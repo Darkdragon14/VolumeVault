@@ -37,13 +37,13 @@ It provides a guided web UI around scheduled backups, encrypted destinations, no
 Generate an application key first:
 
 ```bash
-docker run --rm -v "$PWD:/app" -w /app composer:2 php artisan key:generate --show
+docker run --rm ghcr.io/darkdragon14/volumevault:latest php artisan key:generate --show
 ```
 
-Start the provided Compose stack:
+Paste the generated key into the recommended Compose file from the installation guide, then start VolumeVault:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 Open `http://localhost:8080`, then create the first administrator account from onboarding or import an existing installation save.

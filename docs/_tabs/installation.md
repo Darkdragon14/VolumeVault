@@ -4,36 +4,129 @@ icon: fas fa-download
 order: 1
 ---
 
-## Docker Compose Setup
+## Recommended Self-Hosted Setup
 
-1. Copy `.env.example` to `.env`.
-2. Generate an app key:
-
-```bash
-docker run --rm -v "$PWD:/app" -w /app composer:2 php artisan key:generate --show
-```
-
-3. Put the generated value in `.env` as `APP_KEY=base64:...`.
-4. Start VolumeVault:
+1. Generate an app key:
 
 ```bash
-docker compose up -d --build
+docker run --rm ghcr.io/darkdragon14/volumevault:latest php artisan key:generate --show
 ```
 
-5. Open `http://localhost:8080`.
-6. Create the first administrator account from the onboarding screen, or import an existing installation save.
+2. Create a `docker-compose.yml` file and paste the generated value in `APP_KEY`:
 
-The Compose stack builds one shared `volumevault:local` image and runs four services from it: `migrate`, `app`, `queue`, and `scheduler`. Runtime services share the `volumevault_data` named volume for SQLite and Laravel storage.
+```yaml
+services:
+  volumevault:
+    image: ghcr.io/darkdragon14/volumevault:latest
+    ports:
+      - "8080:8000"
+    volumes:
+      - volumevault_data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      APP_KEY: base64:paste-generated-key-here
+    restart: unless-stopped
+
+volumes:
+  volumevault_data:
+```
+
+3. Start VolumeVault:
+
+```bash
+docker compose up -d
+```
+
+4. Open `http://localhost:8080`.
+5. Create the first administrator account from the onboarding screen, or import an existing installation save.
+
+The recommended setup runs one container. At startup it prepares storage, runs database migrations, then starts the web app, queue worker, and scheduler under process supervision.
+
+Production defaults are built into VolumeVault. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
+
+## Large Installation Compose
+
+For larger installations, you can split the migration, web app, queue worker, and scheduler into separate services while keeping the same image and storage volume:
+
+```yaml
+x-volumevault-environment: &volumevault-environment
+  APP_KEY: ${APP_KEY:?Set APP_KEY before starting VolumeVault}
+
+x-volumevault-service: &volumevault-service
+  image: ghcr.io/darkdragon14/volumevault:latest
+  volumes:
+    - volumevault_data:/app/storage
+    - /var/run/docker.sock:/var/run/docker.sock
+  environment:
+    <<: *volumevault-environment
+
+x-volumevault-runtime-service: &volumevault-runtime-service
+  <<: *volumevault-service
+  entrypoint: []
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  restart: unless-stopped
+
+services:
+  migrate:
+    <<: *volumevault-service
+    entrypoint: ["sh", "-lc"]
+    command: "mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs && touch /app/storage/database/database.sqlite && php artisan migrate --force"
+    restart: "no"
+
+  app:
+    <<: *volumevault-runtime-service
+    ports:
+      - "8080:8000"
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+
+  queue:
+    <<: *volumevault-runtime-service
+    command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=0"]
+
+  scheduler:
+    <<: *volumevault-runtime-service
+    command: ["php", "artisan", "schedule:work"]
+
+volumes:
+  volumevault_data:
+```
+
+This layout is useful when you want separate container lifecycle, logs, and resource limits for runtime concerns. Runtime services use `entrypoint: []` to disable the image's all-in-one startup entrypoint so each service can run only its assigned command.
 
 ## Environment Variables
 
 - `APP_KEY`: required for encrypted destination credentials, notification URLs, and installation saves.
+- `APP_ENV`: defaults to `production`.
+- `APP_DEBUG`: defaults to `false`.
 - `APP_TIMEZONE`: timezone used to interpret backup schedules and display backup job dates, defaults to `UTC`. Use an IANA timezone such as `Europe/Paris`.
-- `APP_URL`: public URL, defaults to `http://localhost:8080` in Compose.
-- `DB_CONNECTION`: defaults to `sqlite` in the provided Compose setup.
-- `DB_DATABASE`: use `/app/storage/database/database.sqlite` in Compose.
-- `QUEUE_CONNECTION`: use `database`.
+- `APP_URL`: public URL, defaults to `http://localhost:8080`.
+- `DB_CONNECTION`: defaults to `sqlite`.
+- `DB_DATABASE`: defaults to `/app/storage/database/database.sqlite` inside the Docker image.
+- `QUEUE_CONNECTION`: defaults to `database`.
+- `CACHE_STORE`: defaults to `database`.
+- `SESSION_DRIVER`: defaults to `database`.
 - `MAIL_MAILER`: use `smtp` or another real mail transport to enable email password reset links. The default `log` mode hides email reset in the UI.
+
+You can override values directly in Compose:
+
+```yaml
+environment:
+  APP_KEY: base64:paste-generated-key-here
+  APP_URL: https://volumevault.example.com
+  APP_TIMEZONE: Europe/Paris
+```
+
+Or load an environment file:
+
+```yaml
+env_file: .env
+environment:
+  APP_KEY: ${APP_KEY:?Set APP_KEY before starting VolumeVault}
+```
+
+Do not reuse a local development `.env` in production without review. Values such as `APP_ENV=local` or `APP_DEBUG=true` override the safe production defaults.
 
 ## Secrets And APP_KEY
 

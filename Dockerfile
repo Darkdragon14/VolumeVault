@@ -21,11 +21,13 @@ RUN composer dump-autoload --optimize && php artisan package:discover --ansi
 FROM php:8.3-cli-alpine
 WORKDIR /app
 
-RUN apk add --no-cache docker-cli libzip-dev sqlite-dev tzdata \
+RUN apk add --no-cache docker-cli libzip-dev sqlite-dev supervisor tzdata \
     && docker-php-ext-install pdo pdo_sqlite zip
 
 COPY --from=vendor /app /app
 COPY --from=assets /app/public/build /app/public/build
+COPY supervisord.conf /etc/supervisord.conf
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 
 RUN mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs /app/bootstrap/cache \
     && touch /app/storage/database/database.sqlite \
@@ -33,4 +35,5 @@ RUN mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/fra
 
 EXPOSE 8000
 
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+ENTRYPOINT ["docker-entrypoint"]
+CMD ["supervisord"]

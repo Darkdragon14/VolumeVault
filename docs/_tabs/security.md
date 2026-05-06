@@ -31,7 +31,7 @@ When `MAIL_MAILER` is `log` or `array`, email password reset is hidden because n
 Password reset is always available from the container CLI:
 
 ```bash
-docker compose exec app php artisan volumevault:reset-password admin@example.com
+docker compose exec volumevault php artisan volumevault:reset-password admin@example.com
 ```
 
 Both reset methods invalidate existing browser sessions for the user. Existing API tokens are kept so integrations are not interrupted.
