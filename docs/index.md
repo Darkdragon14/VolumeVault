@@ -6,7 +6,7 @@ toc: false
 ---
 
 <p align="center">
-  <img src="{{ '/assets/img/volumevault/logo.png' | relative_url }}" alt="VolumeVault" width="420">
+  <img src="/assets/img/volumevault/logo.png" alt="VolumeVault" width="420">
 </p>
 
 # Docker Volume Backups With Safer Restores
@@ -16,8 +16,8 @@ VolumeVault is a self-hosted Laravel application for managing Docker volume back
 It provides a guided web UI around scheduled backups, encrypted destinations, notifications, restore runs, run history, onboarding, and API-driven automation while keeping operational risks explicit.
 
 <p align="center">
-  <img src="{{ '/assets/img/volumevault/dashboard.png' | relative_url }}" alt="VolumeVault dashboard preview" width="48%">
-  <img src="{{ '/assets/img/volumevault/jobs.png' | relative_url }}" alt="VolumeVault backup jobs preview" width="48%">
+  <img src="/assets/img/volumevault/dashboard.png" alt="VolumeVault dashboard preview" width="48%">
+  <img src="/assets/img/volumevault/jobs.png" alt="VolumeVault backup jobs preview" width="48%">
 </p>
 
 ## Highlights
