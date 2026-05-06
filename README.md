@@ -11,10 +11,16 @@ VolumeVault is a self-hosted Laravel application for managing Docker volume back
 
 It provides a clear web UI for scheduled backups, restore runs, encrypted destinations, notifications, run history, onboarding, and API-driven automation.
 
-<p align="center">
-  <img src="public/previews/dashboard.png" alt="VolumeVault dashboard preview" width="45%">
-  <img src="public/previews/jobs.png" alt="VolumeVault backup jobs preview" width="45%">
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="public/previews/dashboard.png" alt="VolumeVault dashboard preview">
+    </td>
+    <td align="center" width="50%">
+      <img src="public/previews/jobs.png" alt="VolumeVault backup jobs preview">
+    </td>
+  </tr>
+</table>
 
 ## Get Started
 
