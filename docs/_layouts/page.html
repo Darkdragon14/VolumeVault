@@ -5,7 +5,11 @@ panel_includes:
 ---
 
 {% include lang.html %}
-{% include toc-status.html %}
+
+{% assign enable_toc = false %}
+{% if site.toc and page.toc != false %}
+  {% assign enable_toc = true %}
+{% endif %}
 
 <article class="px-1" data-toc="{{ enable_toc }}">
   {% if enable_toc %}
