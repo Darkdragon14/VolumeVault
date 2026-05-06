@@ -24,7 +24,7 @@ social:
 
 theme_mode: dark
 cdn:
-avatar: /assets/img/volumevault/avatar.svg
+avatar: /assets/img/volumevault/avatar.png
 social_preview_image: /assets/img/volumevault/dashboard.png
 toc: true
 
