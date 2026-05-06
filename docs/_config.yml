@@ -22,7 +22,7 @@ social:
   links:
     - https://github.com/darkdragon14/VolumeVault
 
-theme_mode: dark
+theme_mode:
 cdn:
 avatar: /assets/img/volumevault/avatar.png
 social_preview_image: /assets/img/volumevault/dashboard.png
