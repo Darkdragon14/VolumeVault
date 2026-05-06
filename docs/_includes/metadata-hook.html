@@ -1,6 +1,19 @@
 <style>
-  #avatar img {
-    object-fit: contain;
-    object-position: center;
+  #sidebar #avatar {
+    position: relative;
+  }
+
+  #sidebar #avatar img {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 88%;
+    height: auto;
+    max-width: none;
+    transform: translate(-50%, -50%);
+  }
+
+  #sidebar #avatar img:hover {
+    transform: translate(-50%, -50%) scale(1.12);
   }
 </style>
