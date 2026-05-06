@@ -6,7 +6,6 @@
 
 [![tests](https://github.com/Darkdragon14/VolumeVault/actions/workflows/tests.yml/badge.svg)](https://github.com/Darkdragon14/VolumeVault/actions/workflows/tests.yml)
 [![Container image](https://github.com/darkdragon14/VolumeVault/actions/workflows/ghcr.yml/badge.svg?branch=main)](https://github.com/darkdragon14/VolumeVault/actions/workflows/ghcr.yml)
-[![Image size](https://ghcr-badge.egpl.dev/darkdragon14/volumevault/size?tag=main&label=image%20size)](https://github.com/darkdragon14/VolumeVault/pkgs/container/volumevault)
 [![Latest release](https://img.shields.io/github/v/release/darkdragon14/VolumeVault?display_name=tag&sort=semver&label=release)](https://github.com/darkdragon14/VolumeVault/releases)
 [![PHP](https://img.shields.io/badge/PHP-8.3%2B-777bb4?logo=php&logoColor=white)](https://www.php.net/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](composer.json)
