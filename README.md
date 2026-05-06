@@ -4,8 +4,12 @@
 
 # VolumeVault
 
-<!-- Badges will go here. -->
-<!-- Example: [![Build](...)](...) [![License](...)](...) -->
+[![tests](https://github.com/Darkdragon14/VolumeVault/actions/workflows/tests.yml/badge.svg)](https://github.com/Darkdragon14/VolumeVault/actions/workflows/tests.yml)
+[![Container image](https://github.com/darkdragon14/VolumeVault/actions/workflows/ghcr.yml/badge.svg?branch=main)](https://github.com/darkdragon14/VolumeVault/actions/workflows/ghcr.yml)
+[![Image size](https://ghcr-badge.egpl.dev/darkdragon14/volumevault/size?tag=latest&label=image%20size)](https://github.com/darkdragon14/VolumeVault/pkgs/container/volumevault)
+[![Latest release](https://img.shields.io/github/v/release/darkdragon14/VolumeVault?display_name=tag&sort=semver&label=release)](https://github.com/darkdragon14/VolumeVault/releases)
+[![PHP](https://img.shields.io/badge/PHP-8.3%2B-777bb4?logo=php&logoColor=white)](https://www.php.net/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](composer.json)
 
 VolumeVault is a self-hosted Laravel application for managing Docker volume backups and safe restores through [`offen/docker-volume-backup`](https://github.com/offen/docker-volume-backup).
 
