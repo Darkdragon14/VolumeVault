@@ -41,6 +41,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'app' => [
                 'timezone' => config('app.timezone'),
+                'version' => config('app.version'),
                 'locale' => $request->user()?->locale ?? User::DEFAULT_LOCALE,
                 'locales' => User::SUPPORTED_LOCALES,
                 'theme' => $request->user()?->theme ?? User::DEFAULT_THEME,

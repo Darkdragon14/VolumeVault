@@ -15,6 +15,8 @@ return [
 
     'name' => env('APP_NAME', 'VolumeVault'),
 
+    'version' => env('APP_VERSION', 'main'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

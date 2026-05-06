@@ -14,7 +14,7 @@ class OpenApiController extends Controller
             'openapi' => '3.1.0',
             'info' => [
                 'title' => 'VolumeVault API',
-                'version' => '1.0.0',
+                'version' => config('app.version'),
                 'description' => 'External JSON API for VolumeVault Docker volume backups and restores.',
             ],
             'servers' => [

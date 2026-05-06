@@ -21,6 +21,9 @@ RUN composer dump-autoload --optimize && php artisan package:discover --ansi
 FROM php:8.3-cli-alpine
 WORKDIR /app
 
+ARG APP_VERSION=main
+ENV APP_VERSION=${APP_VERSION}
+
 RUN apk add --no-cache docker-cli libzip-dev sqlite-dev supervisor tzdata \
     && docker-php-ext-install pdo pdo_sqlite zip
 

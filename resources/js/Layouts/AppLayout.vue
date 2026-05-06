@@ -17,6 +17,7 @@ const { isDark, toggleTheme } = useTheme();
 const flash = computed(() => (page.props.flash || {}) as { success?: string; error?: string });
 const auth = computed(() => (page.props.auth || {}) as { user?: { id: number; name: string; email: string; role: string; locale: string; theme: string } | null });
 const can = computed(() => (page.props.can || {}) as { manageSensitiveData?: boolean; runDockerActions?: boolean; manageUsers?: boolean });
+const app = computed(() => (page.props.app || {}) as { version?: string });
 const updateLocale = (event: Event) => router.patch('/user/locale', { locale: (event.target as HTMLSelectElement).value }, { preserveScroll: true });
 const themeToggleLabel = computed(() => isDark.value ? t('Switch to light theme') : t('Switch to dark theme'));
 const themeName = computed(() => isDark.value ? t('Dark theme') : t('Light theme'));
@@ -234,6 +235,8 @@ onBeforeUnmount(() => {
                 <p>
                     &copy; {{ currentYear }}
                     <a :href="githubProfileUrl" class="font-medium text-slate-400 transition hover:text-sky-300" target="_blank" rel="noopener noreferrer">Darkdragon14</a>
+                    <span class="mx-1.5 text-slate-600">&middot;</span>
+                    <span>VolumeVault {{ app.version || 'main' }}</span>
                 </p>
 
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
