@@ -1,0 +1,30 @@
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const article = document.querySelector('main > article[data-toc="true"]');
+    const tocWrapper = document.getElementById('toc-wrapper');
+
+    if (!article || !tocWrapper || !window.tocbot) {
+      return;
+    }
+
+    const desktop = window.matchMedia('(min-width: 1200px)').matches;
+    const tocSelector = desktop ? '#toc' : '#toc-popup-content';
+
+    if (!document.querySelector(tocSelector)) {
+      return;
+    }
+
+    window.tocbot.init({
+      contentSelector: '.content',
+      tocSelector,
+      headingSelector: 'h2, h3, h4',
+      ignoreSelector: '[data-toc-skip]',
+      orderedList: false,
+      scrollSmooth: false,
+      collapseDepth: 4,
+      headingsOffset: desktop ? 16 * 2 : 16 * 3
+    });
+
+    tocWrapper.classList.remove('invisible');
+  });
+</script>
