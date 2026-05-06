@@ -11,8 +11,8 @@ description: >-
   Self-hosted Laravel application for managing Docker volume backups,
   destinations, schedules, restore runs, notifications, and automation.
 
-url: "https://volumevault.darkdragon.fr"
-baseurl: ""
+url: "https://darkdragon14.github.io"
+baseurl: "/VolumeVault"
 
 github:
   username: darkdragon14

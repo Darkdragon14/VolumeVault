@@ -98,7 +98,7 @@ Keep your `APP_KEY` safe: it is required to decrypt destinations, notifications,
 
 The full documentation is published with GitHub Pages and built from the [`docs`](docs) directory.
 
-- Documentation URL: `https://volumevault.darkdragon.fr`
+- Documentation URL: `https://darkdragon14.github.io/VolumeVault/`
 - Documentation source: [`docs/index.md`](docs/index.md)
 
 ## Credits
