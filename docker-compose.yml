@@ -1,0 +1,61 @@
+x-volumevault-environment: &volumevault-environment
+  APP_NAME: VolumeVault
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: ${APP_KEY}
+  APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+  APP_URL: ${APP_URL:-http://localhost:8080}
+  DB_CONNECTION: sqlite
+  DB_DATABASE: /app/storage/database/database.sqlite
+  QUEUE_CONNECTION: database
+  CACHE_STORE: database
+  SESSION_DRIVER: database
+  LOG_CHANNEL: stack
+  LOG_LEVEL: info
+  MAIL_MAILER: ${MAIL_MAILER:-log}
+  MAIL_SCHEME: ${MAIL_SCHEME:-null}
+  MAIL_HOST: ${MAIL_HOST:-127.0.0.1}
+  MAIL_PORT: ${MAIL_PORT:-2525}
+  MAIL_USERNAME: ${MAIL_USERNAME:-null}
+  MAIL_PASSWORD: ${MAIL_PASSWORD:-null}
+  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-hello@example.com}
+  MAIL_FROM_NAME: ${MAIL_FROM_NAME:-VolumeVault}
+
+x-volumevault-service: &volumevault-service
+  image: volumevault:local
+  volumes:
+    - volumevault_data:/app/storage
+    - /var/run/docker.sock:/var/run/docker.sock
+  environment:
+    <<: *volumevault-environment
+
+x-volumevault-runtime-service: &volumevault-runtime-service
+  <<: *volumevault-service
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  restart: unless-stopped
+
+services:
+  migrate:
+    <<: *volumevault-service
+    build: .
+    command: sh -lc "mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs && touch /app/storage/database/database.sqlite && php artisan migrate --force"
+    restart: "no"
+
+  app:
+    <<: *volumevault-runtime-service
+    ports:
+      - "8080:8000"
+    command: sh -lc "mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs && touch /app/storage/database/database.sqlite && php artisan serve --host=0.0.0.0 --port=8000"
+
+  queue:
+    <<: *volumevault-runtime-service
+    command: sh -lc "mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs && touch /app/storage/database/database.sqlite && php artisan queue:work --tries=1 --timeout=0"
+
+  scheduler:
+    <<: *volumevault-runtime-service
+    command: sh -lc "mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs && touch /app/storage/database/database.sqlite && php artisan schedule:work"
+
+volumes:
+  volumevault_data:

@@ -1,0 +1,324 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    html {
+        color-scheme: light;
+    }
+
+    html.dark {
+        color-scheme: dark;
+    }
+
+    body {
+        @apply bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100;
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+}
+
+@layer components {
+    .app-shell {
+        @apply flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.16),_transparent_34%),linear-gradient(135deg,_#f8fafc,_#e0f2fe_45%,_#eef2ff)] text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_35%),linear-gradient(135deg,_#020617,_#0f172a_45%,_#111827)] dark:text-slate-100;
+    }
+
+    .auth-shell {
+        @apply flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.16),_transparent_34%),linear-gradient(135deg,_#f8fafc,_#e0f2fe_45%,_#eef2ff)] px-4 py-10 text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_35%),linear-gradient(135deg,_#020617,_#0f172a_45%,_#111827)] dark:text-slate-100;
+    }
+
+    .card {
+        @apply rounded-2xl border border-slate-200 bg-white/90 shadow-xl shadow-slate-200/70 backdrop-blur dark:border-white/10 dark:bg-white/[0.04] dark:shadow-2xl dark:shadow-black/20;
+    }
+
+    .input {
+        @apply w-full rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-400/20 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-400;
+    }
+
+    .label {
+        @apply text-sm font-medium text-slate-700 dark:text-slate-200;
+    }
+
+    .btn {
+        @apply inline-flex max-w-full items-center justify-center whitespace-normal rounded-xl px-4 py-2 text-center text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .btn-primary {
+        @apply btn bg-sky-500 text-white hover:bg-sky-400 dark:bg-sky-400 dark:text-slate-950 dark:hover:bg-sky-300;
+    }
+
+    .btn-secondary {
+        @apply btn border border-slate-200 bg-white/80 text-slate-700 shadow-sm shadow-slate-200/60 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:shadow-none dark:hover:bg-white/10;
+    }
+
+    .btn-danger {
+        @apply btn bg-rose-500 text-white hover:bg-rose-400;
+    }
+}
+
+.text-white {
+    color: rgb(15 23 42);
+}
+
+.text-slate-100,
+.text-slate-200 {
+    color: rgb(30 41 59);
+}
+
+.text-slate-300 {
+    color: rgb(71 85 105);
+}
+
+.text-slate-400 {
+    color: rgb(100 116 139);
+}
+
+.text-slate-500 {
+    color: rgb(100 116 139);
+}
+
+.text-sky-100,
+.text-sky-200,
+.text-sky-300 {
+    color: rgb(3 105 161);
+}
+
+.hover\:text-white:hover {
+    color: rgb(15 23 42);
+}
+
+.hover\:text-sky-200:hover,
+.hover\:text-sky-300:hover,
+.focus-visible\:text-sky-300:focus-visible {
+    color: rgb(2 132 199);
+}
+
+.text-emerald-100,
+.text-emerald-200 {
+    color: rgb(4 120 87);
+}
+
+.text-amber-100,
+.text-amber-200 {
+    color: rgb(146 64 14);
+}
+
+.text-violet-200 {
+    color: rgb(109 40 217);
+}
+
+.text-rose-100,
+.text-rose-200,
+.text-rose-300 {
+    color: rgb(190 18 60);
+}
+
+.text-rose-200\/80 {
+    color: rgb(190 18 60 / 0.9);
+}
+
+.hover\:text-rose-100:hover {
+    color: rgb(159 18 57);
+}
+
+.border-white\/10,
+.border-white\/20,
+.border-slate-600,
+.border-slate-700 {
+    border-color: rgb(226 232 240);
+}
+
+.divide-white\/10 > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(226 232 240);
+}
+
+.bg-white\/5,
+.bg-white\/\[0\.03\],
+.bg-white\/\[0\.04\] {
+    background-color: rgb(255 255 255 / 0.82);
+}
+
+.bg-white\/10,
+.hover\:bg-white\/10:hover,
+.hover\:bg-white\/\[0\.03\]:hover {
+    background-color: rgb(241 245 249 / 0.9);
+}
+
+.bg-slate-950,
+.bg-slate-950\/60,
+.bg-slate-950\/70,
+.bg-slate-950\/80 {
+    background-color: rgb(255 255 255 / 0.92);
+}
+
+.bg-slate-950\/30 {
+    background-color: rgb(255 255 255 / 0.62);
+}
+
+.shadow-black\/20,
+.shadow-black\/30,
+.shadow-black\/40 {
+    --tw-shadow-color: rgb(148 163 184 / 0.18);
+    --tw-shadow: var(--tw-shadow-colored);
+}
+
+.dark .text-white {
+    color: rgb(255 255 255);
+}
+
+.dark .text-slate-100 {
+    color: rgb(241 245 249);
+}
+
+.dark .text-slate-200 {
+    color: rgb(226 232 240);
+}
+
+.dark .text-slate-300 {
+    color: rgb(203 213 225);
+}
+
+.dark .text-slate-400 {
+    color: rgb(148 163 184);
+}
+
+.dark .text-slate-500 {
+    color: rgb(100 116 139);
+}
+
+.dark .text-sky-100 {
+    color: rgb(224 242 254);
+}
+
+.dark .text-sky-200 {
+    color: rgb(186 230 253);
+}
+
+.dark .text-sky-300 {
+    color: rgb(125 211 252);
+}
+
+.dark .hover\:text-white:hover {
+    color: rgb(255 255 255);
+}
+
+.dark .hover\:text-sky-200:hover {
+    color: rgb(186 230 253);
+}
+
+.dark .hover\:text-sky-300:hover,
+.dark .focus-visible\:text-sky-300:focus-visible {
+    color: rgb(125 211 252);
+}
+
+.dark .text-emerald-100 {
+    color: rgb(209 250 229);
+}
+
+.dark .text-emerald-200 {
+    color: rgb(167 243 208);
+}
+
+.dark .text-amber-100 {
+    color: rgb(254 243 199);
+}
+
+.dark .text-amber-200 {
+    color: rgb(253 230 138);
+}
+
+.dark .text-violet-200 {
+    color: rgb(221 214 254);
+}
+
+.dark .text-rose-100 {
+    color: rgb(255 228 230);
+}
+
+.dark .text-rose-200 {
+    color: rgb(254 205 211);
+}
+
+.dark .text-rose-200\/80 {
+    color: rgb(254 205 211 / 0.8);
+}
+
+.dark .text-rose-300 {
+    color: rgb(253 164 175);
+}
+
+.dark .hover\:text-rose-100:hover {
+    color: rgb(255 228 230);
+}
+
+.dark .border-white\/10 {
+    border-color: rgb(255 255 255 / 0.1);
+}
+
+.dark .border-white\/20 {
+    border-color: rgb(255 255 255 / 0.2);
+}
+
+.dark .border-slate-600 {
+    border-color: rgb(71 85 105);
+}
+
+.dark .border-slate-700 {
+    border-color: rgb(51 65 85);
+}
+
+.dark .divide-white\/10 > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(255 255 255 / 0.1);
+}
+
+.dark .bg-white\/5 {
+    background-color: rgb(255 255 255 / 0.05);
+}
+
+.dark .bg-white\/10,
+.dark .hover\:bg-white\/10:hover {
+    background-color: rgb(255 255 255 / 0.1);
+}
+
+.dark .bg-white\/\[0\.03\],
+.dark .hover\:bg-white\/\[0\.03\]:hover {
+    background-color: rgb(255 255 255 / 0.03);
+}
+
+.dark .bg-white\/\[0\.04\] {
+    background-color: rgb(255 255 255 / 0.04);
+}
+
+.dark .bg-slate-950 {
+    background-color: rgb(2 6 23);
+}
+
+.dark .bg-slate-950\/30 {
+    background-color: rgb(2 6 23 / 0.3);
+}
+
+.dark .bg-slate-950\/60 {
+    background-color: rgb(2 6 23 / 0.6);
+}
+
+.dark .bg-slate-950\/70 {
+    background-color: rgb(2 6 23 / 0.7);
+}
+
+.dark .bg-slate-950\/80 {
+    background-color: rgb(2 6 23 / 0.8);
+}
+
+.dark .shadow-black\/20 {
+    --tw-shadow-color: rgb(0 0 0 / 0.2);
+    --tw-shadow: var(--tw-shadow-colored);
+}
+
+.dark .shadow-black\/30 {
+    --tw-shadow-color: rgb(0 0 0 / 0.3);
+    --tw-shadow: var(--tw-shadow-colored);
+}
+
+.dark .shadow-black\/40 {
+    --tw-shadow-color: rgb(0 0 0 / 0.4);
+    --tw-shadow: var(--tw-shadow-colored);
+}

@@ -1,0 +1,105 @@
+# The Site Configuration
+
+theme: jekyll-theme-chirpy
+
+lang: en
+timezone: Europe/Paris
+
+title: VolumeVault
+tagline: Docker volume backups with safer restores
+description: >-
+  Self-hosted Laravel application for managing Docker volume backups,
+  destinations, schedules, restore runs, notifications, and automation.
+
+url: "https://volumevault.darkdragon.fr"
+baseurl: ""
+
+github:
+  username: darkdragon14
+
+social:
+  name: VolumeVault
+  links:
+    - https://github.com/darkdragon14/VolumeVault
+
+theme_mode: dark
+cdn:
+avatar: /assets/img/volumevault/favicon.png
+social_preview_image: /assets/img/volumevault/dashboard.png
+toc: true
+
+comments:
+  provider:
+
+assets:
+  self_host:
+    enabled:
+    env:
+
+pwa:
+  enabled: true
+  cache:
+    enabled: true
+    deny_paths:
+
+kramdown:
+  footnote_backlink: "&#8617;&#xfe0e;"
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    css_class: highlight
+    span:
+      line_numbers: false
+    block:
+      line_numbers: true
+      start_line: 1
+
+collections:
+  tabs:
+    output: true
+    sort_by: order
+
+defaults:
+  - scope:
+      path: ""
+      type: posts
+    values:
+      layout: post
+      comments: false
+      toc: true
+      permalink: /posts/:title/
+  - scope:
+      path: ""
+      type: tabs
+    values:
+      layout: page
+      permalink: /:title/
+
+sass:
+  style: compressed
+
+compress_html:
+  clippings: all
+  comments: all
+  endings: all
+  profile: false
+  blanklines: false
+  ignore:
+    envs: [development]
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - vendor
+  - .bundle
+  - .jekyll-cache
+  - _site
+
+jekyll-archives:
+  enabled: [categories, tags]
+  layouts:
+    category: category
+    tag: tag
+  permalinks:
+    tag: /tags/:name/
+    category: /categories/:name/
