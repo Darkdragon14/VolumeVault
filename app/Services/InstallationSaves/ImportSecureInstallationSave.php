@@ -181,6 +181,7 @@ class ImportSecureInstallationSave
 
             if ($item->isDir()) {
                 File::ensureDirectoryExists($target);
+
                 continue;
             }
 

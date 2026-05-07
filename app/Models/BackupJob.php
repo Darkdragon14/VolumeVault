@@ -13,13 +13,19 @@ class BackupJob extends Model
     use HasFactory;
 
     public const STATUS_ACTIVE = 'active';
+
     public const STATUS_PAUSED = 'paused';
+
     public const STATUS_ERROR = 'error';
+
     public const STATUS_RUNNING = 'running';
 
     public const SCHEDULE_HOURLY = 'hourly';
+
     public const SCHEDULE_DAILY = 'daily';
+
     public const SCHEDULE_WEEKLY = 'weekly';
+
     public const SCHEDULE_CRON = 'cron';
 
     protected $fillable = [

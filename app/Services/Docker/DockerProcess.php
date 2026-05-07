@@ -2,6 +2,7 @@
 
 namespace App\Services\Docker;
 
+use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
@@ -30,7 +31,7 @@ class DockerProcess
 
     public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
     {
-        $process = new Process($command, null, $environment ?: null, null, $timeout);
+        $process = new Process($command, null, $this->environment($environment), null, $timeout);
 
         try {
             $process->run();
@@ -52,6 +53,21 @@ class DockerProcess
                 timedOut: true,
             );
         }
+    }
+
+    private function environment(array $environment): array
+    {
+        $home = storage_path('app/docker-cli/home');
+        $config = storage_path('app/docker-cli/config');
+
+        File::ensureDirectoryExists($home);
+        File::ensureDirectoryExists($config);
+
+        return array_merge($environment, [
+            'DOCKER_CONFIG' => $config,
+            'HOME' => $home,
+            'XDG_CONFIG_HOME' => $config,
+        ]);
     }
 
     private function sanitizeCommand(array $command): array

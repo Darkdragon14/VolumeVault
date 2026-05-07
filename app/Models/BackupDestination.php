@@ -11,13 +11,21 @@ class BackupDestination extends Model
     use HasFactory;
 
     public const PROVIDER_AWS_S3 = 'aws_s3';
+
     public const PROVIDER_CLOUDFLARE_R2 = 'cloudflare_r2';
+
     public const PROVIDER_CUSTOM_S3 = 'custom_s3';
+
     public const PROVIDER_WEBDAV = 'webdav';
+
     public const PROVIDER_SSH = 'ssh';
+
     public const PROVIDER_AZURE_BLOB = 'azure_blob';
+
     public const PROVIDER_DROPBOX = 'dropbox';
+
     public const PROVIDER_GOOGLE_DRIVE = 'google_drive';
+
     public const PROVIDER_LOCAL = 'local';
 
     public const S3_PROVIDERS = [

@@ -16,6 +16,7 @@ class RunRestoreJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
+
     public int $timeout = 0;
 
     public function __construct(public readonly int $restoreRunId) {}

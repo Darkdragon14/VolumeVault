@@ -11,12 +11,17 @@ class BackupRun extends Model
     use HasFactory;
 
     public const STATUS_QUEUED = 'queued';
+
     public const STATUS_RUNNING = 'running';
+
     public const STATUS_SUCCESS = 'success';
+
     public const STATUS_FAILED = 'failed';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     public const TRIGGER_SCHEDULED = 'scheduled';
+
     public const TRIGGER_MANUAL = 'manual';
 
     protected $fillable = [

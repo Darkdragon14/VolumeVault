@@ -11,7 +11,6 @@ use Illuminate\Support\Str;
 use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Net\SFTP;
 use RuntimeException;
-use Throwable;
 
 class DestinationStorage
 {
@@ -314,6 +313,7 @@ class DestinationStorage
 
             if ($sftp->is_dir($path)) {
                 $this->collectSftpFiles($sftp, $path, $key, $objects, $limit);
+
                 continue;
             }
 

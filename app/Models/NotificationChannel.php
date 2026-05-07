@@ -11,10 +11,15 @@ class NotificationChannel extends Model
     use HasFactory;
 
     public const SERVICE_DISCORD = 'discord';
+
     public const SERVICE_TELEGRAM = 'telegram';
+
     public const SERVICE_NTFY = 'ntfy';
+
     public const SERVICE_GOTIFY = 'gotify';
+
     public const SERVICE_SMTP = 'smtp';
+
     public const SERVICE_ADVANCED = 'advanced';
 
     public const SERVICES = [
@@ -27,11 +32,13 @@ class NotificationChannel extends Model
     ];
 
     public const LEVEL_ERROR = 'error';
+
     public const LEVEL_INFO = 'info';
 
     public const LEVELS = [self::LEVEL_ERROR, self::LEVEL_INFO];
 
     public const SCOPE_ALL = 'all';
+
     public const SCOPE_SPECIFIC = 'specific';
 
     public const SCOPES = [self::SCOPE_ALL, self::SCOPE_SPECIFIC];

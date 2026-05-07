@@ -6,7 +6,7 @@
     "keywords": ["laravel", "docker", "backup", "s3", "webdav", "sftp"],
     "license": "Apache-2.0",
     "require": {
-        "php": "^8.3",
+        "php": "^8.5",
         "aws/aws-sdk-php": "^3.379",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/framework": "^13.0",
@@ -64,7 +64,7 @@
     "config": {
         "optimize-autoloader": true,
         "platform": {
-            "php": "8.3.0"
+            "php": "8.5.0"
         },
         "preferred-install": "dist",
         "sort-packages": true,

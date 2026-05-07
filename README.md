@@ -7,7 +7,7 @@
 [![tests](https://github.com/Darkdragon14/VolumeVault/actions/workflows/tests.yml/badge.svg)](https://github.com/Darkdragon14/VolumeVault/actions/workflows/tests.yml)
 [![Container image](https://github.com/darkdragon14/VolumeVault/actions/workflows/ghcr.yml/badge.svg?branch=main)](https://github.com/darkdragon14/VolumeVault/actions/workflows/ghcr.yml)
 [![Latest release](https://img.shields.io/github/v/release/darkdragon14/VolumeVault?display_name=tag&sort=semver&label=release)](https://github.com/darkdragon14/VolumeVault/releases)
-[![PHP](https://img.shields.io/badge/PHP-8.3%2B-777bb4?logo=php&logoColor=white)](https://www.php.net/)
+[![PHP](https://img.shields.io/badge/PHP-8.5%2B-777bb4?logo=php&logoColor=white)](https://www.php.net/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](composer.json)
 
 VolumeVault is a self-hosted Laravel application for managing Docker volume backups and safe restores through [`offen/docker-volume-backup`](https://github.com/offen/docker-volume-backup).
@@ -40,7 +40,7 @@ services:
   volumevault:
     image: ghcr.io/darkdragon14/volumevault:latest
     ports:
-      - "8080:8000"
+      - "8080:8080"
     volumes:
       - volumevault_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
@@ -60,7 +60,9 @@ docker compose up -d
 
 Open `http://localhost:8080` and create the first administrator account from the onboarding screen.
 
-The single container runs the web app, database migrations, queue worker, and scheduler.
+The container listens on port `8080`; change the host side of the mapping, for example `9090:8080`, if you want to expose VolumeVault on another port.
+
+The single container runs nginx, PHP-FPM, database migrations, queue worker, and scheduler.
 
 Defaults are built into the application for a production SQLite setup. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
 

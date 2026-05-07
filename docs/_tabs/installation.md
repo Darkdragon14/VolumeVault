@@ -19,7 +19,7 @@ services:
   volumevault:
     image: ghcr.io/darkdragon14/volumevault:latest
     ports:
-      - "8080:8000"
+      - "8080:8080"
     volumes:
       - volumevault_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
@@ -40,7 +40,7 @@ docker compose up -d
 4. Open `http://localhost:8080`.
 5. Create the first administrator account from the onboarding screen, or import an existing installation save.
 
-The recommended setup runs one container. At startup it prepares storage, runs database migrations, then starts the web app, queue worker, and scheduler under process supervision.
+The recommended setup runs one container. At startup it prepares storage, runs database migrations, then starts nginx, PHP-FPM, the queue worker, and the scheduler under process supervision.
 
 Production defaults are built into VolumeVault. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
 
@@ -62,7 +62,6 @@ x-volumevault-service: &volumevault-service
 
 x-volumevault-runtime-service: &volumevault-runtime-service
   <<: *volumevault-service
-  entrypoint: []
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -72,28 +71,35 @@ services:
   migrate:
     <<: *volumevault-service
     entrypoint: ["sh", "-lc"]
-    command: "mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs && touch /app/storage/database/database.sqlite && php artisan migrate --force"
+    command: "mkdir -p /app/storage/database /app/storage/framework/cache/data /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs /app/bootstrap/cache && touch /app/storage/database/database.sqlite && chown -R www-data:www-data /app/storage /app/bootstrap/cache && /command/s6-setuidgid www-data php artisan migrate --force"
     restart: "no"
 
   app:
     <<: *volumevault-runtime-service
     ports:
-      - "8080:8000"
-    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+      - "8080:8080"
+    environment:
+      <<: *volumevault-environment
+      VOLUMEVAULT_MIGRATIONS_ENABLED: "false"
+      VOLUMEVAULT_QUEUE_ENABLED: "false"
+      VOLUMEVAULT_SCHEDULER_ENABLED: "false"
+    command: ["/init"]
 
   queue:
     <<: *volumevault-runtime-service
-    command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=0"]
+    command: ["/command/s6-setuidgid", "www-data", "php", "artisan", "queue:work", "--tries=1", "--timeout=0"]
 
   scheduler:
     <<: *volumevault-runtime-service
-    command: ["php", "artisan", "schedule:work"]
+    command: ["/command/s6-setuidgid", "www-data", "php", "artisan", "schedule:work"]
 
 volumes:
   volumevault_data:
 ```
 
-This layout is useful when you want separate container lifecycle, logs, and resource limits for runtime concerns. Runtime services use `entrypoint: []` to disable the image's all-in-one startup entrypoint so each service can run only its assigned command.
+This layout is useful when you want separate container lifecycle, logs, and resource limits for runtime concerns. The `app` service keeps the image entrypoint so nginx and PHP-FPM are prepared correctly, but disables migrations because the separate `migrate` service already handles them.
+
+The container listens on port `8080`. You can expose any host port by changing the value on the left, for example `9090:8080`, and should set `APP_URL` to the public URL you use.
 
 ## Environment Variables
 
@@ -107,6 +113,9 @@ This layout is useful when you want separate container lifecycle, logs, and reso
 - `QUEUE_CONNECTION`: defaults to `database`.
 - `CACHE_STORE`: defaults to `database`.
 - `SESSION_DRIVER`: defaults to `database`.
+- `VOLUMEVAULT_MIGRATIONS_ENABLED`: set to `false` only when running migrations in a separate container.
+- `VOLUMEVAULT_QUEUE_ENABLED`: set to `false` only when splitting queue workers into separate containers.
+- `VOLUMEVAULT_SCHEDULER_ENABLED`: set to `false` only when splitting the scheduler into a separate container.
 - `MAIL_MAILER`: use `smtp` or another real mail transport to enable email password reset links. The default `log` mode hides email reset in the UI.
 
 You can override values directly in Compose:

@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+if [ "${VOLUMEVAULT_SCHEDULER_ENABLED:-true}" != "true" ]; then
+    exec sleep infinity
+fi
+
+cd /app
+exec /command/s6-setuidgid www-data php artisan schedule:work

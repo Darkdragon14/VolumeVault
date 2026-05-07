@@ -3,7 +3,7 @@ services:
     image: volumevault:local
     build: .
     ports:
-      - "8080:8000"
+      - "8080:8080"
     volumes:
       - volumevault_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock

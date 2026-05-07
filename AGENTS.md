@@ -8,7 +8,7 @@ The app is aimed at homelab users and must remain production-minded while keepin
 
 ## Stack
 
-- Laravel 13, PHP 8.3+
+- Laravel 13, PHP 8.5+
 - Vue 3, Inertia.js, TypeScript where practical
 - Tailwind CSS
 - SQLite by default

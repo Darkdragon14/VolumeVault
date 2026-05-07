@@ -11,13 +11,19 @@ class RestoreRun extends Model
     use HasFactory;
 
     public const MODE_NEW_VOLUME = 'new_volume';
+
     public const MODE_INPLACE = 'inplace';
+
     public const MODE_SAFE_INPLACE = 'safe_inplace';
 
     public const STATUS_QUEUED = 'queued';
+
     public const STATUS_RUNNING = 'running';
+
     public const STATUS_SUCCESS = 'success';
+
     public const STATUS_FAILED = 'failed';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
