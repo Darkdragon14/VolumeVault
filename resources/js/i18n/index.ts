@@ -43,6 +43,7 @@ export function useI18n() {
     const page = usePage();
     const locale = computed(() => resolveLocale((page.props.auth as any)?.user?.locale || (page.props.app as any)?.locale));
     const locales = computed(() => ((page.props.app as any)?.locales || Object.keys(translations)) as Locale[]);
+    const timezone = computed(() => (page.props.app as any)?.timezone || 'UTC');
 
     const t = (key: string, replacements: Replacements = {}) => {
         const text = translations[locale.value][key] || translations[defaultLocale][key] || key;
@@ -51,8 +52,18 @@ export function useI18n() {
     };
 
     const formatDate = (value?: string | null, fallback = 'Never') => value
-        ? new Date(value).toLocaleString(locale.value)
+        ? new Date(value).toLocaleString(locale.value, {
+            day: '2-digit',
+            hour: '2-digit',
+            hour12: false,
+            minute: '2-digit',
+            month: '2-digit',
+            second: '2-digit',
+            timeZone: timezone.value,
+            timeZoneName: 'short',
+            year: 'numeric',
+        })
         : t(fallback);
 
-    return { t, locale, locales, languageNames, formatDate };
+    return { t, locale, locales, languageNames, formatDate, timezone };
 }

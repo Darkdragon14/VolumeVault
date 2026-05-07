@@ -2,6 +2,7 @@
   "Dashboard": "Iranyitopult",
   "Volumes": "Kotetek",
   "Backup jobs": "Mentesi feladatok",
+  "Times are shown in {timezone}.": "Az idopontok {timezone} szerint jelennek meg.",
   "Destinations": "Celok",
   "Notifications": "Ertesitesek",
   "Installation save": "Telepitesi mentes",

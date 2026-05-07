@@ -2,6 +2,7 @@
   "Dashboard": "Dashboard",
   "Volumes": "Volumi",
   "Backup jobs": "Processi backup",
+  "Times are shown in {timezone}.": "Gli orari sono mostrati in {timezone}.",
   "Destinations": "Destinazioni",
   "Notifications": "Notifiche",
   "Installation save": "Salvataggio installazione",

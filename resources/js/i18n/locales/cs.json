@@ -2,6 +2,7 @@
   "Dashboard": "Prehled",
   "Volumes": "Svazky",
   "Backup jobs": "Ulohy zaloh",
+  "Times are shown in {timezone}.": "Casy jsou zobrazeny v {timezone}.",
   "Destinations": "Cile",
   "Notifications": "Oznameni",
   "Installation save": "Zaloha instalace",

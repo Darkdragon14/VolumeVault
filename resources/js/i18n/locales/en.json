@@ -22,6 +22,7 @@
   "Safe, explicit orchestration for Docker volume backups and restores.": "Safe, explicit orchestration for Docker volume backups and restores.",
   "Inspect discovered Docker volumes and start backup jobs from the volumes that matter.": "Inspect discovered Docker volumes and start backup jobs from the volumes that matter.",
   "Schedule, pause, run, and restore Docker volume backups from one place.": "Schedule, pause, run, and restore Docker volume backups from one place.",
+  "Times are shown in {timezone}.": "Times are shown in {timezone}.",
   "Choose the source volume, destination, schedule, retention, and backup exclusions.": "Choose the source volume, destination, schedule, retention, and backup exclusions.",
   "Review schedule, destination, run history, and recovery actions for this job.": "Review schedule, destination, run history, and recovery actions for this job.",
   "Inspect container output, status, timing, and errors for this backup run.": "Inspect container output, status, timing, and errors for this backup run.",

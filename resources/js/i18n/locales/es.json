@@ -2,6 +2,7 @@
   "Dashboard": "Panel",
   "Volumes": "Volumenes",
   "Backup jobs": "Tareas de copia",
+  "Times are shown in {timezone}.": "Los horarios se muestran en {timezone}.",
   "Destinations": "Destinos",
   "Notifications": "Notificaciones",
   "Installation save": "Copia de instalacion",

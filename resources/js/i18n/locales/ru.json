@@ -2,6 +2,7 @@
   "Dashboard": "Панель",
   "Volumes": "Тома",
   "Backup jobs": "Задания резервного копирования",
+  "Times are shown in {timezone}.": "Время показано в {timezone}.",
   "Destinations": "Назначения",
   "Notifications": "Уведомления",
   "Installation save": "Сохранение установки",

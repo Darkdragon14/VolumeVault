@@ -9,7 +9,7 @@ defineProps<{ jobs: any[] }>();
 
 const page = usePage();
 const can = page.props.can as { runDockerActions?: boolean };
-const { t, formatDate } = useI18n();
+const { t, formatDate, timezone } = useI18n();
 const destroyJob = (id: number) => confirm(t('Delete this backup job and its run history?')) && router.delete(`/backup-jobs/${id}`);
 const runNow = (id: number) => router.post(`/backup-jobs/${id}/run`);
 const pause = (id: number) => router.post(`/backup-jobs/${id}/pause`);
@@ -22,6 +22,8 @@ const resume = (id: number) => router.post(`/backup-jobs/${id}/resume`);
         <template #actions>
             <Link v-if="can.runDockerActions" href="/backup-jobs/create" class="btn-primary">{{ t('New backup job') }}</Link>
         </template>
+
+        <p class="mb-3 text-sm text-slate-400">{{ t('Times are shown in {timezone}.', { timezone }) }}</p>
 
         <div class="card overflow-hidden">
             <div v-if="jobs.length">
