@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from '@/i18n';
 
 const props = defineProps<{
@@ -33,6 +33,32 @@ const form = useForm({
     backup_exclude_regexp: props.job?.backup_exclude_regexp || '',
     stop_containers_before_backup: props.job?.stop_containers_before_backup || false,
 });
+
+const volumeSearch = ref(form.volume_name);
+const volumeSelectorOpen = ref(false);
+
+const filteredVolumes = computed(() => {
+    const query = volumeSearch.value.trim().toLowerCase();
+
+    if (!query) return props.volumes;
+
+    return props.volumes.filter((volume) => volume.name.toLowerCase().includes(query));
+});
+
+const selectedVolume = computed(() => props.volumes.find((volume) => volume.name === form.volume_name));
+
+const updateVolumeSearch = () => {
+    const matchingVolume = props.volumes.find((volume) => volume.name === volumeSearch.value);
+
+    form.volume_name = matchingVolume?.name || '';
+    volumeSelectorOpen.value = true;
+};
+
+const selectVolume = (volume: any) => {
+    form.volume_name = volume.name;
+    volumeSearch.value = volume.name;
+    volumeSelectorOpen.value = false;
+};
 
 const summary = computed(() => {
     if (form.schedule_type === 'hourly') return `Every ${form.schedule_config.everyHours || 1} hours`;
@@ -66,13 +92,38 @@ const submit = () => {
                     <span v-if="form.errors.name" class="text-sm text-rose-300">{{ form.errors.name }}</span>
                 </label>
 
-                <label class="space-y-2">
+                <div class="space-y-2">
                     <span class="label">{{ t('Docker volume') }}</span>
-                    <select v-model="form.volume_name" class="input" required>
-                        <option value="" disabled>{{ t('Select a volume') }}</option>
-                        <option v-for="volume in volumes" :key="volume.name" :value="volume.name">{{ volume.name }}</option>
-                    </select>
-                </label>
+                    <div class="relative">
+                        <input
+                            v-model="volumeSearch"
+                            class="input pr-10"
+                            required
+                            autocomplete="off"
+                            :placeholder="t('Search volumes')"
+                            @focus="volumeSelectorOpen = true"
+                            @input="updateVolumeSearch"
+                            @keydown.escape="volumeSelectorOpen = false"
+                        >
+                        <button type="button" class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-200" :aria-label="t('Select a volume')" @click="volumeSelectorOpen = !volumeSelectorOpen">
+                            <span aria-hidden="true">⌄</span>
+                        </button>
+
+                        <div v-if="volumeSelectorOpen" class="absolute z-20 mt-2 max-h-60 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-xl shadow-slate-200/60 dark:border-slate-700 dark:bg-slate-950 dark:shadow-black/30">
+                            <button
+                                v-for="volume in filteredVolumes"
+                                :key="volume.name"
+                                type="button"
+                                class="block w-full px-3 py-2 text-left text-slate-700 hover:bg-sky-50 hover:text-sky-700 dark:text-slate-200 dark:hover:bg-sky-400/10 dark:hover:text-sky-100"
+                                @mousedown.prevent="selectVolume(volume)"
+                            >
+                                <span class="block break-all">{{ volume.name }}</span>
+                            </button>
+                            <p v-if="!filteredVolumes.length" class="px-3 py-2 text-slate-500 dark:text-slate-400">{{ t('No matching volumes') }}</p>
+                        </div>
+                    </div>
+                    <p v-if="selectedVolume" class="text-sm text-slate-300">{{ t('Selected volume: {volume}', { volume: selectedVolume.name }) }}</p>
+                </div>
 
                 <label class="space-y-2">
                     <span class="label">{{ t('Destination') }}</span>
