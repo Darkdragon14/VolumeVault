@@ -1,5 +1,11 @@
 .env
+.agents
+.phpunit.cache
+.phpunit.result.cache
+AGENTS.md
+boost.json
 node_modules
+opencode.json
 vendor
 storage/logs/*
 storage/framework/cache/*
@@ -10,4 +16,3 @@ database/*.sqlite
 public/build
 .git
 .github
-plan.md
