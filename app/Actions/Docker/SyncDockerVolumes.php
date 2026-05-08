@@ -3,6 +3,7 @@
 namespace App\Actions\Docker;
 
 use App\Actions\Backup\MarkMissingVolumeJobs;
+use App\Models\BackupJob;
 use App\Models\DockerVolume;
 
 class SyncDockerVolumes
@@ -38,13 +39,22 @@ class SyncDockerVolumes
             $missingQuery->whereNotIn('name', $names->all());
         }
 
-        $missingNames = $missingQuery->pluck('name');
+        $jobVolumeNames = BackupJob::query()->select('volume_name');
+        $missingNames = (clone $missingQuery)->whereIn('name', $jobVolumeNames)->pluck('name');
+        $orphanedMissingNames = (clone $missingQuery)->whereNotIn('name', BackupJob::query()->select('volume_name'))->pluck('name');
+
         $markedMissing = DockerVolume::whereIn('name', $missingNames)->update(['exists' => false]);
+        $removed = DockerVolume::whereIn('name', $orphanedMissingNames)->delete();
+        $removed += DockerVolume::query()
+            ->where('exists', false)
+            ->whereNotIn('name', BackupJob::query()->select('volume_name'))
+            ->delete();
         $affectedJobs = $this->markMissingVolumeJobs->handle($missingNames->all());
 
         return [
             'found' => $names->count(),
             'marked_missing' => $markedMissing,
+            'removed' => $removed,
             'affected_jobs' => $affectedJobs,
         ];
     }

@@ -30,7 +30,7 @@ class VolumeController extends Controller
         try {
             $result = $syncDockerVolumes->handle();
 
-            return back()->with('success', "Synced {$result['found']} Docker volumes. {$result['marked_missing']} marked missing.");
+            return back()->with('success', "Synced {$result['found']} Docker volumes. {$result['marked_missing']} marked missing. {$result['removed']} removed.");
         } catch (Throwable $exception) {
             return back()->with('error', 'Unable to sync Docker volumes: '.str($exception->getMessage())->limit(500)->toString());
         }

@@ -22,7 +22,7 @@ It provides a guided web UI around scheduled backups, encrypted destinations, no
 
 ## Highlights
 
-- Discover Docker volumes through the Docker CLI and keep track of volumes that disappear later.
+- Discover Docker volumes through the Docker CLI and keep missing volumes visible only while backup jobs still reference them.
 - Configure AWS S3, Cloudflare R2, custom S3-compatible storage, WebDAV, SSH/SFTP, Azure Blob Storage, Dropbox, Google Drive, and local filesystem destinations.
 - Store destination credentials and notification URLs encrypted at rest with Laravel `Crypt`.
 - Create hourly, daily, weekly, or cron-based backup schedules.
