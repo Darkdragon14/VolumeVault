@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -17,6 +18,7 @@ return new class extends Migration
             'jobs',
             'job_batches',
             'failed_jobs',
+            'hosts',
             'docker_volumes',
             'backup_destinations',
             'backup_jobs',
@@ -111,9 +113,38 @@ return new class extends Migration
             $table->timestamp('failed_at')->useCurrent();
         });
 
-        Schema::create('docker_volumes', function (Blueprint $table) {
+        Schema::create('hosts', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->unique();
+            $table->string('name');
+            $table->string('type')->index();
+            $table->string('status')->default('online')->index();
+            $table->boolean('is_active')->default(true)->index();
+            $table->timestamp('last_seen_at')->nullable()->index();
+            $table->string('agent_version')->nullable();
+            $table->string('docker_version')->nullable();
+            $table->json('capabilities')->nullable();
+            $table->json('metadata')->nullable();
+            $table->string('enrollment_token_hash')->nullable()->index();
+            $table->timestamp('enrollment_token_expires_at')->nullable()->index();
+            $table->timestamp('enrolled_at')->nullable();
+            $table->text('last_error')->nullable();
+            $table->timestamps();
+        });
+
+        $now = now();
+        $localHostId = DB::table('hosts')->insertGetId([
+            'name' => 'Local Docker Host',
+            'type' => 'local',
+            'status' => 'online',
+            'is_active' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        Schema::create('docker_volumes', function (Blueprint $table) use ($localHostId) {
+            $table->id();
+            $table->foreignId('host_id')->default($localHostId)->constrained('hosts')->restrictOnDelete();
+            $table->string('name');
             $table->string('driver')->nullable();
             $table->text('mountpoint')->nullable();
             $table->json('labels')->nullable();
@@ -121,6 +152,8 @@ return new class extends Migration
             $table->boolean('exists')->default(true)->index();
             $table->timestamp('last_seen_at')->nullable()->index();
             $table->timestamps();
+
+            $table->unique(['host_id', 'name']);
         });
 
         Schema::create('backup_destinations', function (Blueprint $table) {
@@ -143,8 +176,9 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('backup_jobs', function (Blueprint $table) {
+        Schema::create('backup_jobs', function (Blueprint $table) use ($localHostId) {
             $table->id();
+            $table->foreignId('host_id')->default($localHostId)->constrained('hosts')->restrictOnDelete();
             $table->string('name');
             $table->string('volume_name')->index();
             $table->foreignId('backup_destination_id')->constrained()->cascadeOnDelete();
@@ -163,8 +197,9 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('backup_runs', function (Blueprint $table) {
+        Schema::create('backup_runs', function (Blueprint $table) use ($localHostId) {
             $table->id();
+            $table->foreignId('host_id')->default($localHostId)->constrained('hosts')->restrictOnDelete();
             $table->foreignId('backup_job_id')->constrained()->cascadeOnDelete();
             $table->string('status')->default('queued')->index();
             $table->string('trigger');
@@ -177,8 +212,9 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('restore_runs', function (Blueprint $table) {
+        Schema::create('restore_runs', function (Blueprint $table) use ($localHostId) {
             $table->id();
+            $table->foreignId('host_id')->default($localHostId)->constrained('hosts')->restrictOnDelete();
             $table->foreignId('backup_job_id')->constrained()->cascadeOnDelete();
             $table->foreignId('backup_destination_id')->nullable()->constrained()->nullOnDelete();
             $table->string('selected_backup_key');
@@ -253,6 +289,7 @@ return new class extends Migration
         Schema::dropIfExists('backup_jobs');
         Schema::dropIfExists('backup_destinations');
         Schema::dropIfExists('docker_volumes');
+        Schema::dropIfExists('hosts');
         Schema::dropIfExists('failed_jobs');
         Schema::dropIfExists('job_batches');
         Schema::dropIfExists('jobs');
