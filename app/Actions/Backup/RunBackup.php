@@ -117,6 +117,10 @@ class RunBackup
         }
 
         try {
+            if (! $host || $host->type !== Host::TYPE_LOCAL) {
+                throw new RuntimeException('Only local backup jobs can run through the local Docker worker.');
+            }
+
             if (! $job->destination?->is_active) {
                 throw new RuntimeException('The backup destination is inactive.');
             }

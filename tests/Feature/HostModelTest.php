@@ -22,6 +22,7 @@ class HostModelTest extends TestCase
         $this->assertSame(Host::TYPE_LOCAL, $localHost->type);
         $this->assertSame(Host::STATUS_ONLINE, $localHost->status);
         $this->assertTrue($localHost->is_active);
+        $this->assertTrue($localHost->is(Host::localHost()));
     }
 
     public function test_host_relations_are_available_from_scoped_resources(): void

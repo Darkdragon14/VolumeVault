@@ -18,6 +18,7 @@ class CreateBackupRun
     public function handle(BackupJob $job, string $trigger, ?User $initiatedBy = null): BackupRun
     {
         $job->loadMissing('destination');
+        $hostId = (int) ($job->host_id ?: Host::localHost()->id);
 
         // A group member is only ever run as part of its group run (which creates
         // its BackupRun directly). Block the standalone run paths — manual "run
@@ -63,6 +64,7 @@ class CreateBackupRun
 
         return DB::transaction(function () use ($job, $trigger, $initiatedBy): BackupRun {
             $run = BackupRun::create([
+                'host_id' => $hostId,
                 'backup_job_id' => $job->id,
                 'initiated_by_user_id' => $initiatedBy?->getKey(),
                 'status' => BackupRun::STATUS_QUEUED,

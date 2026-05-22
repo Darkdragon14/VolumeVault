@@ -11,6 +11,7 @@ use App\Actions\Restore\Modes\RestoreModeHandler;
 use App\Actions\Restore\Modes\SafeInPlaceRestore;
 use App\Models\ActivityLog;
 use App\Models\DockerVolume;
+use App\Models\Host;
 use App\Models\RestoreRun;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Logging\AppendRunLog;
@@ -136,10 +137,13 @@ class RunRestore
                 throw new RuntimeException($result->combinedOutput() ?: 'Restore container failed.');
             }
 
-            DockerVolume::updateOrCreate(['name' => $run->target_volume_name], [
-                'exists' => true,
-                'last_seen_at' => now(),
-            ]);
+            DockerVolume::updateOrCreate(
+                ['host_id' => $host->id, 'name' => $run->target_volume_name],
+                [
+                    'exists' => true,
+                    'last_seen_at' => now(),
+                ]
+            );
 
             $finishedAt = now();
             $run->forceFill([

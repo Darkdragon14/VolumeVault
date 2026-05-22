@@ -20,6 +20,7 @@ class RestoreController extends Controller
     public function create(Request $request, BackupJob $backupJob, ListBackupObjects $listBackupObjects, GenerateRestoreVolumeName $generateRestoreVolumeName): Response
     {
         $backupJob->load('destination');
+        $hostId = (int) ($backupJob->host_id ?: Host::localHost()->id);
         $listError = null;
 
         try {

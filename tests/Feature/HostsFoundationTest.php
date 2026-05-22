@@ -2,15 +2,35 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\CreateBackupRun;
+use App\Actions\Backup\RunBackup;
+use App\Actions\Docker\CreateDockerVolume;
+use App\Actions\Docker\FindContainersUsingVolume;
+use App\Actions\Docker\InspectDockerVolume;
+use App\Actions\Docker\RunBackupContainer;
+use App\Actions\Docker\RunRestoreContainer;
+use App\Actions\Docker\StartDockerContainers;
+use App\Actions\Docker\StopDockerContainers;
+use App\Actions\Restore\CreateRestoreRun;
+use App\Actions\Restore\RunRestore;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
+use App\Models\Host;
 use App\Models\RestoreRun;
+use App\Services\BackupDestinations\DestinationStorage;
+use App\Services\Docker\DockerProcessResult;
+use App\Services\Logging\AppendRunLog;
+use App\Services\Notifications\SendShoutrrrNotification;
+use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
+use Mockery;
+use RuntimeException;
 use Tests\TestCase;
 
 class HostsFoundationTest extends TestCase
@@ -87,6 +107,175 @@ class HostsFoundationTest extends TestCase
         $this->expectException(QueryException::class);
 
         DockerVolume::create(['name' => 'shared_data', 'exists' => true]);
+    }
+
+    public function test_backup_run_creation_uses_the_job_host(): void
+    {
+        $agentHost = Host::factory()->agent()->create(['name' => 'Remote Agent']);
+        $destination = $this->destination();
+        DockerVolume::create(['host_id' => $agentHost->id, 'name' => 'agent_data', 'exists' => true]);
+        $job = BackupJob::create([
+            'host_id' => $agentHost->id,
+            'name' => 'Agent Nightly',
+            'volume_name' => 'agent_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+
+        $run = app(CreateBackupRun::class)->handle($job, BackupRun::TRIGGER_MANUAL);
+
+        $this->assertSame($agentHost->id, $run->host_id);
+    }
+
+    public function test_backup_run_creation_rejects_volume_that_exists_only_on_another_host(): void
+    {
+        $localHost = Host::localHost();
+        $agentHost = Host::factory()->agent()->create(['name' => 'Remote Agent']);
+        $destination = $this->destination();
+        DockerVolume::create(['host_id' => $agentHost->id, 'name' => 'shared_data', 'exists' => true]);
+        $job = BackupJob::create([
+            'host_id' => $localHost->id,
+            'name' => 'Local Nightly',
+            'volume_name' => 'shared_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+
+        $this->expectException(ValidationException::class);
+
+        app(CreateBackupRun::class)->handle($job, BackupRun::TRIGGER_MANUAL);
+    }
+
+    public function test_restore_run_creation_uses_the_job_host(): void
+    {
+        $agentHost = Host::factory()->agent()->create(['name' => 'Remote Agent']);
+        $destination = $this->destination();
+        $job = BackupJob::create([
+            'host_id' => $agentHost->id,
+            'name' => 'Agent Nightly',
+            'volume_name' => 'agent_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+
+        $run = app(CreateRestoreRun::class)->handle($job, [
+            'selected_backup_key' => 'backups/agent_data.tar.gz',
+            'mode' => RestoreRun::MODE_NEW_VOLUME,
+            'target_volume_name' => 'agent_data_restored',
+        ]);
+
+        $this->assertSame($agentHost->id, $run->host_id);
+    }
+
+    public function test_local_backup_updates_volume_for_the_local_host_only(): void
+    {
+        $localHost = Host::localHost();
+        $agentHost = Host::factory()->agent()->create(['name' => 'Remote Agent']);
+        $destination = $this->destination();
+        DockerVolume::create(['host_id' => $agentHost->id, 'name' => 'app_data', 'exists' => false]);
+        $job = BackupJob::create([
+            'host_id' => $localHost->id,
+            'name' => 'Local Nightly',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+            'stop_containers_before_backup' => false,
+        ]);
+        $run = BackupRun::create([
+            'host_id' => $localHost->id,
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+        ]);
+        $inspectDockerVolume = Mockery::mock(InspectDockerVolume::class);
+        $inspectDockerVolume->shouldReceive('handle')->once()->with('app_data')->andReturn(['name' => 'app_data']);
+        $findContainersUsingVolume = Mockery::mock(FindContainersUsingVolume::class);
+        $findContainersUsingVolume->shouldNotReceive('handle');
+        $runBackupContainer = Mockery::mock(RunBackupContainer::class);
+        $runBackupContainer->shouldReceive('handle')
+            ->once()
+            ->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $sendNotification = Mockery::mock(SendShoutrrrNotification::class);
+        $sendNotification->shouldReceive('sendBackupRunFinished')->once();
+
+        $action = new RunBackup(
+            $inspectDockerVolume,
+            $findContainersUsingVolume,
+            Mockery::mock(StopDockerContainers::class),
+            Mockery::mock(StartDockerContainers::class),
+            $runBackupContainer,
+            app(AppendRunLog::class),
+            $sendNotification,
+            app(BackupScheduleCalculator::class),
+        );
+        $action->handle($run);
+
+        $this->assertDatabaseHas('docker_volumes', ['host_id' => $localHost->id, 'name' => 'app_data', 'exists' => true]);
+        $this->assertDatabaseHas('docker_volumes', ['host_id' => $agentHost->id, 'name' => 'app_data', 'exists' => false]);
+    }
+
+    public function test_local_restore_updates_volume_for_the_local_host_only(): void
+    {
+        $localHost = Host::localHost();
+        $agentHost = Host::factory()->agent()->create(['name' => 'Remote Agent']);
+        $destination = $this->destination();
+        DockerVolume::create(['host_id' => $agentHost->id, 'name' => 'app_data_restored', 'exists' => false]);
+        $job = BackupJob::create([
+            'host_id' => $localHost->id,
+            'name' => 'Local Nightly',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+        $run = RestoreRun::create([
+            'host_id' => $localHost->id,
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $destination->id,
+            'selected_backup_key' => 'backups/app_data.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data_restored',
+            'mode' => RestoreRun::MODE_NEW_VOLUME,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+        $inspectDockerVolume = Mockery::mock(InspectDockerVolume::class);
+        $inspectDockerVolume->shouldReceive('handle')->once()->with('app_data_restored')->andThrow(new RuntimeException('missing'));
+        $createDockerVolume = Mockery::mock(CreateDockerVolume::class);
+        $createDockerVolume->shouldReceive('handle')->once()->with('app_data_restored');
+        $runRestoreContainer = Mockery::mock(RunRestoreContainer::class);
+        $runRestoreContainer->shouldReceive('handle')
+            ->once()
+            ->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $storage = Mockery::mock(DestinationStorage::class);
+        $storage->shouldReceive('download')
+            ->once()
+            ->with(Mockery::on(fn (BackupDestination $givenDestination): bool => $givenDestination->is($destination)), 'backups/app_data.tar.gz', Mockery::type('string'));
+
+        $action = new RunRestore(
+            $inspectDockerVolume,
+            $createDockerVolume,
+            $runRestoreContainer,
+            $storage,
+            app(AppendRunLog::class),
+        );
+        $action->handle($run);
+
+        $this->assertDatabaseHas('docker_volumes', ['host_id' => $localHost->id, 'name' => 'app_data_restored', 'exists' => true]);
+        $this->assertDatabaseHas('docker_volumes', ['host_id' => $agentHost->id, 'name' => 'app_data_restored', 'exists' => false]);
     }
 
     private function destination(): BackupDestination

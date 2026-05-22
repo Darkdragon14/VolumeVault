@@ -4,6 +4,7 @@ namespace App\Actions\Restore;
 
 use App\Models\ActivityLog;
 use App\Models\BackupJob;
+use App\Models\Host;
 use App\Models\RestoreRun;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
@@ -23,6 +24,7 @@ class CreateRestoreRun
             : $this->resolveNewVolumeTarget($job, $sourceName, $data['target_volume_name'] ?? null);
 
         $run = RestoreRun::create([
+            'host_id' => $hostId,
             'backup_job_id' => $job->id,
             'initiated_by_user_id' => $initiatedBy?->getKey(),
             'backup_destination_id' => $job->backup_destination_id,

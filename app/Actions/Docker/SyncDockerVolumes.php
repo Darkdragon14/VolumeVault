@@ -5,6 +5,7 @@ namespace App\Actions\Docker;
 use App\Actions\Backup\MarkMissingVolumeJobs;
 use App\Models\BackupJob;
 use App\Models\DockerVolume;
+use App\Models\Host;
 
 class SyncDockerVolumes
 {
@@ -15,13 +16,14 @@ class SyncDockerVolumes
 
     public function handle(): array
     {
+        $localHost = Host::localHost();
         $seenAt = now();
         $volumes = $this->listDockerVolumes->handle();
         $names = collect($volumes)->pluck('name')->filter()->values();
 
         foreach ($volumes as $volume) {
             DockerVolume::updateOrCreate(
-                ['name' => $volume['name']],
+                ['host_id' => $localHost->id, 'name' => $volume['name']],
                 [
                     'driver' => $volume['driver'] ?? null,
                     'mountpoint' => $volume['mountpoint'] ?? null,
@@ -33,7 +35,9 @@ class SyncDockerVolumes
             );
         }
 
-        $missingQuery = DockerVolume::query()->where('exists', true);
+        $missingQuery = DockerVolume::query()
+            ->where('host_id', $localHost->id)
+            ->where('exists', true);
 
         if ($names->isNotEmpty()) {
             $missingQuery->whereNotIn('name', $names->all());
@@ -52,7 +56,12 @@ class SyncDockerVolumes
             ->where('exists', false)
             ->whereNotIn('name', clone $jobVolumeNames)
             ->delete();
-        $affectedJobs = $this->markMissingVolumeJobs->handle($missingNames->all());
+        $removed += DockerVolume::query()
+            ->where('host_id', $localHost->id)
+            ->where('exists', false)
+            ->whereNotIn('name', clone $jobVolumeNames)
+            ->delete();
+        $affectedJobs = $this->markMissingVolumeJobs->handle($missingNames->all(), $localHost);
 
         return [
             'found' => $names->count(),

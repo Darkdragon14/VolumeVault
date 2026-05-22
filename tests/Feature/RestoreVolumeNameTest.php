@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Actions\Docker\InspectDockerVolume;
 use App\Actions\Restore\GenerateRestoreVolumeName;
 use App\Models\DockerVolume;
+use App\Models\Host;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
@@ -45,6 +46,22 @@ class RestoreVolumeNameTest extends TestCase
         $name = $generator->handle('my-app_data', CarbonImmutable::parse('2026-05-01 14:30:00', 'UTC'));
 
         $this->assertSame('my-app_data_restored_20260501_143000_2', $name);
+    }
+
+    public function test_database_collisions_are_scoped_to_host_when_host_is_provided(): void
+    {
+        $localHost = Host::localHost();
+        $agentHost = Host::factory()->agent()->create();
+        DockerVolume::create([
+            'host_id' => $agentHost->id,
+            'name' => 'my-app_data_restored_20260501_143000',
+            'exists' => true,
+        ]);
+        $generator = new GenerateRestoreVolumeName($this->missingVolumeInspector());
+
+        $name = $generator->handle('my-app_data', CarbonImmutable::parse('2026-05-01 14:30:00', 'UTC'), $localHost->id);
+
+        $this->assertSame('my-app_data_restored_20260501_143000', $name);
     }
 
     private function missingVolumeInspector(): InspectDockerVolume

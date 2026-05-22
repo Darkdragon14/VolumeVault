@@ -58,6 +58,11 @@ class Host extends Model
         return $query->where('type', self::TYPE_LOCAL);
     }
 
+    public static function localHost(): self
+    {
+        return self::query()->local()->sole();
+    }
+
     public function dockerVolumes(): HasMany
     {
         return $this->hasMany(DockerVolume::class);

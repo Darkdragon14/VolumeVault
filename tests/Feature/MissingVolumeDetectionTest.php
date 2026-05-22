@@ -8,6 +8,7 @@ use App\Actions\Docker\SyncDockerVolumes;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\DockerVolume;
+use App\Models\Host;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
@@ -28,7 +29,7 @@ class MissingVolumeDetectionTest extends TestCase
             'status' => BackupJob::STATUS_ACTIVE,
         ]);
 
-        app(MarkMissingVolumeJobs::class)->handle(['missing_volume']);
+        app(MarkMissingVolumeJobs::class)->handle(['missing_volume'], Host::localHost());
 
         $job->refresh();
 
@@ -91,6 +92,33 @@ class MissingVolumeDetectionTest extends TestCase
         $this->assertSame(0, $result['removed']);
         $this->assertDatabaseHas('docker_volumes', ['name' => 'job_volume', 'exists' => false]);
         $this->assertSame(BackupJob::STATUS_ERROR, $job->refresh()->status);
+    }
+
+    public function test_sync_missing_volume_detection_ignores_jobs_on_other_hosts(): void
+    {
+        $localHost = Host::localHost();
+        $agentHost = Host::factory()->agent()->create();
+        $destination = $this->destination();
+        DockerVolume::create(['host_id' => $localHost->id, 'name' => 'shared_volume', 'exists' => true]);
+        DockerVolume::create(['host_id' => $agentHost->id, 'name' => 'shared_volume', 'exists' => true]);
+        $agentJob = BackupJob::create([
+            'host_id' => $agentHost->id,
+            'name' => 'Agent Nightly',
+            'volume_name' => 'shared_volume',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+
+        $result = $this->syncDockerVolumes([]);
+
+        $this->assertSame(0, $result['marked_missing']);
+        $this->assertSame(1, $result['removed']);
+        $this->assertDatabaseMissing('docker_volumes', ['host_id' => $localHost->id, 'name' => 'shared_volume']);
+        $this->assertDatabaseHas('docker_volumes', ['host_id' => $agentHost->id, 'name' => 'shared_volume', 'exists' => true]);
+        $this->assertSame(BackupJob::STATUS_ACTIVE, $agentJob->refresh()->status);
     }
 
     public function test_sync_removes_stale_missing_volume_after_last_job_is_deleted(): void
