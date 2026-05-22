@@ -38,6 +38,7 @@ class BackupJob extends Model
     public const FILTER_MODE_INCLUDE = 'include';
 
     protected $fillable = [
+        'host_id',
         'name',
         'backup_job_group_id',
         'source_type',

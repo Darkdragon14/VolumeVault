@@ -28,6 +28,7 @@ class RestoreRun extends Model
     public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
+        'host_id',
         'backup_job_id',
         'initiated_by_user_id',
         'backup_destination_id',
@@ -66,6 +67,11 @@ class RestoreRun extends Model
     public function job(): BelongsTo
     {
         return $this->belongsTo(BackupJob::class, 'backup_job_id');
+    }
+
+    public function host(): BelongsTo
+    {
+        return $this->belongsTo(Host::class);
     }
 
     public function destination(): BelongsTo

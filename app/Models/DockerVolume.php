@@ -11,6 +11,7 @@ class DockerVolume extends Model
     use HasFactory;
 
     protected $fillable = [
+        'host_id',
         'name',
         'driver',
         'mountpoint',

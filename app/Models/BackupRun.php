@@ -28,6 +28,7 @@ class BackupRun extends Model
     public const TRIGGER_PRE_RESTORE = 'pre_restore';
 
     protected $fillable = [
+        'host_id',
         'backup_job_id',
         'backup_group_run_id',
         'initiated_by_user_id',
