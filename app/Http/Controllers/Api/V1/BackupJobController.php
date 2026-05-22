@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Backup\CreateBackupRun;
+use App\Http\Controllers\Api\V1\Concerns\ResolvesApiHosts;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\BackupJobRequest;
 use App\Jobs\RunBackupJob;
@@ -19,10 +20,14 @@ use Illuminate\Validation\ValidationException;
 
 class BackupJobController extends Controller
 {
+    use ResolvesApiHosts;
+
     public function __construct(private readonly BackupScheduleCalculator $scheduleCalculator) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $scope = $this->resolveHostScope($request);
+
         return response()->json([
             'data' => BackupJob::with(['destination', 'notificationChannels'])
                 ->latest()
@@ -54,7 +59,7 @@ class BackupJobController extends Controller
         return response()->json([
             'data' => [
                 ...$this->serializeJob($backupJob),
-                'runs' => $backupJob->runs()->limit(50)->get(),
+                'runs' => $backupJob->runs()->with('host')->limit(50)->get()->map(fn (BackupRun $run) => $this->serializeRun($run)),
             ],
         ]);
     }
@@ -95,7 +100,7 @@ class BackupJobController extends Controller
         $run = $createBackupRun->handle($backupJob, BackupRun::TRIGGER_MANUAL, $request->user());
         RunBackupJob::dispatch($run->id);
 
-        return response()->json(['data' => $run], 202);
+        return response()->json(['data' => $this->serializeRun($run->load('host'))], 202);
     }
 
     public function pause(Request $request, BackupJob $backupJob): JsonResponse
@@ -301,7 +306,8 @@ class BackupJobController extends Controller
         $job->loadMissing('notificationChannels');
 
         return [
-            ...$job->toArray(),
+            ...$data,
+            'host' => $this->safeHost($job->host),
             'destination' => $job->destination?->safeForFrontend(),
             'notification_channel_ids' => $job->notificationChannels->pluck('id')->values()->all(),
             'schedule_summary' => $this->scheduleCalculator->summary($job->schedule_type, $job->schedule_config ?? []),

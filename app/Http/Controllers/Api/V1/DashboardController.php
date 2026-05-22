@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Http\Controllers\Api\V1\Concerns\ResolvesApiHosts;
 use App\Http\Controllers\Controller;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
@@ -11,6 +12,7 @@ use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Services\Volumes\VolumeBackupSummaries;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
@@ -35,7 +37,7 @@ class DashboardController extends Controller
             ->where('status', BackupJob::STATUS_ACTIVE)
             ->whereNull('backup_job_group_id')
             ->whereNotNull('next_run_at')
-            ->orderBy('next_run_at')
+            ->orderBy('next_run_at'), $scope)
             ->first();
         $nextGroup = BackupJobGroup::query()
             ->where('status', BackupJobGroup::STATUS_ACTIVE)
@@ -75,7 +77,7 @@ class DashboardController extends Controller
                 'jobs_with_errors' => BackupJob::with('destination')
                     ->whereNull('backup_job_group_id')
                     ->where('status', BackupJob::STATUS_ERROR)
-                    ->latest()
+                    ->latest(), $scope)
                     ->limit(8)
                     ->get()
                     ->map(fn (BackupJob $job) => $this->job($job)),
@@ -89,9 +91,35 @@ class DashboardController extends Controller
 
     private function job(BackupJob $job): array
     {
+        $data = $job->toArray();
+        unset($data['destination'], $data['host']);
+
         return [
-            ...$job->toArray(),
+            ...$data,
+            'host' => $this->safeHost($job->host),
             'destination' => $job->destination?->safeForFrontend(),
+        ];
+    }
+
+    private function backupRun(BackupRun $run): array
+    {
+        $data = $run->toArray();
+        unset($data['host']);
+
+        return [
+            ...$data,
+            'host' => $this->safeHost($run->host),
+        ];
+    }
+
+    private function restoreRun(RestoreRun $run): array
+    {
+        $data = $run->toArray();
+        unset($data['host']);
+
+        return [
+            ...$data,
+            'host' => $this->safeHost($run->host),
         ];
     }
 }

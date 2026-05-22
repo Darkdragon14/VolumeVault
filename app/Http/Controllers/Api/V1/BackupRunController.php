@@ -2,21 +2,41 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Http\Controllers\Api\V1\Concerns\ResolvesApiHosts;
 use App\Http\Controllers\Controller;
 use App\Models\BackupRun;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class BackupRunController extends Controller
 {
-    public function index(): JsonResponse
+    use ResolvesApiHosts;
+
+    public function index(Request $request): JsonResponse
     {
+        $scope = $this->resolveHostScope($request);
+
         return response()->json([
-            'data' => BackupRun::with('job.destination')->latest()->limit(100)->get(),
+            'data' => $this->applyHostScope(BackupRun::with('job.destination', 'host')->latest(), $scope)
+                ->limit(100)
+                ->get()
+                ->map(fn (BackupRun $run) => $this->serializeRun($run)),
         ]);
     }
 
     public function show(BackupRun $backupRun): JsonResponse
     {
-        return response()->json(['data' => $backupRun->load('job.destination')]);
+        return response()->json(['data' => $this->serializeRun($backupRun->load('job.destination', 'host'))]);
+    }
+
+    private function serializeRun(BackupRun $run): array
+    {
+        $data = $run->toArray();
+        unset($data['host']);
+
+        return [
+            ...$data,
+            'host' => $this->safeHost($run->host),
+        ];
     }
 }

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
+use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
@@ -22,7 +23,7 @@ class ExternalApiTest extends TestCase
 
     public function test_openapi_schema_is_public(): void
     {
-        $this->getJson('/api/v1/openapi.json')
+        $response = $this->getJson('/api/v1/openapi.json')
             ->assertOk()
             ->assertJsonPath('openapi', '3.1.0')
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.source_type.enum.1', 'host_path')
@@ -32,6 +33,16 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('components.schemas.DockerVolume.properties.backup_state.enum.0', 'backed_up')
             ->assertJsonPath('components.schemas.BackupRun.properties.backup_size_bytes.type.0', 'integer')
             ->assertJsonPath('components.securitySchemes.bearerAuth.scheme', 'bearer');
+
+        $schema = $response->json();
+
+        $this->assertSame('host_id', $schema['paths']['/volumes']['get']['parameters'][0]['name']);
+        $this->assertSame('all_hosts', $schema['paths']['/volumes']['get']['parameters'][1]['name']);
+        $this->assertSame('host_id', $schema['paths']['/dashboard']['get']['parameters'][0]['name']);
+        $this->assertSame('host_id', $schema['paths']['/backup-jobs']['get']['parameters'][0]['name']);
+        $this->assertSame('host_id', $schema['paths']['/backup-runs']['get']['parameters'][0]['name']);
+        $this->assertSame('host_id', $schema['paths']['/restore-runs']['get']['parameters'][0]['name']);
+        $this->assertArrayHasKey('HostMetadata', $schema['components']['schemas']);
     }
 
     public function test_openapi_marks_the_schema_endpoint_public_and_pause_bodies_optional(): void

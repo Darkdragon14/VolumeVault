@@ -79,7 +79,7 @@ class OpenApiController extends Controller
             '/backup-group-runs/{id}' => ['get' => $this->operation('Read a backup group run with its per-volume member runs.', ['read'], null, true)],
             '/backup-runs' => ['get' => $this->operation('List recent backup runs.', ['read'])],
             '/backup-runs/{id}' => ['get' => $this->operation('Read backup run details and logs.', ['read'], null, true)],
-            '/restore-runs' => ['get' => $this->operation('List recent restore runs.', ['read'])],
+            '/restore-runs' => ['get' => $this->operation('List recent restore runs.', ['read'], hostList: true)],
             '/restore-runs/{id}' => ['get' => $this->operation('Read restore run details and logs.', ['read'], null, true)],
             '/destinations' => [
                 'get' => $this->operation('List backup destinations without plaintext secrets.', ['read'], null, false, true),
@@ -103,6 +103,12 @@ class OpenApiController extends Controller
 
     private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true): array
     {
+        $description = trim(($abilities ? 'Requires token abilities: '.implode(', ', $abilities).'. ' : '').($admin ? 'Requires an admin user token.' : ''));
+
+        if ($hostList) {
+            $description = trim($description.' Host scoping precedence is host_id, then all_hosts=true, then the local host. Responses include safe host metadata.');
+        }
+
         $operation = [
             'summary' => $summary,
             'description' => $public
@@ -125,13 +131,36 @@ class OpenApiController extends Controller
             ];
         }
 
+        $parameters = [];
+
         if ($id) {
-            $operation['parameters'] = [[
+            $parameters[] = [
                 'name' => 'id',
                 'in' => 'path',
                 'required' => true,
                 'schema' => ['type' => 'integer'],
-            ]];
+            ];
+        }
+
+        if ($hostList) {
+            $parameters[] = [
+                'name' => 'host_id',
+                'in' => 'query',
+                'required' => false,
+                'description' => 'Filter results to a single host. Takes precedence over all_hosts.',
+                'schema' => ['type' => 'integer'],
+            ];
+            $parameters[] = [
+                'name' => 'all_hosts',
+                'in' => 'query',
+                'required' => false,
+                'description' => 'Set to true to list across hosts. When omitted with host_id, the local host is used.',
+                'schema' => ['type' => 'boolean'],
+            ];
+        }
+
+        if ($parameters !== []) {
+            $operation['parameters'] = $parameters;
         }
 
         if ($body) {
@@ -338,6 +367,21 @@ class OpenApiController extends Controller
                     'schedule_type' => ['type' => ['string', 'null'], 'enum' => ['hourly', 'daily', 'weekly', 'cron'], 'description' => 'Schedule for jobs created on the fly. Required only when the stack has volumes without a backup job. Existing jobs keep their own schedule.'],
                     'schedule_config' => ['type' => 'object', 'description' => 'Schedule details for created jobs: {everyHours} for hourly, {time} for daily, {dayOfWeek,time} for weekly, {expression} for cron.'],
                     'timezone' => ['type' => ['string', 'null'], 'description' => 'IANA timezone the created jobs\' schedule is evaluated in. Defaults to the application timezone.'],
+                ],
+            ],
+            'HostMetadata' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer'],
+                    'name' => ['type' => 'string'],
+                    'type' => ['type' => 'string', 'enum' => ['local', 'agent']],
+                    'status' => ['type' => 'string', 'enum' => ['online', 'offline', 'error']],
+                    'is_active' => ['type' => 'boolean'],
+                    'last_seen_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                    'agent_version' => ['type' => ['string', 'null']],
+                    'docker_version' => ['type' => ['string', 'null']],
+                    'capabilities' => ['type' => 'object', 'additionalProperties' => true],
+                    'metadata' => ['type' => 'object', 'additionalProperties' => true],
                 ],
             ],
             'PauseRequest' => [
