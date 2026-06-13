@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_archive_name_templates' => [
+        'title' => 'Custom backup archive names',
+        'description' => 'Backup jobs can now define an archive name template using tokens such as {name}, {source}, {id}, {year}, {month}, {day}, and {time}. Existing jobs keep the previous volumevault-source-run-id naming until a template is configured, and the form warns when a template may overwrite earlier archives.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Teljesebb felületi fordítások',
         'description' => 'Számos felületi szöveg, amely még angolul jelent meg – köztük az API-tokenek és a telepítésmentések oldalai –, mostantól teljesen le van fordítva. Mind a kilenc nyelv szinkronizálva lett, és a hiányzó fordítások pótlásra kerültek, így a nem angol nyelvű felhasználók többé nem látnak lefordítatlan címkéket, gombokat és üzeneteket.',

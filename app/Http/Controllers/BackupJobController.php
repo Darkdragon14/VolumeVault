@@ -193,6 +193,7 @@ class BackupJobController extends Controller
         $scheduleConfig = $request->normalizedScheduleConfig();
         $timezone = $request->filled('timezone') ? $request->input('timezone') : null;
         $backupExcludeRegexp = trim((string) $request->input('backup_exclude_regexp', ''));
+        $backupFilenameTemplate = trim((string) $request->input('backup_filename_template', ''));
         $sourceType = $request->input('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME);
         $isHostPath = $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH;
 
@@ -214,6 +215,7 @@ class BackupJobController extends Controller
             'retention_days' => $request->input('retention_days'),
             'retention_count' => $request->input('retention_count'),
             'backup_exclude_regexp' => $backupExcludeRegexp !== '' ? $backupExcludeRegexp : null,
+            'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
             'stop_containers_before_backup' => $request->boolean('stop_containers_before_backup'),
             'stop_container_names' => $isHostPath && $request->boolean('stop_containers_before_backup')
                 ? array_values(array_filter((array) $request->input('stop_container_names', [])))

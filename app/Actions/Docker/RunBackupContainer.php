@@ -2,6 +2,7 @@
 
 namespace App\Actions\Docker;
 
+use App\Actions\Backup\RenderBackupFilename;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
@@ -17,10 +18,14 @@ class RunBackupContainer
 
     private readonly HostPathPolicy $hostPathPolicy;
 
+    private readonly RenderBackupFilename $renderBackupFilename;
+
     public function __construct(
         private readonly DockerProcess $dockerProcess,
+        ?RenderBackupFilename $renderBackupFilename = null,
         ?HostPathPolicy $hostPathPolicy = null,
     ) {
+        $this->renderBackupFilename = $renderBackupFilename ?? app(RenderBackupFilename::class);
         $this->hostPathPolicy = $hostPathPolicy ?? app(HostPathPolicy::class);
     }
 
@@ -261,7 +266,7 @@ class RunBackupContainer
 
     public function backupFilename(BackupRun $run): string
     {
-        return 'volumevault-'.$this->sourceMountName($run->job).'-run-'.$run->id.'.tar.gz';
+        return $this->renderBackupFilename->handle($run);
     }
 
     private function sourceMountArguments(BackupJob $job): array

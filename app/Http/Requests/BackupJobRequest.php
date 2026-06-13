@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Actions\Backup\RenderBackupFilename;
 use App\Actions\Docker\ValidateHostPathMount;
 use App\Http\Requests\Concerns\ValidatesBackupSizeRange;
 use App\Models\BackupJob;
@@ -27,11 +28,13 @@ class BackupJobRequest extends FormRequest
         $sourceType = (string) ($this->input('source_type') ?: BackupJob::SOURCE_TYPE_DOCKER_VOLUME);
         $hostPath = app(HostPathPolicy::class)->normalize($this->input('host_path'));
         $alertConfigs = $this->customAlertSettingsEnabled() ? $this->input('alert_configs') : null;
+        $backupFilenameTemplate = trim((string) $this->input('backup_filename_template', ''));
 
         $this->merge([
             'source_type' => $sourceType,
             'host_path' => $hostPath !== '' ? $hostPath : null,
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
+            'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
             'alert_configs' => $alertConfigs,
         ]);
     }
@@ -58,6 +61,7 @@ class BackupJobRequest extends FormRequest
             'retention_days' => ['nullable', 'integer', 'min:1'],
             'retention_count' => ['nullable', 'integer', 'min:1'],
             'backup_exclude_regexp' => ['nullable', 'string', 'max:1000'],
+            'backup_filename_template' => ['nullable', 'string', 'max:180'],
             'notifications_enabled' => ['boolean'],
             'notification_channel_ids' => ['nullable', 'array'],
             'notification_channel_ids.*' => ['integer', 'distinct', 'exists:notification_channels,id'],
@@ -90,6 +94,7 @@ class BackupJobRequest extends FormRequest
             }
 
             $this->validateHostPathSource($validator);
+            $this->validateBackupFilenameTemplate($validator);
             $this->validateAlertSizeRanges($validator);
         });
     }
@@ -146,5 +151,12 @@ class BackupJobRequest extends FormRequest
             $this->input('alert_configs', []) ?? [],
             fn (int $index): string => 'alert_configs.'.$index.'.config.backup_size_out_of_range_max_bytes',
         );
+    }
+
+    private function validateBackupFilenameTemplate(Validator $validator): void
+    {
+        if ($message = app(RenderBackupFilename::class)->validationError($this->input('backup_filename_template'))) {
+            $validator->errors()->add('backup_filename_template', $message);
+        }
     }
 }

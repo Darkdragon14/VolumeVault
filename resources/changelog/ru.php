@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_archive_name_templates' => [
+        'title' => 'Custom backup archive names',
+        'description' => 'Backup jobs can now define an archive name template using tokens such as {name}, {source}, {id}, {year}, {month}, {day}, and {time}. Existing jobs keep the previous volumevault-source-run-id naming until a template is configured, and the form warns when a template may overwrite earlier archives.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Более полный перевод интерфейса',
         'description' => 'Многие тексты интерфейса, которые всё ещё отображались на английском языке — включая страницы API-токенов и сохранений установки — теперь полностью переведены. Все девять языков синхронизированы, а недостающие переводы добавлены, поэтому пользователи, не владеющие английским, больше не видят непереведённые подписи, кнопки и сообщения.',

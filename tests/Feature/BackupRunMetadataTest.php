@@ -47,6 +47,23 @@ class BackupRunMetadataTest extends TestCase
         $this->assertSame(1536, $run->backup_size_bytes);
     }
 
+    public function test_successful_backup_records_custom_archive_key_when_template_is_configured(): void
+    {
+        $archivePath = sys_get_temp_dir().'/volumevault-backup-metadata-custom';
+        File::deleteDirectory($archivePath);
+        File::ensureDirectoryExists($archivePath);
+
+        $this->app->instance(DockerProcess::class, $this->dockerProcess(createArchive: true));
+
+        $run = $this->backupRun($archivePath, ['backup_filename_template' => '{name}-{id}']);
+        app(RunBackup::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(BackupRun::STATUS_SUCCESS, $run->status);
+        $this->assertSame('Local_app_backup-'.$run->id.'.tar.gz', $run->backup_key);
+        $this->assertSame(1536, $run->backup_size_bytes);
+    }
+
     public function test_missing_archive_metadata_does_not_fail_successful_backup(): void
     {
         $archivePath = sys_get_temp_dir().'/volumevault-backup-metadata-missing';
@@ -64,7 +81,7 @@ class BackupRunMetadataTest extends TestCase
         $this->assertStringContainsString('Backup archive size could not be detected.', $run->logs);
     }
 
-    private function backupRun(string $archivePath): BackupRun
+    private function backupRun(string $archivePath, array $jobOverrides = []): BackupRun
     {
         DockerVolume::create(['name' => 'app_data', 'exists' => true]);
         $destination = BackupDestination::create([
@@ -75,7 +92,7 @@ class BackupRunMetadataTest extends TestCase
             'secret_access_key' => '',
             'settings' => ['archive_path' => $archivePath, 'archive_mount_source' => $archivePath],
         ]);
-        $job = BackupJob::create([
+        $job = BackupJob::create(array_merge([
             'name' => 'Local app backup',
             'volume_name' => 'app_data',
             'backup_destination_id' => $destination->id,
@@ -83,7 +100,7 @@ class BackupRunMetadataTest extends TestCase
             'schedule_config' => ['time' => '02:00'],
             'cron_expression' => '0 2 * * *',
             'status' => BackupJob::STATUS_ACTIVE,
-        ]);
+        ], $jobOverrides));
 
         return BackupRun::create([
             'backup_job_id' => $job->id,

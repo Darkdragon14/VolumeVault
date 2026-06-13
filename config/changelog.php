@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'backup_archive_name_templates',
+        ],
+    ],
     'releases' => [
         'v1.11.1' => [
             'date' => '2026-06-13',

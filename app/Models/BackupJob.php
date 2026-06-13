@@ -56,6 +56,7 @@ class BackupJob extends Model
         'retention_days',
         'retention_count',
         'backup_exclude_regexp',
+        'backup_filename_template',
         'stop_containers_before_backup',
         'stop_container_names',
     ];
