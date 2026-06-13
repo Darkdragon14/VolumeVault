@@ -2,8 +2,8 @@
 
 return [
     'backup_archive_name_templates' => [
-        'title' => 'Custom backup archive names',
-        'description' => 'Backup jobs can now define an archive name template using tokens such as {name}, {source}, {id}, {year}, {month}, {day}, and {time}. Existing jobs keep the previous volumevault-source-run-id naming until a template is configured, and the form warns when a template may overwrite earlier archives.',
+        'title' => 'Egyedi mentesarchivum-nevek',
+        'description' => 'A mentési feladatok mostantol archivumnev-sablont hasznalhatnak olyan tokenekkel, mint {name}, {source}, {id}, {year}, {month}, {day} es {time}. A meglevo feladatok megtartjak a korabbi volumevault-source-run-id nevezest, amig nincs sablon beallitva, es az urlap figyelmeztet, ha egy sablon felulirhat korabbi archivumokat.',
     ],
     'complete_i18n_coverage' => [
         'title' => 'Teljesebb felületi fordítások',

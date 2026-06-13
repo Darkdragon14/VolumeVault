@@ -2,8 +2,8 @@
 
 return [
     'backup_archive_name_templates' => [
-        'title' => 'Custom backup archive names',
-        'description' => 'Backup jobs can now define an archive name template using tokens such as {name}, {source}, {id}, {year}, {month}, {day}, and {time}. Existing jobs keep the previous volumevault-source-run-id naming until a template is configured, and the form warns when a template may overwrite earlier archives.',
+        'title' => 'Vlastni nazvy zaloznich archivu',
+        'description' => 'Zalozni ulohy ted mohou definovat sablonu nazvu archivu pomoci tokenu jako {name}, {source}, {id}, {year}, {month}, {day} a {time}. Existujici ulohy si ponechaji puvodni pojmenovani volumevault-source-run-id, dokud neni nastavena sablona, a formular upozorni, kdyz by sablona mohla prepsat starsi archivy.',
     ],
     'complete_i18n_coverage' => [
         'title' => 'Úplnější překlady rozhraní',

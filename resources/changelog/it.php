@@ -2,8 +2,8 @@
 
 return [
     'backup_archive_name_templates' => [
-        'title' => 'Custom backup archive names',
-        'description' => 'Backup jobs can now define an archive name template using tokens such as {name}, {source}, {id}, {year}, {month}, {day}, and {time}. Existing jobs keep the previous volumevault-source-run-id naming until a template is configured, and the form warns when a template may overwrite earlier archives.',
+        'title' => 'Nomi personalizzati per gli archivi backup',
+        'description' => 'I processi backup possono ora definire un modello di nome archivio con token come {name}, {source}, {id}, {year}, {month}, {day} e {time}. I processi esistenti mantengono la precedente denominazione volumevault-source-run-id finche non viene configurato un modello, e il modulo avvisa quando un modello puo sovrascrivere archivi precedenti.',
     ],
     'complete_i18n_coverage' => [
         'title' => 'Traduzioni dell\'interfaccia più complete',

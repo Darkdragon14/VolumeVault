@@ -7,7 +7,6 @@
   "Host path access is disabled. Configure at least one allowed prefix in VOLUMEVAULT_HOST_PATH_ALLOWLIST.": "L'acces aux chemins hotes est desactive. Configurez au moins un prefixe autorise dans VOLUMEVAULT_HOST_PATH_ALLOWLIST.",
   "Host path is outside VOLUMEVAULT_HOST_PATH_ALLOWLIST. Allowed prefixes: {prefixes}.": "Le chemin hote est en dehors de VOLUMEVAULT_HOST_PATH_ALLOWLIST. Prefixes autorises : {prefixes}.",
   "Archive name template": "Modele de nom d'archive",
-  "Available tokens: {tokens}": "Variables disponibles : {tokens}",
   "Default: {template}": "Par defaut : {template}",
   "Optional template without extension. VolumeVault adds .tar.gz automatically.": "Modele optionnel sans extension. VolumeVault ajoute .tar.gz automatiquement.",
   "Preview: {filename}": "Apercu : {filename}",

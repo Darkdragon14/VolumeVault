@@ -139,7 +139,6 @@
   "Host path access is disabled. Configure at least one allowed prefix in VOLUMEVAULT_HOST_PATH_ALLOWLIST.": "Host path access is disabled. Configure at least one allowed prefix in VOLUMEVAULT_HOST_PATH_ALLOWLIST.",
   "Host path is outside VOLUMEVAULT_HOST_PATH_ALLOWLIST. Allowed prefixes: {prefixes}.": "Host path is outside VOLUMEVAULT_HOST_PATH_ALLOWLIST. Allowed prefixes: {prefixes}.",
   "Archive name template": "Archive name template",
-  "Available tokens: {tokens}": "Available tokens: {tokens}",
   "Default: {template}": "Default: {template}",
   "Optional template without extension. VolumeVault adds .tar.gz automatically.": "Optional template without extension. VolumeVault adds .tar.gz automatically.",
   "Preview: {filename}": "Preview: {filename}",
