@@ -5,6 +5,10 @@ return [
         'title' => 'Egyedi mentesarchivum-nevek',
         'description' => 'A mentési feladatok mostantol archivumnev-sablont hasznalhatnak olyan tokenekkel, mint {name}, {source}, {id}, {year}, {month}, {day} es {time}. A meglevo feladatok megtartjak a korabbi volumevault-source-run-id nevezest, amig nincs sablon beallitva, es az urlap figyelmeztet, ha egy sablon felulirhat korabbi archivumokat.',
     ],
+    'russian_translation_revisions' => [
+        'title' => 'Finomitott orosz feluleti szovegek',
+        'description' => 'Az orosz feluleti forditasok tovabbi megfogalmazasi javitasokat kaptak a jobb kovetkezetesseg es olvashatosag erdekeben. Koszonet @artyomboyko reszere a forditasi hozzajarulasert.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Teljesebb felületi fordítások',
         'description' => 'Számos felületi szöveg, amely még angolul jelent meg – köztük az API-tokenek és a telepítésmentések oldalai –, mostantól teljesen le van fordítva. Mind a kilenc nyelv szinkronizálva lett, és a hiányzó fordítások pótlásra kerültek, így a nem angol nyelvű felhasználók többé nem látnak lefordítatlan címkéket, gombokat és üzeneteket.',

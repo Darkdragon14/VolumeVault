@@ -5,6 +5,10 @@ return [
         'title' => 'Vlastni nazvy zaloznich archivu',
         'description' => 'Zalozni ulohy ted mohou definovat sablonu nazvu archivu pomoci tokenu jako {name}, {source}, {id}, {year}, {month}, {day} a {time}. Existujici ulohy si ponechaji puvodni pojmenovani volumevault-source-run-id, dokud neni nastavena sablona, a formular upozorni, kdyz by sablona mohla prepsat starsi archivy.',
     ],
+    'russian_translation_revisions' => [
+        'title' => 'Vyladene ruske texty rozhrani',
+        'description' => 'Ruske preklady rozhrani dostaly dalsi upravy formulaci pro lepsi konzistenci a citelnost. Dekujeme @artyomboyko za tento prekladatelsky prispevek.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Úplnější překlady rozhraní',
         'description' => 'Mnoho textů rozhraní, které se stále zobrazovaly anglicky – včetně stránek s API tokeny a uloženími instalace –, je nyní plně přeloženo. Všech devět jazyků bylo sjednoceno a chybějící překlady doplněny, takže neanglicky mluvící uživatelé již nevidí nepřeložené popisky, tlačítka a zprávy.',

@@ -5,6 +5,10 @@ return [
         'title' => 'Custom backup archive names',
         'description' => 'Backup jobs can now define an archive name template using tokens such as {name}, {source}, {id}, {year}, {month}, {day}, and {time}. Existing jobs keep the previous volumevault-source-run-id naming until a template is configured, and the form warns when a template may overwrite earlier archives.',
     ],
+    'russian_translation_revisions' => [
+        'title' => 'Refined Russian interface text',
+        'description' => 'Russian interface translations received additional wording fixes for better consistency and readability. Thanks to @artyomboyko for the translation contribution.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'More complete interface translations',
         'description' => 'Many interface texts that were still shown in English — including the API tokens and installation-save pages — are now fully translated. All nine languages were synchronized and the missing translations filled in, so non-English users no longer see untranslated labels, buttons, and messages.',

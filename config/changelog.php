@@ -1,13 +1,22 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'backup_archive_name_templates',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.12.0' => [
+            'date' => '2026-06-13',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.12.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'backup_archive_name_templates',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'russian_translation_revisions',
+                ],
+            ],
+        ],
         'v1.11.1' => [
             'date' => '2026-06-13',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.11.1',

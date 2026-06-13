@@ -5,6 +5,10 @@ return [
         'title' => 'Anpassbare Backup-Archivnamen',
         'description' => 'Backup-Jobs koennen jetzt eine Vorlage fuer Archivnamen mit Tokens wie {name}, {source}, {id}, {year}, {month}, {day} und {time} definieren. Bestehende Jobs behalten die bisherige Benennung volumevault-source-run-id, bis eine Vorlage konfiguriert wird. Das Formular warnt, wenn eine Vorlage fruehere Archive ueberschreiben koennte.',
     ],
+    'russian_translation_revisions' => [
+        'title' => 'Verfeinerte russische Oberflaechentexte',
+        'description' => 'Die russischen Uebersetzungen der Oberflaeche wurden mit weiteren Formulierungsanpassungen fuer mehr Einheitlichkeit und bessere Lesbarkeit verbessert. Danke an @artyomboyko fuer diesen Uebersetzungsbeitrag.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Vollständigere Übersetzungen der Oberfläche',
         'description' => 'Viele Oberflächentexte, die noch auf Englisch angezeigt wurden – darunter die Seiten für API-Tokens und Installationssicherungen –, sind jetzt vollständig übersetzt. Alle neun Sprachen wurden synchronisiert und fehlende Übersetzungen ergänzt, sodass nicht englischsprachige Nutzer keine unübersetzten Beschriftungen, Schaltflächen und Meldungen mehr sehen.',

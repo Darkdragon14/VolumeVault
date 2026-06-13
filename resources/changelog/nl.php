@@ -5,6 +5,10 @@ return [
         'title' => 'Aangepaste namen voor back-uparchieven',
         'description' => 'Back-uptaken kunnen nu een sjabloon voor archiefnamen gebruiken met tokens zoals {name}, {source}, {id}, {year}, {month}, {day} en {time}. Bestaande taken behouden de vorige naamgeving volumevault-source-run-id totdat een sjabloon is ingesteld, en het formulier waarschuwt wanneer een sjabloon eerdere archieven kan overschrijven.',
     ],
+    'russian_translation_revisions' => [
+        'title' => 'Verfijnde Russische interfacetext',
+        'description' => 'De Russische interfacevertalingen kregen extra tekstcorrecties voor betere consistentie en leesbaarheid. Dank aan @artyomboyko voor deze vertaalbijdrage.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Vollediger vertaalde interface',
         'description' => 'Veel interfaceteksten die nog in het Engels werden weergegeven – waaronder de pagina\'s voor API-tokens en installatieback-ups – zijn nu volledig vertaald. Alle negen talen zijn gesynchroniseerd en ontbrekende vertalingen aangevuld, zodat niet-Engelstalige gebruikers geen onvertaalde labels, knoppen en berichten meer zien.',
