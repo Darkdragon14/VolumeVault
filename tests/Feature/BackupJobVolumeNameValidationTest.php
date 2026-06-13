@@ -40,6 +40,48 @@ class BackupJobVolumeNameValidationTest extends TestCase
         $this->assertSame(1, BackupJob::count());
     }
 
+    public function test_backup_filename_template_with_unknown_token_is_rejected(): void
+    {
+        $destination = $this->destination();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('backup-jobs.create'))
+            ->post(route('backup-jobs.store'), $this->payload($destination, [
+                'backup_filename_template' => '{name}-{unknown}',
+            ]))
+            ->assertSessionHasErrors('backup_filename_template');
+
+        $this->assertSame(0, BackupJob::count());
+    }
+
+    public function test_backup_filename_template_with_path_segments_is_rejected(): void
+    {
+        $destination = $this->destination();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('backup-jobs.create'))
+            ->post(route('backup-jobs.store'), $this->payload($destination, [
+                'backup_filename_template' => '../{name}-{id}',
+            ]))
+            ->assertSessionHasErrors('backup_filename_template');
+
+        $this->assertSame(0, BackupJob::count());
+    }
+
+    public function test_valid_backup_filename_template_is_stored(): void
+    {
+        $destination = $this->destination();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('backup-jobs.create'))
+            ->post(route('backup-jobs.store'), $this->payload($destination, [
+                'backup_filename_template' => '{name}-{year}-{month}-{day}-{time}',
+            ]))
+            ->assertSessionDoesntHaveErrors('backup_filename_template');
+
+        $this->assertSame('{name}-{year}-{month}-{day}-{time}', BackupJob::first()?->backup_filename_template);
+    }
+
     private function destination(): BackupDestination
     {
         return BackupDestination::create([

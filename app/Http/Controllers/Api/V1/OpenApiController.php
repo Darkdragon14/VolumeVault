@@ -163,6 +163,7 @@ class OpenApiController extends Controller
                     'retention_days' => ['type' => ['integer', 'null'], 'minimum' => 1],
                     'retention_count' => ['type' => ['integer', 'null'], 'minimum' => 1],
                     'backup_exclude_regexp' => ['type' => ['string', 'null'], 'maxLength' => 1000, 'description' => 'Go regular expression passed to BACKUP_EXCLUDE_REGEXP for offen/docker-volume-backup. Matching full file paths are excluded.'],
+                    'backup_filename_template' => ['type' => ['string', 'null'], 'maxLength' => 180, 'description' => 'Optional archive filename template without extension. Supported tokens: {name}, {source}, {id}, {run}, {year}, {month}, {day}, {time}, {hour}, {minute}, {second}. Existing jobs with null keep the legacy volumevault-{source}-run-{id}.tar.gz naming.'],
                     'notifications_enabled' => ['type' => 'boolean', 'default' => true],
                     'notification_channel_ids' => [
                         'type' => 'array',

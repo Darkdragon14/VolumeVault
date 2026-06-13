@@ -20,12 +20,14 @@ To create a backup job:
 2. Create and test at least one active destination.
 3. Open `Backup jobs` and create a job for a Docker volume or an absolute host path.
 4. Choose a schedule: hourly, daily, weekly, or cron.
-5. Optionally set retention days, retention count, file exclusion regexp, and container stop behavior.
+5. Optionally set retention days, retention count, archive name template, file exclusion regexp, and container stop behavior.
 6. Save the job and run it manually once to validate the destination and logs.
 
 Backup times are interpreted in `APP_TIMEZONE`. For example, set `APP_TIMEZONE=Europe/Paris` if a daily schedule at `02:00` should run at 02:00 Paris time instead of 02:00 UTC.
 
 Backup jobs can optionally exclude files from the archive with `BACKUP_EXCLUDE_REGEXP`. The value is a Go regular expression matched against each file's full path inside `BACKUP_SOURCES`. For example, `\.log$` excludes log files, `(^|/)cache(/|$)` excludes folders named `cache`, and `(^|/)node_modules(/|$)` excludes `node_modules` folders. Leave the field empty to include everything.
+
+Backup jobs can also define an archive name template without the extension. Supported tokens are `{name}`, `{source}`, `{id}`, `{run}`, `{year}`, `{month}`, `{day}`, `{time}`, `{hour}`, `{minute}`, and `{second}`. `{name}` is the job name sanitized for filenames, `{source}` is the Docker volume or host path source, and `{id}` / `{run}` is the backup run ID. VolumeVault appends `.tar.gz` automatically. Include a uniqueness token such as `{id}` or `{time}` to avoid overwriting earlier archives with the same generated name.
 
 ## Host Path Sources
 
@@ -78,11 +80,13 @@ Backups are run by launching a temporary `offen/docker-volume-backup:latest` con
 
 The environment variable mapping for `offen/docker-volume-backup` is centralized in `app/Actions/Docker/RunBackupContainer.php`. Check the upstream `offen/docker-volume-backup` documentation if an environment variable changes.
 
-Generated archive names follow this pattern:
+By default, generated archive names follow this pattern:
 
 ```text
 volumevault-<safe-source-name>-run-<backup-run-id>.tar.gz
 ```
+
+Existing jobs with no archive name template keep that legacy pattern.
 
 ## Restore Behavior
 

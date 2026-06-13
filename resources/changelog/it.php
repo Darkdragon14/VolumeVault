@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_archive_name_templates' => [
+        'title' => 'Nomi personalizzati per gli archivi backup',
+        'description' => 'I processi backup possono ora definire un modello di nome archivio con token come {name}, {source}, {id}, {year}, {month}, {day} e {time}. I processi esistenti mantengono la precedente denominazione volumevault-source-run-id finche non viene configurato un modello, e il modulo avvisa quando un modello puo sovrascrivere archivi precedenti.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Traduzioni dell\'interfaccia più complete',
         'description' => 'Molti testi dell\'interfaccia ancora visualizzati in inglese — comprese le pagine dei token API e dei salvataggi dell\'installazione — sono ora completamente tradotti. Le nove lingue sono state sincronizzate e le traduzioni mancanti completate, così gli utenti non anglofoni non vedono più etichette, pulsanti e messaggi non tradotti.',

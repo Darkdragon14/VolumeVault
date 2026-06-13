@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_archive_name_templates' => [
+        'title' => 'Noms personnalisés pour les archives de sauvegarde',
+        'description' => 'Les jobs de sauvegarde peuvent maintenant définir un modèle de nom d’archive avec des variables comme {name}, {source}, {id}, {year}, {month}, {day} et {time}. Les jobs existants gardent l’ancien format volumevault-source-run-id tant qu’aucun modèle n’est configuré, et le formulaire avertit lorsqu’un modèle risque d’écraser d’anciennes archives.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Traductions de l\'interface plus complètes',
         'description' => 'De nombreux textes de l\'interface encore affichés en anglais — notamment les pages des jetons API et de sauvegarde de l\'installation — sont désormais entièrement traduits. Les neuf langues ont été synchronisées et les traductions manquantes complétées, afin que les utilisateurs non anglophones ne voient plus de libellés, boutons et messages non traduits.',

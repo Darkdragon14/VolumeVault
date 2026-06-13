@@ -9,6 +9,7 @@ use App\Models\BackupRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
@@ -23,6 +24,13 @@ class RunBackupContainerTest extends TestCase
         // Host-path sources are fail-closed without an allowlist; allow the
         // prefixes the happy-path tests in this file rely on.
         config(['volumevault.host_path_allowlist' => ['/srv']]);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     public function test_volume_source_is_mounted_read_only_and_env_names_are_forwarded(): void
@@ -70,6 +78,25 @@ class RunBackupContainerTest extends TestCase
 
         $this->assertSame('volumevault-app_data-run-'.$run->id.'.tar.gz', $action->backupFilename($run));
         $this->assertSame('volumevault-app_data-run-'.$run->id.'.tar.gz', $docker->environment['BACKUP_FILENAME']);
+    }
+
+    public function test_custom_filename_template_uses_sanitized_job_name_run_id_and_time_tokens(): void
+    {
+        Carbon::setTestNow('2026-06-13 14:15:16');
+        $docker = $this->recordingDocker();
+        $action = new RunBackupContainer($docker);
+        $run = $this->backupRun($this->s3Destination(), [
+            'name' => 'App data nightly backup!',
+            'volume_name' => 'app_data',
+            'backup_filename_template' => '{name}-{year}-{month}-{day}-{time}-{id}',
+        ]);
+        $run->forceFill(['started_at' => now()])->save();
+
+        $action->handle($run);
+
+        $expected = 'App_data_nightly_backup_-2026-06-13-14-15-16-'.$run->id.'.tar.gz';
+        $this->assertSame($expected, $action->backupFilename($run->fresh(['job'])));
+        $this->assertSame($expected, $docker->environment['BACKUP_FILENAME']);
     }
 
     public function test_host_path_source_is_mounted_as_a_read_only_bind(): void

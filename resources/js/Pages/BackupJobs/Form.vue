@@ -62,6 +62,7 @@ const form = useForm({
     retention_days: props.job?.retention_days || '',
     retention_count: props.job?.retention_count || '',
     backup_exclude_regexp: props.job?.backup_exclude_regexp || '',
+    backup_filename_template: props.job?.backup_filename_template || '',
     notifications_enabled: props.job?.notifications_enabled ?? true,
     notification_channel_ids: (props.job?.notification_channel_ids || props.defaultNotificationChannelIds || []) as number[],
     use_custom_alert_settings: props.job?.use_custom_alert_settings ?? false,
@@ -116,6 +117,40 @@ const filteredVolumes = computed(() => {
 });
 
 const selectedVolume = computed(() => props.volumes.find((volume) => volume.name === form.volume_name));
+const safeFilenamePart = (value: string, fallback: string) => value.replace(/[^A-Za-z0-9_.-]+/g, '_') || fallback;
+const archiveTemplate = computed(() => (form.backup_filename_template || '').trim());
+const archiveTemplateHasRunToken = computed(() => /\{(id|run)\}/.test(archiveTemplate.value));
+const archiveTemplateHasDateAndTimeTokens = computed(() => (
+    /\{year\}/.test(archiveTemplate.value)
+    && /\{month\}/.test(archiveTemplate.value)
+    && /\{day\}/.test(archiveTemplate.value)
+    && /\{(time|hour|minute|second)\}/.test(archiveTemplate.value)
+));
+const archiveTemplateOverwriteRisk = computed(() => archiveTemplate.value !== '' && !archiveTemplateHasRunToken.value && !archiveTemplateHasDateAndTimeTokens.value);
+const archiveFilenamePreview = computed(() => {
+    const now = new Date();
+    const source = form.source_type === 'host_path'
+        ? form.host_path.replace(/^\/+|\/+$/g, '')
+        : form.volume_name;
+    const replacements: Record<string, string> = {
+        '{name}': safeFilenamePart(form.name || 'backup', 'backup'),
+        '{source}': safeFilenamePart(source || 'source', 'source'),
+        '{id}': '123',
+        '{run}': '123',
+        '{year}': String(now.getFullYear()),
+        '{month}': String(now.getMonth() + 1).padStart(2, '0'),
+        '{day}': String(now.getDate()).padStart(2, '0'),
+        '{time}': [now.getHours(), now.getMinutes(), now.getSeconds()].map((part) => String(part).padStart(2, '0')).join('-'),
+        '{hour}': String(now.getHours()).padStart(2, '0'),
+        '{minute}': String(now.getMinutes()).padStart(2, '0'),
+        '{second}': String(now.getSeconds()).padStart(2, '0'),
+    };
+
+    return Object.entries(replacements).reduce(
+        (filename, [token, value]) => filename.split(token).join(value),
+        archiveTemplate.value || 'volumevault-{source}-run-{id}',
+    ) + '.tar.gz';
+});
 
 const updateVolumeSearch = () => {
     if (!isDockerVolumeSource.value) return;
@@ -355,6 +390,22 @@ const submit = () => {
                     </button>
                 </div>
             </div>
+
+            <section class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+                <div class="space-y-2">
+                    <label for="backup_filename_template" class="label">{{ t('Archive name template') }}</label>
+                    <input id="backup_filename_template" v-model="form.backup_filename_template" class="input font-mono" :placeholder="t('Default: {template}', { template: 'volumevault-{source}-run-{id}' })">
+                    <p class="text-sm text-slate-300">{{ t('Optional template without extension. VolumeVault adds .tar.gz automatically.') }}</p>
+                    <p class="break-all rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-100">
+                        {{ t('Preview: {filename}', { filename: archiveFilenamePreview }) }}
+                    </p>
+                    <p class="text-sm text-slate-400">{{ t('Available tokens: {tokens}', { tokens: '{name}, {source}, {id}, {run}, {year}, {month}, {day}, {time}, {hour}, {minute}, {second}' }) }}</p>
+                    <p v-if="archiveTemplateOverwriteRisk" class="rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
+                        {{ t('This template may produce the same filename for multiple backups. Previous archives can be overwritten by offen/docker-volume-backup.') }}
+                    </p>
+                    <span v-if="form.errors.backup_filename_template" class="text-sm text-rose-300">{{ form.errors.backup_filename_template }}</span>
+                </div>
+            </section>
 
             <section v-if="!isDockerVolumeSource && form.stop_containers_before_backup" class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
                 <div class="flex items-center gap-2">

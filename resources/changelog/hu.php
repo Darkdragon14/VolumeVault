@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_archive_name_templates' => [
+        'title' => 'Egyedi mentesarchivum-nevek',
+        'description' => 'A mentési feladatok mostantol archivumnev-sablont hasznalhatnak olyan tokenekkel, mint {name}, {source}, {id}, {year}, {month}, {day} es {time}. A meglevo feladatok megtartjak a korabbi volumevault-source-run-id nevezest, amig nincs sablon beallitva, es az urlap figyelmeztet, ha egy sablon felulirhat korabbi archivumokat.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Teljesebb felületi fordítások',
         'description' => 'Számos felületi szöveg, amely még angolul jelent meg – köztük az API-tokenek és a telepítésmentések oldalai –, mostantól teljesen le van fordítva. Mind a kilenc nyelv szinkronizálva lett, és a hiányzó fordítások pótlásra kerültek, így a nem angol nyelvű felhasználók többé nem látnak lefordítatlan címkéket, gombokat és üzeneteket.',

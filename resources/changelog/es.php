@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_archive_name_templates' => [
+        'title' => 'Nombres personalizados para archivos de copia',
+        'description' => 'Las tareas de copia ahora pueden definir una plantilla de nombre de archivo con tokens como {name}, {source}, {id}, {year}, {month}, {day} y {time}. Las tareas existentes conservan el nombre anterior volumevault-source-run-id hasta que se configure una plantilla, y el formulario avisa cuando una plantilla puede sobrescribir archivos anteriores.',
+    ],
     'complete_i18n_coverage' => [
         'title' => 'Traducciones de la interfaz más completas',
         'description' => 'Muchos textos de la interfaz que aún aparecían en inglés —incluidas las páginas de tokens de API y de guardado de la instalación— ahora están totalmente traducidos. Los nueve idiomas se sincronizaron y se completaron las traducciones que faltaban, de modo que los usuarios que no hablan inglés ya no ven etiquetas, botones ni mensajes sin traducir.',
