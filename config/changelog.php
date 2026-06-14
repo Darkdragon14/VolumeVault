@@ -1,17 +1,22 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'busybox_restore_tar_compat',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'stable_stack_volume_search',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.12.1' => [
+            'date' => '2026-06-14',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.12.1',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'busybox_restore_tar_compat',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'stable_stack_volume_search',
+                ],
+            ],
+        ],
         'v1.12.0' => [
             'date' => '2026-06-13',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.12.0',
