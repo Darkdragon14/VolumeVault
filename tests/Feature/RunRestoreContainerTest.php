@@ -16,7 +16,7 @@ class RunRestoreContainerTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_restore_command_mounts_volume_and_archive_and_strips_components(): void
+    public function test_restore_command_mounts_volume_streams_archive_and_strips_components(): void
     {
         $docker = $this->recordingDocker();
         $run = $this->restoreRun();
@@ -27,19 +27,24 @@ class RunRestoreContainerTest extends TestCase
         $command = $docker->command;
         $this->assertSame(['docker', 'run', '--rm', '--name'], array_slice($command, 0, 4));
 
-        // The target volume is writable; the archive is mounted read-only.
+        // The target volume is writable; the archive is streamed over stdin so
+        // containerized deployments do not depend on host-visible app paths.
+        $this->assertContains('-i', $command);
         $this->assertContains('app_data_restored:/restore', $command);
-        $this->assertContains($archivePath.':/archive/backup.tar.gz:ro', $command);
+        $this->assertSame($archivePath, $docker->inputPath);
+        $this->assertNotContains($archivePath.':/archive/backup.tar.gz:ro', $command);
 
         // tar extracts the archive into the volume, stripping the wrapping path segments.
         $this->assertSame(RunBackupContainer::IMAGE, $command[array_search('--entrypoint', $command, true) + 2]);
         $this->assertContains('tar', $command);
         $this->assertContains('-xzf', $command);
+        $this->assertSame('-', $command[array_search('-xzf', $command, true) + 1]);
         $this->assertContains('--strip-components', $command);
         $this->assertSame('2', $command[array_search('--strip-components', $command, true) + 1]);
 
-        // A forged archive cannot escape /restore via absolute paths.
-        $this->assertContains('--no-absolute-names', $command);
+        // Keep the restore compatible with BusyBox tar in the Alpine-based backup image.
+        $this->assertNotContains('--no-absolute-names', $command);
+        $this->assertNotContains('--no-overwrite-dir', $command);
     }
 
     public function test_restore_container_id_is_persisted(): void
@@ -93,9 +98,12 @@ class RunRestoreContainerTest extends TestCase
         {
             public array $command = [];
 
-            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            public ?string $inputPath = null;
+
+            public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
             {
                 $this->command = $command;
+                $this->inputPath = $inputPath;
 
                 return new DockerProcessResult($command, 0, 'restore complete', '');
             }

@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'busybox_restore_tar_compat' => [
+        'title' => 'Kompatible Restore-Extraktion',
+        'description' => 'Wiederherstellungen in ein neues Docker-Volume uebergeben keine nur von GNU tar unterstuetzten Optionen mehr und streamen das Archiv jetzt in den Restore-Container, sodass die Extraktion mit BusyBox-tar und containerisierten Deployments funktioniert, deren Storage in einem Docker-Volume liegt.',
+    ],
+    'stable_stack_volume_search' => [
+        'title' => 'Stabile Stack- und Volume-Suche',
+        'description' => 'Eingaben in der Stack- oder Volume-Suche halten den Filter jetzt aktiv, statt nach der URL-Synchronisierung auf den Standardzustand zurueckzuspringen.',
+    ],
     'backup_archive_name_templates' => [
         'title' => 'Anpassbare Backup-Archivnamen',
         'description' => 'Backup-Jobs koennen jetzt eine Vorlage fuer Archivnamen mit Tokens wie {name}, {source}, {id}, {year}, {month}, {day} und {time} definieren. Bestehende Jobs behalten die bisherige Benennung volumevault-source-run-id, bis eine Vorlage konfiguriert wird. Das Formular warnt, wenn eine Vorlage fruehere Archive ueberschreiben koennte.',

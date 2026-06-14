@@ -3,6 +3,7 @@
 namespace App\Services\Docker;
 
 use Illuminate\Support\Facades\File;
+use RuntimeException;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
@@ -33,6 +34,30 @@ class DockerProcess
     {
         $process = new Process($command, null, $this->environment($environment), null, $timeout);
 
+        return $this->runProcess($process, $command);
+    }
+
+    public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+    {
+        $input = @fopen($inputPath, 'rb');
+
+        if ($input === false) {
+            throw new RuntimeException('Unable to open Docker process input file: '.$inputPath);
+        }
+
+        try {
+            $process = new Process($command, null, $this->environment($environment), $input, $timeout);
+
+            return $this->runProcess($process, $command);
+        } finally {
+            if (is_resource($input)) {
+                fclose($input);
+            }
+        }
+    }
+
+    private function runProcess(Process $process, array $command): DockerProcessResult
+    {
         try {
             $process->run();
 

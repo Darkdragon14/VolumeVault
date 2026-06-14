@@ -19,20 +19,24 @@ export function readFiltersFromUrl(params: Record<string, FilterRef>): void {
 }
 
 export function useUrlFilters(filters: Record<string, FilterRef>, options?: { debounce?: number }): void {
-    const buildQuery = (): Record<string, string> => {
-        const query: Record<string, string> = {};
+    const syncToUrl = () => {
+        if (typeof window === 'undefined') return;
+
+        const url = new URL(window.location.href);
 
         for (const [key, ref] of Object.entries(filters)) {
             if (ref.value) {
-                query[key] = ref.value;
+                url.searchParams.set(key, ref.value);
+            } else {
+                url.searchParams.delete(key);
             }
         }
 
-        return query;
-    };
-
-    const syncToUrl = () => {
-        router.replace({ query: buildQuery() }, { preserveState: true });
+        router.replace({
+            url: url.pathname + url.search + url.hash,
+            preserveState: true,
+            preserveScroll: true,
+        });
     };
 
     if (options?.debounce) {

@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\Docker\DockerProcess;
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 class DockerProcessTest extends TestCase
@@ -24,5 +25,24 @@ class DockerProcessTest extends TestCase
             storage_path('app/docker-cli/config'),
             $result->output,
         );
+    }
+
+    public function test_docker_process_can_stream_an_input_file_to_stdin(): void
+    {
+        $inputPath = sys_get_temp_dir().'/volumevault-docker-process-stdin-'.uniqid();
+        File::put($inputPath, 'archive-bytes');
+
+        try {
+            $result = app(DockerProcess::class)->runWithInputFile([
+                PHP_BINARY,
+                '-r',
+                'echo strtoupper(file_get_contents("php://stdin"));',
+            ], $inputPath, 10);
+
+            $this->assertSame(0, $result->exitCode);
+            $this->assertSame('ARCHIVE-BYTES', $result->output);
+        } finally {
+            File::delete($inputPath);
+        }
     }
 }

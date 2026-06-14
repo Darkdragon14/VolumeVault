@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'busybox_restore_tar_compat' => [
+        'title' => 'Compatibele restore-extractie',
+        'description' => 'Herstelacties naar een nieuw Docker-volume geven geen GNU-only tar-opties meer door en streamen het archief nu naar de restore-container, zodat extractie werkt met BusyBox-tar en met containerdeployments waarvan de opslag in een Docker-volume staat.',
+    ],
+    'stable_stack_volume_search' => [
+        'title' => 'Stabiele stack- en volumezoekfunctie',
+        'description' => 'Typen in de zoekfunctie voor stacks of volumes houdt het filter nu actief in plaats van terug te vallen naar de standaardtoestand nadat de URL is gesynchroniseerd.',
+    ],
     'backup_archive_name_templates' => [
         'title' => 'Aangepaste namen voor back-uparchieven',
         'description' => 'Back-uptaken kunnen nu een sjabloon voor archiefnamen gebruiken met tokens zoals {name}, {source}, {id}, {year}, {month}, {day} en {time}. Bestaande taken behouden de vorige naamgeving volumevault-source-run-id totdat een sjabloon is ingesteld, en het formulier waarschuwt wanneer een sjabloon eerdere archieven kan overschrijven.',

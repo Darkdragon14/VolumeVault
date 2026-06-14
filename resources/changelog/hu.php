@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'busybox_restore_tar_compat' => [
+        'title' => 'Kompatibilis visszaallitasi kicsomagolas',
+        'description' => 'Az uj Docker volume-ra torteno visszaallitasok mar nem adnak at csak GNU tar altal tamogatott opciokat, es az archivumot most streamelve kuldik a visszaallitasi kontenerbe, igy a kicsomagolas mukodik BusyBox tar mellett es olyan konteneres telepiteseken is, ahol a tarolo Docker volume-ban van.',
+    ],
+    'stable_stack_volume_search' => [
+        'title' => 'Stabil stack- es volume-kereses',
+        'description' => 'A stackek vagy volume-ok keresojebe irt szoveg most aktivan tartja a szurot, ahelyett hogy az URL szinkronizalasa utan visszaallna alapallapotba.',
+    ],
     'backup_archive_name_templates' => [
         'title' => 'Egyedi mentesarchivum-nevek',
         'description' => 'A mentési feladatok mostantol archivumnev-sablont hasznalhatnak olyan tokenekkel, mint {name}, {source}, {id}, {year}, {month}, {day} es {time}. A meglevo feladatok megtartjak a korabbi volumevault-source-run-id nevezest, amig nincs sablon beallitva, es az urlap figyelmeztet, ha egy sablon felulirhat korabbi archivumokat.',

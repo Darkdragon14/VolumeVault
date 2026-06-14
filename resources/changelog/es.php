@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'busybox_restore_tar_compat' => [
+        'title' => 'Extracción de restauración compatible',
+        'description' => 'Las restauraciones a un nuevo volumen Docker ya no pasan opciones de tar exclusivas de GNU y ahora envían el archivo al contenedor de restauración por streaming, por lo que la extracción funciona con BusyBox tar y con despliegues en contenedor cuyo almacenamiento vive en un volumen Docker.',
+    ],
+    'stable_stack_volume_search' => [
+        'title' => 'Búsqueda estable de stacks y volúmenes',
+        'description' => 'Al escribir en la búsqueda de stacks o volúmenes, el filtro ahora permanece activo en lugar de restablecerse tras sincronizar la URL.',
+    ],
     'backup_archive_name_templates' => [
         'title' => 'Nombres personalizados para archivos de copia',
         'description' => 'Las tareas de copia ahora pueden definir una plantilla de nombre de archivo con tokens como {name}, {source}, {id}, {year}, {month}, {day} y {time}. Las tareas existentes conservan el nombre anterior volumevault-source-run-id hasta que se configure una plantilla, y el formulario avisa cuando una plantilla puede sobrescribir archivos anteriores.',

@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'busybox_restore_tar_compat' => [
+        'title' => 'Estrazione di ripristino compatibile',
+        'description' => 'I ripristini verso un nuovo volume Docker non passano più opzioni tar disponibili solo in GNU tar e ora inviano l\'archivio in streaming al container di ripristino, quindi l\'estrazione funziona con BusyBox tar e con deployment containerizzati il cui storage vive in un volume Docker.',
+    ],
+    'stable_stack_volume_search' => [
+        'title' => 'Ricerca stabile di stack e volumi',
+        'description' => 'Digitando nella ricerca di stack o volumi, il filtro resta ora attivo invece di reimpostarsi dopo la sincronizzazione dell\'URL.',
+    ],
     'backup_archive_name_templates' => [
         'title' => 'Nomi personalizzati per gli archivi backup',
         'description' => 'I processi backup possono ora definire un modello di nome archivio con token come {name}, {source}, {id}, {year}, {month}, {day} e {time}. I processi esistenti mantengono la precedente denominazione volumevault-source-run-id finche non viene configurato un modello, e il modulo avvisa quando un modello puo sovrascrivere archivi precedenti.',
