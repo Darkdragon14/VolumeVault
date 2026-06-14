@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'busybox_restore_tar_compat' => [
+        'title' => 'Kompatibilni extrakce obnovy',
+        'description' => 'Obnovy do noveho Docker volume uz nepredavaji volby tar dostupne jen v GNU tar a archiv se ted streamuje primo do obnovovaciho kontejneru, takze extrakce funguje s BusyBox tar i v kontejnerizovanych nasazenich, kde storage bezi v Docker volume.',
+    ],
+    'stable_stack_volume_search' => [
+        'title' => 'Stabilni hledani stacku a volumes',
+        'description' => 'Pri psani do hledani stacku nebo volumes zustane filtr aktivni misto toho, aby se po synchronizaci URL vratil do vychoziho stavu.',
+    ],
     'backup_archive_name_templates' => [
         'title' => 'Vlastni nazvy zaloznich archivu',
         'description' => 'Zalozni ulohy ted mohou definovat sablonu nazvu archivu pomoci tokenu jako {name}, {source}, {id}, {year}, {month}, {day} a {time}. Existujici ulohy si ponechaji puvodni pojmenovani volumevault-source-run-id, dokud neni nastavena sablona, a formular upozorni, kdyz by sablona mohla prepsat starsi archivy.',

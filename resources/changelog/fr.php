@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'busybox_restore_tar_compat' => [
+        'title' => 'Extraction de restauration compatible',
+        'description' => 'Les restaurations vers un nouveau volume Docker n\'envoient plus d\'options tar propres à GNU et streament maintenant l\'archive dans le conteneur de restauration, afin que l\'extraction fonctionne avec BusyBox tar et les déploiements conteneurisés dont le stockage vit dans un volume Docker.',
+    ],
+    'stable_stack_volume_search' => [
+        'title' => 'Recherche stacks et volumes stabilisée',
+        'description' => 'La saisie dans la recherche des stacks ou volumes garde maintenant le filtre actif au lieu de revenir à l\'état par défaut après la synchronisation de l\'URL.',
+    ],
     'backup_archive_name_templates' => [
         'title' => 'Noms personnalisés pour les archives de sauvegarde',
         'description' => 'Les jobs de sauvegarde peuvent maintenant définir un modèle de nom d’archive avec des variables comme {name}, {source}, {id}, {year}, {month}, {day} et {time}. Les jobs existants gardent l’ancien format volumevault-source-run-id tant qu’aucun modèle n’est configuré, et le formulaire avertit lorsqu’un modèle risque d’écraser d’anciennes archives.',

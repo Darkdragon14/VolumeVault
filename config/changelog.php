@@ -1,7 +1,16 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'busybox_restore_tar_compat',
+        ],
+        [
+            'type' => 'change',
+            'key' => 'stable_stack_volume_search',
+        ],
+    ],
     'releases' => [
         'v1.12.0' => [
             'date' => '2026-06-13',

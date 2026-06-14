@@ -18,6 +18,26 @@ class RestoreVolumeCleanupTest extends TestCase
 {
     use RefreshDatabase;
 
+    private string $storagePath = '';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->storagePath = sys_get_temp_dir().'/volumevault-restore-cleanup-'.uniqid();
+        File::ensureDirectoryExists($this->storagePath);
+        $this->app->useStoragePath($this->storagePath);
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->storagePath !== '') {
+            File::deleteDirectory($this->storagePath);
+        }
+
+        parent::tearDown();
+    }
+
     public function test_failed_restore_removes_partially_created_target_volume(): void
     {
         $docker = $this->dockerProcess(restoreSucceeds: false);
@@ -131,6 +151,11 @@ class RestoreVolumeCleanupTest extends TestCase
                 }
 
                 return new DockerProcessResult($command, 0, '', '');
+            }
+
+            public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                return $this->run($command, $timeout, $environment);
             }
         };
     }
