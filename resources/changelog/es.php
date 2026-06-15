@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_in_place_modes' => [
+        'title' => 'Modos de restauración en sitio',
+        'description' => 'El asistente de restauración ahora puede restaurar una copia directamente en su volumen Docker de origen. «Restaurar en sitio» vacía y reemplaza el volumen tras volver a escribir su nombre para confirmar; «Restauración en sitio segura» además detiene los contenedores que usan el volumen durante la restauración y los reinicia después. El selector de copias se limita por defecto a los archivos de la tarea seleccionada, añade filtros por nombre y fecha, marca la copia más reciente, y un botón «Restaurar esta copia» abre el asistente desde una ejecución de copia.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Copia de seguridad de todo un stack a la vez',
         'description' => 'La página de stacks ahora permite hacer una copia de seguridad de un stack completo con un clic. Los stacks totalmente configurados muestran un botón "Ejecutar todas las tareas" que pone en cola una ejecución para cada tarea; los stacks con volúmenes sin cubrir muestran un cuadro "Copia de seguridad del stack" que crea una tarea de copia (diaria o personalizada) para cada volumen que no tiene una y, después, pone en cola una copia de todo el stack. La misma operación está disponible a través de la API (POST /stacks/backup).',

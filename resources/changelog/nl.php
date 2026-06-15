@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_in_place_modes' => [
+        'title' => 'Modi voor herstel ter plekke',
+        'description' => 'De herstelwizard kan een back-up nu rechtstreeks terugzetten in het Docker-bronvolume. „Ter plekke herstellen" wist en vervangt het volume nadat je de naam ter bevestiging opnieuw typt; „Veilig herstel ter plekke" stopt daarnaast de containers die het volume gebruiken tijdens het herstel en start ze daarna opnieuw. De back-upkiezer toont nu standaard de archieven van de geselecteerde taak, voegt filters op naam en datum toe, markeert het nieuwste archief en een knop „Deze back-up herstellen" opent de wizard rechtstreeks vanuit een back-uprun.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Een hele stack in één keer back-uppen',
         'description' => 'De Stacks-pagina kan nu een hele stack met één klik back-uppen. Volledig geconfigureerde stacks krijgen een knop "Alle taken uitvoeren" die voor elke taak een back-up in de wachtrij plaatst; stacks met niet-gedekte volumes krijgen een venster "Stack back-uppen" dat voor elk volume zonder taak een dagelijkse (of aangepaste) backuptaak aanmaakt en daarna een back-up voor de hele stack in de wachtrij plaatst. Dezelfde bewerking is beschikbaar via de API (POST /stacks/backup).',

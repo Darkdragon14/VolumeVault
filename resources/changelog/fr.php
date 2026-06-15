@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_in_place_modes' => [
+        'title' => 'Modes de restauration sur place',
+        'description' => 'L\'assistant de restauration peut désormais restaurer une sauvegarde directement dans son volume Docker source. « Restaurer sur place » vide et remplace le volume après avoir retapé son nom pour confirmer ; « Restauration sur place sécurisée » arrête en plus les conteneurs utilisant le volume pendant la restauration et les redémarre ensuite. Le sélecteur de sauvegarde se limite par défaut aux archives de la tâche sélectionnée, ajoute des filtres par nom et par date, signale l\'archive la plus récente, et un bouton « Restaurer cette sauvegarde » ouvre l\'assistant directement depuis une exécution de sauvegarde.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Sauvegarder une stack entière en une fois',
         'description' => 'La page Stacks permet désormais de sauvegarder une stack entière en un clic. Les stacks entièrement configurées disposent d\'un bouton « Exécuter toutes les tâches » qui lance une sauvegarde pour chaque tâche ; les stacks avec des volumes non couverts proposent une fenêtre « Sauvegarder la stack » qui crée une tâche de sauvegarde (quotidienne ou personnalisée) pour chaque volume qui n\'en a pas, puis lance une sauvegarde pour toute la stack. La même opération est disponible via l\'API (POST /stacks/backup).',

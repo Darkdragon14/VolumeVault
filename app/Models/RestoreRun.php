@@ -35,6 +35,7 @@ class RestoreRun extends Model
         'mode',
         'status',
         'affected_containers',
+        'stopped_container_ids',
         'confirmation_text',
         'started_at',
         'finished_at',
@@ -48,6 +49,7 @@ class RestoreRun extends Model
     {
         return [
             'affected_containers' => 'array',
+            'stopped_container_ids' => 'array',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
             'duration_seconds' => 'integer',

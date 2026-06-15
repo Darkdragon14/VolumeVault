@@ -2,10 +2,13 @@
 
 namespace App\Actions\Restore;
 
-use App\Actions\Docker\CreateDockerVolume;
-use App\Actions\Docker\InspectDockerVolume;
-use App\Actions\Docker\RemoveDockerVolume;
 use App\Actions\Docker\RunRestoreContainer;
+use App\Actions\Docker\StartDockerContainers;
+use App\Actions\Restore\Modes\InPlaceRestore;
+use App\Actions\Restore\Modes\NewVolumeRestore;
+use App\Actions\Restore\Modes\RestoreModeHandler;
+use App\Actions\Restore\Modes\SafeInPlaceRestore;
+use App\Models\ActivityLog;
 use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Services\BackupDestinations\DestinationStorage;
@@ -17,12 +20,13 @@ use Throwable;
 class RunRestore
 {
     public function __construct(
-        private readonly InspectDockerVolume $inspectDockerVolume,
-        private readonly CreateDockerVolume $createDockerVolume,
-        private readonly RemoveDockerVolume $removeDockerVolume,
         private readonly RunRestoreContainer $runRestoreContainer,
+        private readonly StartDockerContainers $startDockerContainers,
         private readonly DestinationStorage $storage,
         private readonly AppendRunLog $appendRunLog,
+        private readonly NewVolumeRestore $newVolumeRestore,
+        private readonly InPlaceRestore $inPlaceRestore,
+        private readonly SafeInPlaceRestore $safeInPlaceRestore,
     ) {}
 
     public function handle(RestoreRun $run): void
@@ -30,7 +34,8 @@ class RunRestore
         $run->loadMissing('job.destination', 'destination');
         $startedAt = now();
         $archivePath = storage_path('app/restore-runs/'.$run->id.'/backup.tar.gz');
-        $createdVolume = false;
+        $handler = $this->handlerFor($run->mode);
+        $prepared = false;
 
         $run->forceFill([
             'status' => RestoreRun::STATUS_RUNNING,
@@ -38,22 +43,17 @@ class RunRestore
         ])->save();
 
         try {
-            if ($run->mode !== RestoreRun::MODE_NEW_VOLUME) {
-                throw new RuntimeException('Only restore-to-new-volume is currently enabled.');
-            }
-
-            if ($this->volumeExists($run->target_volume_name)) {
-                throw new RuntimeException('Target Docker volume already exists: '.$run->target_volume_name);
-            }
+            // prepareTarget may stop containers and/or create a volume. It runs
+            // before any download so a precondition failure aborts cheaply; the
+            // $prepared flag gates cleanupAfterFailure so we never remove a
+            // volume that already existed (prepareTarget threw on its guard).
+            $handler->prepareTarget($run);
+            $prepared = true;
 
             File::ensureDirectoryExists(dirname($archivePath));
 
             $this->appendRunLog->handle($run, 'Downloading selected backup object from backup destination.');
             $this->storage->download($run->destination, $run->selected_backup_key, $archivePath);
-
-            $this->appendRunLog->handle($run, 'Creating target Docker volume '.$run->target_volume_name.'.');
-            $this->createDockerVolume->handle($run->target_volume_name);
-            $createdVolume = true;
 
             $this->appendRunLog->handle($run, 'Extracting backup archive into target volume.');
             $result = $this->runRestoreContainer->handle($run->fresh(), $archivePath);
@@ -75,12 +75,14 @@ class RunRestore
                 'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
             ])->save();
         } catch (Throwable $exception) {
-            if ($createdVolume) {
-                $this->removePartialVolume($run);
+            if ($prepared) {
+                $handler->cleanupAfterFailure($run);
             }
 
             $this->markFailed($run, $exception);
         } finally {
+            $this->restartStoppedContainersQuietly($run->fresh());
+
             if (File::exists($archivePath)) {
                 File::delete($archivePath);
             }
@@ -115,31 +117,63 @@ class RunRestore
     }
 
     /**
-     * Remove the target volume created by this run after a failed extraction.
+     * Restart application containers a previous safe in-place restore stopped
+     * but never restarted (worker crash between stop and restart).
      *
-     * Without this, the partially-created volume survives and the next retry
-     * trips the volumeExists() guard ("Target Docker volume already exists")
-     * with no clear cause. Cleanup failures are logged but never mask the
-     * original restore error.
+     * Used by the stale-run reconciliation command. Idempotent: re-running
+     * `docker start` on an already-running container succeeds, and the IDs are
+     * only cleared once every container is back up. Propagates failures so the
+     * caller can report them — the finally block uses the quiet variant instead.
      */
-    private function removePartialVolume(RestoreRun $run): void
+    public function restartStoppedContainers(RestoreRun $run): void
     {
+        $containerIds = $run->stopped_container_ids ?? [];
+
+        if (! $containerIds) {
+            return;
+        }
+
+        $this->startDockerContainers->handle($containerIds);
+
+        $run->forceFill(['stopped_container_ids' => null])->save();
+
+        $message = 'Restarted containers left stopped after an interrupted restore: '.implode(', ', $containerIds);
+        $this->appendRunLog->handle($run, $message);
+
+        ActivityLog::record('restore_run_containers_reconciled', $message, $run, [
+            'backup_job_id' => $run->backup_job_id,
+        ]);
+    }
+
+    /**
+     * Restart stopped containers from RunRestore's finally block, swallowing
+     * failures: a failed restart must not mask the restore outcome. The IDs are
+     * left set so reconciliation can retry.
+     */
+    private function restartStoppedContainersQuietly(RestoreRun $run): void
+    {
+        $containerIds = $run->stopped_container_ids ?? [];
+
+        if (! $containerIds) {
+            return;
+        }
+
         try {
-            $this->removeDockerVolume->handle($run->target_volume_name);
-            $this->appendRunLog->handle($run, 'Removed partially-created target volume '.$run->target_volume_name.' so the run can be retried cleanly.');
-        } catch (Throwable $cleanupException) {
-            $this->appendRunLog->handle($run, 'Failed to remove partially-created target volume '.$run->target_volume_name.': '.$cleanupException->getMessage());
+            $this->startDockerContainers->handle($containerIds);
+            $run->forceFill(['stopped_container_ids' => null])->save();
+            $this->appendRunLog->handle($run->fresh(), 'Restarted containers: '.implode(', ', $containerIds));
+        } catch (Throwable $exception) {
+            $this->appendRunLog->handle($run->fresh(), 'Failed to restart containers: '.$exception->getMessage());
         }
     }
 
-    private function volumeExists(string $volumeName): bool
+    private function handlerFor(string $mode): RestoreModeHandler
     {
-        try {
-            $this->inspectDockerVolume->handle($volumeName);
-
-            return true;
-        } catch (RuntimeException) {
-            return false;
-        }
+        return match ($mode) {
+            RestoreRun::MODE_NEW_VOLUME => $this->newVolumeRestore,
+            RestoreRun::MODE_INPLACE => $this->inPlaceRestore,
+            RestoreRun::MODE_SAFE_INPLACE => $this->safeInPlaceRestore,
+            default => throw new RuntimeException('Unsupported restore mode: '.$mode),
+        };
     }
 }

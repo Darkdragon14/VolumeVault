@@ -61,12 +61,21 @@ class ReconcileStaleRuns extends Command
         // Runs the sweep just failed (or runs whose worker died during restart)
         // may still have application containers stopped. Restart them now.
         $restartedCount = 0;
-        $this->runsWithStoppedContainers()->each(function (BackupRun $run) use ($runBackup, &$restartedCount): void {
+        $this->backupRunsWithStoppedContainers()->each(function (BackupRun $run) use ($runBackup, &$restartedCount): void {
             try {
                 $runBackup->restartStoppedContainers($run);
                 $restartedCount++;
             } catch (Throwable $exception) {
                 $this->warn("Failed to restart containers for backup run {$run->id}: {$exception->getMessage()}");
+            }
+        });
+
+        $this->restoreRunsWithStoppedContainers()->each(function (RestoreRun $run) use ($runRestore, &$restartedCount): void {
+            try {
+                $runRestore->restartStoppedContainers($run);
+                $restartedCount++;
+            } catch (Throwable $exception) {
+                $this->warn("Failed to restart containers for restore run {$run->id}: {$exception->getMessage()}");
             }
         });
 
@@ -96,15 +105,31 @@ class ReconcileStaleRuns extends Command
     }
 
     /**
-     * Terminal runs whose application containers were stopped for the backup
-     * but never restarted (worker crash between stop and restart).
+     * Terminal backup runs whose application containers were stopped for the
+     * backup but never restarted (worker crash between stop and restart).
      *
      * @return Collection<int, BackupRun>
      */
-    private function runsWithStoppedContainers(): Collection
+    private function backupRunsWithStoppedContainers(): Collection
     {
         return BackupRun::query()
             ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
+            ->whereNotNull('stopped_container_ids')
+            ->where('stopped_container_ids', '!=', '[]')
+            ->get();
+    }
+
+    /**
+     * Terminal restore runs whose application containers were stopped for a safe
+     * in-place restore but never restarted (worker crash between stop and
+     * restart). Mirrors {@see backupRunsWithStoppedContainers()}.
+     *
+     * @return Collection<int, RestoreRun>
+     */
+    private function restoreRunsWithStoppedContainers(): Collection
+    {
+        return RestoreRun::query()
+            ->whereIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
             ->whereNotNull('stopped_container_ids')
             ->where('stopped_container_ids', '!=', '[]')
             ->get();

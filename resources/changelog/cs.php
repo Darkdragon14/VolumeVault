@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_in_place_modes' => [
+        'title' => 'Režimy obnovy na místě',
+        'description' => 'Průvodce obnovou nyní umí obnovit zálohu přímo do jejího zdrojového Docker svazku. „Obnovit na místě" vymaže a nahradí svazek po opětovném napsání jeho názvu pro potvrzení; „Bezpečná obnova na místě" navíc během obnovy zastaví kontejnery používající svazek a po dokončení je restartuje. Výběr zálohy se nyní ve výchozím nastavení omezuje na archivy vybrané úlohy, přidává filtry podle názvu a data, označuje nejnovější archiv a tlačítko „Obnovit tuto zálohu" otevře průvodce přímo z běhu zálohy.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Záloha celého stacku najednou',
         'description' => 'Stránka Stacky nyní umožňuje zálohovat celý stack jedním kliknutím. Plně nakonfigurované stacky mají tlačítko "Spustit všechny úlohy", které zařadí spuštění pro každou úlohu; stacky s nepokrytými svazky mají dialog "Zálohovat stack", který pro každý svazek bez úlohy vytvoří denní (nebo vlastní) zálohovací úlohu a poté zařadí zálohu celého stacku. Stejná operace je dostupná i přes API (POST /stacks/backup).',

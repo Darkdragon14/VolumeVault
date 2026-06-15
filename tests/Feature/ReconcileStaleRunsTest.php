@@ -190,6 +190,34 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(['app-1'], $run->refresh()->stopped_container_ids);
     }
 
+    public function test_terminal_restore_run_with_stopped_containers_is_restarted(): void
+    {
+        $docker = $this->recordingDockerProcess();
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_SAFE_INPLACE,
+            'status' => RestoreRun::STATUS_FAILED,
+            'started_at' => now()->subDays(2),
+            'finished_at' => now()->subDays(2),
+            'stopped_container_ids' => ['app-1', 'app-2'],
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame([
+            ['docker', 'start', 'app-1'],
+            ['docker', 'start', 'app-2'],
+        ], $docker->commands);
+        $this->assertNull($run->refresh()->stopped_container_ids);
+    }
+
     public function test_terminal_run_without_stopped_containers_is_left_untouched(): void
     {
         $docker = $this->recordingDockerProcess();

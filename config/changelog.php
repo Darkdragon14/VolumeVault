@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'restore_in_place_modes',
+        ],
+    ],
     'releases' => [
         'v1.13.0' => [
             'date' => '2026-06-15',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_in_place_modes' => [
+        'title' => 'Helyben visszaállítási módok',
+        'description' => 'A visszaállítási varázsló mostantól közvetlenül a forrás Docker kötetébe tud visszaállítani egy mentést. A „Helyben visszaállítás" a név újragépelésével történő megerősítés után kiüríti és lecseréli a kötetet; a „Biztonságos helyben visszaállítás" a visszaállítás alatt ezenfelül leállítja a kötetet használó konténereket, majd a végén újraindítja őket. A mentésválasztó mostantól alapértelmezetten a kiválasztott feladat archívumait mutatja, név és dátum szerinti szűrőket ad, kiemeli a legújabb archívumot, és a „Mentés visszaállítása" gomb közvetlenül egy mentési futásból nyitja meg a varázslót.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Egy teljes stack mentése egyszerre',
         'description' => 'A Stackek oldal mostantól egyetlen kattintással menthet egy teljes stacket. A teljesen beállított stackeknél megjelenik az "Összes feladat futtatása" gomb, amely minden feladathoz sorba állít egy futtatást; a nem lefedett kötetekkel rendelkező stackeknél a "Stack mentése" ablak minden feladat nélküli kötethez létrehoz egy napi (vagy egyéni) mentési feladatot, majd sorba állít egy mentést a teljes stackhez. Ugyanez a művelet elérhető az API-n keresztül is (POST /stacks/backup).',

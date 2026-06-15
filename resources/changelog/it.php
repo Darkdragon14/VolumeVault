@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_in_place_modes' => [
+        'title' => 'Modalità di ripristino sul posto',
+        'description' => 'La procedura di ripristino ora può ripristinare un backup direttamente nel suo volume Docker di origine. «Ripristina sul posto» svuota e sostituisce il volume dopo aver ridigitato il suo nome per confermare; «Ripristino sul posto sicuro» arresta inoltre i container che usano il volume durante il ripristino e li riavvia al termine. Il selettore dei backup ora mostra in modo predefinito gli archivi del job selezionato, aggiunge filtri per nome e data, evidenzia l\'archivio più recente e un pulsante «Ripristina questo backup» apre la procedura direttamente da un\'esecuzione di backup.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Backup di un intero stack in una volta',
         'description' => 'La pagina Stack ora consente di eseguire il backup di un intero stack con un clic. Gli stack completamente configurati mostrano un pulsante "Esegui tutti i processi" che mette in coda un\'esecuzione per ogni processo; gli stack con volumi non coperti mostrano una finestra "Backup dello stack" che crea un processo di backup (giornaliero o personalizzato) per ogni volume che non ne ha uno, poi mette in coda un backup dell\'intero stack. La stessa operazione è disponibile tramite l\'API (POST /stacks/backup).',

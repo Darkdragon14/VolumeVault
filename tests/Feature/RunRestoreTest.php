@@ -10,6 +10,7 @@ use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Mockery;
 use Tests\TestCase;
 
@@ -17,20 +18,24 @@ class RunRestoreTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_only_new_volume_mode_is_supported(): void
+    private string $storagePath = '';
+
+    protected function setUp(): void
     {
-        $storage = Mockery::mock(DestinationStorage::class);
-        $storage->shouldNotReceive('download');
-        $this->app->instance(DestinationStorage::class, $storage);
-        $this->app->instance(DockerProcess::class, $this->docker(volumeExists: false));
+        parent::setUp();
 
-        $run = $this->restoreRun(['mode' => RestoreRun::MODE_INPLACE]);
+        $this->storagePath = sys_get_temp_dir().'/volumevault-run-restore-'.uniqid();
+        File::ensureDirectoryExists($this->storagePath);
+        $this->app->useStoragePath($this->storagePath);
+    }
 
-        app(RunRestore::class)->handle($run);
-        $run->refresh();
+    protected function tearDown(): void
+    {
+        if ($this->storagePath !== '') {
+            File::deleteDirectory($this->storagePath);
+        }
 
-        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
-        $this->assertStringContainsString('Only restore-to-new-volume is currently enabled.', $run->error_message);
+        parent::tearDown();
     }
 
     public function test_run_fails_when_the_target_volume_already_exists(): void
@@ -50,7 +55,71 @@ class RunRestoreTest extends TestCase
         $this->assertStringContainsString('Target Docker volume already exists', $run->error_message);
     }
 
-    public function test_markFailed_is_idempotent_for_terminal_runs(): void
+    public function test_in_place_restore_clears_then_extracts_into_the_source_volume(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_SUCCESS, $run->status);
+        $this->assertTrue($docker->ranClear, 'In-place restore must wipe the source volume before extracting.');
+        $this->assertTrue($docker->ranRestore, 'In-place restore must extract the archive.');
+        // The source volume is reused, never created or removed.
+        $this->assertNotContains('create', $docker->volumeSubcommands);
+        $this->assertNotContains('rm', $docker->volumeSubcommands);
+    }
+
+    public function test_in_place_restore_fails_when_the_source_volume_is_missing(): void
+    {
+        $storage = Mockery::mock(DestinationStorage::class);
+        $storage->shouldNotReceive('download');
+        $this->app->instance(DestinationStorage::class, $storage);
+        $this->app->instance(DockerProcess::class, $this->docker(volumeExists: false));
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('does not exist', $run->error_message);
+    }
+
+    public function test_safe_in_place_restore_stops_and_restarts_affected_containers(): void
+    {
+        $docker = $this->docker(volumeExists: true, containers: ['c1', 'c2']);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_SAFE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_SUCCESS, $run->status);
+        $this->assertSame(['c1', 'c2'], $docker->stopped);
+        $this->assertSame(['c1', 'c2'], $docker->started);
+        $this->assertTrue($docker->ranClear);
+        // Recorded for the UI audit trail, then cleared once everything restarts.
+        $this->assertCount(2, $run->affected_containers);
+        $this->assertNull($run->stopped_container_ids);
+    }
+
+    public function test_mark_failed_is_idempotent_for_terminal_runs(): void
     {
         $run = $this->restoreRun(['status' => RestoreRun::STATUS_SUCCESS, 'finished_at' => now()->subHour()]);
 
@@ -94,21 +163,88 @@ class RunRestoreTest extends TestCase
         ], $overrides));
     }
 
-    private function docker(bool $volumeExists): DockerProcess
+    private function storageThatDownloads(): DestinationStorage
     {
-        return new class($volumeExists) extends DockerProcess
+        $storage = Mockery::mock(DestinationStorage::class);
+        $storage->shouldReceive('download')
+            ->andReturnUsing(function (BackupDestination $destination, string $key, string $targetPath): void {
+                File::ensureDirectoryExists(dirname($targetPath));
+                File::put($targetPath, 'archive');
+            });
+
+        return $storage;
+    }
+
+    private function docker(bool $volumeExists, array $containers = []): DockerProcess
+    {
+        return new class($volumeExists, $containers) extends DockerProcess
         {
-            public function __construct(private readonly bool $volumeExists) {}
+            /** @var array<int, string> */
+            public array $volumeSubcommands = [];
+
+            /** @var array<int, string> */
+            public array $stopped = [];
+
+            /** @var array<int, string> */
+            public array $started = [];
+
+            public bool $ranClear = false;
+
+            public bool $ranRestore = false;
+
+            public function __construct(private readonly bool $volumeExists, private readonly array $containers) {}
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
             {
-                if (($command[1] ?? null) === 'volume' && ($command[2] ?? null) === 'inspect') {
-                    return $this->volumeExists
-                        ? new DockerProcessResult($command, 0, '[{"Name":"app_data_restored"}]', '')
-                        : new DockerProcessResult($command, 1, '', 'no such volume');
+                $verb = $command[1] ?? null;
+
+                if ($verb === 'volume') {
+                    $this->volumeSubcommands[] = (string) ($command[2] ?? '');
+
+                    if (($command[2] ?? null) === 'inspect') {
+                        return $this->volumeExists
+                            ? new DockerProcessResult($command, 0, '[{"Name":"app_data"}]', '')
+                            : new DockerProcessResult($command, 1, '', 'no such volume');
+                    }
+
+                    return new DockerProcessResult($command, 0, '', '');
+                }
+
+                if ($verb === 'ps') {
+                    $lines = array_map(
+                        fn (string $id) => json_encode(['ID' => $id, 'Names' => $id.'-name', 'State' => 'running']),
+                        $this->containers,
+                    );
+
+                    return new DockerProcessResult($command, 0, implode("\n", $lines), '');
+                }
+
+                if ($verb === 'stop') {
+                    $this->stopped[] = (string) ($command[2] ?? '');
+
+                    return new DockerProcessResult($command, 0, '', '');
+                }
+
+                if ($verb === 'start') {
+                    $this->started[] = (string) ($command[2] ?? '');
+
+                    return new DockerProcessResult($command, 0, '', '');
+                }
+
+                if ($verb === 'run' && in_array('find', $command, true)) {
+                    // The only `docker run` going through run() is ClearDockerVolume;
+                    // the restore extraction streams via runWithInputFile() below.
+                    $this->ranClear = true;
                 }
 
                 return new DockerProcessResult($command, 0, '', '');
+            }
+
+            public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                $this->ranRestore = true;
+
+                return new DockerProcessResult($command, 0, 'restore complete', '');
             }
         };
     }
