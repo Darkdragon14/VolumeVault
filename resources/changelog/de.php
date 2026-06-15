@@ -5,6 +5,10 @@ return [
         'title' => 'Modi für direkte Wiederherstellung',
         'description' => 'Der Wiederherstellungsassistent kann ein Backup jetzt direkt in sein Docker-Quellvolume zurückspielen. „Direkt wiederherstellen" leert und ersetzt das Volume, nachdem du seinen Namen zur Bestätigung erneut eingegeben hast; „Sichere direkte Wiederherstellung" stoppt während der Wiederherstellung zusätzlich die Container, die das Volume verwenden, und startet sie danach neu. Die Backup-Auswahl zeigt jetzt standardmäßig die Archive des gewählten Auftrags, bietet Filter nach Name und Datum, hebt das neueste Archiv hervor, und eine Schaltfläche „Dieses Backup wiederherstellen" öffnet den Assistenten direkt aus einem Backup-Lauf.',
     ],
+    'restore_notifications' => [
+        'title' => 'Benachrichtigungen bei Wiederherstellung',
+        'description' => 'VolumeVault benachrichtigt dich jetzt, wenn eine Wiederherstellung startet, erfolgreich ist oder fehlschlägt, und nutzt dafür die bereits für den Backup-Auftrag konfigurierten Benachrichtigungskanäle. Start- und Erfolgsmeldungen gehen an Kanäle, die jeden Lauf erhalten, während Fehler an alle Kanäle gehen. Ein Benachrichtigungsproblem unterbricht die Wiederherstellung selbst nie.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Ganzen Stack auf einmal sichern',
         'description' => 'Die Stack-Seite kann jetzt einen ganzen Stack mit einem Klick sichern. Vollständig konfigurierte Stacks erhalten eine Schaltfläche "Alle Jobs ausführen", die für jeden Job eine Sicherung einreiht; Stacks mit nicht abgedeckten Volumes erhalten einen Dialog "Stack sichern", der für jedes Volume ohne Job einen täglichen (oder benutzerdefinierten) Backup-Job anlegt und anschließend eine Sicherung für den gesamten Stack einreiht. Dieselbe Operation ist auch über die API verfügbar (POST /stacks/backup).',

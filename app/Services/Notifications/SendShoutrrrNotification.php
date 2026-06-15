@@ -10,6 +10,7 @@ use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\NotificationChannel;
+use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Support\FormatBytes;
@@ -37,6 +38,30 @@ class SendShoutrrrNotification
             $title = $this->backupRunTitle($run, $channel);
             $message = $this->backupRunMessage($run, $channel);
             $this->send($channel, $title, $message);
+        }
+    }
+
+    /**
+     * Notify the backup job's channels about a restore lifecycle event
+     * (started / succeeded / failed). Reuses the job's channels and its
+     * notifications_enabled toggle. Started and succeeded are info-level
+     * events (info channels only); a failure reaches every channel.
+     */
+    public function sendRestoreRun(RestoreRun $run): void
+    {
+        $run->loadMissing('job.destination');
+        $failed = $run->status === RestoreRun::STATUS_FAILED;
+
+        if ($run->job === null) {
+            return;
+        }
+
+        foreach ($this->resolveNotificationChannels->forJob($run->job) as $channel) {
+            if (! $failed && $channel->notification_level !== NotificationChannel::LEVEL_INFO) {
+                continue;
+            }
+
+            $this->send($channel, $this->restoreRunTitle($run), $this->restoreRunMessage($run));
         }
     }
 
@@ -157,6 +182,36 @@ class SendShoutrrrNotification
         $default = $run->status === BackupRun::STATUS_FAILED ? 'VolumeVault backup failed' : 'VolumeVault backup succeeded';
 
         return $this->renderTemplate($channel->title_template, $run) ?: $default;
+    }
+
+    private function restoreRunTitle(RestoreRun $run): string
+    {
+        return match ($run->status) {
+            RestoreRun::STATUS_SUCCESS => 'VolumeVault restore succeeded',
+            RestoreRun::STATUS_FAILED => 'VolumeVault restore failed',
+            default => 'VolumeVault restore started',
+        };
+    }
+
+    private function restoreRunMessage(RestoreRun $run): string
+    {
+        $lines = [
+            'Job: '.($run->job?->name ?? 'Unknown'),
+            'Source volume: '.$run->source_volume_name,
+            'Target volume: '.$run->target_volume_name,
+            'Mode: '.$run->mode,
+            'Status: '.$run->status,
+        ];
+
+        if ($run->duration_seconds !== null) {
+            $lines[] = 'Duration: '.$run->duration_seconds.'s';
+        }
+
+        if ($run->error_message) {
+            $lines[] = 'Error: '.$run->error_message;
+        }
+
+        return implode("\n", $lines);
     }
 
     private function alertTitle(Alert $alert, string $type): string

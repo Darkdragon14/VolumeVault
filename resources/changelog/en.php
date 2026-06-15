@@ -5,6 +5,10 @@ return [
         'title' => 'In-place restore modes',
         'description' => 'The restore wizard can now restore a backup straight back into its source Docker volume. "Restore in place" wipes and replaces the volume after you retype its name to confirm; "Safe in-place restore" also stops the containers using the volume during the restore and restarts them afterwards. The backup picker now defaults to the selected job\'s archives, adds name and date filters, flags the latest archive, and a "Restore this backup" button opens the wizard straight from a backup run.',
     ],
+    'restore_notifications' => [
+        'title' => 'Restore notifications',
+        'description' => 'VolumeVault now notifies you when a restore starts, succeeds, or fails, reusing the notification channels already configured on the backup job. Start and success messages are sent to channels set to receive every run, while failures reach every channel. A notification problem never interrupts the restore itself.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Back up a whole stack at once',
         'description' => 'The Stacks page can now back up an entire stack in one click. Fully configured stacks get a "Run all jobs" button that queues a run for every job; stacks with uncovered volumes get a "Back up stack" dialog that creates a daily (or custom) backup job for each volume without one, then queues a run for the whole stack. The same operation is available through the API (POST /stacks/backup).',

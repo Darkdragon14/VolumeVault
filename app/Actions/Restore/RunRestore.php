@@ -13,6 +13,7 @@ use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Logging\AppendRunLog;
+use App\Services\Notifications\SendShoutrrrNotification;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 use Throwable;
@@ -27,6 +28,7 @@ class RunRestore
         private readonly NewVolumeRestore $newVolumeRestore,
         private readonly InPlaceRestore $inPlaceRestore,
         private readonly SafeInPlaceRestore $safeInPlaceRestore,
+        private readonly SendShoutrrrNotification $sendShoutrrrNotification,
     ) {}
 
     public function handle(RestoreRun $run): void
@@ -41,6 +43,8 @@ class RunRestore
             'status' => RestoreRun::STATUS_RUNNING,
             'started_at' => $startedAt,
         ])->save();
+
+        $this->notify($run);
 
         try {
             // prepareTarget may stop containers and/or create a volume. It runs
@@ -74,6 +78,8 @@ class RunRestore
                 'finished_at' => $finishedAt,
                 'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
             ])->save();
+
+            $this->notify($run);
         } catch (Throwable $exception) {
             if ($prepared) {
                 $handler->cleanupAfterFailure($run);
@@ -114,6 +120,27 @@ class RunRestore
         ])->save();
 
         $this->appendRunLog->handle($run, $message);
+
+        // Central failure notification: markFailed is reached from the in-process
+        // catch block, the queue job's failed() hook and stale-run reconciliation,
+        // so every failure path notifies. The terminal-state guard above keeps it
+        // to a single send.
+        $this->notify($run);
+    }
+
+    /**
+     * Send a restore lifecycle notification without ever letting a notification
+     * failure interrupt the restore. Mirrors RunBackup::sendNotifications.
+     */
+    private function notify(RestoreRun $run): void
+    {
+        try {
+            $this->sendShoutrrrNotification->sendRestoreRun($run);
+        } catch (Throwable $exception) {
+            ActivityLog::record('notification_send_failed', 'Restore notification failed.', $run, [
+                'error' => str($exception->getMessage())->limit(1000)->toString(),
+            ]);
+        }
     }
 
     /**

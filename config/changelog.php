@@ -6,6 +6,10 @@ return [
             'type' => 'feature',
             'key' => 'restore_in_place_modes',
         ],
+        [
+            'type' => 'feature',
+            'key' => 'restore_notifications',
+        ],
     ],
     'releases' => [
         'v1.13.0' => [

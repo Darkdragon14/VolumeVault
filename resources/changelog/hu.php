@@ -5,6 +5,10 @@ return [
         'title' => 'Helyben visszaállítási módok',
         'description' => 'A visszaállítási varázsló mostantól közvetlenül a forrás Docker kötetébe tud visszaállítani egy mentést. A „Helyben visszaállítás" a név újragépelésével történő megerősítés után kiüríti és lecseréli a kötetet; a „Biztonságos helyben visszaállítás" a visszaállítás alatt ezenfelül leállítja a kötetet használó konténereket, majd a végén újraindítja őket. A mentésválasztó mostantól alapértelmezetten a kiválasztott feladat archívumait mutatja, név és dátum szerinti szűrőket ad, kiemeli a legújabb archívumot, és a „Mentés visszaállítása" gomb közvetlenül egy mentési futásból nyitja meg a varázslót.',
     ],
+    'restore_notifications' => [
+        'title' => 'Visszaállítási értesítések',
+        'description' => 'A VolumeVault mostantól értesít, amikor egy visszaállítás elindul, sikerül vagy meghiúsul, és ehhez a mentési feladathoz már beállított értesítési csatornákat használja. Az indítási és sikerüzenetek a minden futtatást fogadó csatornákra kerülnek, míg a hibák minden csatornát elérnek. Egy értesítési hiba soha nem szakítja meg magát a visszaállítást.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Egy teljes stack mentése egyszerre',
         'description' => 'A Stackek oldal mostantól egyetlen kattintással menthet egy teljes stacket. A teljesen beállított stackeknél megjelenik az "Összes feladat futtatása" gomb, amely minden feladathoz sorba állít egy futtatást; a nem lefedett kötetekkel rendelkező stackeknél a "Stack mentése" ablak minden feladat nélküli kötethez létrehoz egy napi (vagy egyéni) mentési feladatot, majd sorba állít egy mentést a teljes stackhez. Ugyanez a művelet elérhető az API-n keresztül is (POST /stacks/backup).',
