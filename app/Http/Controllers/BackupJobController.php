@@ -89,7 +89,7 @@ class BackupJobController extends Controller
                 ->orderByDesc('finished_at')
                 ->orderByDesc('created_at')
                 ->first(['id', 'finished_at', 'backup_key', 'backup_size_bytes']),
-            'runs' => $this->paginateForInertia($backupJob->runs(), $perPage, null, 'runs_page'),
+            'runs' => $this->paginateForInertia($backupJob->runs()->with('initiatedBy:id,name,email'), $perPage, null, 'runs_page'),
             'restoreRuns' => $this->paginateForInertia($backupJob->restoreRuns()->with('initiatedBy:id,name,email'), $perPage, null, 'restores_page'),
         ]);
     }
@@ -120,9 +120,9 @@ class BackupJobController extends Controller
         return redirect()->route('backup-jobs.index')->with('success', 'Backup job deleted.');
     }
 
-    public function runNow(BackupJob $backupJob, CreateBackupRun $createBackupRun)
+    public function runNow(Request $request, BackupJob $backupJob, CreateBackupRun $createBackupRun)
     {
-        $run = $createBackupRun->handle($backupJob, BackupRun::TRIGGER_MANUAL);
+        $run = $createBackupRun->handle($backupJob, BackupRun::TRIGGER_MANUAL, $request->user());
         RunBackupJob::dispatch($run->id);
 
         return redirect()->route('backup-runs.show', $run)->with('success', 'Backup run queued.');

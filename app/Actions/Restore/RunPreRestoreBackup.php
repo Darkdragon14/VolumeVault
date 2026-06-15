@@ -40,6 +40,7 @@ class RunPreRestoreBackup
 
         $backup = BackupRun::create([
             'backup_job_id' => $run->backup_job_id,
+            'initiated_by_user_id' => $run->initiated_by_user_id,
             'status' => BackupRun::STATUS_QUEUED,
             'trigger' => BackupRun::TRIGGER_PRE_RESTORE,
         ]);

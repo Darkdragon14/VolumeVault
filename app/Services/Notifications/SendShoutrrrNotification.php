@@ -27,7 +27,7 @@ class SendShoutrrrNotification
 
     public function sendBackupRunFinished(BackupRun $run): void
     {
-        $run->loadMissing('job.destination');
+        $run->loadMissing('job.destination', 'initiatedBy');
         $failed = $run->status === BackupRun::STATUS_FAILED;
 
         foreach ($this->resolveNotificationChannels->forJob($run->job) as $channel) {
@@ -239,6 +239,7 @@ class SendShoutrrrNotification
             'Destination: '.($job->destination?->name ?? 'Unknown'),
             'Status: '.$run->status,
             'Trigger: '.$run->trigger,
+            'Initiated by: '.($run->initiatedBy?->name ?? 'Unknown'),
         ];
 
         if ($run->duration_seconds !== null) {
@@ -303,6 +304,7 @@ class SendShoutrrrNotification
             'destination' => $job->destination?->name ?? 'Unknown',
             'status' => $run->status,
             'trigger' => $run->trigger,
+            'user' => $run->initiatedBy?->name ?? '',
             'duration' => $run->duration_seconds !== null ? $run->duration_seconds.'s' : '',
             'backup_size' => $run->backup_size_bytes !== null ? FormatBytes::format($run->backup_size_bytes) : '',
             'error' => $run->error_message ?? '',

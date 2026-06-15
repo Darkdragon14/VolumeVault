@@ -14,6 +14,10 @@ return [
             'type' => 'feature',
             'key' => 'restore_notifications',
         ],
+        [
+            'type' => 'feature',
+            'key' => 'backup_initiator_tracking',
+        ],
     ],
     'releases' => [
         'v1.13.0' => [

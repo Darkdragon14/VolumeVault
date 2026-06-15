@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Annak nyomon követése, ki indította az egyes mentéseket',
+        'description' => 'A mentések mostantól rögzítik, melyik felhasználó indította őket. A kézi futtatások (a felületről vagy az API-ból) és a teljes verem mentései a bejelentkezett felhasználóhoz vannak rendelve, a helyben történő visszaállítás előtt készített biztonsági mentés a visszaállítást indító felhasználót örökli, az ütemezett futtatások pedig hozzárendelés nélkül maradnak. A kezdeményező megjelenik a feladat futtatási előzményeiben és a mentés részleteiben, szerepel a mentési értesítésekben, és új {{ user }} tokenként elérhető az egyéni értesítési sablonokhoz.',
+    ],
     'restore_history_on_job' => [
         'title' => 'Visszaállítási előzmények a biztonsági mentési feladatoknál',
         'description' => 'Minden biztonsági mentési feladat oldala mostantól két fülre osztja az előzményeket: a „Futási előzmények" a feladat biztonsági mentéseit sorolja fel, egy új „Visszaállítási előzmények" fül pedig az adott feladathoz végrehajtott összes visszaállítást – állapottal, móddal, forrás- és célkötettel, kezdési idővel, időtartammal és a teljes visszaállítási részletekre mutató hivatkozással. Mindkét fül mostantól lapozható, így a hosszú előzmények már nem korlátozódnak 50 sorra.',

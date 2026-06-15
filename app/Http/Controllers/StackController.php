@@ -33,7 +33,7 @@ class StackController extends Controller
     public function backup(StackBackupRequest $request, BackupStack $backupStack)
     {
         $stackName = $request->stackName();
-        $summary = $backupStack->handle($stackName, $request->validated());
+        $summary = $backupStack->handle($stackName, $request->validated(), $request->user());
 
         return back()->with('success', $this->summaryMessage($stackName, $summary));
     }

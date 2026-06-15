@@ -69,9 +69,9 @@ class BackupJobController extends Controller
         return response()->json(status: 204);
     }
 
-    public function runNow(BackupJob $backupJob, CreateBackupRun $createBackupRun): JsonResponse
+    public function runNow(Request $request, BackupJob $backupJob, CreateBackupRun $createBackupRun): JsonResponse
     {
-        $run = $createBackupRun->handle($backupJob, BackupRun::TRIGGER_MANUAL);
+        $run = $createBackupRun->handle($backupJob, BackupRun::TRIGGER_MANUAL, $request->user());
         RunBackupJob::dispatch($run->id);
 
         return response()->json(['data' => $run], 202);

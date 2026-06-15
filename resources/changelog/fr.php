@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Suivi de l\'auteur de chaque sauvegarde',
+        'description' => 'Les sauvegardes enregistrent désormais quel utilisateur les a lancées. Les exécutions manuelles (depuis l\'interface ou l\'API) et les sauvegardes de pile complète sont attribuées à l\'utilisateur connecté, la sauvegarde de sécurité réalisée avant une restauration sur place hérite de l\'utilisateur ayant lancé la restauration, et les exécutions planifiées restent sans auteur. L\'initiateur apparaît dans l\'historique des exécutions de la tâche et sur le détail de la sauvegarde, est inclus dans les notifications de sauvegarde et est disponible via un nouveau jeton {{ user }} pour les modèles de notification personnalisés.',
+    ],
     'restore_history_on_job' => [
         'title' => 'Historique des restaurations par tâche',
         'description' => 'La page de chaque tâche de sauvegarde répartit désormais son historique en deux onglets : « Historique des sauvegardes » liste les sauvegardes de la tâche, et un nouvel onglet « Historique des restaurations » liste chaque restauration effectuée pour cette tâche — avec le statut, le mode, les volumes source et cible, la date de début, la durée et un lien vers les détails complets de la restauration. Les deux onglets sont désormais paginés, l\'historique n\'est donc plus limité à 50 lignes.',

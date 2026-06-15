@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Bijhouden wie elke back-up heeft gestart',
+        'description' => 'Back-ups registreren nu welke gebruiker ze heeft gestart. Handmatige uitvoeringen (via de interface of de API) en back-ups van een volledige stack worden toegewezen aan de aangemelde gebruiker, de veiligheidsback-up die vóór een in-place herstel wordt gemaakt erft de gebruiker die het herstel heeft gestart, en geplande uitvoeringen blijven zonder toewijzing. De initiator verschijnt in de uitvoeringsgeschiedenis van de taak en in de back-updetails, wordt opgenomen in back-upmeldingen en is beschikbaar als nieuw {{ user }}-token voor aangepaste meldingssjablonen.',
+    ],
     'restore_history_on_job' => [
         'title' => 'Herstelgeschiedenis bij back-uptaken',
         'description' => 'De pagina van elke back-uptaak splitst de geschiedenis nu op in twee tabbladen: "Runhistorie" toont de back-ups van de taak en een nieuw tabblad "Herstelgeschiedenis" toont elke herstelactie die voor die taak is uitgevoerd — met status, modus, bron- en doelvolume, starttijd, duur en een link naar de volledige herstelgegevens. Beide tabbladen zijn nu gepagineerd, zodat lange geschiedenissen niet langer beperkt zijn tot 50 rijen.',

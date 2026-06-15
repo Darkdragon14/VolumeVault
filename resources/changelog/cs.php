@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Sledování, kdo spustil každou zálohu',
+        'description' => 'Zálohy nyní zaznamenávají, který uživatel je spustil. Ruční spuštění (z rozhraní nebo přes API) a zálohy celého stacku jsou přiřazeny přihlášenému uživateli, bezpečnostní záloha pořízená před obnovou na místě přebírá uživatele, který obnovu spustil, a naplánovaná spuštění zůstávají bez přiřazení. Iniciátor se zobrazuje v historii spuštění úlohy a v podrobnostech zálohy, je součástí oznámení o zálohách a je k dispozici jako nový token {{ user }} pro vlastní šablony oznámení.',
+    ],
     'restore_history_on_job' => [
         'title' => 'Historie obnovení u záloh',
         'description' => 'Stránka každé zálohovací úlohy nyní rozděluje historii do dvou karet: „Historie běhu" zobrazuje zálohy úlohy a nová karta „Historie obnovení" zobrazuje každé obnovení provedené pro danou úlohu – se stavem, režimem, zdrojovým a cílovým svazkem, časem zahájení, dobou trvání a odkazem na úplné podrobnosti obnovení. Obě karty jsou nyní stránkované, takže dlouhá historie již není omezena na 50 řádků.',

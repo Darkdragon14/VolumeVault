@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Track who triggered each backup',
+        'description' => 'Backups now record which user started them. Manual runs (from the UI or the API) and whole-stack backups are attributed to the signed-in user, the safety backup taken before an in-place restore inherits the user who launched the restore, and scheduled runs stay unattributed. The initiator appears in the job\'s run history and on the backup run details, is included in backup notifications, and is available as a new {{ user }} token for custom notification templates.',
+    ],
     'restore_history_on_job' => [
         'title' => 'Restore history on backup jobs',
         'description' => 'Each backup job page now splits its history into two tabs: "Run history" lists the job\'s backups, and a new "Restore history" tab lists every restore performed for that job — with status, mode, source and target volumes, start time, duration, and a link to the full restore details. Both tabs are now paginated, so long histories are no longer capped at 50 rows.',

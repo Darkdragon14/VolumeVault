@@ -27,6 +27,7 @@ const restoreHref = `/backup-jobs/${props.run.job.id}/restore?backup=${encodeURI
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Job') }}</dt><dd class="mt-1 break-words text-white">{{ run.job.name }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="run.status" /></dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Trigger') }}</dt><dd class="mt-1 text-white">{{ t(run.trigger) }}</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Initiated by') }}</dt><dd class="mt-1 break-all text-white">{{ run.initiated_by ? `${run.initiated_by.name} (${run.initiated_by.email})` : '—' }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Duration') }}</dt><dd class="mt-1 text-white">{{ run.duration_seconds ?? '-' }}s</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Started') }}</dt><dd class="mt-1 text-white">{{ formatDate(run.started_at) }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Finished') }}</dt><dd class="mt-1 text-white">{{ formatDate(run.finished_at) }}</dd></div>

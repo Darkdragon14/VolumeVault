@@ -8,6 +8,7 @@ use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
+use App\Models\User;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use App\Services\Volumes\VolumeBackupSummaries;
 use Illuminate\Support\Collection;
@@ -34,13 +35,14 @@ class BackupStack
      * A null stack name targets the "no stack" group.
      *
      * @param  array<string, mixed>  $input  Validated input: backup_destination_id, schedule_type, schedule_config, timezone.
+     * @param  User|null  $initiatedBy  The user who triggered the stack backup, recorded on every queued run.
      * @return array{created: int, queued: int, skipped: int}
      *
      * @throws ValidationException When the stack has no volumes, or a job must
      *                             be created but the destination/schedule is
      *                             missing or invalid.
      */
-    public function handle(?string $stackName, array $input): array
+    public function handle(?string $stackName, array $input, ?User $initiatedBy = null): array
     {
         $volumeNames = DockerVolume::query()
             ->where('exists', true)
@@ -55,7 +57,7 @@ class BackupStack
         }
 
         $created = $this->createMissingJobs($volumeNames, $input);
-        $result = $this->queueRuns($volumeNames);
+        $result = $this->queueRuns($volumeNames, $initiatedBy);
 
         return [
             'created' => $created,
@@ -135,7 +137,7 @@ class BackupStack
      * @param  Collection<int, string>  $volumeNames
      * @return array{queued: int, skipped: int}
      */
-    private function queueRuns(Collection $volumeNames): array
+    private function queueRuns(Collection $volumeNames, ?User $initiatedBy): array
     {
         $jobs = BackupJob::query()
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
@@ -147,7 +149,7 @@ class BackupStack
 
         foreach ($jobs as $job) {
             try {
-                $run = $this->createBackupRun->handle($job, BackupRun::TRIGGER_MANUAL);
+                $run = $this->createBackupRun->handle($job, BackupRun::TRIGGER_MANUAL, $initiatedBy);
                 RunBackupJob::dispatch($run->id);
                 $queued++;
             } catch (ValidationException) {

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Seguimiento de quién inició cada copia de seguridad',
+        'description' => 'Las copias de seguridad ahora registran qué usuario las inició. Las ejecuciones manuales (desde la interfaz o la API) y las copias de seguridad de toda la pila se atribuyen al usuario conectado, la copia de seguridad de protección realizada antes de una restauración in situ hereda el usuario que inició la restauración, y las ejecuciones programadas quedan sin atribuir. El iniciador aparece en el historial de ejecuciones del trabajo y en los detalles de la copia de seguridad, se incluye en las notificaciones de copia de seguridad y está disponible como un nuevo token {{ user }} para las plantillas de notificación personalizadas.',
+    ],
     'restore_history_on_job' => [
         'title' => 'Historial de restauraciones en los trabajos de copia',
         'description' => 'La página de cada trabajo de copia de seguridad divide ahora su historial en dos pestañas: «Historial» enumera las copias del trabajo y una nueva pestaña «Historial de restauraciones» enumera todas las restauraciones realizadas para ese trabajo, con estado, modo, volúmenes de origen y destino, hora de inicio, duración y un enlace a los detalles completos de la restauración. Ambas pestañas están ahora paginadas, por lo que los historiales largos ya no se limitan a 50 filas.',

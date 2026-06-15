@@ -47,6 +47,25 @@ class StackBulkBackupTest extends TestCase
         Queue::assertPushed(RunBackupJob::class, 2);
     }
 
+    public function test_stack_backup_runs_are_attributed_to_the_authenticated_user(): void
+    {
+        Queue::fake();
+
+        $destination = $this->destination();
+        $this->volume('api_data', 'api');
+        $this->job($destination, 'api_data');
+        $user = User::factory()->admin()->create();
+
+        $this->actingAs($user)
+            ->from(route('stacks.index'))
+            ->post('/stacks/backup', ['stack' => 'api'])
+            ->assertSessionHas('success');
+
+        $run = BackupRun::firstOrFail();
+        $this->assertSame(BackupRun::TRIGGER_MANUAL, $run->trigger);
+        $this->assertSame($user->id, $run->initiated_by_user_id);
+    }
+
     public function test_created_job_uses_the_chosen_weekly_schedule(): void
     {
         Queue::fake();

@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
+use App\Models\User;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -14,7 +15,7 @@ class CreateBackupRun
 {
     public function __construct(private readonly BackupScheduleCalculator $scheduleCalculator) {}
 
-    public function handle(BackupJob $job, string $trigger): BackupRun
+    public function handle(BackupJob $job, string $trigger, ?User $initiatedBy = null): BackupRun
     {
         $job->loadMissing('destination');
 
@@ -51,9 +52,10 @@ class CreateBackupRun
             ]);
         }
 
-        return DB::transaction(function () use ($job, $trigger): BackupRun {
+        return DB::transaction(function () use ($job, $trigger, $initiatedBy): BackupRun {
             $run = BackupRun::create([
                 'backup_job_id' => $job->id,
+                'initiated_by_user_id' => $initiatedBy?->getKey(),
                 'status' => BackupRun::STATUS_QUEUED,
                 'trigger' => $trigger,
             ]);

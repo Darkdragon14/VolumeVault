@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Traccia chi ha avviato ogni backup',
+        'description' => 'I backup ora registrano quale utente li ha avviati. Le esecuzioni manuali (dall\'interfaccia o dall\'API) e i backup dell\'intero stack sono attribuiti all\'utente connesso, il backup di sicurezza eseguito prima di un ripristino in loco eredita l\'utente che ha avviato il ripristino e le esecuzioni pianificate restano senza attribuzione. L\'iniziatore compare nella cronologia delle esecuzioni del processo e nei dettagli del backup, è incluso nelle notifiche di backup ed è disponibile come nuovo token {{ user }} per i modelli di notifica personalizzati.',
+    ],
     'restore_history_on_job' => [
         'title' => 'Cronologia dei ripristini nei processi di backup',
         'description' => 'La pagina di ogni processo di backup suddivide ora la cronologia in due schede: «Cronologia» elenca i backup del processo e una nuova scheda «Cronologia dei ripristini» elenca ogni ripristino eseguito per quel processo, con stato, modalità, volumi di origine e destinazione, ora di inizio, durata e un collegamento ai dettagli completi del ripristino. Entrambe le schede sono ora paginate, quindi le cronologie lunghe non sono più limitate a 50 righe.',

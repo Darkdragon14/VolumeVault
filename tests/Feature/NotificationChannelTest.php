@@ -183,7 +183,7 @@ class NotificationChannelTest extends TestCase
         $dockerProcess->shouldReceive('run')
             ->once()
             ->with(
-                Mockery::on(fn (array $command) => in_array("Job: Nightly\nSource: app_data\nDestination: S3\nStatus: success\nTrigger: manual\nDuration: 3s\nBackup size: 2 KB", $command, true)),
+                Mockery::on(fn (array $command) => in_array("Job: Nightly\nSource: app_data\nDestination: S3\nStatus: success\nTrigger: manual\nInitiated by: Unknown\nDuration: 3s\nBackup size: 2 KB", $command, true)),
                 60,
                 Mockery::any(),
             )
@@ -256,6 +256,41 @@ class NotificationChannelTest extends TestCase
             ->with(
                 Mockery::on(fn (array $command) => in_array('Backup failed: Nightly', $command, true)
                     && in_array("app_data to S3 in 9s / 1.5 KB\nBoom", $command, true)),
+                60,
+                Mockery::any(),
+            )
+            ->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $this->app->instance(DockerProcess::class, $dockerProcess);
+
+        app(SendShoutrrrNotification::class)->sendBackupRunFinished($run);
+    }
+
+    public function test_custom_template_renders_the_user_token(): void
+    {
+        [$job] = $this->createJobs();
+        $user = User::factory()->admin()->create(['name' => 'Ada Lovelace']);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'initiated_by_user_id' => $user->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'duration_seconds' => 3,
+        ]);
+
+        $channel = NotificationChannel::create([
+            'name' => 'Ntfy',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/all',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'body_template' => '{{ status }} backup by {{ user }}',
+        ]);
+        $job->notificationChannels()->attach($channel);
+
+        $dockerProcess = Mockery::mock(DockerProcess::class);
+        $dockerProcess->shouldReceive('run')
+            ->once()
+            ->with(
+                Mockery::on(fn (array $command) => in_array('success backup by Ada Lovelace', $command, true)),
                 60,
                 Mockery::any(),
             )
