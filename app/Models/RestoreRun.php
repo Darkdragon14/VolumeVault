@@ -34,6 +34,8 @@ class RestoreRun extends Model
         'source_volume_name',
         'target_volume_name',
         'mode',
+        'backup_before_overwrite',
+        'pre_restore_backup_run_id',
         'status',
         'affected_containers',
         'stopped_container_ids',
@@ -51,6 +53,7 @@ class RestoreRun extends Model
         return [
             'affected_containers' => 'array',
             'stopped_container_ids' => 'array',
+            'backup_before_overwrite' => 'boolean',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
             'duration_seconds' => 'integer',
@@ -70,5 +73,15 @@ class RestoreRun extends Model
     public function initiatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'initiated_by_user_id');
+    }
+
+    /**
+     * The safety backup taken just before a "backup before overwrite" in-place
+     * restore wiped the source volume. Null when the option was off (or the run
+     * aborted before the backup was created).
+     */
+    public function preRestoreBackup(): BelongsTo
+    {
+        return $this->belongsTo(BackupRun::class, 'pre_restore_backup_run_id');
     }
 }

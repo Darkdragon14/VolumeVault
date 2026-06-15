@@ -7,7 +7,7 @@ return [
     ],
     'restore_in_place_modes' => [
         'title' => 'Helyben visszaállítási módok',
-        'description' => 'A visszaállítási varázsló mostantól közvetlenül a forrás Docker kötetébe tud visszaállítani egy mentést. A „Helyben visszaállítás" a név újragépelésével történő megerősítés után kiüríti és lecseréli a kötetet; a „Biztonságos helyben visszaállítás" a visszaállítás alatt ezenfelül leállítja a kötetet használó konténereket, majd a végén újraindítja őket. A mentésválasztó mostantól alapértelmezetten a kiválasztott feladat archívumait mutatja, név és dátum szerinti szűrőket ad, kiemeli a legújabb archívumot, és a „Mentés visszaállítása" gomb közvetlenül egy mentési futásból nyitja meg a varázslót.',
+        'description' => 'A visszaállítási varázsló mostantól közvetlenül a forrás Docker kötetébe tud visszaállítani egy mentést. A „Helyben visszaállítás" a név újragépelésével történő megerősítés után kiüríti és lecseréli a kötetet; a „Biztonságos helyben visszaállítás" a visszaállítás alatt ezenfelül leállítja a kötetet használó konténereket, majd a végén újraindítja őket. A mentésválasztó mostantól alapértelmezetten a kiválasztott feladat archívumait mutatja, név és dátum szerinti szűrőket ad, kiemeli a legújabb archívumot, és a „Mentés visszaállítása" gomb közvetlenül egy mentési futásból nyitja meg a varázslót. Mindkét helyben visszaállítási mód opcionálisan elmentheti a kötet jelenlegi tartalmát a felülírás előtt; ha ez a biztonsági mentés sikertelen, a visszaállítás megszakad.',
     ],
     'restore_notifications' => [
         'title' => 'Visszaállítási értesítések',

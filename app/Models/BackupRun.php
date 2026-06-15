@@ -24,6 +24,8 @@ class BackupRun extends Model
 
     public const TRIGGER_MANUAL = 'manual';
 
+    public const TRIGGER_PRE_RESTORE = 'pre_restore';
+
     protected $fillable = [
         'backup_job_id',
         'status',

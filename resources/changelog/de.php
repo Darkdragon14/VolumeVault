@@ -7,7 +7,7 @@ return [
     ],
     'restore_in_place_modes' => [
         'title' => 'Modi für direkte Wiederherstellung',
-        'description' => 'Der Wiederherstellungsassistent kann ein Backup jetzt direkt in sein Docker-Quellvolume zurückspielen. „Direkt wiederherstellen" leert und ersetzt das Volume, nachdem du seinen Namen zur Bestätigung erneut eingegeben hast; „Sichere direkte Wiederherstellung" stoppt während der Wiederherstellung zusätzlich die Container, die das Volume verwenden, und startet sie danach neu. Die Backup-Auswahl zeigt jetzt standardmäßig die Archive des gewählten Auftrags, bietet Filter nach Name und Datum, hebt das neueste Archiv hervor, und eine Schaltfläche „Dieses Backup wiederherstellen" öffnet den Assistenten direkt aus einem Backup-Lauf.',
+        'description' => 'Der Wiederherstellungsassistent kann ein Backup jetzt direkt in sein Docker-Quellvolume zurückspielen. „Direkt wiederherstellen" leert und ersetzt das Volume, nachdem du seinen Namen zur Bestätigung erneut eingegeben hast; „Sichere direkte Wiederherstellung" stoppt während der Wiederherstellung zusätzlich die Container, die das Volume verwenden, und startet sie danach neu. Die Backup-Auswahl zeigt jetzt standardmäßig die Archive des gewählten Auftrags, bietet Filter nach Name und Datum, hebt das neueste Archiv hervor, und eine Schaltfläche „Dieses Backup wiederherstellen" öffnet den Assistenten direkt aus einem Backup-Lauf. Beide direkten Wiederherstellungsmodi können vor dem Überschreiben optional eine Sicherheitskopie des aktuellen Volume-Inhalts erstellen; schlägt diese Sicherung fehl, wird die Wiederherstellung abgebrochen.',
     ],
     'restore_notifications' => [
         'title' => 'Benachrichtigungen bei Wiederherstellung',

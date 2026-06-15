@@ -30,6 +30,9 @@ class CreateRestoreRun
             'source_volume_name' => $sourceName,
             'target_volume_name' => $targetVolume,
             'mode' => $mode,
+            // Only the destructive in-place modes wipe an existing volume, so the
+            // safety backup is meaningless (and the toggle hidden) otherwise.
+            'backup_before_overwrite' => $this->isInPlace($mode) ? (bool) ($data['backup_before_overwrite'] ?? false) : false,
             'status' => RestoreRun::STATUS_QUEUED,
             'confirmation_text' => $data['confirmation_text'] ?? null,
         ]);

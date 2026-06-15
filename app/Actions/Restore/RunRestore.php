@@ -29,6 +29,7 @@ class RunRestore
         private readonly InPlaceRestore $inPlaceRestore,
         private readonly SafeInPlaceRestore $safeInPlaceRestore,
         private readonly SendShoutrrrNotification $sendShoutrrrNotification,
+        private readonly RunPreRestoreBackup $runPreRestoreBackup,
     ) {}
 
     public function handle(RestoreRun $run): void
@@ -47,6 +48,15 @@ class RunRestore
         $this->notify($run);
 
         try {
+            // Optional safety net for the destructive in-place modes: back up the
+            // source volume's current contents before anything wipes it. Runs
+            // before prepareTarget so a backup failure aborts the restore while the
+            // volume is still untouched ($prepared stays false → no cleanup, no
+            // ClearDockerVolume).
+            if ($run->backup_before_overwrite && in_array($run->mode, [RestoreRun::MODE_INPLACE, RestoreRun::MODE_SAFE_INPLACE], true)) {
+                $this->runPreRestoreBackup->handle($run);
+            }
+
             // prepareTarget may stop containers and/or create a volume. It runs
             // before any download so a precondition failure aborts cheaply; the
             // $prepared flag gates cleanupAfterFailure so we never remove a

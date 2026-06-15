@@ -27,6 +27,7 @@ class StoreRestoreRequest extends FormRequest
                 RestoreRun::MODE_SAFE_INPLACE,
             ])],
             'target_volume_name' => ['nullable', 'string', 'max:128', 'regex:/^[A-Za-z0-9_.-]+$/'],
+            'backup_before_overwrite' => ['nullable', 'boolean'],
             'confirmation_text' => ['nullable', 'string', 'max:255'],
         ];
     }

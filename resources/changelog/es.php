@@ -7,7 +7,7 @@ return [
     ],
     'restore_in_place_modes' => [
         'title' => 'Modos de restauración en sitio',
-        'description' => 'El asistente de restauración ahora puede restaurar una copia directamente en su volumen Docker de origen. «Restaurar en sitio» vacía y reemplaza el volumen tras volver a escribir su nombre para confirmar; «Restauración en sitio segura» además detiene los contenedores que usan el volumen durante la restauración y los reinicia después. El selector de copias se limita por defecto a los archivos de la tarea seleccionada, añade filtros por nombre y fecha, marca la copia más reciente, y un botón «Restaurar esta copia» abre el asistente desde una ejecución de copia.',
+        'description' => 'El asistente de restauración ahora puede restaurar una copia directamente en su volumen Docker de origen. «Restaurar en sitio» vacía y reemplaza el volumen tras volver a escribir su nombre para confirmar; «Restauración en sitio segura» además detiene los contenedores que usan el volumen durante la restauración y los reinicia después. El selector de copias se limita por defecto a los archivos de la tarea seleccionada, añade filtros por nombre y fecha, marca la copia más reciente, y un botón «Restaurar esta copia» abre el asistente desde una ejecución de copia. Ambos modos en sitio pueden, opcionalmente, hacer una copia de seguridad del contenido actual del volumen antes de sobrescribirlo; la restauración se cancela si esa copia falla.',
     ],
     'restore_notifications' => [
         'title' => 'Notificaciones de restauración',

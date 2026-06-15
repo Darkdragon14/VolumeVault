@@ -24,6 +24,7 @@ const form = useForm({
     selected_backup_key: '',
     mode: 'new_volume',
     target_volume_name: props.generatedTargetVolumeName,
+    backup_before_overwrite: false,
     confirmation_text: '',
 });
 
@@ -78,6 +79,7 @@ watch(
         } else {
             form.target_volume_name = props.generatedTargetVolumeName;
             form.confirmation_text = '';
+            form.backup_before_overwrite = false;
         }
     },
 );
@@ -224,6 +226,14 @@ if (props.preselectedBackupKey) {
                 <span class="text-xs text-amber-200">{{ t('The source volume is overwritten in place.') }}</span>
             </div>
 
+            <label v-if="isInPlace" class="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
+                <input v-model="form.backup_before_overwrite" type="checkbox" class="mt-1 text-sky-400">
+                <span class="min-w-0 flex-1">
+                    <span class="block text-sm font-medium text-white">{{ t('Back up the current volume before overwriting it') }}</span>
+                    <span class="mt-1 block text-xs text-slate-400">{{ t('Creates a full backup to {name} before the restore. The restore is aborted if this backup fails.', { name: job.destination?.name }) }}</span>
+                </span>
+            </label>
+
             <div class="mt-5 flex flex-wrap gap-3">
                 <button class="btn-secondary" @click="step = 1">{{ t('Back') }}</button>
                 <button class="btn-primary" @click="step = 3">{{ t('Continue') }}</button>
@@ -243,6 +253,7 @@ if (props.preselectedBackupKey) {
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Target volume') }}</dt><dd class="mt-1 break-all text-white">{{ form.target_volume_name }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 break-words text-white">{{ job.destination?.name }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Selected backup') }}</dt><dd class="mt-1 break-all text-white">{{ selectedBackup?.display_name || selectedBackup?.key }}</dd></div>
+                <div v-if="isInPlace"><dt class="text-xs uppercase text-slate-400">{{ t('Safety backup') }}</dt><dd class="mt-1 text-white">{{ form.backup_before_overwrite ? t('Yes, backed up before overwrite') : t('No') }}</dd></div>
             </dl>
 
             <label v-if="requiresConfirmation" class="mt-5 block space-y-2">

@@ -7,7 +7,7 @@ return [
     ],
     'restore_in_place_modes' => [
         'title' => 'Modi voor herstel ter plekke',
-        'description' => 'De herstelwizard kan een back-up nu rechtstreeks terugzetten in het Docker-bronvolume. „Ter plekke herstellen" wist en vervangt het volume nadat je de naam ter bevestiging opnieuw typt; „Veilig herstel ter plekke" stopt daarnaast de containers die het volume gebruiken tijdens het herstel en start ze daarna opnieuw. De back-upkiezer toont nu standaard de archieven van de geselecteerde taak, voegt filters op naam en datum toe, markeert het nieuwste archief en een knop „Deze back-up herstellen" opent de wizard rechtstreeks vanuit een back-uprun.',
+        'description' => 'De herstelwizard kan een back-up nu rechtstreeks terugzetten in het Docker-bronvolume. „Ter plekke herstellen" wist en vervangt het volume nadat je de naam ter bevestiging opnieuw typt; „Veilig herstel ter plekke" stopt daarnaast de containers die het volume gebruiken tijdens het herstel en start ze daarna opnieuw. De back-upkiezer toont nu standaard de archieven van de geselecteerde taak, voegt filters op naam en datum toe, markeert het nieuwste archief en een knop „Deze back-up herstellen" opent de wizard rechtstreeks vanuit een back-uprun. Beide ter-plekke-modi kunnen optioneel een back-up maken van de huidige inhoud van het volume voordat het wordt overschreven; het herstel wordt afgebroken als die veiligheidsback-up mislukt.',
     ],
     'restore_notifications' => [
         'title' => 'Herstelmeldingen',

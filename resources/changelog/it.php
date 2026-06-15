@@ -7,7 +7,7 @@ return [
     ],
     'restore_in_place_modes' => [
         'title' => 'Modalità di ripristino sul posto',
-        'description' => 'La procedura di ripristino ora può ripristinare un backup direttamente nel suo volume Docker di origine. «Ripristina sul posto» svuota e sostituisce il volume dopo aver ridigitato il suo nome per confermare; «Ripristino sul posto sicuro» arresta inoltre i container che usano il volume durante il ripristino e li riavvia al termine. Il selettore dei backup ora mostra in modo predefinito gli archivi del job selezionato, aggiunge filtri per nome e data, evidenzia l\'archivio più recente e un pulsante «Ripristina questo backup» apre la procedura direttamente da un\'esecuzione di backup.',
+        'description' => 'La procedura di ripristino ora può ripristinare un backup direttamente nel suo volume Docker di origine. «Ripristina sul posto» svuota e sostituisce il volume dopo aver ridigitato il suo nome per confermare; «Ripristino sul posto sicuro» arresta inoltre i container che usano il volume durante il ripristino e li riavvia al termine. Il selettore dei backup ora mostra in modo predefinito gli archivi del job selezionato, aggiunge filtri per nome e data, evidenzia l\'archivio più recente e un pulsante «Ripristina questo backup» apre la procedura direttamente da un\'esecuzione di backup. Entrambe le modalità sul posto possono, facoltativamente, eseguire un backup del contenuto attuale del volume prima di sovrascriverlo; il ripristino viene annullato se questo backup di sicurezza fallisce.',
     ],
     'restore_notifications' => [
         'title' => 'Notifiche di ripristino',

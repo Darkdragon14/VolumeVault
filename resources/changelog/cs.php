@@ -7,7 +7,7 @@ return [
     ],
     'restore_in_place_modes' => [
         'title' => 'Režimy obnovy na místě',
-        'description' => 'Průvodce obnovou nyní umí obnovit zálohu přímo do jejího zdrojového Docker svazku. „Obnovit na místě" vymaže a nahradí svazek po opětovném napsání jeho názvu pro potvrzení; „Bezpečná obnova na místě" navíc během obnovy zastaví kontejnery používající svazek a po dokončení je restartuje. Výběr zálohy se nyní ve výchozím nastavení omezuje na archivy vybrané úlohy, přidává filtry podle názvu a data, označuje nejnovější archiv a tlačítko „Obnovit tuto zálohu" otevře průvodce přímo z běhu zálohy.',
+        'description' => 'Průvodce obnovou nyní umí obnovit zálohu přímo do jejího zdrojového Docker svazku. „Obnovit na místě" vymaže a nahradí svazek po opětovném napsání jeho názvu pro potvrzení; „Bezpečná obnova na místě" navíc během obnovy zastaví kontejnery používající svazek a po dokončení je restartuje. Výběr zálohy se nyní ve výchozím nastavení omezuje na archivy vybrané úlohy, přidává filtry podle názvu a data, označuje nejnovější archiv a tlačítko „Obnovit tuto zálohu" otevře průvodce přímo z běhu zálohy. Oba režimy obnovy na místě mohou volitelně před přepsáním zazálohovat aktuální obsah svazku; pokud tato bezpečnostní záloha selže, obnova se zruší.',
     ],
     'restore_notifications' => [
         'title' => 'Oznámení o obnovení',
