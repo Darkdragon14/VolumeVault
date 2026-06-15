@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'stack_bulk_backup',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.13.0' => [
+            'date' => '2026-06-15',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.13.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'stack_bulk_backup',
+                ],
+            ],
+        ],
         'v1.12.1' => [
             'date' => '2026-06-14',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.12.1',
