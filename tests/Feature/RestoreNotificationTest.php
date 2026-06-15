@@ -57,6 +57,39 @@ class RestoreNotificationTest extends TestCase
         app(SendShoutrrrNotification::class)->sendRestoreRun($run);
     }
 
+    public function test_restore_notifications_can_use_custom_templates(): void
+    {
+        $run = $this->restoreRun([
+            'status' => RestoreRun::STATUS_FAILED,
+            'error_message' => 'Boom',
+            'duration_seconds' => 7,
+        ]);
+
+        $channel = NotificationChannel::create([
+            'name' => 'Ntfy',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/restore',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'restore_title_template' => 'Restore {{ status }}: {{ job }}',
+            'restore_body_template' => "{{ source }} -> {{ target }} ({{ mode }}) {{ duration }}\n{{ error }}",
+        ]);
+        $run->job->notificationChannels()->attach($channel);
+
+        $docker = Mockery::mock(DockerProcess::class);
+        $docker->shouldReceive('run')
+            ->once()
+            ->with(
+                Mockery::on(fn (array $command) => in_array('Restore failed: Job', $command, true)
+                    && in_array("app_data -> app_data_restored (new_volume) 7s\nBoom", $command, true)),
+                60,
+                Mockery::any(),
+            )
+            ->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $this->app->instance(DockerProcess::class, $docker);
+
+        app(SendShoutrrrNotification::class)->sendRestoreRun($run);
+    }
+
     public function test_no_notifications_when_job_notifications_disabled(): void
     {
         $run = $this->restoreRun(['status' => RestoreRun::STATUS_FAILED, 'error_message' => 'Boom']);

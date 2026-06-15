@@ -61,7 +61,7 @@ class SendShoutrrrNotification
                 continue;
             }
 
-            $this->send($channel, $this->restoreRunTitle($run), $this->restoreRunMessage($run));
+            $this->send($channel, $this->restoreRunTitle($run, $channel), $this->restoreRunMessage($run, $channel));
         }
     }
 
@@ -184,17 +184,25 @@ class SendShoutrrrNotification
         return $this->renderTemplate($channel->title_template, $run) ?: $default;
     }
 
-    private function restoreRunTitle(RestoreRun $run): string
+    private function restoreRunTitle(RestoreRun $run, NotificationChannel $channel): string
     {
-        return match ($run->status) {
+        $default = match ($run->status) {
             RestoreRun::STATUS_SUCCESS => 'VolumeVault restore succeeded',
             RestoreRun::STATUS_FAILED => 'VolumeVault restore failed',
             default => 'VolumeVault restore started',
         };
+
+        return $this->renderRestoreTemplate($channel->restore_title_template, $run) ?: $default;
     }
 
-    private function restoreRunMessage(RestoreRun $run): string
+    private function restoreRunMessage(RestoreRun $run, NotificationChannel $channel): string
     {
+        $customMessage = $this->renderRestoreTemplate($channel->restore_body_template, $run);
+
+        if ($customMessage !== '') {
+            return $customMessage;
+        }
+
         $lines = [
             'Job: '.($run->job?->name ?? 'Unknown'),
             'Source volume: '.$run->source_volume_name,
@@ -297,7 +305,8 @@ class SendShoutrrrNotification
         }
 
         $job = $run->job;
-        $values = [
+
+        return $this->applyTokens($template, [
             'job' => $job->name,
             'volume' => $job->sourceName(),
             'source' => $job->sourceName(),
@@ -308,8 +317,34 @@ class SendShoutrrrNotification
             'duration' => $run->duration_seconds !== null ? $run->duration_seconds.'s' : '',
             'backup_size' => $run->backup_size_bytes !== null ? FormatBytes::format($run->backup_size_bytes) : '',
             'error' => $run->error_message ?? '',
-        ];
+        ]);
+    }
 
+    private function renderRestoreTemplate(?string $template, RestoreRun $run): string
+    {
+        $template = trim((string) $template);
+
+        if ($template === '') {
+            return '';
+        }
+
+        return $this->applyTokens($template, [
+            'job' => $run->job?->name ?? 'Unknown',
+            'source' => $run->source_volume_name,
+            'target' => $run->target_volume_name,
+            'mode' => $run->mode,
+            'status' => $run->status,
+            'user' => $run->initiatedBy?->name ?? '',
+            'duration' => $run->duration_seconds !== null ? $run->duration_seconds.'s' : '',
+            'error' => $run->error_message ?? '',
+        ]);
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     */
+    private function applyTokens(string $template, array $values): string
+    {
         return preg_replace_callback('/{{\s*([a-z_]+)\s*}}/i', fn ($matches) => $values[strtolower($matches[1])] ?? $matches[0], $template);
     }
 

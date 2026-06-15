@@ -121,6 +121,8 @@ class NotificationChannelController extends Controller
             'scope' => ['nullable', 'string', Rule::in(NotificationChannel::SCOPES)],
             'title_template' => ['nullable', 'string', 'max:255'],
             'body_template' => ['nullable', 'string', 'max:4000'],
+            'restore_title_template' => ['nullable', 'string', 'max:255'],
+            'restore_body_template' => ['nullable', 'string', 'max:4000'],
             'is_active' => ['boolean'],
             'is_default' => ['boolean'],
             'config' => ['nullable', 'array'],
@@ -137,6 +139,8 @@ class NotificationChannelController extends Controller
             'scope' => $data['scope'] ?? NotificationChannel::SCOPE_ALL,
             'title_template' => $data['title_template'] ?? null,
             'body_template' => $data['body_template'] ?? null,
+            'restore_title_template' => $data['restore_title_template'] ?? null,
+            'restore_body_template' => $data['restore_body_template'] ?? null,
             'is_active' => $request->boolean('is_active', true),
             'is_default' => $request->boolean('is_default'),
         ], fn ($value) => $value !== null);
