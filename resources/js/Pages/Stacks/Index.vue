@@ -2,13 +2,13 @@
 import ActionIcon from '@/Components/ActionIcon.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
 import { matchesSearch, readFiltersFromUrl, useListFilters, useUrlFilters } from '@/Composables/useListFilters';
 
-const props = defineProps<{ stacks: any[] }>();
+const props = defineProps<{ stacks: any[]; destinations: any[]; timezones: string[]; appTimezone: string }>();
 
 const page = usePage();
 const can = page.props.can as { runDockerActions?: boolean };
@@ -16,6 +16,64 @@ const { t, formatDate } = useI18n();
 const search = ref('');
 const backupFilter = ref('');
 const filtersVisible = ref(false);
+
+const scheduleTypes = ['hourly', 'daily', 'weekly', 'cron'];
+const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+const processing = ref(false);
+const backupTarget = ref<any | null>(null);
+const backupForm = reactive({
+    backup_destination_id: props.destinations[0]?.id ?? '',
+    schedule_type: 'daily',
+    schedule_config: { time: '02:00', everyHours: 6, dayOfWeek: 'sunday', expression: '0 2 * * *' },
+    timezone: '',
+});
+
+const isFullyConfigured = (stack: any) => stack.existing_volumes > 0 && stack.configured_job_volumes === stack.existing_volumes;
+
+const openBackup = (stack: any) => {
+    if (!props.destinations.length) {
+        return;
+    }
+    backupForm.backup_destination_id = props.destinations[0]?.id ?? '';
+    backupForm.schedule_type = 'daily';
+    backupForm.schedule_config = { time: '02:00', everyHours: 6, dayOfWeek: 'sunday', expression: '0 2 * * *' };
+    backupForm.timezone = '';
+    backupTarget.value = stack;
+};
+
+const closeBackup = () => {
+    backupTarget.value = null;
+};
+
+const submitBackup = () => {
+    if (processing.value || !backupTarget.value) {
+        return;
+    }
+    router.post('/stacks/backup', {
+        stack: backupTarget.value.name,
+        backup_destination_id: backupForm.backup_destination_id,
+        schedule_type: backupForm.schedule_type,
+        schedule_config: backupForm.schedule_config,
+        timezone: backupForm.timezone,
+    }, {
+        preserveScroll: true,
+        onStart: () => { processing.value = true; },
+        onFinish: () => { processing.value = false; },
+        onSuccess: () => closeBackup(),
+    });
+};
+
+const runAll = (stack: any) => {
+    if (processing.value || !confirm(t('Queue a backup run for every job in this stack?'))) {
+        return;
+    }
+    router.post('/stacks/backup', { stack: stack.name }, {
+        preserveScroll: true,
+        onStart: () => { processing.value = true; },
+        onFinish: () => { processing.value = false; },
+    });
+};
 
 readFiltersFromUrl({ search, backup_status: backupFilter });
 useUrlFilters({ search, backup_status: backupFilter }, { debounce: 300 });
@@ -100,6 +158,10 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
                                 <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold" :class="stackConfigurationClass(stack.configuration_state)">{{ stackConfigurationLabel(stack.configuration_state) }}</span>
                             </div>
                             <p class="mt-1 text-sm text-slate-400">{{ t('{count} volumes', { count: stack.total_volumes }) }}</p>
+                            <div v-if="can.runDockerActions && stack.existing_volumes > 0" class="mt-3">
+                                <button v-if="isFullyConfigured(stack)" type="button" class="btn-secondary gap-2" :disabled="processing" @click="runAll(stack)">{{ t('Run all jobs') }}</button>
+                                <button v-else type="button" class="btn-secondary gap-2" :disabled="processing || !destinations.length" @click="openBackup(stack)">{{ t('Back up stack') }}</button>
+                            </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:min-w-[30rem]">
                             <div class="rounded-xl bg-white/5 p-3"><p class="text-xs uppercase text-slate-500">{{ t('Backed up') }}</p><p class="mt-1 text-lg font-semibold text-emerald-100">{{ stack.backed_up_volumes }}</p></div>
@@ -171,6 +233,66 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
         <div v-else class="card p-10 text-center">
             <p class="text-lg font-semibold">{{ t('No stacks found.') }}</p>
             <button v-if="hasActiveFilters" type="button" class="btn-secondary mt-5" @click="resetFilters">{{ t('Reset filters') }}</button>
+        </div>
+
+        <div v-if="backupTarget" class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4" @click.self="closeBackup">
+            <div class="card w-full max-w-lg p-5">
+                <h2 class="text-lg font-semibold text-white">{{ t('Back up stack') }}</h2>
+                <p class="mt-1 break-words text-sm text-slate-400">{{ backupTarget.name || t('No stack') }}</p>
+                <p class="mt-3 text-sm text-slate-300">{{ t('A backup job is created with the destination and schedule below for every volume in this stack that does not have one yet, then a backup run is queued for the whole stack. Existing jobs keep their own schedule.') }}</p>
+
+                <div class="mt-4 space-y-4">
+                    <label class="block space-y-1">
+                        <span class="label">{{ t('Destination') }}</span>
+                        <select v-model="backupForm.backup_destination_id" class="input">
+                            <option v-for="destination in destinations" :key="destination.id" :value="destination.id">{{ destination.name }} / {{ destination.target_label || destination.bucket }}</option>
+                        </select>
+                    </label>
+
+                    <div>
+                        <span class="label">{{ t('Schedule') }}</span>
+                        <div class="mt-1 grid gap-2 sm:grid-cols-4">
+                            <label v-for="type in scheduleTypes" :key="type" class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-2 text-sm capitalize">
+                                <input v-model="backupForm.schedule_type" type="radio" :value="type" class="text-sky-400">
+                                {{ t(type) }}
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label v-if="backupForm.schedule_type === 'hourly'" class="space-y-1">
+                            <span class="label">{{ t('Every X hours') }}</span>
+                            <input v-model="backupForm.schedule_config.everyHours" class="input" type="number" min="1" max="24">
+                        </label>
+                        <label v-if="backupForm.schedule_type === 'daily' || backupForm.schedule_type === 'weekly'" class="space-y-1">
+                            <span class="label">{{ t('Time') }}</span>
+                            <input v-model="backupForm.schedule_config.time" class="input" type="time">
+                        </label>
+                        <label v-if="backupForm.schedule_type === 'weekly'" class="space-y-1">
+                            <span class="label">{{ t('Day of week') }}</span>
+                            <select v-model="backupForm.schedule_config.dayOfWeek" class="input">
+                                <option v-for="day in days" :key="day" :value="day">{{ t(day) }}</option>
+                            </select>
+                        </label>
+                        <label v-if="backupForm.schedule_type === 'cron'" class="space-y-1 sm:col-span-2">
+                            <span class="label">{{ t('Cron expression') }}</span>
+                            <input v-model="backupForm.schedule_config.expression" class="input" placeholder="0 2 * * *">
+                        </label>
+                        <label class="space-y-1 sm:col-span-2">
+                            <span class="label">{{ t('Timezone') }}</span>
+                            <select v-model="backupForm.timezone" class="input">
+                                <option value="">{{ t('Application default ({timezone})', { timezone: appTimezone }) }}</option>
+                                <option v-for="tz in timezones" :key="tz" :value="tz">{{ tz }}</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mt-5 flex justify-end gap-2">
+                    <button type="button" class="btn-secondary" :disabled="processing" @click="closeBackup">{{ t('Cancel') }}</button>
+                    <button type="button" class="btn-primary" :disabled="processing" @click="submitBackup">{{ processing ? t('Starting...') : t('Start backup') }}</button>
+                </div>
+            </div>
         </div>
     </AppLayout>
 </template>

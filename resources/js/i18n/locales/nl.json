@@ -1,4 +1,6 @@
 {
+  "A backup job is created with the destination and schedule below for every volume in this stack that does not have one yet, then a backup run is queued for the whole stack. Existing jobs keep their own schedule.": "Voor elk volume in deze stack dat nog geen taak heeft, wordt een backuptaak gemaakt met de onderstaande bestemming en het onderstaande schema; daarna wordt een back-up voor de hele stack in de wachtrij geplaatst. Bestaande taken behouden hun eigen schema.",
+  "Back up stack": "Stack back-uppen",
   "Local archive paths cannot contain a colon.": "Lokale archiefpaden mogen geen dubbele punt bevatten.",
   "Host path must be an absolute path.": "Het host-pad moet een absoluut pad zijn.",
   "Host path cannot be the filesystem root.": "Het host-pad mag niet de hoofdmap van het bestandssysteem zijn.",
@@ -10,6 +12,10 @@
   "Default: {template}": "Standaard: {template}",
   "Optional template without extension. VolumeVault adds .tar.gz automatically.": "Optioneel sjabloon zonder extensie. VolumeVault voegt automatisch .tar.gz toe.",
   "Preview: {filename}": "Voorbeeld: {filename}",
+  "Queue a backup run for every job in this stack?": "Voor elke taak in deze stack een back-up in de wachtrij plaatsen?",
+  "Run all jobs": "Alle taken uitvoeren",
+  "Start backup": "Back-up starten",
+  "Starting...": "Starten...",
   "This template may produce the same filename for multiple backups. Previous archives can be overwritten by offen/docker-volume-backup.": "Dit sjabloon kan voor meerdere back-ups dezelfde bestandsnaam opleveren. Eerdere archieven kunnen door offen/docker-volume-backup worden overschreven.",
   "Customize": "Aanpassen",
   "Reset to defaults": "Standaardwaarden herstellen",

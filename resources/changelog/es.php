@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'stack_bulk_backup' => [
+        'title' => 'Copia de seguridad de todo un stack a la vez',
+        'description' => 'La página de stacks ahora permite hacer una copia de seguridad de un stack completo con un clic. Los stacks totalmente configurados muestran un botón "Ejecutar todas las tareas" que pone en cola una ejecución para cada tarea; los stacks con volúmenes sin cubrir muestran un cuadro "Copia de seguridad del stack" que crea una tarea de copia (diaria o personalizada) para cada volumen que no tiene una y, después, pone en cola una copia de todo el stack. La misma operación está disponible a través de la API (POST /stacks/backup).',
+    ],
     'busybox_restore_tar_compat' => [
         'title' => 'Extracción de restauración compatible',
         'description' => 'Las restauraciones a un nuevo volumen Docker ya no pasan opciones de tar exclusivas de GNU y ahora envían el archivo al contenedor de restauración por streaming, por lo que la extracción funciona con BusyBox tar y con despliegues en contenedor cuyo almacenamiento vive en un volumen Docker.',

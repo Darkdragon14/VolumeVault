@@ -1,4 +1,6 @@
 {
+  "A backup job is created with the destination and schedule below for every volume in this stack that does not have one yet, then a backup run is queued for the whole stack. Existing jobs keep their own schedule.": "Pro kazdy svazek v tomto stacku, ktery jeste nema ulohu, se vytvori uloha zalohy s nize zvolenym cilem a planem; pote se do fronty zaradi zaloha celeho stacku. Stavajici ulohy si ponechaji vlastni plan.",
+  "Back up stack": "Zalohovat stack",
   "Local archive paths cannot contain a colon.": "Mistni cesty archivu nesmeji obsahovat dvojtecku.",
   "Host path must be an absolute path.": "Cesta hostitele musi byt absolutni cesta.",
   "Host path cannot be the filesystem root.": "Cesta hostitele nemuze byt korenovy adresar souboroveho systemu.",
@@ -10,6 +12,10 @@
   "Default: {template}": "Vychozi: {template}",
   "Optional template without extension. VolumeVault adds .tar.gz automatically.": "Volitelna sablona bez pripony. VolumeVault automaticky prida .tar.gz.",
   "Preview: {filename}": "Nahled: {filename}",
+  "Queue a backup run for every job in this stack?": "Zaradit zalohu do fronty pro kazdou ulohu v tomto stacku?",
+  "Run all jobs": "Spustit vsechny ulohy",
+  "Start backup": "Spustit zalohu",
+  "Starting...": "Spousteni...",
   "This template may produce the same filename for multiple backups. Previous archives can be overwritten by offen/docker-volume-backup.": "Tato sablona muze pro vice zaloh vytvorit stejny nazev souboru. Predchozi archivy muze offen/docker-volume-backup prepsat.",
   "Customize": "Prizpusobit",
   "Reset to defaults": "Obnovit vychozi",

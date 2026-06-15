@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'stack_bulk_backup' => [
+        'title' => 'Egy teljes stack mentése egyszerre',
+        'description' => 'A Stackek oldal mostantól egyetlen kattintással menthet egy teljes stacket. A teljesen beállított stackeknél megjelenik az "Összes feladat futtatása" gomb, amely minden feladathoz sorba állít egy futtatást; a nem lefedett kötetekkel rendelkező stackeknél a "Stack mentése" ablak minden feladat nélküli kötethez létrehoz egy napi (vagy egyéni) mentési feladatot, majd sorba állít egy mentést a teljes stackhez. Ugyanez a művelet elérhető az API-n keresztül is (POST /stacks/backup).',
+    ],
     'busybox_restore_tar_compat' => [
         'title' => 'Kompatibilis visszaallitasi kicsomagolas',
         'description' => 'Az uj Docker volume-ra torteno visszaallitasok mar nem adnak at csak GNU tar altal tamogatott opciokat, es az archivumot most streamelve kuldik a visszaallitasi kontenerbe, igy a kicsomagolas mukodik BusyBox tar mellett es olyan konteneres telepiteseken is, ahol a tarolo Docker volume-ban van.',

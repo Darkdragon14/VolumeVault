@@ -1,4 +1,6 @@
 {
+  "A backup job is created with the destination and schedule below for every volume in this stack that does not have one yet, then a backup run is queued for the whole stack. Existing jobs keep their own schedule.": "Se crea una tarea de copia de seguridad con el destino y la programacion siguientes para cada volumen de este stack que aun no tiene una; despues se pone en cola una copia de seguridad para todo el stack. Las tareas existentes conservan su propia programacion.",
+  "Back up stack": "Copia de seguridad del stack",
   "Local archive paths cannot contain a colon.": "Las rutas de archivo locales no pueden contener dos puntos.",
   "Host path must be an absolute path.": "La ruta del host debe ser una ruta absoluta.",
   "Host path cannot be the filesystem root.": "La ruta del host no puede ser la raiz del sistema de archivos.",
@@ -10,6 +12,10 @@
   "Default: {template}": "Predeterminado: {template}",
   "Optional template without extension. VolumeVault adds .tar.gz automatically.": "Plantilla opcional sin extension. VolumeVault agrega .tar.gz automaticamente.",
   "Preview: {filename}": "Vista previa: {filename}",
+  "Queue a backup run for every job in this stack?": "Poner en cola una copia de seguridad para cada tarea de este stack?",
+  "Run all jobs": "Ejecutar todas las tareas",
+  "Start backup": "Iniciar copia de seguridad",
+  "Starting...": "Iniciando...",
   "This template may produce the same filename for multiple backups. Previous archives can be overwritten by offen/docker-volume-backup.": "Esta plantilla puede generar el mismo nombre de archivo para varias copias. offen/docker-volume-backup puede sobrescribir archivos anteriores.",
   "Customize": "Personalizar",
   "Reset to defaults": "Restablecer valores predeterminados",

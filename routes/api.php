@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\NotificationChannelController;
 use App\Http\Controllers\Api\V1\OpenApiController;
 use App\Http\Controllers\Api\V1\RestoreController;
 use App\Http\Controllers\Api\V1\RestoreRunController;
+use App\Http\Controllers\Api\V1\StackController;
 use App\Http\Controllers\Api\V1\VolumeController;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +37,7 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware(['auth:sanctum', 'abilities:write', 'admin'])->group(function () {
         Route::post('/volumes/sync', [VolumeController::class, 'sync']);
+        Route::post('/stacks/backup', [StackController::class, 'backup']);
         Route::post('/backup-jobs', [BackupJobController::class, 'store']);
         Route::put('/backup-jobs/{backupJob}', [BackupJobController::class, 'update']);
         Route::delete('/backup-jobs/{backupJob}', [BackupJobController::class, 'destroy']);

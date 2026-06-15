@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'stack_bulk_backup' => [
+        'title' => 'Sauvegarder une stack entière en une fois',
+        'description' => 'La page Stacks permet désormais de sauvegarder une stack entière en un clic. Les stacks entièrement configurées disposent d\'un bouton « Exécuter toutes les tâches » qui lance une sauvegarde pour chaque tâche ; les stacks avec des volumes non couverts proposent une fenêtre « Sauvegarder la stack » qui crée une tâche de sauvegarde (quotidienne ou personnalisée) pour chaque volume qui n\'en a pas, puis lance une sauvegarde pour toute la stack. La même opération est disponible via l\'API (POST /stacks/backup).',
+    ],
     'busybox_restore_tar_compat' => [
         'title' => 'Extraction de restauration compatible',
         'description' => 'Les restaurations vers un nouveau volume Docker n\'envoient plus d\'options tar propres à GNU et streament maintenant l\'archive dans le conteneur de restauration, afin que l\'extraction fonctionne avec BusyBox tar et les déploiements conteneurisés dont le stockage vit dans un volume Docker.',

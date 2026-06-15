@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'stack_bulk_backup' => [
+        'title' => 'Ganzen Stack auf einmal sichern',
+        'description' => 'Die Stack-Seite kann jetzt einen ganzen Stack mit einem Klick sichern. Vollständig konfigurierte Stacks erhalten eine Schaltfläche "Alle Jobs ausführen", die für jeden Job eine Sicherung einreiht; Stacks mit nicht abgedeckten Volumes erhalten einen Dialog "Stack sichern", der für jedes Volume ohne Job einen täglichen (oder benutzerdefinierten) Backup-Job anlegt und anschließend eine Sicherung für den gesamten Stack einreiht. Dieselbe Operation ist auch über die API verfügbar (POST /stacks/backup).',
+    ],
     'busybox_restore_tar_compat' => [
         'title' => 'Kompatible Restore-Extraktion',
         'description' => 'Wiederherstellungen in ein neues Docker-Volume uebergeben keine nur von GNU tar unterstuetzten Optionen mehr und streamen das Archiv jetzt in den Restore-Container, sodass die Extraktion mit BusyBox-tar und containerisierten Deployments funktioniert, deren Storage in einem Docker-Volume liegt.',
