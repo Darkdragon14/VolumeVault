@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'stack_bulk_backup',
+        ],
+    ],
     'releases' => [
         'v1.12.1' => [
             'date' => '2026-06-14',

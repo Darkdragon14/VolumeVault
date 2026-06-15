@@ -46,6 +46,7 @@ class OpenApiController extends Controller
             '/volumes' => ['get' => $this->operation('List Docker volumes.', ['read'])],
             '/host-path-allowlist' => ['get' => $this->operation('Read the configured host-path allowlist (prefixes that host-path backup sources and local destinations may use). Empty/not configured means host paths are refused (fail-closed).', ['read'], null, false, true)],
             '/volumes/sync' => ['post' => $this->operation('Synchronize Docker volumes from the host.', ['write'], null, true, true)],
+            '/stacks/backup' => ['post' => $this->operation('Back up a whole stack at once. For every Docker volume in the stack that has no backup job yet, a job is created using the given destination and schedule; then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, omit destination/schedule to just queue a run for every job.', ['write'], ['$ref' => '#/components/schemas/StackBackupRequest'], false, true, 202)],
             '/backup-jobs' => [
                 'get' => $this->operation('List backup jobs.', ['read']),
                 'post' => $this->operation('Create a backup job.', ['write'], ['$ref' => '#/components/schemas/BackupJobRequest'], true, true),
@@ -176,6 +177,16 @@ class OpenApiController extends Controller
                         'items' => ['type' => 'string', 'maxLength' => 255],
                         'description' => 'Names of the containers to stop before backup. Only honoured when source_type is host_path and stop_containers_before_backup is true; ignored for docker_volume sources, which discover containers automatically.',
                     ],
+                ],
+            ],
+            'StackBackupRequest' => [
+                'type' => 'object',
+                'properties' => [
+                    'stack' => ['type' => ['string', 'null'], 'maxLength' => 255, 'description' => 'Compose or Swarm stack name (com.docker.compose.project / com.docker.stack.namespace). Null or omitted targets the "no stack" group of volumes that carry no stack label.'],
+                    'backup_destination_id' => ['type' => ['integer', 'null'], 'description' => 'Destination for jobs created on the fly. Required only when the stack has volumes without a backup job; ignored when every volume is already covered.'],
+                    'schedule_type' => ['type' => ['string', 'null'], 'enum' => ['hourly', 'daily', 'weekly', 'cron'], 'description' => 'Schedule for jobs created on the fly. Required only when the stack has volumes without a backup job. Existing jobs keep their own schedule.'],
+                    'schedule_config' => ['type' => 'object', 'description' => 'Schedule details for created jobs: {everyHours} for hourly, {time} for daily, {dayOfWeek,time} for weekly, {expression} for cron.'],
+                    'timezone' => ['type' => ['string', 'null'], 'description' => 'IANA timezone the created jobs\' schedule is evaluated in. Defaults to the application timezone.'],
                 ],
             ],
             'PauseRequest' => [

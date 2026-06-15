@@ -64,6 +64,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/alerts/settings', [AlertRuleController::class, 'edit'])->name('alerts.settings.edit');
         Route::put('/alerts/settings', [AlertRuleController::class, 'update'])->name('alerts.settings.update');
 
+        Route::post('/stacks/backup', [StackController::class, 'backup'])->name('stacks.backup');
+
         Route::resource('backup-jobs', BackupJobController::class)->except(['index', 'show']);
         Route::post('/backup-jobs/{backupJob}/run', [BackupJobController::class, 'runNow'])->name('backup-jobs.run');
         Route::post('/backup-jobs/{backupJob}/pause', [BackupJobController::class, 'pause'])->name('backup-jobs.pause');

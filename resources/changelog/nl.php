@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'stack_bulk_backup' => [
+        'title' => 'Een hele stack in één keer back-uppen',
+        'description' => 'De Stacks-pagina kan nu een hele stack met één klik back-uppen. Volledig geconfigureerde stacks krijgen een knop "Alle taken uitvoeren" die voor elke taak een back-up in de wachtrij plaatst; stacks met niet-gedekte volumes krijgen een venster "Stack back-uppen" dat voor elk volume zonder taak een dagelijkse (of aangepaste) backuptaak aanmaakt en daarna een back-up voor de hele stack in de wachtrij plaatst. Dezelfde bewerking is beschikbaar via de API (POST /stacks/backup).',
+    ],
     'busybox_restore_tar_compat' => [
         'title' => 'Compatibele restore-extractie',
         'description' => 'Herstelacties naar een nieuw Docker-volume geven geen GNU-only tar-opties meer door en streamen het archief nu naar de restore-container, zodat extractie werkt met BusyBox-tar en met containerdeployments waarvan de opslag in een Docker-volume staat.',

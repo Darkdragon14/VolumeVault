@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'stack_bulk_backup' => [
+        'title' => 'Backup di un intero stack in una volta',
+        'description' => 'La pagina Stack ora consente di eseguire il backup di un intero stack con un clic. Gli stack completamente configurati mostrano un pulsante "Esegui tutti i processi" che mette in coda un\'esecuzione per ogni processo; gli stack con volumi non coperti mostrano una finestra "Backup dello stack" che crea un processo di backup (giornaliero o personalizzato) per ogni volume che non ne ha uno, poi mette in coda un backup dell\'intero stack. La stessa operazione è disponibile tramite l\'API (POST /stacks/backup).',
+    ],
     'busybox_restore_tar_compat' => [
         'title' => 'Estrazione di ripristino compatibile',
         'description' => 'I ripristini verso un nuovo volume Docker non passano più opzioni tar disponibili solo in GNU tar e ora inviano l\'archivio in streaming al container di ripristino, quindi l\'estrazione funziona con BusyBox tar e con deployment containerizzati il cui storage vive in un volume Docker.',

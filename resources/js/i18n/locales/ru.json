@@ -1,4 +1,6 @@
 {
+  "A backup job is created with the destination and schedule below for every volume in this stack that does not have one yet, then a backup run is queued for the whole stack. Existing jobs keep their own schedule.": "Для каждого тома в этом стеке, у которого ещё нет задания, создаётся задание резервного копирования с указанными ниже назначением и расписанием; затем в очередь ставится резервное копирование для всего стека. Существующие задания сохраняют собственное расписание.",
+  "Back up stack": "Резервное копирование стека",
   "Local archive paths cannot contain a colon.": "Локальные пути архива не могут содержать двоеточие.",
   "Host path must be an absolute path.": "Путь хоста должен быть абсолютным.",
   "Host path cannot be the filesystem root.": "Путь хоста не может быть корнем файловой системы.",
@@ -10,6 +12,10 @@
   "Default: {template}": "По умолчанию: {template}",
   "Optional template without extension. VolumeVault adds .tar.gz automatically.": "Необязательный шаблон без расширения. VolumeVault автоматически добавляет .tar.gz.",
   "Preview: {filename}": "Предпросмотр: {filename}",
+  "Queue a backup run for every job in this stack?": "Поставить в очередь резервное копирование для каждого задания в этом стеке?",
+  "Run all jobs": "Запустить все задания",
+  "Start backup": "Запустить резервное копирование",
+  "Starting...": "Запуск...",
   "This template may produce the same filename for multiple backups. Previous archives can be overwritten by offen/docker-volume-backup.": "Этот шаблон может создавать одинаковое имя файла для нескольких резервных копий. Предыдущие архивы могут быть перезаписаны offen/docker-volume-backup.",
   "Customize": "Настроить",
   "Reset to defaults": "Сбросить к значениям по умолчанию",

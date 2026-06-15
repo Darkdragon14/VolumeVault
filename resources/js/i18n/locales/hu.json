@@ -1,4 +1,6 @@
 {
+  "A backup job is created with the destination and schedule below for every volume in this stack that does not have one yet, then a backup run is queued for the whole stack. Existing jobs keep their own schedule.": "A stack minden olyan kotetehez, amelynek meg nincs feladata, letrejon egy mentesi feladat az alabb megadott cellal es utemezessel; majd a rendszer sorba allit egy mentest a teljes stackhez. A meglevo feladatok megtartjak sajat utemezesuket.",
+  "Back up stack": "Stack mentese",
   "Local archive paths cannot contain a colon.": "A helyi archivum-utvonalak nem tartalmazhatnak kettospontot.",
   "Host path must be an absolute path.": "A gazdagep utvonalanak abszolut utvonalnak kell lennie.",
   "Host path cannot be the filesystem root.": "A gazdagep utvonala nem lehet a fajlrendszer gyokere.",
@@ -10,6 +12,10 @@
   "Default: {template}": "Alapertelmezett: {template}",
   "Optional template without extension. VolumeVault adds .tar.gz automatically.": "Opcionális sablon kiterjesztes nelkul. A VolumeVault automatikusan hozzaadja a .tar.gz kiterjesztest.",
   "Preview: {filename}": "Elozetes: {filename}",
+  "Queue a backup run for every job in this stack?": "Sorba allit egy mentest a stack minden feladatahoz?",
+  "Run all jobs": "Osszes feladat futtatasa",
+  "Start backup": "Mentes inditasa",
+  "Starting...": "Inditas...",
   "This template may produce the same filename for multiple backups. Previous archives can be overwritten by offen/docker-volume-backup.": "Ez a sablon tobb menteshez is ugyanazt a fajlnevet eredmenyezheti. A korabbi archivumokat az offen/docker-volume-backup felulirhatja.",
   "Customize": "Testreszabas",
   "Reset to defaults": "Alapertekek visszaallitasa",

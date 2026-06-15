@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'stack_bulk_backup' => [
+        'title' => 'Záloha celého stacku najednou',
+        'description' => 'Stránka Stacky nyní umožňuje zálohovat celý stack jedním kliknutím. Plně nakonfigurované stacky mají tlačítko "Spustit všechny úlohy", které zařadí spuštění pro každou úlohu; stacky s nepokrytými svazky mají dialog "Zálohovat stack", který pro každý svazek bez úlohy vytvoří denní (nebo vlastní) zálohovací úlohu a poté zařadí zálohu celého stacku. Stejná operace je dostupná i přes API (POST /stacks/backup).',
+    ],
     'busybox_restore_tar_compat' => [
         'title' => 'Kompatibilni extrakce obnovy',
         'description' => 'Obnovy do noveho Docker volume uz nepredavaji volby tar dostupne jen v GNU tar a archiv se ted streamuje primo do obnovovaciho kontejneru, takze extrakce funguje s BusyBox tar i v kontejnerizovanych nasazenich, kde storage bezi v Docker volume.',

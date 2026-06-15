@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'stack_bulk_backup' => [
+        'title' => 'Back up a whole stack at once',
+        'description' => 'The Stacks page can now back up an entire stack in one click. Fully configured stacks get a "Run all jobs" button that queues a run for every job; stacks with uncovered volumes get a "Back up stack" dialog that creates a daily (or custom) backup job for each volume without one, then queues a run for the whole stack. The same operation is available through the API (POST /stacks/backup).',
+    ],
     'busybox_restore_tar_compat' => [
         'title' => 'Compatible restore extraction',
         'description' => 'Restores to a new Docker volume no longer pass GNU-only tar options and now stream the archive into the restore container, so extraction works with BusyBox tar and containerized deployments whose storage lives in a Docker volume.',
