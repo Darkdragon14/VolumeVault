@@ -4,6 +4,10 @@ return [
     'unreleased' => [
         [
             'type' => 'feature',
+            'key' => 'restore_history_on_job',
+        ],
+        [
+            'type' => 'feature',
             'key' => 'restore_in_place_modes',
         ],
         [

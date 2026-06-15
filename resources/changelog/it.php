@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_history_on_job' => [
+        'title' => 'Cronologia dei ripristini nei processi di backup',
+        'description' => 'La pagina di ogni processo di backup suddivide ora la cronologia in due schede: «Cronologia» elenca i backup del processo e una nuova scheda «Cronologia dei ripristini» elenca ogni ripristino eseguito per quel processo, con stato, modalità, volumi di origine e destinazione, ora di inizio, durata e un collegamento ai dettagli completi del ripristino. Entrambe le schede sono ora paginate, quindi le cronologie lunghe non sono più limitate a 50 righe.',
+    ],
     'restore_in_place_modes' => [
         'title' => 'Modalità di ripristino sul posto',
         'description' => 'La procedura di ripristino ora può ripristinare un backup direttamente nel suo volume Docker di origine. «Ripristina sul posto» svuota e sostituisce il volume dopo aver ridigitato il suo nome per confermare; «Ripristino sul posto sicuro» arresta inoltre i container che usano il volume durante il ripristino e li riavvia al termine. Il selettore dei backup ora mostra in modo predefinito gli archivi del job selezionato, aggiunge filtri per nome e data, evidenzia l\'archivio più recente e un pulsante «Ripristina questo backup» apre la procedura direttamente da un\'esecuzione di backup.',

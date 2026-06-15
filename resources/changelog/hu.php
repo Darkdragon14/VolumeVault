@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_history_on_job' => [
+        'title' => 'Visszaállítási előzmények a biztonsági mentési feladatoknál',
+        'description' => 'Minden biztonsági mentési feladat oldala mostantól két fülre osztja az előzményeket: a „Futási előzmények" a feladat biztonsági mentéseit sorolja fel, egy új „Visszaállítási előzmények" fül pedig az adott feladathoz végrehajtott összes visszaállítást – állapottal, móddal, forrás- és célkötettel, kezdési idővel, időtartammal és a teljes visszaállítási részletekre mutató hivatkozással. Mindkét fül mostantól lapozható, így a hosszú előzmények már nem korlátozódnak 50 sorra.',
+    ],
     'restore_in_place_modes' => [
         'title' => 'Helyben visszaállítási módok',
         'description' => 'A visszaállítási varázsló mostantól közvetlenül a forrás Docker kötetébe tud visszaállítani egy mentést. A „Helyben visszaállítás" a név újragépelésével történő megerősítés után kiüríti és lecseréli a kötetet; a „Biztonságos helyben visszaállítás" a visszaállítás alatt ezenfelül leállítja a kötetet használó konténereket, majd a végén újraindítja őket. A mentésválasztó mostantól alapértelmezetten a kiválasztott feladat archívumait mutatja, név és dátum szerinti szűrőket ad, kiemeli a legújabb archívumot, és a „Mentés visszaállítása" gomb közvetlenül egy mentési futásból nyitja meg a varázslót.',

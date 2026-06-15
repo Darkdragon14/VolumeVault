@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_history_on_job' => [
+        'title' => 'Restore history on backup jobs',
+        'description' => 'Each backup job page now splits its history into two tabs: "Run history" lists the job\'s backups, and a new "Restore history" tab lists every restore performed for that job — with status, mode, source and target volumes, start time, duration, and a link to the full restore details. Both tabs are now paginated, so long histories are no longer capped at 50 rows.',
+    ],
     'restore_in_place_modes' => [
         'title' => 'In-place restore modes',
         'description' => 'The restore wizard can now restore a backup straight back into its source Docker volume. "Restore in place" wipes and replaces the volume after you retype its name to confirm; "Safe in-place restore" also stops the containers using the volume during the restore and restarts them afterwards. The backup picker now defaults to the selected job\'s archives, adds name and date filters, flags the latest archive, and a "Restore this backup" button opens the wizard straight from a backup run.',

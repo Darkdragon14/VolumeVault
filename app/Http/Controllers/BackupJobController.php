@@ -77,9 +77,10 @@ class BackupJobController extends Controller
         return redirect()->route('backup-jobs.index')->with('success', 'Backup job created.');
     }
 
-    public function show(BackupJob $backupJob): Response
+    public function show(Request $request, BackupJob $backupJob): Response
     {
         $backupJob->load(['destination', 'notificationChannels']);
+        $perPage = $this->perPageForRequest($request);
 
         return Inertia::render('BackupJobs/Show', [
             'job' => $this->serializeJob($backupJob),
@@ -88,7 +89,8 @@ class BackupJobController extends Controller
                 ->orderByDesc('finished_at')
                 ->orderByDesc('created_at')
                 ->first(['id', 'finished_at', 'backup_key', 'backup_size_bytes']),
-            'runs' => $backupJob->runs()->limit(50)->get(),
+            'runs' => $this->paginateForInertia($backupJob->runs(), $perPage, null, 'runs_page'),
+            'restoreRuns' => $this->paginateForInertia($backupJob->restoreRuns(), $perPage, null, 'restores_page'),
         ]);
     }
 

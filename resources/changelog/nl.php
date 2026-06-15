@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_history_on_job' => [
+        'title' => 'Herstelgeschiedenis bij back-uptaken',
+        'description' => 'De pagina van elke back-uptaak splitst de geschiedenis nu op in twee tabbladen: "Runhistorie" toont de back-ups van de taak en een nieuw tabblad "Herstelgeschiedenis" toont elke herstelactie die voor die taak is uitgevoerd — met status, modus, bron- en doelvolume, starttijd, duur en een link naar de volledige herstelgegevens. Beide tabbladen zijn nu gepagineerd, zodat lange geschiedenissen niet langer beperkt zijn tot 50 rijen.',
+    ],
     'restore_in_place_modes' => [
         'title' => 'Modi voor herstel ter plekke',
         'description' => 'De herstelwizard kan een back-up nu rechtstreeks terugzetten in het Docker-bronvolume. „Ter plekke herstellen" wist en vervangt het volume nadat je de naam ter bevestiging opnieuw typt; „Veilig herstel ter plekke" stopt daarnaast de containers die het volume gebruiken tijdens het herstel en start ze daarna opnieuw. De back-upkiezer toont nu standaard de archieven van de geselecteerde taak, voegt filters op naam en datum toe, markeert het nieuwste archief en een knop „Deze back-up herstellen" opent de wizard rechtstreeks vanuit een back-uprun.',

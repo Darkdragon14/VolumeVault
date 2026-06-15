@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_history_on_job' => [
+        'title' => 'Historial de restauraciones en los trabajos de copia',
+        'description' => 'La página de cada trabajo de copia de seguridad divide ahora su historial en dos pestañas: «Historial» enumera las copias del trabajo y una nueva pestaña «Historial de restauraciones» enumera todas las restauraciones realizadas para ese trabajo, con estado, modo, volúmenes de origen y destino, hora de inicio, duración y un enlace a los detalles completos de la restauración. Ambas pestañas están ahora paginadas, por lo que los historiales largos ya no se limitan a 50 filas.',
+    ],
     'restore_in_place_modes' => [
         'title' => 'Modos de restauración en sitio',
         'description' => 'El asistente de restauración ahora puede restaurar una copia directamente en su volumen Docker de origen. «Restaurar en sitio» vacía y reemplaza el volumen tras volver a escribir su nombre para confirmar; «Restauración en sitio segura» además detiene los contenedores que usan el volumen durante la restauración y los reinicia después. El selector de copias se limita por defecto a los archivos de la tarea seleccionada, añade filtros por nombre y fecha, marca la copia más reciente, y un botón «Restaurar esta copia» abre el asistente desde una ejecución de copia.',

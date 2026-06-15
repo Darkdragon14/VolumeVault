@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_history_on_job' => [
+        'title' => 'Historie obnovení u záloh',
+        'description' => 'Stránka každé zálohovací úlohy nyní rozděluje historii do dvou karet: „Historie běhu" zobrazuje zálohy úlohy a nová karta „Historie obnovení" zobrazuje každé obnovení provedené pro danou úlohu – se stavem, režimem, zdrojovým a cílovým svazkem, časem zahájení, dobou trvání a odkazem na úplné podrobnosti obnovení. Obě karty jsou nyní stránkované, takže dlouhá historie již není omezena na 50 řádků.',
+    ],
     'restore_in_place_modes' => [
         'title' => 'Režimy obnovy na místě',
         'description' => 'Průvodce obnovou nyní umí obnovit zálohu přímo do jejího zdrojového Docker svazku. „Obnovit na místě" vymaže a nahradí svazek po opětovném napsání jeho názvu pro potvrzení; „Bezpečná obnova na místě" navíc během obnovy zastaví kontejnery používající svazek a po dokončení je restartuje. Výběr zálohy se nyní ve výchozím nastavení omezuje na archivy vybrané úlohy, přidává filtry podle názvu a data, označuje nejnovější archiv a tlačítko „Obnovit tuto zálohu" otevře průvodce přímo z běhu zálohy.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_history_on_job' => [
+        'title' => 'Historique des restaurations par tâche',
+        'description' => 'La page de chaque tâche de sauvegarde répartit désormais son historique en deux onglets : « Historique des sauvegardes » liste les sauvegardes de la tâche, et un nouvel onglet « Historique des restaurations » liste chaque restauration effectuée pour cette tâche — avec le statut, le mode, les volumes source et cible, la date de début, la durée et un lien vers les détails complets de la restauration. Les deux onglets sont désormais paginés, l\'historique n\'est donc plus limité à 50 lignes.',
+    ],
     'restore_in_place_modes' => [
         'title' => 'Modes de restauration sur place',
         'description' => 'L\'assistant de restauration peut désormais restaurer une sauvegarde directement dans son volume Docker source. « Restaurer sur place » vide et remplace le volume après avoir retapé son nom pour confirmer ; « Restauration sur place sécurisée » arrête en plus les conteneurs utilisant le volume pendant la restauration et les redémarre ensuite. Le sélecteur de sauvegarde se limite par défaut aux archives de la tâche sélectionnée, ajoute des filtres par nom et par date, signale l\'archive la plus récente, et un bouton « Restaurer cette sauvegarde » ouvre l\'assistant directement depuis une exécution de sauvegarde.',

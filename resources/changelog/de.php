@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'restore_history_on_job' => [
+        'title' => 'Wiederherstellungsverlauf bei Backup-Aufträgen',
+        'description' => 'Die Seite jedes Backup-Auftrags teilt ihren Verlauf jetzt in zwei Registerkarten auf: „Verlauf" listet die Backups des Auftrags auf, und eine neue Registerkarte „Wiederherstellungsverlauf" listet jede für diesen Auftrag durchgeführte Wiederherstellung auf – mit Status, Modus, Quell- und Zielvolume, Startzeit, Dauer und einem Link zu den vollständigen Wiederherstellungsdetails. Beide Registerkarten sind jetzt paginiert, sodass lange Verläufe nicht mehr auf 50 Zeilen begrenzt sind.',
+    ],
     'restore_in_place_modes' => [
         'title' => 'Modi für direkte Wiederherstellung',
         'description' => 'Der Wiederherstellungsassistent kann ein Backup jetzt direkt in sein Docker-Quellvolume zurückspielen. „Direkt wiederherstellen" leert und ersetzt das Volume, nachdem du seinen Namen zur Bestätigung erneut eingegeben hast; „Sichere direkte Wiederherstellung" stoppt während der Wiederherstellung zusätzlich die Container, die das Volume verwenden, und startet sie danach neu. Die Backup-Auswahl zeigt jetzt standardmäßig die Archive des gewählten Auftrags, bietet Filter nach Name und Datum, hebt das neueste Archiv hervor, und eine Schaltfläche „Dieses Backup wiederherstellen" öffnet den Assistenten direkt aus einem Backup-Lauf.',

@@ -8,9 +8,12 @@ const props = defineProps<{
     baseUrl: string;
     /** Extra query params to preserve (search, filters, etc.) */
     extraParams?: Record<string, string | number | undefined>;
+    /** Query param name carrying the page number (lets several paginators coexist on one page). */
+    pageParam?: string;
 }>();
 
 const { t } = useI18n();
+const pageKey = computed(() => props.pageParam ?? 'page');
 const meta = computed(() => props.data.meta);
 const totalPages = computed(() => meta.value.last_page);
 const currentPage = computed(() => meta.value.current_page);
@@ -26,9 +29,9 @@ function goToPage(page: number) {
 
     router.get(props.baseUrl, {
         ...props.extraParams,
-        page,
+        [pageKey.value]: page,
         per_page: currentPerPage.value === 0 ? 'all' : currentPerPage.value,
-    }, { preserveState: true, replace: true });
+    }, { preserveState: true, preserveScroll: true, replace: true });
 }
 
 function changePerPage(event: Event) {
@@ -37,9 +40,9 @@ function changePerPage(event: Event) {
 
     router.get(props.baseUrl, {
         ...props.extraParams,
-        page: 1,
+        [pageKey.value]: 1,
         per_page: perPage,
-    }, { preserveState: true, replace: true });
+    }, { preserveState: true, preserveScroll: true, replace: true });
 }
 
 const visiblePages = computed(() => {
