@@ -25,6 +25,7 @@ const { t, formatDate } = useI18n();
                 <div class="lg:col-span-2"><dt class="text-xs uppercase text-slate-400">{{ t('Backup key') }}</dt><dd class="mt-1 break-all text-white">{{ run.selected_backup_key }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Started') }}</dt><dd class="mt-1 text-white">{{ formatDate(run.started_at) }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Duration') }}</dt><dd class="mt-1 text-white">{{ run.duration_seconds ?? '-' }}s</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Initiated by') }}</dt><dd class="mt-1 break-all text-white">{{ run.initiated_by ? `${run.initiated_by.name} (${run.initiated_by.email})` : '—' }}</dd></div>
             </dl>
             <p v-if="run.error_message" class="mt-5 break-words rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ run.error_message }}</p>
         </section>

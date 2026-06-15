@@ -97,7 +97,7 @@ class RestoreController extends Controller
 
     public function store(StoreRestoreRequest $request, BackupJob $backupJob, CreateRestoreRun $createRestoreRun)
     {
-        $run = $createRestoreRun->handle($backupJob, $request->validated());
+        $run = $createRestoreRun->handle($backupJob, $request->validated(), $request->user());
         RunRestoreJob::dispatch($run->id);
 
         return redirect()->route('restore-runs.show', $run)->with('success', 'Restore run queued.');

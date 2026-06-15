@@ -28,6 +28,7 @@ class RestoreRun extends Model
 
     protected $fillable = [
         'backup_job_id',
+        'initiated_by_user_id',
         'backup_destination_id',
         'selected_backup_key',
         'source_volume_name',
@@ -64,5 +65,10 @@ class RestoreRun extends Model
     public function destination(): BelongsTo
     {
         return $this->belongsTo(BackupDestination::class, 'backup_destination_id');
+    }
+
+    public function initiatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'initiated_by_user_id');
     }
 }

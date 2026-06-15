@@ -37,8 +37,9 @@ class RestoreKeyValidationTest extends TestCase
     {
         Queue::fake();
         $job = $this->backupJob();
+        $user = User::factory()->admin()->create();
 
-        $response = $this->actingAs(User::factory()->admin()->create())
+        $response = $this->actingAs($user)
             ->post(route('backup-jobs.restore.store', $job), [
                 'selected_backup_key' => 'backup.tar.gz',
                 'mode' => RestoreRun::MODE_NEW_VOLUME,
@@ -46,6 +47,8 @@ class RestoreKeyValidationTest extends TestCase
 
         $response->assertSessionDoesntHaveErrors();
         $this->assertSame(1, RestoreRun::count());
+        // The restore records who initiated it for audit purposes.
+        $this->assertSame($user->id, RestoreRun::first()->initiated_by_user_id);
     }
 
     public function test_path_traversal_key_is_rejected(): void

@@ -143,6 +143,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                                 <div><dt class="text-xs uppercase text-slate-500">{{ t('Duration') }}</dt><dd class="mt-1 text-slate-200">{{ run.duration_seconds ?? '-' }}s</dd></div>
                                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-500">{{ t('Source') }}</dt><dd class="mt-1 break-all text-slate-200">{{ run.source_volume_name }}</dd></div>
                                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-500">{{ t('Target') }}</dt><dd class="mt-1 break-all text-slate-200">{{ run.target_volume_name }}</dd></div>
+                                <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Initiated by') }}</dt><dd class="mt-1 text-slate-200">{{ run.initiated_by?.name ?? '—' }}</dd></div>
                                 <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Started') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(run.started_at) }}</dd></div>
                             </dl>
                         </article>
@@ -150,7 +151,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                     <div class="hidden overflow-x-auto md:block">
                     <table class="min-w-full divide-y divide-white/10 text-sm">
                         <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
-                            <tr><th class="px-4 py-3">{{ t('Status') }}</th><th class="px-4 py-3">{{ t('Mode') }}</th><th class="px-4 py-3">{{ t('Source') }}</th><th class="px-4 py-3">{{ t('Target') }}</th><th class="px-4 py-3">{{ t('Started') }}</th><th class="px-4 py-3">{{ t('Duration') }}</th><th class="px-4 py-3">{{ t('Details') }}</th></tr>
+                            <tr><th class="px-4 py-3">{{ t('Status') }}</th><th class="px-4 py-3">{{ t('Mode') }}</th><th class="px-4 py-3">{{ t('Source') }}</th><th class="px-4 py-3">{{ t('Target') }}</th><th class="px-4 py-3">{{ t('Initiated by') }}</th><th class="px-4 py-3">{{ t('Started') }}</th><th class="px-4 py-3">{{ t('Duration') }}</th><th class="px-4 py-3">{{ t('Details') }}</th></tr>
                         </thead>
                         <tbody class="divide-y divide-white/10">
                             <tr v-for="run in restoreRuns.data" :key="run.id">
@@ -158,6 +159,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                                 <td class="px-4 py-3 text-slate-300">{{ run.mode }}</td>
                                 <td class="px-4 py-3 break-all text-slate-300">{{ run.source_volume_name }}</td>
                                 <td class="px-4 py-3 break-all text-slate-300">{{ run.target_volume_name }}</td>
+                                <td class="px-4 py-3 text-slate-300">{{ run.initiated_by?.name ?? '—' }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ formatDate(run.started_at) }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ run.duration_seconds ?? '-' }}s</td>
                                 <td class="px-4 py-3"><Link :href="`/restore-runs/${run.id}`" class="text-sky-300 hover:text-sky-200">{{ t('View details') }}</Link></td>

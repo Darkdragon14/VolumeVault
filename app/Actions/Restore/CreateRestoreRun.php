@@ -5,13 +5,14 @@ namespace App\Actions\Restore;
 use App\Models\ActivityLog;
 use App\Models\BackupJob;
 use App\Models\RestoreRun;
+use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
 class CreateRestoreRun
 {
     public function __construct(private readonly GenerateRestoreVolumeName $generateRestoreVolumeName) {}
 
-    public function handle(BackupJob $job, array $data): RestoreRun
+    public function handle(BackupJob $job, array $data, ?User $initiatedBy = null): RestoreRun
     {
         $job->loadMissing('destination');
         $mode = $data['mode'] ?? RestoreRun::MODE_NEW_VOLUME;
@@ -23,6 +24,7 @@ class CreateRestoreRun
 
         $run = RestoreRun::create([
             'backup_job_id' => $job->id,
+            'initiated_by_user_id' => $initiatedBy?->getKey(),
             'backup_destination_id' => $job->backup_destination_id,
             'selected_backup_key' => $data['selected_backup_key'],
             'source_volume_name' => $sourceName,

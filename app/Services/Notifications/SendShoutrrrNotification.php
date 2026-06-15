@@ -49,7 +49,7 @@ class SendShoutrrrNotification
      */
     public function sendRestoreRun(RestoreRun $run): void
     {
-        $run->loadMissing('job.destination');
+        $run->loadMissing('job.destination', 'initiatedBy');
         $failed = $run->status === RestoreRun::STATUS_FAILED;
 
         if ($run->job === null) {
@@ -201,6 +201,7 @@ class SendShoutrrrNotification
             'Target volume: '.$run->target_volume_name,
             'Mode: '.$run->mode,
             'Status: '.$run->status,
+            'Initiated by: '.($run->initiatedBy?->name ?? 'Unknown'),
         ];
 
         if ($run->duration_seconds !== null) {

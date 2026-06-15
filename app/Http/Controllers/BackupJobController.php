@@ -90,7 +90,7 @@ class BackupJobController extends Controller
                 ->orderByDesc('created_at')
                 ->first(['id', 'finished_at', 'backup_key', 'backup_size_bytes']),
             'runs' => $this->paginateForInertia($backupJob->runs(), $perPage, null, 'runs_page'),
-            'restoreRuns' => $this->paginateForInertia($backupJob->restoreRuns(), $perPage, null, 'restores_page'),
+            'restoreRuns' => $this->paginateForInertia($backupJob->restoreRuns()->with('initiatedBy:id,name,email'), $perPage, null, 'restores_page'),
         ]);
     }
 
