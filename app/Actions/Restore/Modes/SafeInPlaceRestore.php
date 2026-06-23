@@ -31,9 +31,13 @@ class SafeInPlaceRestore implements RestoreModeHandler
         private readonly AppendRunLog $appendRunLog,
     ) {}
 
-    public function prepareTarget(RestoreRun $run): void
+    public function validate(RestoreRun $run): void
     {
         $this->requireExistingVolume($run);
+    }
+
+    public function prepareTarget(RestoreRun $run): void
+    {
         $this->stopAffectedContainers($run);
 
         $this->appendRunLog->handle($run, 'Clearing existing contents of volume '.$run->target_volume_name.' before in-place restore.');
@@ -50,10 +54,13 @@ class SafeInPlaceRestore implements RestoreModeHandler
     /**
      * Discover the containers mounting the source volume and stop them.
      *
-     * The full `docker ps` rows are stored on `affected_containers` for the UI
-     * audit trail; the bare IDs we actually stop go to `stopped_container_ids`,
-     * persisted BEFORE stopping so a worker crash mid-run can be reconciled. The
-     * VolumeVault container is never stopped — doing so would kill this restore.
+     * The full `docker ps -a` rows are stored on `affected_containers` for the UI
+     * audit trail (including containers that were already stopped); the bare IDs
+     * we actually stop go to `stopped_container_ids`, persisted BEFORE stopping so
+     * a worker crash mid-run can be reconciled. Only containers that were *running*
+     * are stopped and recorded — a container intentionally stopped before the
+     * restore must not be started afterwards by the restart step. The VolumeVault
+     * container is never stopped — doing so would kill this restore.
      */
     private function stopAffectedContainers(RestoreRun $run): void
     {
@@ -66,7 +73,12 @@ class SafeInPlaceRestore implements RestoreModeHandler
             $this->appendRunLog->handle($run, "Skipping VolumeVault's own container ({$skipped}) to avoid interrupting the restore.");
         }
 
-        $stopped = collect($containers)->pluck('id')->filter()->values()->all();
+        $stopped = collect($containers)
+            ->filter(fn (array $container): bool => $container['state'] === 'running')
+            ->pluck('id')
+            ->filter()
+            ->values()
+            ->all();
 
         $run->forceFill(['affected_containers' => $containers])->save();
 

@@ -332,6 +332,46 @@ class NotificationChannelTest extends TestCase
         $this->assertTrue($second->fresh()->is_default);
     }
 
+    public function test_clearing_custom_templates_wipes_the_saved_values(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Ntfy',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/all',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'title_template' => 'Backup {{ status }}',
+            'body_template' => 'Body',
+            'restore_title_template' => 'Restore {{ status }}',
+            'restore_body_template' => 'Restore body',
+        ]);
+
+        // Disabling the custom-message toggles submits empty strings, which the
+        // ConvertEmptyStringsToNull middleware turns into null. The update must
+        // wipe the stored templates rather than silently keep them.
+        $this->actingAs($admin)
+            ->put('/notifications/'.$channel->id, [
+                'name' => 'Ntfy',
+                'service' => NotificationChannel::SERVICE_ADVANCED,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'title_template' => '',
+                'body_template' => '',
+                'restore_title_template' => '',
+                'restore_body_template' => '',
+                'is_active' => true,
+                'config' => [],
+            ])
+            ->assertRedirect('/notifications');
+
+        $channel->refresh();
+        $this->assertNull($channel->title_template);
+        $this->assertNull($channel->body_template);
+        $this->assertNull($channel->restore_title_template);
+        $this->assertNull($channel->restore_body_template);
+        // The saved encrypted URL is untouched when no new config is provided.
+        $this->assertSame('ntfy://ntfy.sh/all', $channel->url);
+    }
+
     public function test_admin_can_toggle_notification_channel_active_state_inline(): void
     {
         $admin = User::factory()->admin()->create();

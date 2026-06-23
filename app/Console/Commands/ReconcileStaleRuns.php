@@ -171,9 +171,16 @@ class ReconcileStaleRuns extends Command
                 // Indeterminate (Docker unreachable): fall through to the age gate.
             }
 
-            $startedAt = $run->started_at ?? $run->created_at;
+            // No live container yet (worker died between marking running and
+            // creating the container) — or Docker was unreachable. Prefer the
+            // progress heartbeat when the run records one: a restore spends its
+            // pre-container time on a safety backup and archive download, each of
+            // which refreshes last_heartbeat_at, so a slow-but-healthy restore is
+            // not failed on the short default threshold. Backup runs have no
+            // heartbeat column and fall back to started_at as before.
+            $progressedAt = $run->last_heartbeat_at ?? $run->started_at ?? $run->created_at;
 
-            return $startedAt !== null && $startedAt->lessThan($cutoff);
+            return $progressedAt !== null && $progressedAt->lessThan($cutoff);
         }
 
         return $run->created_at !== null && $run->created_at->lessThan($cutoff);

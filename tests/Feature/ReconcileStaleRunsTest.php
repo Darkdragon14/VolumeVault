@@ -124,6 +124,49 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertNotNull($run->error_message);
     }
 
+    public function test_running_restore_with_a_recent_heartbeat_is_not_swept(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data_restored',
+            'mode' => RestoreRun::MODE_NEW_VOLUME,
+            'status' => RestoreRun::STATUS_RUNNING,
+            // A long safety backup / download: started long ago and no container
+            // yet, but the worker is alive and refreshing the heartbeat.
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subMinutes(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
+    }
+
+    public function test_running_restore_with_a_stale_heartbeat_is_swept(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data_restored',
+            'mode' => RestoreRun::MODE_NEW_VOLUME,
+            'status' => RestoreRun::STATUS_RUNNING,
+            // Recent start, but the heartbeat went cold — the worker died.
+            'started_at' => now()->subMinutes(2),
+            'last_heartbeat_at' => now()->subHours(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+    }
+
     public function test_interrupted_run_with_stopped_containers_is_restarted_and_cleared(): void
     {
         $docker = $this->recordingDockerProcess();

@@ -119,6 +119,59 @@ class RunRestoreTest extends TestCase
         $this->assertNull($run->stopped_container_ids);
     }
 
+    public function test_in_place_restore_does_not_wipe_when_the_download_yields_an_empty_archive(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        // The destination "succeeds" but produces a zero-byte file (vanished
+        // object / truncated transfer). The verify step must catch it before the
+        // in-place wipe runs, so the live volume is never cleared.
+        $storage = Mockery::mock(DestinationStorage::class);
+        $storage->shouldReceive('download')
+            ->andReturnUsing(function (BackupDestination $destination, string $key, string $targetPath): void {
+                File::ensureDirectoryExists(dirname($targetPath));
+                File::put($targetPath, '');
+            });
+        $this->app->instance(DestinationStorage::class, $storage);
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('missing or empty', $run->error_message);
+        $this->assertFalse($docker->ranClear, 'The source volume must not be wiped when the archive is unusable.');
+        $this->assertFalse($docker->ranRestore);
+    }
+
+    public function test_safe_in_place_restore_only_stops_running_containers(): void
+    {
+        // c2 was already stopped before the restore; it must not be recorded as a
+        // container we stopped, so the restart step leaves it as the user left it.
+        $docker = $this->docker(volumeExists: true, containers: ['c1', 'c2'], containerStates: ['c2' => 'exited']);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_SAFE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_SUCCESS, $run->status);
+        $this->assertSame(['c1'], $docker->stopped, 'Only the running container should be stopped.');
+        $this->assertSame(['c1'], $docker->started, 'The already-stopped container must not be started.');
+        // Both still appear in the audit trail of containers using the volume.
+        $this->assertCount(2, $run->affected_containers);
+    }
+
     public function test_mark_failed_is_idempotent_for_terminal_runs(): void
     {
         $run = $this->restoreRun(['status' => RestoreRun::STATUS_SUCCESS, 'finished_at' => now()->subHour()]);
@@ -175,9 +228,9 @@ class RunRestoreTest extends TestCase
         return $storage;
     }
 
-    private function docker(bool $volumeExists, array $containers = []): DockerProcess
+    private function docker(bool $volumeExists, array $containers = [], array $containerStates = []): DockerProcess
     {
-        return new class($volumeExists, $containers) extends DockerProcess
+        return new class($volumeExists, $containers, $containerStates) extends DockerProcess
         {
             /** @var array<int, string> */
             public array $volumeSubcommands = [];
@@ -192,7 +245,7 @@ class RunRestoreTest extends TestCase
 
             public bool $ranRestore = false;
 
-            public function __construct(private readonly bool $volumeExists, private readonly array $containers) {}
+            public function __construct(private readonly bool $volumeExists, private readonly array $containers, private readonly array $containerStates) {}
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
             {
@@ -212,7 +265,11 @@ class RunRestoreTest extends TestCase
 
                 if ($verb === 'ps') {
                     $lines = array_map(
-                        fn (string $id) => json_encode(['ID' => $id, 'Names' => $id.'-name', 'State' => 'running']),
+                        fn (string $id) => json_encode([
+                            'ID' => $id,
+                            'Names' => $id.'-name',
+                            'State' => $this->containerStates[$id] ?? 'running',
+                        ]),
                         $this->containers,
                     );
 

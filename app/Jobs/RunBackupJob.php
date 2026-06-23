@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Actions\Backup\RunBackup;
 use App\Models\BackupRun;
+use App\Support\VolumeJobLock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -24,9 +25,16 @@ class RunBackupJob implements ShouldQueue
 
     public function middleware(): array
     {
-        $run = BackupRun::find($this->backupRunId);
+        // Serialize on the Docker volume so a backup cannot run while an in-place
+        // restore is mid-wipe on the same volume (and vice versa). Host-path jobs
+        // have no volume and keep their previous per-job key.
+        $run = BackupRun::with('job:id,volume_name')->find($this->backupRunId);
+        $key = VolumeJobLock::key($run?->job?->volume_name, 'backup-job-'.($run?->backup_job_id ?? $this->backupRunId));
 
-        return [(new WithoutOverlapping('backup-job-'.($run?->backup_job_id ?? $this->backupRunId)))->expireAfter(86400)];
+        // shared() drops the per-job-class namespace from the lock key so this
+        // backup and a RunRestoreJob keyed on the same volume contend for the one
+        // lock instead of two class-scoped locks that never collide.
+        return [(new WithoutOverlapping($key))->shared()->expireAfter(86400)];
     }
 
     public function handle(RunBackup $runBackup): void

@@ -43,11 +43,18 @@ class RunRestore
         $run->forceFill([
             'status' => RestoreRun::STATUS_RUNNING,
             'started_at' => $startedAt,
+            'last_heartbeat_at' => $startedAt,
         ])->save();
 
         $this->notify($run);
 
         try {
+            // Read-only precondition check first, so an invalid target (missing
+            // source volume, or a taken new-volume name) fails fast — before the
+            // safety backup or the potentially-slow download, and before anything
+            // destructive runs.
+            $handler->validate($run);
+
             // Optional safety net for the destructive in-place modes: back up the
             // source volume's current contents before anything wipes it. Runs
             // before prepareTarget so a backup failure aborts the restore while the
@@ -55,19 +62,29 @@ class RunRestore
             // ClearDockerVolume).
             if ($run->backup_before_overwrite && in_array($run->mode, [RestoreRun::MODE_INPLACE, RestoreRun::MODE_SAFE_INPLACE], true)) {
                 $this->runPreRestoreBackup->handle($run);
+                $this->heartbeat($run);
             }
 
-            // prepareTarget may stop containers and/or create a volume. It runs
-            // before any download so a precondition failure aborts cheaply; the
+            // Download AND verify the archive BEFORE any destructive step. The
+            // in-place modes wipe the live source volume in prepareTarget(); doing
+            // that only once we already hold a usable archive means a vanished
+            // backup object or a network failure can never leave the volume empty
+            // with nothing to restore from. $prepared stays false until the wipe,
+            // so a failure here aborts with the volume untouched.
+            File::ensureDirectoryExists(dirname($archivePath));
+
+            $this->appendRunLog->handle($run, 'Downloading selected backup object from backup destination.');
+            $this->heartbeat($run);
+            $this->storage->download($run->destination, $run->selected_backup_key, $archivePath);
+            $this->verifyArchive($run, $archivePath);
+            $this->heartbeat($run);
+
+            // prepareTarget may stop containers and/or create/clear a volume. It
+            // runs only after the archive is downloaded and verified; the
             // $prepared flag gates cleanupAfterFailure so we never remove a
             // volume that already existed (prepareTarget threw on its guard).
             $handler->prepareTarget($run);
             $prepared = true;
-
-            File::ensureDirectoryExists(dirname($archivePath));
-
-            $this->appendRunLog->handle($run, 'Downloading selected backup object from backup destination.');
-            $this->storage->download($run->destination, $run->selected_backup_key, $archivePath);
 
             $this->appendRunLog->handle($run, 'Extracting backup archive into target volume.');
             $result = $this->runRestoreContainer->handle($run->fresh(), $archivePath);
@@ -202,6 +219,33 @@ class RunRestore
         } catch (Throwable $exception) {
             $this->appendRunLog->handle($run->fresh(), 'Failed to restart containers: '.$exception->getMessage());
         }
+    }
+
+    /**
+     * Refresh the run's progress marker. While a restore is downloading the
+     * archive or running a safety backup there is no Docker container to check
+     * for liveness, so stale-run reconciliation falls back to this timestamp to
+     * avoid failing a healthy-but-slow restore (see ReconcileStaleRuns::isStale).
+     */
+    private function heartbeat(RestoreRun $run): void
+    {
+        $run->forceFill(['last_heartbeat_at' => now()])->save();
+    }
+
+    /**
+     * Confirm the download produced a usable archive before any destructive step.
+     *
+     * A vanished object or a half-finished transfer can yield a missing or
+     * zero-byte file; catching that here keeps the in-place wipe from running
+     * with nothing to restore.
+     */
+    private function verifyArchive(RestoreRun $run, string $archivePath): void
+    {
+        if (! File::exists($archivePath) || File::size($archivePath) === 0) {
+            throw new RuntimeException('Downloaded backup archive is missing or empty; aborting before touching the target volume: '.$run->selected_backup_key);
+        }
+
+        $this->appendRunLog->handle($run, 'Verified downloaded archive ('.File::size($archivePath).' bytes) before preparing the target volume.');
     }
 
     private function handlerFor(string $mode): RestoreModeHandler

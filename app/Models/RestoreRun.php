@@ -41,6 +41,7 @@ class RestoreRun extends Model
         'stopped_container_ids',
         'confirmation_text',
         'started_at',
+        'last_heartbeat_at',
         'finished_at',
         'duration_seconds',
         'logs',
@@ -55,6 +56,7 @@ class RestoreRun extends Model
             'stopped_container_ids' => 'array',
             'backup_before_overwrite' => 'boolean',
             'started_at' => 'datetime',
+            'last_heartbeat_at' => 'datetime',
             'finished_at' => 'datetime',
             'duration_seconds' => 'integer',
         ];

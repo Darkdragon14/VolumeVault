@@ -24,10 +24,13 @@ class InPlaceRestore implements RestoreModeHandler
         private readonly AppendRunLog $appendRunLog,
     ) {}
 
-    public function prepareTarget(RestoreRun $run): void
+    public function validate(RestoreRun $run): void
     {
         $this->requireExistingVolume($run);
+    }
 
+    public function prepareTarget(RestoreRun $run): void
+    {
         $this->appendRunLog->handle($run, 'Clearing existing contents of volume '.$run->target_volume_name.' before in-place restore.');
         $this->clearDockerVolume->handle($run->target_volume_name);
     }

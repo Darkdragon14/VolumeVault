@@ -24,25 +24,31 @@ const perPageLabel = (value: number) => value === 0 ? t('All') : String(value);
 
 const currentPerPage = computed(() => meta.value.per_page === 0 ? 0 : meta.value.per_page);
 
+// Keep query params this paginator does not own (e.g. a sibling paginator's
+// page on the same page, active tab, filters) so paging one list never resets
+// another. The managed keys passed in `overrides` take precedence.
+function buildQuery(overrides: Record<string, string | number>) {
+    const existing = Object.fromEntries(new URLSearchParams(window.location.search));
+    return { ...existing, ...props.extraParams, ...overrides };
+}
+
 function goToPage(page: number) {
     if (page < 1 || page > totalPages.value || page === currentPage.value) return;
 
-    router.get(props.baseUrl, {
-        ...props.extraParams,
+    router.get(props.baseUrl, buildQuery({
         [pageKey.value]: page,
         per_page: currentPerPage.value === 0 ? 'all' : currentPerPage.value,
-    }, { preserveState: true, preserveScroll: true, replace: true });
+    }), { preserveState: true, preserveScroll: true, replace: true });
 }
 
 function changePerPage(event: Event) {
     const value = (event.target as HTMLSelectElement).value;
     const perPage = value === 'all' || value === '0' ? 'all' : Number(value);
 
-    router.get(props.baseUrl, {
-        ...props.extraParams,
+    router.get(props.baseUrl, buildQuery({
         [pageKey.value]: 1,
         per_page: perPage,
-    }, { preserveState: true, preserveScroll: true, replace: true });
+    }), { preserveState: true, preserveScroll: true, replace: true });
 }
 
 const visiblePages = computed(() => {

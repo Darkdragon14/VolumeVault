@@ -22,12 +22,15 @@ class NewVolumeRestore implements RestoreModeHandler
         private readonly AppendRunLog $appendRunLog,
     ) {}
 
-    public function prepareTarget(RestoreRun $run): void
+    public function validate(RestoreRun $run): void
     {
         if ($this->volumeExists($run->target_volume_name)) {
             throw new RuntimeException('Target Docker volume already exists: '.$run->target_volume_name);
         }
+    }
 
+    public function prepareTarget(RestoreRun $run): void
+    {
         $this->appendRunLog->handle($run, 'Creating target Docker volume '.$run->target_volume_name.'.');
         $this->createDockerVolume->handle($run->target_volume_name);
     }
