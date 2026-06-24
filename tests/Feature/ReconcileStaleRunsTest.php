@@ -299,6 +299,40 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_QUEUED, $waiter->refresh()->status);
     }
 
+    public function test_queued_restore_is_not_swept_just_after_its_lock_holder_finishes(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+
+        // The holder finished seconds ago; the waiter has been released with a
+        // delay and has not yet resumed. It must survive the release window.
+        RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_SUCCESS,
+            'started_at' => now()->subMinutes(20),
+            'finished_at' => now()->subSeconds(10),
+        ]);
+
+        $waiter = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+        $waiter->forceFill(['created_at' => now()->subDays(2)])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $waiter->refresh()->status);
+    }
+
     public function test_interrupted_run_with_stopped_containers_is_restarted_and_cleared(): void
     {
         $docker = $this->recordingDockerProcess();

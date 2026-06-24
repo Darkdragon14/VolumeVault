@@ -130,11 +130,17 @@ class ReconcileStaleRuns extends Command
     }
 
     /**
-     * Whether another currently-RUNNING backup or restore holds the volume lock
-     * for $volume. A queued run released by WithoutOverlapping while it waits for
-     * that lock is legitimately pending, not stale — failing it here would both
-     * lose the operation and (with the terminal-state guard) leave a confusingly
-     * failed run that still had a queued job in flight.
+     * Whether another backup or restore on $volume holds — or only just released —
+     * the volume lock. A queued run released by WithoutOverlapping while it waits
+     * for that lock is legitimately pending, not stale; failing it would lose the
+     * operation and (with the terminal-state guard) leave a confusingly failed run
+     * with a queued job still in flight.
+     *
+     * "Just released" matters because a lock loser is requeued with releaseAfter(60):
+     * for up to that delay the holder has finished (no RUNNING run) yet the waiter
+     * keeps its old created_at and has not resumed. Treating a holder that reached a
+     * terminal state within the release window + a buffer as still "busy" bridges
+     * that gap, so the waiter survives long enough to pick the lock back up.
      */
     private function volumeHeldByAnotherActiveRun(?string $volume, ?int $restoreId = null, ?int $backupRunId = null): bool
     {
@@ -142,16 +148,32 @@ class ReconcileStaleRuns extends Command
             return false;
         }
 
+        // releaseAfter(60) on both jobs + a buffer for the worker to redeliver.
+        $recentlyReleased = now()->subSeconds(120);
+
         $restoreHolds = RestoreRun::query()
-            ->where('status', RestoreRun::STATUS_RUNNING)
             ->where('target_volume_name', $volume)
             ->when($restoreId, fn ($query) => $query->whereKeyNot($restoreId))
+            ->where(fn ($query) => $query
+                ->where('status', RestoreRun::STATUS_RUNNING)
+                ->orWhere(fn ($q) => $q
+                    ->whereIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
+                    ->where('finished_at', '>=', $recentlyReleased)))
             ->exists();
 
         $backupHolds = BackupRun::query()
-            ->where('status', BackupRun::STATUS_RUNNING)
             ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
             ->when($backupRunId, fn ($query) => $query->whereKeyNot($backupRunId))
+            // A pre-restore safety backup runs inline inside its restore's worker
+            // and never holds the volume lock on its own, so it must not count as a
+            // holder — otherwise a just-failed safety backup would shield its parent
+            // restore from reconciliation, re-creating the mutual-skip deadlock.
+            ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE)
+            ->where(fn ($query) => $query
+                ->where('status', BackupRun::STATUS_RUNNING)
+                ->orWhere(fn ($q) => $q
+                    ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
+                    ->where('finished_at', '>=', $recentlyReleased)))
             ->exists();
 
         return $restoreHolds || $backupHolds;

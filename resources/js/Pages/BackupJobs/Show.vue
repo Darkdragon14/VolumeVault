@@ -141,7 +141,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                                 <Link :href="`/restore-runs/${run.id}`" class="text-sm text-sky-300 hover:text-sky-200">{{ t('View details') }}</Link>
                             </div>
                             <dl class="grid grid-cols-2 gap-3 text-sm">
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Mode') }}</dt><dd class="mt-1 text-slate-200">{{ run.mode }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Mode') }}</dt><dd class="mt-1 text-slate-200">{{ t(run.mode) }}</dd></div>
                                 <div><dt class="text-xs uppercase text-slate-500">{{ t('Duration') }}</dt><dd class="mt-1 text-slate-200">{{ run.duration_seconds ?? '-' }}s</dd></div>
                                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-500">{{ t('Source') }}</dt><dd class="mt-1 break-all text-slate-200">{{ run.source_volume_name }}</dd></div>
                                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-500">{{ t('Target') }}</dt><dd class="mt-1 break-all text-slate-200">{{ run.target_volume_name }}</dd></div>
@@ -158,7 +158,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                         <tbody class="divide-y divide-white/10">
                             <tr v-for="run in restoreRuns.data" :key="run.id">
                                 <td class="px-4 py-3"><StatusBadge :status="run.status" /></td>
-                                <td class="px-4 py-3 text-slate-300">{{ run.mode }}</td>
+                                <td class="px-4 py-3 text-slate-300">{{ t(run.mode) }}</td>
                                 <td class="px-4 py-3 break-all text-slate-300">{{ run.source_volume_name }}</td>
                                 <td class="px-4 py-3 break-all text-slate-300">{{ run.target_volume_name }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ run.initiated_by?.name ?? '—' }}</td>

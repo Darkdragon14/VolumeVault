@@ -247,6 +247,36 @@ class RunRestoreTest extends TestCase
         $this->assertFalse($docker->ranRestore);
     }
 
+    public function test_in_place_restore_aborts_before_wiping_if_finalized_out_of_band(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        // Simulate stale-run reconciliation failing the run mid-download (a raw
+        // update, mirroring markFailed touching only the DB row). The worker must
+        // notice before prepareTarget and never wipe the volume.
+        $storage = Mockery::mock(DestinationStorage::class);
+        $storage->shouldReceive('download')
+            ->andReturnUsing(function (BackupDestination $destination, string $key, string $targetPath) use ($run): void {
+                File::ensureDirectoryExists(dirname($targetPath));
+                File::put($targetPath, 'archive');
+                RestoreRun::whereKey($run->id)->update(['status' => RestoreRun::STATUS_FAILED]);
+            });
+        $this->app->instance(DestinationStorage::class, $storage);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertFalse($docker->ranClear, 'A run finalized out of band must not wipe the volume.');
+        $this->assertFalse($docker->ranRestore);
+    }
+
     public function test_in_place_clear_runs_in_a_named_container_for_liveness(): void
     {
         $docker = $this->docker(volumeExists: true);

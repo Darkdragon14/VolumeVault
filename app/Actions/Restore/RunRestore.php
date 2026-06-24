@@ -16,6 +16,7 @@ use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Logging\AppendRunLog;
 use App\Services\Notifications\SendShoutrrrNotification;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
@@ -90,6 +91,18 @@ class RunRestore
             if ($run->backup_before_overwrite && in_array($run->mode, [RestoreRun::MODE_INPLACE, RestoreRun::MODE_SAFE_INPLACE], true)) {
                 $this->runPreRestoreBackup->handle($run);
                 $this->heartbeat($run);
+            }
+
+            // Re-read the run immediately before the destructive step. If stale-run
+            // reconciliation (or any out-of-band actor) finalized it while we were
+            // downloading, verifying or running the safety backup, abort now rather
+            // than wipe a volume for a run already marked failed. Sync the model
+            // first so the catch's markFailed sees the terminal state and no-ops
+            // (no duplicate failure notification).
+            if ($run->fresh()->status !== RestoreRun::STATUS_RUNNING) {
+                $run->refresh();
+
+                throw new RuntimeException('Restore was finalized out of band before the target was prepared; aborting to avoid an unexpected volume change.');
             }
 
             // prepareTarget may stop containers and/or create/clear a volume. It
@@ -260,8 +273,19 @@ class RunRestore
 
         // Read the whole archive (gzip + tar) without extracting, so a truncated
         // or corrupt download fails here rather than partway through tar -xzf —
-        // after the in-place wipe has already cleared the volume.
-        $result = $this->verifyRestoreArchive->handle($archivePath);
+        // after the in-place wipe has already cleared the volume. The check runs
+        // in a named container recorded as the run's container id so a long verify
+        // on a huge archive is reconciled on liveness, not failed (no heartbeat
+        // fires during the blocking call, and the archive's mtime is now frozen).
+        $containerName = 'volumevault-verify-'.$run->id.'-'.Str::lower(Str::random(8));
+        $run->forceFill(['docker_container_id' => $containerName])->save();
+
+        $result = $this->verifyRestoreArchive->handle($archivePath, $containerName);
+
+        // The verify container is gone (--rm); drop the now-dead reference and
+        // refresh the heartbeat so liveness falls back to the heartbeat until the
+        // next container (clear/extract) starts.
+        $run->forceFill(['docker_container_id' => null, 'last_heartbeat_at' => now()])->save();
 
         if (! $result->successful()) {
             throw new RuntimeException(

@@ -21,23 +21,30 @@ class VerifyRestoreArchive
 {
     public function __construct(private readonly DockerProcess $dockerProcess) {}
 
-    public function handle(string $archivePath): DockerProcessResult
+    /**
+     * @param  string|null  $containerName  Name to give the throwaway verify
+     *                                      container. Pass it when the caller records the name as the run's
+     *                                      docker_container_id, so stale-run reconciliation can confirm a long verify
+     *                                      (a huge, many-file archive) is still alive instead of failing the restore.
+     */
+    public function handle(string $archivePath, ?string $containerName = null): DockerProcessResult
     {
         // Discard the file listing tar -tzf writes to stdout — DockerProcess buffers
         // stdout in memory, and an archive with millions of entries would otherwise
         // blow up verification. The redirect keeps tar's exit status (the single
         // command's status), which is all we need: non-zero means corrupt/truncated.
-        $command = [
+        $command = array_merge([
             'docker',
             'run',
             '--rm',
             '-i',
+        ], $containerName ? ['--name', $containerName] : [], [
             '--entrypoint',
             'sh',
             RunBackupContainer::IMAGE,
             '-c',
             'tar -tzf - > /dev/null',
-        ];
+        ]);
 
         return $this->dockerProcess->runWithInputFile($command, $archivePath, 0);
     }

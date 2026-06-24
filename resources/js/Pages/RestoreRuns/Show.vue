@@ -19,7 +19,7 @@ const { t, formatDate } = useI18n();
         <section class="card p-4 sm:p-5">
             <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="run.status" /></dd></div>
-                <div><dt class="text-xs uppercase text-slate-400">{{ t('Mode') }}</dt><dd class="mt-1 text-white">{{ run.mode }}</dd></div>
+                <div><dt class="text-xs uppercase text-slate-400">{{ t('Mode') }}</dt><dd class="mt-1 text-white">{{ t(run.mode) }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ run.source_volume_name }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Target') }}</dt><dd class="mt-1 break-all text-white">{{ run.target_volume_name }}</dd></div>
                 <div class="lg:col-span-2"><dt class="text-xs uppercase text-slate-400">{{ t('Backup key') }}</dt><dd class="mt-1 break-all text-white">{{ run.selected_backup_key }}</dd></div>
