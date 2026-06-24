@@ -59,10 +59,16 @@ class RunBackup
             'started_at' => $startedAt,
         ])->save();
 
-        $job->forceFill([
-            'status' => BackupJob::STATUS_RUNNING,
-            'last_run_at' => $startedAt,
-        ])->save();
+        // A pre-restore safety backup borrows the full backup pipeline but must
+        // stay invisible to the job's lifecycle: touching the job here would, for
+        // a manually paused job, flip it to running/active and clear pause_reason,
+        // silently unpausing it. Only real scheduled/manual runs drive job state.
+        if (! $this->isPreRestore($run)) {
+            $job->forceFill([
+                'status' => BackupJob::STATUS_RUNNING,
+                'last_run_at' => $startedAt,
+            ])->save();
+        }
 
         ActivityLog::record('backup_run_started', 'Backup run started.', $run, [
             'backup_job_id' => $job->id,
@@ -126,13 +132,17 @@ class RunBackup
             // next_run_at is owned by CreateBackupRun, which already advanced it to
             // the next theoretical slot when this run was queued. Recomputing it here
             // from finishedAt would skip the slot whenever a run overruns its interval.
-            $job->forceFill([
-                'status' => BackupJob::STATUS_ACTIVE,
-                'last_success_at' => $finishedAt,
-                'last_error' => null,
-                'last_error_at' => null,
-                'pause_reason' => null,
-            ])->save();
+            // Skipped for a pre-restore safety backup so it never unpauses or
+            // reschedules the job (see the start-of-run note).
+            if (! $this->isPreRestore($run)) {
+                $job->forceFill([
+                    'status' => BackupJob::STATUS_ACTIVE,
+                    'last_success_at' => $finishedAt,
+                    'last_error' => null,
+                    'last_error_at' => null,
+                    'pause_reason' => null,
+                ])->save();
+            }
 
             $this->recordBackupArchiveMetadata($run->fresh(['job.destination']));
             $this->sendNotifications($run->fresh(['job.destination']));
@@ -244,6 +254,16 @@ class RunBackup
      * (worker timeout / restart) and the stale-run reconciliation command.
      * Idempotent: runs that already reached a terminal state are left untouched.
      */
+    /**
+     * A safety backup taken automatically before an in-place restore overwrites a
+     * volume. It reuses this pipeline for the actual tar+upload but must not drive
+     * the job's lifecycle (status, pause, scheduling).
+     */
+    private function isPreRestore(BackupRun $run): bool
+    {
+        return $run->trigger === BackupRun::TRIGGER_PRE_RESTORE;
+    }
+
     public function markFailed(BackupRun $run, Throwable $exception): void
     {
         $run->loadMissing('job.destination');
@@ -266,7 +286,11 @@ class RunBackup
 
         $this->appendRunLog->handle($run, $message);
 
-        if ($job) {
+        // A failed pre-restore safety backup must not flip the job to error or
+        // reschedule it — the failure belongs to the restore, which aborts and is
+        // surfaced through its own RestoreRun. Leaving the job (incl. a paused one)
+        // untouched keeps its lifecycle intact.
+        if ($job && ! $this->isPreRestore($run)) {
             $job->forceFill([
                 'status' => BackupJob::STATUS_ERROR,
                 'last_error' => $message,

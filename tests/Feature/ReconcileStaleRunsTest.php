@@ -229,6 +229,40 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
+    public function test_stale_in_place_restore_and_its_safety_backup_are_both_reconciled(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+
+        // A worker crashed mid safety backup: both the inline pre-restore backup
+        // and its parent in-place restore are stuck RUNNING on the same volume.
+        $safetyBackup = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_PRE_RESTORE,
+            'started_at' => now()->subHours(2),
+        ]);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'backup_before_overwrite' => true,
+            'pre_restore_backup_run_id' => $safetyBackup->id,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // Neither shields the other forever: the safety backup is reconciled on
+        // its own liveness, which then unblocks reconciling the restore.
+        $this->assertSame(BackupRun::STATUS_FAILED, $safetyBackup->refresh()->status);
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+    }
+
     public function test_queued_restore_waiting_on_a_busy_volume_is_not_swept(): void
     {
         $job = $this->backupJob(BackupJob::STATUS_ACTIVE);

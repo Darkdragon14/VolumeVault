@@ -93,7 +93,7 @@ class ReconcileStaleRuns extends Command
             ->with('job')
             ->get()
             ->filter(fn (BackupRun $run) => $this->isStale($run, $cutoff, BackupRun::STATUS_RUNNING)
-                && ! $this->volumeHeldByAnotherActiveRun($run->job?->volume_name, backupRunId: $run->id));
+                && ! $this->backupIsWaitingForVolumeLock($run));
     }
 
     /** @return Collection<int, RestoreRun> */
@@ -106,6 +106,27 @@ class ReconcileStaleRuns extends Command
             ->filter(fn (RestoreRun $run) => $this->isStale($run, $cutoff, RestoreRun::STATUS_RUNNING)
                 && ! $this->restoreIsProgressing($run, $cutoff)
                 && ! $this->volumeHeldByAnotherActiveRun($run->target_volume_name, restoreId: $run->id));
+    }
+
+    /**
+     * Whether a stale backup run should be left alone because it is a queued job
+     * waiting on a volume lock held by another active run.
+     *
+     * A pre-restore safety backup is exempt: it runs inline inside its restore's
+     * worker (never as a separately-queued job), so it is never a lock-waiter.
+     * Exempting it also breaks a mutual-skip deadlock — its parent restore stays
+     * "running" and would otherwise shield the safety backup from reconciliation,
+     * while the restore sweep in turn shields the restore because the safety
+     * backup is still "running". Reconciling the safety backup on its own liveness
+     * frees both: once it is failed, the restore is no longer seen as progressing.
+     */
+    private function backupIsWaitingForVolumeLock(BackupRun $run): bool
+    {
+        if ($run->trigger === BackupRun::TRIGGER_PRE_RESTORE) {
+            return false;
+        }
+
+        return $this->volumeHeldByAnotherActiveRun($run->job?->volume_name, backupRunId: $run->id);
     }
 
     /**
