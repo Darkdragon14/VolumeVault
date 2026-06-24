@@ -108,6 +108,26 @@ class BackupRunMetadataTest extends TestCase
         $this->assertNull($job->last_success_at);
     }
 
+    public function test_terminal_backup_is_not_rerun(): void
+    {
+        $archivePath = sys_get_temp_dir().'/volumevault-backup-metadata-terminal';
+        File::deleteDirectory($archivePath);
+        File::ensureDirectoryExists($archivePath);
+
+        $this->app->instance(DockerProcess::class, $this->dockerProcess(createArchive: true));
+
+        // Reconciliation already failed this run; a late-delivered queued job must
+        // not resurrect it. The atomic claim matches zero rows and bails.
+        $run = $this->backupRun($archivePath);
+        $run->forceFill(['status' => BackupRun::STATUS_FAILED, 'finished_at' => now()->subHour()])->save();
+
+        app(RunBackup::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
+        $this->assertNull($run->backup_key);
+    }
+
     private function backupRun(string $archivePath, array $jobOverrides = []): BackupRun
     {
         DockerVolume::create(['name' => 'app_data', 'exists' => true]);

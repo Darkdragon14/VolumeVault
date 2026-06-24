@@ -97,6 +97,33 @@ class PreRestoreBackupTest extends TestCase
         $this->assertNotNull($run->pre_restore_backup_run_id);
     }
 
+    public function test_safety_backup_aborts_when_the_job_volume_no_longer_matches(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        // The job is edited to target a different volume after the restore froze
+        // its target — the safety backup would otherwise capture the wrong volume.
+        $runBackup = Mockery::mock(RunBackup::class);
+        $runBackup->shouldNotReceive('handle');
+        $this->app->instance(RunBackup::class, $runBackup);
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+            'backup_before_overwrite' => true,
+        ]);
+        $run->job->forceFill(['volume_name' => 'other_volume'])->save();
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('no longer targets the volume being restored', $run->error_message);
+        $this->assertFalse($docker->ranClear, 'The volume must not be wiped when the job no longer matches.');
+    }
+
     public function test_no_safety_backup_runs_when_the_toggle_is_off(): void
     {
         $docker = $this->docker(volumeExists: true);

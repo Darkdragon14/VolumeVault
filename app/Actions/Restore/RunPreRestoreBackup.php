@@ -36,6 +36,21 @@ class RunPreRestoreBackup
 
     public function handle(RestoreRun $run): void
     {
+        // The restore froze target_volume_name at creation, but RunBackup backs up
+        // the job's CURRENT volume_name. If the job was edited (volume changed, or
+        // switched to a host-path source) while this in-place restore waited or
+        // downloaded, the safety backup would capture the wrong volume — giving a
+        // false safety net before the frozen volume is wiped. Abort instead.
+        $run->loadMissing('job');
+        $job = $run->job;
+
+        if (! $job?->isDockerVolumeSource() || $job->volume_name !== $run->target_volume_name) {
+            throw new RuntimeException(
+                'The backup job no longer targets the volume being restored ('.$run->target_volume_name.'); '.
+                'aborting before the safety backup to avoid backing up the wrong volume.'
+            );
+        }
+
         $this->appendRunLog->handle($run, 'Creating a safety backup of volume '.$run->target_volume_name.' before overwriting it.');
 
         $backup = BackupRun::create([

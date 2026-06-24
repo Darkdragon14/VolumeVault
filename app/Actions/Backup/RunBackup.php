@@ -40,24 +40,30 @@ class RunBackup
 
     public function handle(BackupRun $run): void
     {
-        // Never re-run a backup that already reached a terminal state. A lock
-        // loser requeued by WithoutOverlapping may be delivered after stale-run
-        // reconciliation marked it failed; moving it back to RUNNING here would
-        // run it twice. Bail instead.
-        if (in_array($run->status, [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED], true)) {
+        $startedAt = now();
+
+        // Atomically claim the run: flip a non-terminal row → RUNNING in one
+        // conditional UPDATE. A lock loser requeued by WithoutOverlapping may be
+        // delivered after stale-run reconciliation marked the row failed; checking
+        // the in-memory status then saving would race that and re-run it. If the
+        // row is already terminal the update matches zero rows and we bail.
+        $claimed = BackupRun::query()
+            ->whereKey($run->getKey())
+            ->whereNotIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
+            ->update([
+                'status' => BackupRun::STATUS_RUNNING,
+                'started_at' => $startedAt,
+            ]);
+
+        if ($claimed === 0) {
             return;
         }
 
+        $run->refresh();
         $run->loadMissing('job.destination');
 
         $job = $run->job;
-        $startedAt = now();
         $stoppedContainers = [];
-
-        $run->forceFill([
-            'status' => BackupRun::STATUS_RUNNING,
-            'started_at' => $startedAt,
-        ])->save();
 
         // A pre-restore safety backup borrows the full backup pipeline but must
         // stay invisible to the job's lifecycle: touching the job here would, for

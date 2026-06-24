@@ -7,10 +7,12 @@ use App\Actions\Docker\ContainerIsAlive;
 use App\Actions\Restore\RunRestore;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
+use App\Support\VolumeJobLock;
 use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 use Throwable;
 
@@ -48,13 +50,23 @@ class ReconcileStaleRuns extends Command
 
         $backupCount = 0;
         $this->staleBackupRuns($cutoff)->each(function (BackupRun $run) use ($runBackup, $reason, &$backupCount): void {
+            $wasRunning = $run->status === BackupRun::STATUS_RUNNING;
+            $volume = $run->job?->volume_name;
             $runBackup->markFailed($run, new RuntimeException($reason));
+            if ($wasRunning) {
+                $this->releaseVolumeLock($volume);
+            }
             $backupCount++;
         });
 
         $restoreCount = 0;
         $this->staleRestoreRuns($cutoff)->each(function (RestoreRun $run) use ($runRestore, $reason, &$restoreCount): void {
+            $wasRunning = $run->status === RestoreRun::STATUS_RUNNING;
+            $volume = $run->target_volume_name;
             $runRestore->markFailed($run, new RuntimeException($reason));
+            if ($wasRunning) {
+                $this->releaseVolumeLock($volume);
+            }
             $restoreCount++;
         });
 
@@ -106,6 +118,22 @@ class ReconcileStaleRuns extends Command
             ->filter(fn (RestoreRun $run) => $this->isStale($run, $cutoff, RestoreRun::STATUS_RUNNING)
                 && ! $this->restoreIsProgressing($run, $cutoff)
                 && ! $this->volumeHeldByAnotherActiveRun($run->target_volume_name, restoreId: $run->id));
+    }
+
+    /**
+     * Force-release the volume's WithoutOverlapping lock after reconciliation
+     * fails the RUNNING holder that crashed without releasing it. The lock is set
+     * with a 24h expiry, so without this a crash would block every same-volume
+     * backup/restore — and keep failing released waiters — for up to a day.
+     * No-op for volume-less runs (host-path backups lock on a job key instead).
+     */
+    private function releaseVolumeLock(?string $volume): void
+    {
+        if (! filled($volume)) {
+            return;
+        }
+
+        Cache::lock(VolumeJobLock::cacheKey($volume))->forceRelease();
     }
 
     /**

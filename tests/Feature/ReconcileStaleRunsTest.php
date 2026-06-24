@@ -9,7 +9,9 @@ use App\Models\BackupRun;
 use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Support\VolumeJobLock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
@@ -297,6 +299,33 @@ class ReconcileStaleRunsTest extends TestCase
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(RestoreRun::STATUS_QUEUED, $waiter->refresh()->status);
+    }
+
+    public function test_failing_a_running_holder_releases_its_orphaned_volume_lock(): void
+    {
+        // Simulate a crashed worker that holds the volume lock but never released it.
+        $orphaned = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
+        $this->assertTrue($orphaned->get());
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now()->subDays(2),
+            'last_heartbeat_at' => now()->subDays(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+        // The lock was force-released, so a fresh acquisition succeeds instead of
+        // waiting out the 24h expiry.
+        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get());
     }
 
     public function test_queued_restore_is_not_swept_just_after_its_lock_holder_finishes(): void

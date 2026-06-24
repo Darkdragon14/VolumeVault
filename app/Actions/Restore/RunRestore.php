@@ -37,26 +37,34 @@ class RunRestore
 
     public function handle(RestoreRun $run): void
     {
-        // Never re-run a restore that already reached a terminal state. A lock
-        // loser can be requeued by WithoutOverlapping and, if stale-run
-        // reconciliation marked it failed while it waited, the queued job may
-        // still be delivered later — moving it back to RUNNING here would re-run a
-        // (possibly destructive) restore. Bail instead.
-        if (in_array($run->status, [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED], true)) {
+        $startedAt = now();
+
+        // Atomically claim the run: flip QUEUED/RUNNING → RUNNING in a single
+        // conditional UPDATE. A lock loser can be requeued by WithoutOverlapping
+        // and, if stale-run reconciliation marked the row failed while it waited,
+        // the queued job may still be delivered later. Checking the in-memory
+        // status then saving would race that reconciliation (load → fail → save
+        // RUNNING resurrects a finalized, possibly destructive restore). The
+        // conditional update closes that window: if the row is already terminal it
+        // matches zero rows and we bail without ever touching the volume.
+        $claimed = RestoreRun::query()
+            ->whereKey($run->getKey())
+            ->whereNotIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
+            ->update([
+                'status' => RestoreRun::STATUS_RUNNING,
+                'started_at' => $startedAt,
+                'last_heartbeat_at' => $startedAt,
+            ]);
+
+        if ($claimed === 0) {
             return;
         }
 
+        $run->refresh();
         $run->loadMissing('job.destination', 'destination');
-        $startedAt = now();
         $archivePath = storage_path('app/restore-runs/'.$run->id.'/backup.tar.gz');
         $handler = $this->handlerFor($run->mode);
         $prepared = false;
-
-        $run->forceFill([
-            'status' => RestoreRun::STATUS_RUNNING,
-            'started_at' => $startedAt,
-            'last_heartbeat_at' => $startedAt,
-        ])->save();
 
         $this->notify($run);
 
@@ -111,6 +119,12 @@ class RunRestore
             // volume that already existed (prepareTarget threw on its guard).
             $handler->prepareTarget($run);
             $prepared = true;
+
+            // The in-place clear container (--rm) recorded as docker_container_id is
+            // gone now; drop the dead reference and refresh the heartbeat so the gap
+            // before the extraction container starts is covered by the heartbeat
+            // instead of a stale container id a sweep would read as dead.
+            $run->forceFill(['docker_container_id' => null, 'last_heartbeat_at' => now()])->save();
 
             $this->appendRunLog->handle($run, 'Extracting backup archive into target volume.');
             $result = $this->runRestoreContainer->handle($run->fresh(), $archivePath);

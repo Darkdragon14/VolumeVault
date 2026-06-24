@@ -45,10 +45,22 @@ function changePerPage(event: Event) {
     const value = (event.target as HTMLSelectElement).value;
     const perPage = value === 'all' || value === '0' ? 'all' : Number(value);
 
-    router.get(props.baseUrl, buildQuery({
+    // per_page is shared by every paginator on the page, so a new page size can
+    // push a sibling list (kept on its old page) out of range and show a false
+    // empty state. Reset all paginators to page 1 by dropping every *_page param.
+    const existing = Object.fromEntries(new URLSearchParams(window.location.search));
+    for (const key of Object.keys(existing)) {
+        if (key === 'page' || key.endsWith('_page')) {
+            delete existing[key];
+        }
+    }
+
+    router.get(props.baseUrl, {
+        ...existing,
+        ...props.extraParams,
         [pageKey.value]: 1,
         per_page: perPage,
-    }), { preserveState: true, preserveScroll: true, replace: true });
+    }, { preserveState: true, preserveScroll: true, replace: true });
 }
 
 const visiblePages = computed(() => {
