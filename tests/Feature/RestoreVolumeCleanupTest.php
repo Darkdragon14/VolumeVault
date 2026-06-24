@@ -157,7 +157,7 @@ class RestoreVolumeCleanupTest extends TestCase
             {
                 // The archive readability check (tar -tzf) always passes; only the
                 // extraction (tar -xzf) reflects the simulated restore outcome.
-                if (in_array('-tzf', $command, true)) {
+                if (collect($command)->contains(fn (string $arg): bool => str_contains($arg, 'tzf'))) {
                     return new DockerProcessResult($command, 0, "data/\n", '');
                 }
 

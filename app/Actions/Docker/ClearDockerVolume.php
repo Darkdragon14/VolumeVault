@@ -18,12 +18,20 @@ class ClearDockerVolume
 {
     public function __construct(private readonly DockerProcess $dockerProcess) {}
 
-    public function handle(string $volumeName): void
+    /**
+     * @param  string|null  $containerName  Name to give the throwaway clear
+     *                                      container. Pass it when the caller records the name as the run's
+     *                                      docker_container_id, so stale-run reconciliation can confirm the clear is
+     *                                      still alive on a large volume instead of failing the restore (and
+     *                                      restarting stopped containers) mid-delete.
+     */
+    public function handle(string $volumeName, ?string $containerName = null): void
     {
-        $command = [
+        $command = array_merge([
             'docker',
             'run',
             '--rm',
+        ], $containerName ? ['--name', $containerName] : [], [
             '-v',
             $volumeName.':/target',
             '--entrypoint',
@@ -33,7 +41,7 @@ class ClearDockerVolume
             '-mindepth',
             '1',
             '-delete',
-        ];
+        ]);
 
         // No timeout (0): clearing is destructive and runs just before extraction.
         // A fixed cap could fire mid-delete on a large volume, leaving it partially

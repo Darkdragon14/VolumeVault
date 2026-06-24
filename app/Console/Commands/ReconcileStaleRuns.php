@@ -90,8 +90,10 @@ class ReconcileStaleRuns extends Command
         return BackupRun::query()
             ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
             ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, BackupRun::STATUS_RUNNING))
+            ->with('job')
             ->get()
-            ->filter(fn (BackupRun $run) => $this->isStale($run, $cutoff, BackupRun::STATUS_RUNNING));
+            ->filter(fn (BackupRun $run) => $this->isStale($run, $cutoff, BackupRun::STATUS_RUNNING)
+                && ! $this->volumeHeldByAnotherActiveRun($run->job?->volume_name, backupRunId: $run->id));
     }
 
     /** @return Collection<int, RestoreRun> */
@@ -102,7 +104,36 @@ class ReconcileStaleRuns extends Command
             ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, RestoreRun::STATUS_RUNNING))
             ->get()
             ->filter(fn (RestoreRun $run) => $this->isStale($run, $cutoff, RestoreRun::STATUS_RUNNING)
-                && ! $this->restoreIsProgressing($run, $cutoff));
+                && ! $this->restoreIsProgressing($run, $cutoff)
+                && ! $this->volumeHeldByAnotherActiveRun($run->target_volume_name, restoreId: $run->id));
+    }
+
+    /**
+     * Whether another currently-RUNNING backup or restore holds the volume lock
+     * for $volume. A queued run released by WithoutOverlapping while it waits for
+     * that lock is legitimately pending, not stale — failing it here would both
+     * lose the operation and (with the terminal-state guard) leave a confusingly
+     * failed run that still had a queued job in flight.
+     */
+    private function volumeHeldByAnotherActiveRun(?string $volume, ?int $restoreId = null, ?int $backupRunId = null): bool
+    {
+        if (! filled($volume)) {
+            return false;
+        }
+
+        $restoreHolds = RestoreRun::query()
+            ->where('status', RestoreRun::STATUS_RUNNING)
+            ->where('target_volume_name', $volume)
+            ->when($restoreId, fn ($query) => $query->whereKeyNot($restoreId))
+            ->exists();
+
+        $backupHolds = BackupRun::query()
+            ->where('status', BackupRun::STATUS_RUNNING)
+            ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
+            ->when($backupRunId, fn ($query) => $query->whereKeyNot($backupRunId))
+            ->exists();
+
+        return $restoreHolds || $backupHolds;
     }
 
     /**

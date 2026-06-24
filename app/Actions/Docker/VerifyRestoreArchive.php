@@ -23,16 +23,20 @@ class VerifyRestoreArchive
 
     public function handle(string $archivePath): DockerProcessResult
     {
+        // Discard the file listing tar -tzf writes to stdout — DockerProcess buffers
+        // stdout in memory, and an archive with millions of entries would otherwise
+        // blow up verification. The redirect keeps tar's exit status (the single
+        // command's status), which is all we need: non-zero means corrupt/truncated.
         $command = [
             'docker',
             'run',
             '--rm',
             '-i',
             '--entrypoint',
-            'tar',
+            'sh',
             RunBackupContainer::IMAGE,
-            '-tzf',
-            '-',
+            '-c',
+            'tar -tzf - > /dev/null',
         ];
 
         return $this->dockerProcess->runWithInputFile($command, $archivePath, 0);

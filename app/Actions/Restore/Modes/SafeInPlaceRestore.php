@@ -9,6 +9,7 @@ use App\Actions\Docker\StopDockerContainers;
 use App\Models\RestoreRun;
 use App\Services\Docker\SelfContainerResolver;
 use App\Services\Logging\AppendRunLog;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -40,8 +41,15 @@ class SafeInPlaceRestore implements RestoreModeHandler
     {
         $this->stopAffectedContainers($run);
 
+        // Record the clear container's name as the run's container id before it
+        // runs, so a slow delete on a large volume is reconciled on liveness
+        // rather than failed on the age threshold — which would also wrongly
+        // restart the containers we just stopped while the delete is still going.
+        $containerName = 'volumevault-clear-'.$run->id.'-'.Str::lower(Str::random(8));
+        $run->forceFill(['docker_container_id' => $containerName])->save();
+
         $this->appendRunLog->handle($run, 'Clearing existing contents of volume '.$run->target_volume_name.' before in-place restore.');
-        $this->clearDockerVolume->handle($run->target_volume_name);
+        $this->clearDockerVolume->handle($run->target_volume_name, $containerName);
     }
 
     public function cleanupAfterFailure(RestoreRun $run): void

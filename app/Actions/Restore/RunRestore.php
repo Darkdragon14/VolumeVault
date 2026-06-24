@@ -36,6 +36,15 @@ class RunRestore
 
     public function handle(RestoreRun $run): void
     {
+        // Never re-run a restore that already reached a terminal state. A lock
+        // loser can be requeued by WithoutOverlapping and, if stale-run
+        // reconciliation marked it failed while it waited, the queued job may
+        // still be delivered later — moving it back to RUNNING here would re-run a
+        // (possibly destructive) restore. Bail instead.
+        if (in_array($run->status, [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED], true)) {
+            return;
+        }
+
         $run->loadMissing('job.destination', 'destination');
         $startedAt = now();
         $archivePath = storage_path('app/restore-runs/'.$run->id.'/backup.tar.gz');
@@ -53,26 +62,18 @@ class RunRestore
         try {
             // Read-only precondition check first, so an invalid target (missing
             // source volume, or a taken new-volume name) fails fast — before the
-            // safety backup or the potentially-slow download, and before anything
-            // destructive runs.
+            // download, the safety backup, and anything destructive.
             $handler->validate($run);
 
-            // Optional safety net for the destructive in-place modes: back up the
-            // source volume's current contents before anything wipes it. Runs
-            // before prepareTarget so a backup failure aborts the restore while the
-            // volume is still untouched ($prepared stays false → no cleanup, no
-            // ClearDockerVolume).
-            if ($run->backup_before_overwrite && in_array($run->mode, [RestoreRun::MODE_INPLACE, RestoreRun::MODE_SAFE_INPLACE], true)) {
-                $this->runPreRestoreBackup->handle($run);
-                $this->heartbeat($run);
-            }
-
-            // Download AND verify the archive BEFORE any destructive step. The
-            // in-place modes wipe the live source volume in prepareTarget(); doing
-            // that only once we already hold a usable archive means a vanished
-            // backup object or a network failure can never leave the volume empty
-            // with nothing to restore from. $prepared stays false until the wipe,
-            // so a failure here aborts with the volume untouched.
+            // Download AND verify the selected archive BEFORE anything else can
+            // touch it. Doing this before the safety backup matters: the safety
+            // backup reuses the job's filename template and retention, so with a
+            // non-unique template it could overwrite, or with tight retention
+            // prune, the very object being restored. Holding a verified local copy
+            // first makes that harmless. It also keeps the destructive in-place
+            // wipe (in prepareTarget) from running without a usable archive.
+            // $prepared stays false until the wipe, so any failure here aborts with
+            // the volume untouched.
             File::ensureDirectoryExists(dirname($archivePath));
 
             $this->appendRunLog->handle($run, 'Downloading selected backup object from backup destination.');
@@ -80,6 +81,16 @@ class RunRestore
             $this->storage->download($run->destination, $run->selected_backup_key, $archivePath);
             $this->verifyArchive($run, $archivePath);
             $this->heartbeat($run);
+
+            // Optional safety net for the destructive in-place modes: back up the
+            // source volume's current contents before anything wipes it. Runs after
+            // the download (so it cannot clobber the selected archive) but before
+            // prepareTarget, so a backup failure still aborts the restore while the
+            // volume is untouched ($prepared stays false → no cleanup, no clear).
+            if ($run->backup_before_overwrite && in_array($run->mode, [RestoreRun::MODE_INPLACE, RestoreRun::MODE_SAFE_INPLACE], true)) {
+                $this->runPreRestoreBackup->handle($run);
+                $this->heartbeat($run);
+            }
 
             // prepareTarget may stop containers and/or create/clear a volume. It
             // runs only after the archive is downloaded and verified; the

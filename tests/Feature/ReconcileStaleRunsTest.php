@@ -229,6 +229,42 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
+    public function test_queued_restore_waiting_on_a_busy_volume_is_not_swept(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+
+        // Holder: a healthy restore currently running on the volume (recent start,
+        // so it is not itself reconciled), holding the volume lock.
+        RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now()->subMinutes(1),
+            'last_heartbeat_at' => now()->subMinutes(1),
+        ]);
+
+        // Waiter: queued long ago because WithoutOverlapping keeps releasing it
+        // while the holder runs. It is pending, not stale.
+        $waiter = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+        $waiter->forceFill(['created_at' => now()->subDays(2)])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $waiter->refresh()->status);
+    }
+
     public function test_interrupted_run_with_stopped_containers_is_restarted_and_cleared(): void
     {
         $docker = $this->recordingDockerProcess();

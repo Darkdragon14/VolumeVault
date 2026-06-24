@@ -418,6 +418,7 @@
   "When to notify": "When to notify",
   "Errors only": "Errors only",
   "Every backup run": "Every backup run",
+  "Every backup and restore run": "Every backup and restore run",
   "Backup scope": "Backup scope",
   "All backups": "All backups",
   "Specific backups": "Specific backups",

@@ -286,6 +286,7 @@
   "When to notify": "Quand notifier",
   "Errors only": "Erreurs seulement",
   "Every backup run": "Chaque sauvegarde",
+  "Every backup and restore run": "Chaque sauvegarde et restauration",
   "Backup scope": "Portee sauvegarde",
   "All backups": "Toutes les sauvegardes",
   "Specific backups": "Sauvegardes specifiques",

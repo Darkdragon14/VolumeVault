@@ -75,10 +75,9 @@ class PreRestoreBackupTest extends TestCase
         $docker = $this->docker(volumeExists: true);
         $this->app->instance(DockerProcess::class, $docker);
 
-        $storage = Mockery::mock(DestinationStorage::class);
-        // A failed safety backup must abort before any download/extraction.
-        $storage->shouldNotReceive('download');
-        $this->app->instance(DestinationStorage::class, $storage);
+        // The archive is downloaded and verified first; the safety backup then
+        // fails, which must abort the restore before the volume is wiped.
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
 
         $this->app->instance(RunBackup::class, $this->fakeRunBackup(BackupRun::STATUS_FAILED));
 

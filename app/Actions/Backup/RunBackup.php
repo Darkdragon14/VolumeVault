@@ -40,6 +40,14 @@ class RunBackup
 
     public function handle(BackupRun $run): void
     {
+        // Never re-run a backup that already reached a terminal state. A lock
+        // loser requeued by WithoutOverlapping may be delivered after stale-run
+        // reconciliation marked it failed; moving it back to RUNNING here would
+        // run it twice. Bail instead.
+        if (in_array($run->status, [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED], true)) {
+            return;
+        }
+
         $run->loadMissing('job.destination');
 
         $job = $run->job;

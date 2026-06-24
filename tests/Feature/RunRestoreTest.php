@@ -196,6 +196,92 @@ class RunRestoreTest extends TestCase
         $this->assertCount(2, $run->affected_containers);
     }
 
+    public function test_safety_backup_runs_after_the_archive_is_downloaded(): void
+    {
+        // If the download fails, the safety backup must never have run — otherwise
+        // it could overwrite/prune the very archive being restored before we hold
+        // it. A throwing download proves the ordering: no safety backup, no wipe.
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $storage = Mockery::mock(DestinationStorage::class);
+        $storage->shouldReceive('download')->andThrow(new \RuntimeException('network down'));
+        $this->app->instance(DestinationStorage::class, $storage);
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+            'backup_before_overwrite' => true,
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertNull($run->pre_restore_backup_run_id, 'The safety backup must not run before the download succeeds.');
+        $this->assertFalse($docker->ranClear);
+    }
+
+    public function test_terminal_restore_is_not_rerun(): void
+    {
+        // A queued lock-loser delivered after reconciliation already failed it must
+        // not be moved back to running and re-executed (it could be destructive).
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $storage = Mockery::mock(DestinationStorage::class);
+        $storage->shouldNotReceive('download');
+        $this->app->instance(DestinationStorage::class, $storage);
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+            'status' => RestoreRun::STATUS_FAILED,
+            'finished_at' => now()->subHour(),
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertFalse($docker->ranClear, 'A terminal restore must not be re-executed.');
+        $this->assertFalse($docker->ranRestore);
+    }
+
+    public function test_in_place_clear_runs_in_a_named_container_for_liveness(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        app(RunRestore::class)->handle($run);
+
+        // The clear runs as a named container so reconciliation can confirm it is
+        // alive on a large volume instead of failing the restore mid-delete.
+        $this->assertContains('--name', $docker->clearCommand);
+        $this->assertNotEmpty(array_filter($docker->clearCommand, fn ($arg) => str_starts_with((string) $arg, 'volumevault-clear-')));
+    }
+
+    public function test_archive_verification_discards_the_listing_output(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        $run = $this->restoreRun(['mode' => RestoreRun::MODE_INPLACE, 'target_volume_name' => 'app_data']);
+
+        app(RunRestore::class)->handle($run);
+
+        // The listing is sent to /dev/null so a many-file archive cannot exhaust
+        // memory through DockerProcess's in-memory stdout capture.
+        $this->assertTrue($docker->ranVerify);
+        $this->assertNotEmpty(array_filter($docker->verifyCommand, fn ($arg) => str_contains((string) $arg, '/dev/null')));
+    }
+
     public function test_mark_failed_is_idempotent_for_terminal_runs(): void
     {
         $run = $this->restoreRun(['status' => RestoreRun::STATUS_SUCCESS, 'finished_at' => now()->subHour()]);
@@ -271,6 +357,12 @@ class RunRestoreTest extends TestCase
 
             public bool $ranVerify = false;
 
+            /** @var array<int, string> */
+            public array $clearCommand = [];
+
+            /** @var array<int, string> */
+            public array $verifyCommand = [];
+
             public function __construct(private readonly bool $volumeExists, private readonly array $containers, private readonly array $containerStates, private readonly bool $archiveReadable) {}
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
@@ -318,6 +410,7 @@ class RunRestoreTest extends TestCase
                     // The only `docker run` going through run() is ClearDockerVolume;
                     // the restore extraction streams via runWithInputFile() below.
                     $this->ranClear = true;
+                    $this->clearCommand = $command;
                 }
 
                 return new DockerProcessResult($command, 0, '', '');
@@ -326,8 +419,9 @@ class RunRestoreTest extends TestCase
             public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
             {
                 // tar -tzf is the readability check; tar -xzf is the extraction.
-                if (in_array('-tzf', $command, true)) {
+                if (collect($command)->contains(fn (string $arg): bool => str_contains($arg, 'tzf'))) {
                     $this->ranVerify = true;
+                    $this->verifyCommand = $command;
 
                     return $this->archiveReadable
                         ? new DockerProcessResult($command, 0, "data/\n", '')

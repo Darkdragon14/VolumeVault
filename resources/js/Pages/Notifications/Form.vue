@@ -205,7 +205,7 @@ const submit = () => {
                     </label>
                     <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm">
                         <input v-model="form.notification_level" type="radio" value="info" class="text-sky-400">
-                        {{ t('Every backup run') }}
+                        {{ t('Every backup and restore run') }}
                     </label>
                 </div>
             </section>
