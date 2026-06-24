@@ -101,7 +101,8 @@ class ReconcileStaleRuns extends Command
             ->whereIn('status', [RestoreRun::STATUS_QUEUED, RestoreRun::STATUS_RUNNING])
             ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, RestoreRun::STATUS_RUNNING))
             ->get()
-            ->filter(fn (RestoreRun $run) => $this->isStale($run, $cutoff, RestoreRun::STATUS_RUNNING));
+            ->filter(fn (RestoreRun $run) => $this->isStale($run, $cutoff, RestoreRun::STATUS_RUNNING)
+                && ! $this->restoreIsProgressing($run, $cutoff));
     }
 
     /**
@@ -145,6 +146,37 @@ class ReconcileStaleRuns extends Command
         $query
             ->where('status', $runningStatus)
             ->orWhere(fn ($q) => $q->where('status', '!=', $runningStatus)->where('created_at', '<', $cutoff));
+    }
+
+    /**
+     * Restore-only liveness for the long phases that run before any Docker
+     * container (and thus any liveness-checkable docker_container_id) exists:
+     * the optional safety backup and the archive download. Either can legitimately
+     * exceed the short stale threshold, so a restore actively working through them
+     * must not be reconciled as dead.
+     */
+    private function restoreIsProgressing(RestoreRun $run, CarbonInterface $cutoff): bool
+    {
+        if ($run->status !== RestoreRun::STATUS_RUNNING) {
+            return false;
+        }
+
+        // Safety backup in flight: it runs as its own BackupRun, reconciled on its
+        // own liveness/age, so the restore waiting on it is not itself stale.
+        if ($run->pre_restore_backup_run_id !== null) {
+            $backup = $run->preRestoreBackup()->first();
+
+            if ($backup && in_array($backup->status, [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING], true)) {
+                return true;
+            }
+        }
+
+        // Archive download in flight: the worker is still streaming the archive to
+        // this run's temp file, so the OS keeps advancing its mtime. A dead worker
+        // leaves it cold. Covers a long download that has no container to check yet.
+        $archivePath = storage_path('app/restore-runs/'.$run->id.'/backup.tar.gz');
+
+        return is_file($archivePath) && filemtime($archivePath) >= $cutoff->getTimestamp();
     }
 
     /**

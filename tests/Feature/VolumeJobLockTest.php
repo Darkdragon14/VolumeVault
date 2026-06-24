@@ -69,6 +69,38 @@ class VolumeJobLockTest extends TestCase
         $this->assertSame('volume-app_data_restored', $lock->key);
     }
 
+    public function test_jobs_release_lock_losers_and_retry_until_a_deadline(): void
+    {
+        $job = $this->backupJob();
+        $backupRun = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        $restoreRun = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+
+        foreach ([new RunBackupJob($backupRun->id), new RunRestoreJob($restoreRun->id)] as $queueJob) {
+            $lock = $this->overlapMiddleware($queueJob);
+
+            // A lock loser is released back to the queue (not dropped)...
+            $this->assertNotNull($lock->releaseAfter);
+            $this->assertGreaterThan(0, $lock->releaseAfter);
+
+            // ...and retries are bounded by a deadline rather than a single
+            // attempt, so a released job waits to serialize instead of failing.
+            $this->assertFalse(property_exists($queueJob, 'tries'));
+            $this->assertInstanceOf(\DateTimeInterface::class, $queueJob->retryUntil());
+        }
+    }
+
     private function overlapMiddleware(object $job): WithoutOverlapping
     {
         foreach ($job->middleware() as $middleware) {

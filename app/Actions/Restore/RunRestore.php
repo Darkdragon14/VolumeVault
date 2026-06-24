@@ -4,6 +4,7 @@ namespace App\Actions\Restore;
 
 use App\Actions\Docker\RunRestoreContainer;
 use App\Actions\Docker\StartDockerContainers;
+use App\Actions\Docker\VerifyRestoreArchive;
 use App\Actions\Restore\Modes\InPlaceRestore;
 use App\Actions\Restore\Modes\NewVolumeRestore;
 use App\Actions\Restore\Modes\RestoreModeHandler;
@@ -22,6 +23,7 @@ class RunRestore
 {
     public function __construct(
         private readonly RunRestoreContainer $runRestoreContainer,
+        private readonly VerifyRestoreArchive $verifyRestoreArchive,
         private readonly StartDockerContainers $startDockerContainers,
         private readonly DestinationStorage $storage,
         private readonly AppendRunLog $appendRunLog,
@@ -245,7 +247,19 @@ class RunRestore
             throw new RuntimeException('Downloaded backup archive is missing or empty; aborting before touching the target volume: '.$run->selected_backup_key);
         }
 
-        $this->appendRunLog->handle($run, 'Verified downloaded archive ('.File::size($archivePath).' bytes) before preparing the target volume.');
+        // Read the whole archive (gzip + tar) without extracting, so a truncated
+        // or corrupt download fails here rather than partway through tar -xzf —
+        // after the in-place wipe has already cleared the volume.
+        $result = $this->verifyRestoreArchive->handle($archivePath);
+
+        if (! $result->successful()) {
+            throw new RuntimeException(
+                'Downloaded backup archive is not a readable .tar.gz; aborting before touching the target volume. '.
+                ($result->combinedOutput() ?: $run->selected_backup_key)
+            );
+        }
+
+        $this->appendRunLog->handle($run, 'Verified downloaded archive ('.File::size($archivePath).' bytes, readable .tar.gz) before preparing the target volume.');
     }
 
     private function handlerFor(string $mode): RestoreModeHandler

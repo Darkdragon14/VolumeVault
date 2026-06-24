@@ -503,6 +503,7 @@
   "running": "running",
   "scheduled": "scheduled",
   "manual": "manual",
+  "pre_restore": "pre-restore safety backup",
   "error": "error",
   "failed": "failed",
   "cancelled": "cancelled",

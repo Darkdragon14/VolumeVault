@@ -35,7 +35,12 @@ class ClearDockerVolume
             '-delete',
         ];
 
-        $result = $this->dockerProcess->run($command, 120);
+        // No timeout (0): clearing is destructive and runs just before extraction.
+        // A fixed cap could fire mid-delete on a large volume, leaving it partially
+        // wiped AND aborting before the restore extracts — the worst outcome. A
+        // hung delete is instead caught by stale-run reconciliation, like the
+        // restore/backup containers which also run uncapped.
+        $result = $this->dockerProcess->run($command, 0);
 
         if (! $result->successful()) {
             throw new RuntimeException($result->combinedOutput() ?: "Unable to clear Docker volume {$volumeName}.");

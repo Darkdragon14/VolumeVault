@@ -371,6 +371,7 @@
   "running": "en cours",
   "scheduled": "planifiee",
   "manual": "manuelle",
+  "pre_restore": "sauvegarde de securite avant restauration",
   "error": "erreur",
   "failed": "echec",
   "cancelled": "annule",

@@ -149,6 +149,30 @@ class RunRestoreTest extends TestCase
         $this->assertFalse($docker->ranRestore);
     }
 
+    public function test_in_place_restore_does_not_wipe_when_the_archive_is_corrupt(): void
+    {
+        // The downloaded file is non-empty but not a readable .tar.gz (truncated /
+        // corrupt). The readability check must catch it before the in-place wipe,
+        // so the live volume is never cleared and extraction never runs.
+        $docker = $this->docker(volumeExists: true, archiveReadable: false);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('not a readable .tar.gz', $run->error_message);
+        $this->assertTrue($docker->ranVerify, 'The archive must be verified before any wipe.');
+        $this->assertFalse($docker->ranClear, 'A corrupt archive must not trigger the in-place wipe.');
+        $this->assertFalse($docker->ranRestore);
+    }
+
     public function test_safe_in_place_restore_only_stops_running_containers(): void
     {
         // c2 was already stopped before the restore; it must not be recorded as a
@@ -228,9 +252,9 @@ class RunRestoreTest extends TestCase
         return $storage;
     }
 
-    private function docker(bool $volumeExists, array $containers = [], array $containerStates = []): DockerProcess
+    private function docker(bool $volumeExists, array $containers = [], array $containerStates = [], bool $archiveReadable = true): DockerProcess
     {
-        return new class($volumeExists, $containers, $containerStates) extends DockerProcess
+        return new class($volumeExists, $containers, $containerStates, $archiveReadable) extends DockerProcess
         {
             /** @var array<int, string> */
             public array $volumeSubcommands = [];
@@ -245,7 +269,9 @@ class RunRestoreTest extends TestCase
 
             public bool $ranRestore = false;
 
-            public function __construct(private readonly bool $volumeExists, private readonly array $containers, private readonly array $containerStates) {}
+            public bool $ranVerify = false;
+
+            public function __construct(private readonly bool $volumeExists, private readonly array $containers, private readonly array $containerStates, private readonly bool $archiveReadable) {}
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
             {
@@ -299,6 +325,15 @@ class RunRestoreTest extends TestCase
 
             public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
             {
+                // tar -tzf is the readability check; tar -xzf is the extraction.
+                if (in_array('-tzf', $command, true)) {
+                    $this->ranVerify = true;
+
+                    return $this->archiveReadable
+                        ? new DockerProcessResult($command, 0, "data/\n", '')
+                        : new DockerProcessResult($command, 1, '', 'gzip: stdin: unexpected end of file');
+                }
+
                 $this->ranRestore = true;
 
                 return new DockerProcessResult($command, 0, 'restore complete', '');

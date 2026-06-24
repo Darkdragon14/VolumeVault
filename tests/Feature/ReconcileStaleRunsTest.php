@@ -10,6 +10,7 @@ use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 class ReconcileStaleRunsTest extends TestCase
@@ -165,6 +166,67 @@ class ReconcileStaleRunsTest extends TestCase
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+    }
+
+    public function test_running_restore_with_an_in_progress_download_is_not_swept(): void
+    {
+        $storagePath = sys_get_temp_dir().'/vv-reconcile-'.uniqid();
+        File::ensureDirectoryExists($storagePath);
+        $this->app->useStoragePath($storagePath);
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data_restored',
+            'mode' => RestoreRun::MODE_NEW_VOLUME,
+            'status' => RestoreRun::STATUS_RUNNING,
+            // Long download: old start AND cold heartbeat, no container yet.
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+        ]);
+
+        // The worker is mid-download: the temp archive exists and was just written.
+        $archive = $storagePath.'/app/restore-runs/'.$run->id.'/backup.tar.gz';
+        File::ensureDirectoryExists(dirname($archive));
+        File::put($archive, 'partial-download');
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
+
+        File::deleteDirectory($storagePath);
+    }
+
+    public function test_running_restore_during_its_safety_backup_is_not_swept(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $safetyBackup = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_PRE_RESTORE,
+            'started_at' => now()->subMinutes(2),
+        ]);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'backup_before_overwrite' => true,
+            'pre_restore_backup_run_id' => $safetyBackup->id,
+            'status' => RestoreRun::STATUS_RUNNING,
+            // Old start / cold heartbeat, but the safety backup is still running.
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
     public function test_interrupted_run_with_stopped_containers_is_restarted_and_cleared(): void
