@@ -15,7 +15,15 @@ const props = defineProps<{
 }>();
 
 const step = ref(1);
-const { t, formatDate } = useI18n();
+const { t, formatDate, timezone } = useI18n();
+
+// The displayed date uses formatDate() in the app/user timezone, so the date
+// filter must derive the backup's calendar date in that SAME timezone — comparing
+// the raw UTC ISO prefix would mis-bucket backups near midnight. 'en-CA' yields
+// YYYY-MM-DD, matching the <input type="date"> value.
+const localDateKey = (value?: string | null): string => value
+    ? new Intl.DateTimeFormat('en-CA', { timeZone: timezone.value, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
+    : '';
 
 const isDockerVolumeSource = computed(() => !!props.job.is_docker_volume_source);
 const sourceVolumeName = computed(() => props.job.volume_name as string);
@@ -113,7 +121,7 @@ const visibleBackups = computed(() => {
     return scopedBackups.value.filter((backup) => {
         const name = String(backup.display_name || backup.key || '').toLowerCase();
         const matchesName = !needle || name.includes(needle);
-        const matchesDate = !dateFilter.value || String(backup.last_modified || '').slice(0, 10) === dateFilter.value;
+        const matchesDate = !dateFilter.value || localDateKey(backup.last_modified) === dateFilter.value;
 
         return matchesName && matchesDate;
     });

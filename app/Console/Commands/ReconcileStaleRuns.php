@@ -274,7 +274,14 @@ class ReconcileStaleRuns extends Command
 
         // Archive download in flight: the worker is still streaming the archive to
         // this run's temp file, so the OS keeps advancing its mtime. A dead worker
-        // leaves it cold. Covers a long download that has no container to check yet.
+        // leaves it cold. Only meaningful BEFORE any container exists — once a
+        // verify/clear/extract container is recorded, its liveness (checked by
+        // isStale) is authoritative, and a leftover backup.tar.gz from the finished
+        // download must not mask a container already confirmed dead.
+        if (filled($run->docker_container_id)) {
+            return false;
+        }
+
         $archivePath = storage_path('app/restore-runs/'.$run->id.'/backup.tar.gz');
 
         return is_file($archivePath) && filemtime($archivePath) >= $cutoff->getTimestamp();

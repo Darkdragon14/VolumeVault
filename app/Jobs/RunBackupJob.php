@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Actions\Backup\RunBackup;
 use App\Models\BackupRun;
+use App\Models\RestoreRun;
 use App\Support\VolumeJobLock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -55,7 +56,46 @@ class RunBackupJob implements ShouldQueue
     {
         $run = BackupRun::findOrFail($this->backupRunId);
 
+        // Defense against an expired WithoutOverlapping lock (24h TTL, no job
+        // timeout): if another run is already executing on this backup's volume,
+        // the lock failed to serialize us — requeue rather than overlap. The
+        // inline pre-restore safety backup runs via RunBackup directly (not this
+        // job), so it never trips this guard.
+        if ($this->volumeBusy($run)) {
+            $this->release(60);
+
+            return;
+        }
+
         $runBackup->handle($run);
+    }
+
+    /**
+     * Whether another backup or restore is currently RUNNING on this backup's
+     * Docker volume. Host-path jobs have no volume and are serialized by their
+     * per-job lock key instead, so this returns false for them.
+     */
+    private function volumeBusy(BackupRun $run): bool
+    {
+        $run->loadMissing('job');
+        $volume = $run->job?->volume_name;
+
+        if (! filled($volume)) {
+            return false;
+        }
+
+        $backupRunning = BackupRun::query()
+            ->where('status', BackupRun::STATUS_RUNNING)
+            ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
+            ->whereKeyNot($run->getKey())
+            ->exists();
+
+        $restoreRunning = RestoreRun::query()
+            ->where('status', RestoreRun::STATUS_RUNNING)
+            ->where('target_volume_name', $volume)
+            ->exists();
+
+        return $backupRunning || $restoreRunning;
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Actions\Restore\RunRestore;
+use App\Models\BackupRun;
 use App\Models\RestoreRun;
 use App\Support\VolumeJobLock;
 use Illuminate\Bus\Queueable;
@@ -55,7 +56,48 @@ class RunRestoreJob implements ShouldQueue
 
     public function handle(RunRestore $runRestore): void
     {
-        $runRestore->handle(RestoreRun::findOrFail($this->restoreRunId));
+        $run = RestoreRun::findOrFail($this->restoreRunId);
+
+        // Defense against an expired WithoutOverlapping lock: the lock has a 24h
+        // TTL but a job has no timeout, so a legitimately long op can outlive its
+        // lock and a waiter (still within retryUntil) could then acquire the
+        // expired lock and start on the same volume. If another run is already
+        // executing on this volume, the lock failed to serialize us — requeue
+        // rather than overlap a possibly-destructive op.
+        if ($this->volumeBusy($run)) {
+            $this->release(60);
+
+            return;
+        }
+
+        $runRestore->handle($run);
+    }
+
+    /**
+     * Whether another backup or restore is currently RUNNING on this restore's
+     * target volume. The inline pre-restore safety backup is not a separate job
+     * and never reaches here, so it is not a false positive.
+     */
+    private function volumeBusy(RestoreRun $run): bool
+    {
+        $volume = $run->target_volume_name;
+
+        if (! filled($volume)) {
+            return false;
+        }
+
+        $restoreRunning = RestoreRun::query()
+            ->where('status', RestoreRun::STATUS_RUNNING)
+            ->where('target_volume_name', $volume)
+            ->whereKeyNot($run->getKey())
+            ->exists();
+
+        $backupRunning = BackupRun::query()
+            ->where('status', BackupRun::STATUS_RUNNING)
+            ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
+            ->exists();
+
+        return $restoreRunning || $backupRunning;
     }
 
     /**

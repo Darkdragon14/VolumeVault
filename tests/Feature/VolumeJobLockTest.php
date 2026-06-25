@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\RunBackup;
+use App\Actions\Restore\RunRestore;
 use App\Jobs\RunBackupJob;
 use App\Jobs\RunRestoreJob;
 use App\Models\BackupDestination;
@@ -99,6 +101,64 @@ class VolumeJobLockTest extends TestCase
             $this->assertFalse(property_exists($queueJob, 'tries'));
             $this->assertInstanceOf(\DateTimeInterface::class, $queueJob->retryUntil());
         }
+    }
+
+    public function test_restore_job_requeues_instead_of_overlapping_a_busy_volume(): void
+    {
+        $job = $this->backupJob();
+
+        // An established run already executing on the volume (e.g. a long op whose
+        // 24h lock expired, letting this one acquire the stale lock).
+        RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+        ]);
+
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+
+        // release() is a no-op without a queue-job context; the action must not run,
+        // so the run stays QUEUED (RunRestore would have claimed it RUNNING).
+        (new RunRestoreJob($run->id))->handle(app(RunRestore::class));
+
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $run->refresh()->status);
+    }
+
+    public function test_backup_job_requeues_instead_of_overlapping_a_busy_volume(): void
+    {
+        $job = $this->backupJob();
+
+        RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+        ]);
+
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        (new RunBackupJob($run->id))->handle(app(RunBackup::class));
+
+        $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
     }
 
     private function overlapMiddleware(object $job): WithoutOverlapping

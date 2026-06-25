@@ -170,6 +170,39 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
     }
 
+    public function test_restore_with_a_dead_container_is_swept_despite_a_recent_archive(): void
+    {
+        $storagePath = sys_get_temp_dir().'/vv-reconcile-dead-'.uniqid();
+        File::ensureDirectoryExists($storagePath);
+        $this->app->useStoragePath($storagePath);
+        $this->app->instance(DockerProcess::class, $this->inspectDockerProcess(alive: false));
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now()->subMinute(),
+            'docker_container_id' => 'volumevault-extract-1-deadbeef',
+        ]);
+
+        // A leftover archive from the finished download, freshly written. It must
+        // NOT mask the confirmed-dead extract container.
+        $archive = $storagePath.'/app/restore-runs/'.$run->id.'/backup.tar.gz';
+        File::ensureDirectoryExists(dirname($archive));
+        File::put($archive, 'leftover');
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+
+        File::deleteDirectory($storagePath);
+    }
+
     public function test_running_restore_with_an_in_progress_download_is_not_swept(): void
     {
         $storagePath = sys_get_temp_dir().'/vv-reconcile-'.uniqid();
