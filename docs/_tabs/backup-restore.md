@@ -8,7 +8,7 @@ order: 3
 
 VolumeVault does not reimplement backup archive creation. Backup runs launch a temporary `offen/docker-volume-backup:latest` container with the selected Docker volume or host path mounted read-only under `/backup`. VolumeVault maps each configured destination to the environment variables expected by `offen/docker-volume-backup`.
 
-Restore runs download the selected archive through VolumeVault's destination layer, create a new Docker volume, then extract the archive using the `offen/docker-volume-backup` image with `tar` as entrypoint.
+Restore runs download and verify the selected archive through VolumeVault's destination layer, then extract it using the `offen/docker-volume-backup` image with `tar` as entrypoint. Restores can target a new Docker volume or, for Docker-volume backup jobs, overwrite the original volume with explicit confirmation.
 
 Docker commands are built with array arguments through Symfony Process. Secrets are passed as process environment variables or temporary mounted secret files and are not logged by VolumeVault.
 
@@ -90,22 +90,23 @@ Existing jobs with no archive name template keep that legacy pattern.
 
 ## Restore Behavior
 
-Restore-to-new-volume is the implemented restore mode and the default because it does not overwrite the source. Host path backups are also restored into a new Docker volume.
+Restore-to-new-volume remains the default and safest mode because it never overwrites the source. Host path backups are always restored into a new Docker volume.
 
-The flow is:
+Available restore modes:
 
-- List backup objects from the destination.
-- Select one object.
-- Generate or edit a safe target volume name.
-- Create a new Docker volume.
-- Download the selected archive temporarily.
-- Extract the archive into the target volume using the `offen/docker-volume-backup` image with `tar` as entrypoint.
+- `Restore to new volume`: creates a new Docker volume, downloads and verifies the selected archive, then extracts into the new volume.
+- `Restore in place`: available only for Docker volume sources. It downloads and verifies the selected archive, requires you to retype the exact source volume name, clears the source volume, then extracts the archive back into that same volume.
+- `Safe in-place restore`: available only for Docker volume sources. It performs the same destructive overwrite as restore-in-place, but first stops running containers that use the volume and restarts them after the restore finishes or fails.
 
-In-place and safe in-place modes are represented in the model and UI but are intentionally disabled until their safety flows are fully implemented.
+In-place modes are destructive. They are restricted to Docker volume backup jobs, ignore custom target volume names, and require typed confirmation of the source volume name before the restore can be queued.
+
+For both in-place modes, you can optionally back up the current contents of the source volume before it is overwritten. This pre-restore safety backup uses the backup job's configured destination, is linked from the restore details, and aborts the restore before any wipe if it fails.
+
+The restore wizard lists backup objects from the selected job's destination, lets you filter by archive name or displayed date, marks the latest archive, and can be opened directly from a backup run through `Restore this backup`.
 
 ## Notifications
 
-VolumeVault sends backup notifications through Shoutrrr after a backup run finishes. Each backup job has its own notification toggle and selected notification channels.
+VolumeVault sends backup and restore notifications through Shoutrrr. Each backup job has its own notification toggle and selected notification channels; restore runs reuse the channels configured on their backup job.
 
 Supported guided setup modes:
 
@@ -118,8 +119,10 @@ Supported guided setup modes:
 
 Notification levels:
 
-- `Errors only`: sends notifications only for failed backup runs.
-- `Every backup run`: sends notifications for both successful and failed backup runs.
+- `Errors only`: sends notifications only for failed backup and restore runs.
+- `Every backup and restore run`: sends notifications for successful backup runs and restore start/success events, in addition to failures.
+
+Restore failures are sent to every selected channel, including channels configured as `Errors only`. Restore start and success messages are sent only to channels configured for every run. Notification delivery errors are logged but never interrupt the backup or restore itself.
 
 Per-job notification configuration:
 
@@ -131,6 +134,10 @@ One notification channel can be marked as the default channel. It is preselected
 
 Notification URLs are encrypted at rest and never returned to the frontend or API after saving. Use the channel test button after setup to verify the target service.
 
-Channels can optionally override the backup notification title and body with templates. Supported tokens are `{{ job }}`, `{{ volume }}`, `{{ destination }}`, `{{ status }}`, `{{ trigger }}`, `{{ duration }}`, and `{{ error }}`.
+Channels can optionally override backup and restore notification titles and bodies with templates.
+
+Backup template tokens: `{{ job }}`, `{{ source }}`, `{{ volume }}`, `{{ destination }}`, `{{ status }}`, `{{ trigger }}`, `{{ user }}`, `{{ duration }}`, `{{ backup_size }}`, and `{{ error }}`.
+
+Restore template tokens: `{{ job }}`, `{{ source }}`, `{{ target }}`, `{{ mode }}`, `{{ status }}`, `{{ user }}`, `{{ duration }}`, and `{{ error }}`.
 
 Notification tests and delivery run the Shoutrrr CLI image through Docker. Only admins can create, edit, delete, or test notification channels.
