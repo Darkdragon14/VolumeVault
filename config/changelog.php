@@ -1,25 +1,30 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'restore_history_on_job',
-        ],
-        [
-            'type' => 'feature',
-            'key' => 'restore_in_place_modes',
-        ],
-        [
-            'type' => 'feature',
-            'key' => 'restore_notifications',
-        ],
-        [
-            'type' => 'feature',
-            'key' => 'backup_initiator_tracking',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.14.0' => [
+            'date' => '2026-06-25',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.14.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'restore_history_on_job',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'restore_in_place_modes',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'restore_notifications',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'backup_initiator_tracking',
+                ],
+            ],
+        ],
         'v1.13.0' => [
             'date' => '2026-06-15',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.13.0',
