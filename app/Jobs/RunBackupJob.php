@@ -71,9 +71,13 @@ class RunBackupJob implements ShouldQueue
     }
 
     /**
-     * Whether another backup or restore is currently RUNNING on this backup's
-     * Docker volume. Host-path jobs have no volume and are serialized by their
-     * per-job lock key instead, so this returns false for them.
+     * Whether another backup or restore is still working on this backup's Docker
+     * volume. "Working" is not only status=running: a run flips to a terminal
+     * status before its finally block restarts the containers it stopped, so a run
+     * that still has stopped_container_ids is counted too — otherwise a waiter that
+     * started after the 24h lock expired could read/clear the volume while the
+     * previous run is mid-restart of containers mounting it. Host-path jobs have no
+     * volume and are serialized by their per-job lock key instead.
      */
     private function volumeBusy(BackupRun $run): bool
     {
@@ -84,18 +88,29 @@ class RunBackupJob implements ShouldQueue
             return false;
         }
 
-        $backupRunning = BackupRun::query()
-            ->where('status', BackupRun::STATUS_RUNNING)
+        $backupActive = BackupRun::query()
             ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
             ->whereKeyNot($run->getKey())
+            ->where(fn ($query) => $this->stillWorking($query))
             ->exists();
 
-        $restoreRunning = RestoreRun::query()
-            ->where('status', RestoreRun::STATUS_RUNNING)
+        $restoreActive = RestoreRun::query()
             ->where('target_volume_name', $volume)
+            ->where(fn ($query) => $this->stillWorking($query))
             ->exists();
 
-        return $backupRunning || $restoreRunning;
+        return $backupActive || $restoreActive;
+    }
+
+    /**
+     * Constrain to runs that are running, or terminal but still owning stopped
+     * containers their finally has not restarted yet.
+     */
+    private function stillWorking($query): void
+    {
+        $query
+            ->where('status', BackupRun::STATUS_RUNNING)
+            ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
     }
 
     /**

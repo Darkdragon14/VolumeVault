@@ -161,6 +161,38 @@ class VolumeJobLockTest extends TestCase
         $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
     }
 
+    public function test_restore_job_requeues_while_a_finished_run_is_still_restarting_containers(): void
+    {
+        $job = $this->backupJob();
+
+        // A backup that just finished SUCCESS but whose finally has not yet
+        // restarted the containers it stopped (stopped_container_ids still set).
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subMinutes(5),
+            'finished_at' => now(),
+            'stopped_container_ids' => ['app-1', 'app-2'],
+        ]);
+
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_SAFE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+
+        // The restore must not clear/extract the volume while the backup is still
+        // mid-restart of containers mounting it — it requeues instead.
+        (new RunRestoreJob($run->id))->handle(app(RunRestore::class));
+
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $run->refresh()->status);
+    }
+
     private function overlapMiddleware(object $job): WithoutOverlapping
     {
         foreach ($job->middleware() as $middleware) {
