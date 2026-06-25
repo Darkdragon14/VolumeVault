@@ -32,6 +32,13 @@ class InPlaceRestore implements RestoreModeHandler
 
     public function prepareTarget(RestoreRun $run): void
     {
+        // Guard the destructive clear: if reconciliation (or any out-of-band actor)
+        // finalized this run since RunRestore's pre-prepare check, abort before
+        // wiping rather than clear a volume whose run is no longer ours.
+        if ($run->fresh()?->status !== RestoreRun::STATUS_RUNNING) {
+            throw new RuntimeException('Restore was finalized out of band before the volume was cleared; aborting the in-place wipe.');
+        }
+
         // Record the clear container's name as the run's container id before it
         // runs, so a slow delete on a large volume is reconciled on liveness
         // rather than failed on the age threshold while it is still working.

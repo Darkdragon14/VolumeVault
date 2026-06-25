@@ -399,6 +399,41 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertTrue(Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400)->get());
     }
 
+    public function test_queued_run_is_not_swept_while_a_terminal_run_still_restarts_containers(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->recordingDockerProcess());
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+
+        // A terminal backup on the volume that still owns stopped containers (its
+        // finally has not finished restarting them — pending reconcile restart).
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'finished_at' => now()->subHours(2),
+            'stopped_container_ids' => ['app-1'],
+        ]);
+
+        $waiter = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+        $waiter->forceFill(['created_at' => now()->subDays(2)])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // The stale sweep (which runs before the container-restart sweep) must not
+        // fail the waiter while the terminal run is still restarting on its volume.
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $waiter->refresh()->status);
+    }
+
     public function test_queued_restore_is_not_swept_just_after_its_lock_holder_finishes(): void
     {
         $job = $this->backupJob(BackupJob::STATUS_ACTIVE);

@@ -41,6 +41,13 @@ class SafeInPlaceRestore implements RestoreModeHandler
     {
         $this->stopAffectedContainers($run);
 
+        // Stopping many (or slow) containers can take a while with no Docker
+        // container of our own to check for liveness; reconciliation could have
+        // failed this run on the age threshold during the stop and already
+        // restarted the containers. Re-check before the destructive clear: abort
+        // rather than wipe/extract a volume whose run is no longer ours.
+        $this->requireStillRunning($run);
+
         // Record the clear container's name as the run's container id before it
         // runs, so a slow delete on a large volume is reconciled on liveness
         // rather than failed on the age threshold — which would also wrongly
@@ -93,7 +100,13 @@ class SafeInPlaceRestore implements RestoreModeHandler
         if ($stopped) {
             $run->forceFill(['stopped_container_ids' => $stopped])->save();
             $this->appendRunLog->handle($run, 'Stopping containers before in-place restore: '.implode(', ', $stopped));
-            $this->stopDockerContainers->handle($stopped);
+
+            // Refresh the heartbeat after each container so a long stop keeps the
+            // run looking alive to reconciliation (no container id exists yet).
+            $this->stopDockerContainers->handle(
+                $stopped,
+                fn () => $run->forceFill(['last_heartbeat_at' => now()])->save(),
+            );
         }
     }
 
@@ -103,6 +116,17 @@ class SafeInPlaceRestore implements RestoreModeHandler
             $this->inspectDockerVolume->handle($run->target_volume_name);
         } catch (RuntimeException) {
             throw new RuntimeException('Target Docker volume does not exist for in-place restore: '.$run->target_volume_name);
+        }
+    }
+
+    /**
+     * Guard the destructive clear: if reconciliation (or any out-of-band actor)
+     * finalized this run while we were stopping containers, abort before wiping.
+     */
+    private function requireStillRunning(RestoreRun $run): void
+    {
+        if ($run->fresh()?->status !== RestoreRun::STATUS_RUNNING) {
+            throw new RuntimeException('Restore was finalized out of band before the volume was cleared; aborting the in-place wipe.');
         }
     }
 }

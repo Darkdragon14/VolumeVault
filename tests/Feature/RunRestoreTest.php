@@ -324,6 +324,70 @@ class RunRestoreTest extends TestCase
         $this->assertNull($run->error_message);
     }
 
+    public function test_safe_in_place_aborts_clear_if_finalized_during_container_stop(): void
+    {
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_SAFE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+
+        // Docker double that fails the run (as reconciliation would) while stopping
+        // a container — simulating a stop that outran the stale threshold.
+        $docker = new class($run->id) extends DockerProcess
+        {
+            public bool $ranClear = false;
+
+            public bool $ranRestore = false;
+
+            public function __construct(private readonly int $runId) {}
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                $verb = $command[1] ?? null;
+
+                if ($verb === 'volume' && ($command[2] ?? null) === 'inspect') {
+                    return new DockerProcessResult($command, 0, '[{"Name":"app_data"}]', '');
+                }
+
+                if ($verb === 'ps') {
+                    return new DockerProcessResult($command, 0, json_encode(['ID' => 'c1', 'Names' => 'c1', 'State' => 'running']), '');
+                }
+
+                if ($verb === 'stop') {
+                    RestoreRun::whereKey($this->runId)->update(['status' => RestoreRun::STATUS_FAILED]);
+
+                    return new DockerProcessResult($command, 0, '', '');
+                }
+
+                if ($verb === 'run' && in_array('find', $command, true)) {
+                    $this->ranClear = true;
+                }
+
+                return new DockerProcessResult($command, 0, '', '');
+            }
+
+            public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                if (collect($command)->contains(fn (string $arg): bool => str_contains($arg, 'tzf'))) {
+                    return new DockerProcessResult($command, 0, "data/\n", '');
+                }
+
+                $this->ranRestore = true;
+
+                return new DockerProcessResult($command, 0, 'restore complete', '');
+            }
+        };
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertFalse($docker->ranClear, 'A run finalized during the container stop must not wipe the volume.');
+        $this->assertFalse($docker->ranRestore);
+    }
+
     public function test_mark_failed_does_not_overwrite_a_run_that_already_succeeded(): void
     {
         $run = $this->restoreRun(['status' => RestoreRun::STATUS_SUCCESS, 'finished_at' => now()]);

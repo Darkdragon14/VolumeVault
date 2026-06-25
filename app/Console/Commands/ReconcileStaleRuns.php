@@ -181,11 +181,7 @@ class ReconcileStaleRuns extends Command
         $restoreHolds = RestoreRun::query()
             ->where('target_volume_name', $volume)
             ->when($restoreId, fn ($query) => $query->whereKeyNot($restoreId))
-            ->where(fn ($query) => $query
-                ->where('status', RestoreRun::STATUS_RUNNING)
-                ->orWhere(fn ($q) => $q
-                    ->whereIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
-                    ->where('finished_at', '>=', $recentlyReleased)))
+            ->where(fn ($query) => $this->stillHoldsVolume($query, $recentlyReleased))
             ->exists();
 
         $backupHolds = BackupRun::query()
@@ -196,14 +192,32 @@ class ReconcileStaleRuns extends Command
             // holder — otherwise a just-failed safety backup would shield its parent
             // restore from reconciliation, re-creating the mutual-skip deadlock.
             ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE)
-            ->where(fn ($query) => $query
-                ->where('status', BackupRun::STATUS_RUNNING)
-                ->orWhere(fn ($q) => $q
-                    ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
-                    ->where('finished_at', '>=', $recentlyReleased)))
+            ->where(fn ($query) => $this->stillHoldsVolume($query, $recentlyReleased))
             ->exists();
 
         return $restoreHolds || $backupHolds;
+    }
+
+    /**
+     * Constrain to runs that still hold the volume: running, terminal but only
+     * just released (within the requeue window), or terminal but still owning
+     * stopped containers their finally has not restarted yet. The last case keeps
+     * this consistent with the jobs' volumeBusy guard, so a queued waiter is not
+     * swept while a terminal run is still mid-restart/reconcile of its containers.
+     *
+     * STATUS_* values are identical across BackupRun and RestoreRun, so the same
+     * constants apply to either query.
+     */
+    private function stillHoldsVolume($query, CarbonInterface $recentlyReleased): void
+    {
+        $query
+            ->where('status', BackupRun::STATUS_RUNNING)
+            ->orWhere(fn ($q) => $q
+                ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
+                ->where('finished_at', '>=', $recentlyReleased))
+            ->orWhere(fn ($q) => $q
+                ->whereNotNull('stopped_container_ids')
+                ->where('stopped_container_ids', '!=', '[]'));
     }
 
     /**
