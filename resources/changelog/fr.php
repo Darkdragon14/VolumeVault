@@ -1,6 +1,22 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Suivi de l\'auteur de chaque sauvegarde',
+        'description' => 'Les sauvegardes enregistrent désormais quel utilisateur les a lancées. Les exécutions manuelles (depuis l\'interface ou l\'API) et les sauvegardes de pile complète sont attribuées à l\'utilisateur connecté, la sauvegarde de sécurité réalisée avant une restauration sur place hérite de l\'utilisateur ayant lancé la restauration, et les exécutions planifiées restent sans auteur. L\'initiateur apparaît dans l\'historique des exécutions de la tâche et sur le détail de la sauvegarde, est inclus dans les notifications de sauvegarde et est disponible via un nouveau jeton {{ user }} pour les modèles de notification personnalisés.',
+    ],
+    'restore_history_on_job' => [
+        'title' => 'Historique des restaurations par tâche',
+        'description' => 'La page de chaque tâche de sauvegarde répartit désormais son historique en deux onglets : « Historique des sauvegardes » liste les sauvegardes de la tâche, et un nouvel onglet « Historique des restaurations » liste chaque restauration effectuée pour cette tâche — avec le statut, le mode, les volumes source et cible, la date de début, la durée et un lien vers les détails complets de la restauration. Les deux onglets sont désormais paginés, l\'historique n\'est donc plus limité à 50 lignes.',
+    ],
+    'restore_in_place_modes' => [
+        'title' => 'Modes de restauration sur place',
+        'description' => 'L\'assistant de restauration peut désormais restaurer une sauvegarde directement dans son volume Docker source. « Restaurer sur place » vide et remplace le volume après avoir retapé son nom pour confirmer ; « Restauration sur place sécurisée » arrête en plus les conteneurs utilisant le volume pendant la restauration et les redémarre ensuite. Le sélecteur de sauvegarde se limite par défaut aux archives de la tâche sélectionnée, ajoute des filtres par nom et par date, signale l\'archive la plus récente, et un bouton « Restaurer cette sauvegarde » ouvre l\'assistant directement depuis une exécution de sauvegarde. Les deux modes sur place peuvent aussi, en option, sauvegarder le contenu actuel du volume avant de l\'écraser ; la restauration est annulée si cette sauvegarde de sécurité échoue.',
+    ],
+    'restore_notifications' => [
+        'title' => 'Notifications de restauration',
+        'description' => 'VolumeVault vous prévient désormais lorsqu\'une restauration démarre, réussit ou échoue, en réutilisant les canaux de notification déjà configurés sur la tâche de sauvegarde. Les messages de démarrage et de réussite sont envoyés aux canaux réglés sur « chaque exécution », tandis que les échecs atteignent tous les canaux. Un problème de notification n\'interrompt jamais la restauration elle-même.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Sauvegarder une stack entière en une fois',
         'description' => 'La page Stacks permet désormais de sauvegarder une stack entière en un clic. Les stacks entièrement configurées disposent d\'un bouton « Exécuter toutes les tâches » qui lance une sauvegarde pour chaque tâche ; les stacks avec des volumes non couverts proposent une fenêtre « Sauvegarder la stack » qui crée une tâche de sauvegarde (quotidienne ou personnalisée) pour chaque volume qui n\'en a pas, puis lance une sauvegarde pour toute la stack. La même opération est disponible via l\'API (POST /stacks/backup).',

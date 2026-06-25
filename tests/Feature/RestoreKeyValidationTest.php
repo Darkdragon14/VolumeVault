@@ -37,8 +37,9 @@ class RestoreKeyValidationTest extends TestCase
     {
         Queue::fake();
         $job = $this->backupJob();
+        $user = User::factory()->admin()->create();
 
-        $response = $this->actingAs(User::factory()->admin()->create())
+        $response = $this->actingAs($user)
             ->post(route('backup-jobs.restore.store', $job), [
                 'selected_backup_key' => 'backup.tar.gz',
                 'mode' => RestoreRun::MODE_NEW_VOLUME,
@@ -46,6 +47,8 @@ class RestoreKeyValidationTest extends TestCase
 
         $response->assertSessionDoesntHaveErrors();
         $this->assertSame(1, RestoreRun::count());
+        // The restore records who initiated it for audit purposes.
+        $this->assertSame($user->id, RestoreRun::first()->initiated_by_user_id);
     }
 
     public function test_path_traversal_key_is_rejected(): void
@@ -74,6 +77,59 @@ class RestoreKeyValidationTest extends TestCase
                 'mode' => RestoreRun::MODE_NEW_VOLUME,
             ])
             ->assertSessionHasErrors('selected_backup_key');
+
+        $this->assertSame(0, RestoreRun::count());
+    }
+
+    public function test_in_place_restore_requires_typed_confirmation_matching_the_volume_name(): void
+    {
+        $job = $this->backupJob();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('backup-jobs.restore', $job))
+            ->post(route('backup-jobs.restore.store', $job), [
+                'selected_backup_key' => 'backup.tar.gz',
+                'mode' => RestoreRun::MODE_INPLACE,
+                'confirmation_text' => 'wrong',
+            ])
+            ->assertSessionHasErrors('confirmation_text');
+
+        $this->assertSame(0, RestoreRun::count());
+    }
+
+    public function test_in_place_restore_is_accepted_with_the_exact_volume_name(): void
+    {
+        Queue::fake();
+        $job = $this->backupJob();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('backup-jobs.restore.store', $job), [
+                'selected_backup_key' => 'backup.tar.gz',
+                'mode' => RestoreRun::MODE_INPLACE,
+                'confirmation_text' => 'app_data',
+            ])
+            ->assertSessionDoesntHaveErrors();
+
+        $run = RestoreRun::first();
+        $this->assertNotNull($run);
+        $this->assertSame(RestoreRun::MODE_INPLACE, $run->mode);
+        // In-place restores overwrite the source volume itself.
+        $this->assertSame('app_data', $run->target_volume_name);
+    }
+
+    public function test_in_place_restore_is_rejected_for_host_path_sources(): void
+    {
+        $job = $this->backupJob();
+        $job->forceFill(['source_type' => BackupJob::SOURCE_TYPE_HOST_PATH, 'host_path' => '/srv/data'])->save();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('backup-jobs.restore', $job))
+            ->post(route('backup-jobs.restore.store', $job), [
+                'selected_backup_key' => 'backup.tar.gz',
+                'mode' => RestoreRun::MODE_INPLACE,
+                'confirmation_text' => '/srv/data',
+            ])
+            ->assertSessionHasErrors('mode');
 
         $this->assertSame(0, RestoreRun::count());
     }

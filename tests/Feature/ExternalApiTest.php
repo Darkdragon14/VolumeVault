@@ -6,11 +6,13 @@ use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
+use App\Models\RestoreRun;
 use App\Models\User;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -410,5 +412,45 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.volume_name.pattern', '^[A-Za-z0-9_.-]+$')
             ->assertJsonPath('components.schemas.RestoreRequest.properties.target_volume_name.pattern', '^[A-Za-z0-9_.-]+$')
             ->assertJsonPath('components.schemas.RestoreRequest.properties.selected_backup_key.description', fn (string $d): bool => str_contains($d, '/backup-jobs/{id}/backups'));
+    }
+
+    public function test_api_restore_is_attributed_to_the_token_owner(): void
+    {
+        Queue::fake();
+
+        $archivePath = sys_get_temp_dir().'/volumevault-api-restore-'.uniqid();
+        File::ensureDirectoryExists($archivePath);
+        File::put($archivePath.'/backup.tar.gz', 'fake-archive');
+
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => $archivePath],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Job',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson("/api/v1/backup-jobs/{$job->id}/restore", [
+                'selected_backup_key' => 'backup.tar.gz',
+                'mode' => RestoreRun::MODE_NEW_VOLUME,
+            ])
+            ->assertAccepted()
+            ->assertJsonPath('data.initiated_by_user_id', $admin->id);
+
+        File::deleteDirectory($archivePath);
     }
 }

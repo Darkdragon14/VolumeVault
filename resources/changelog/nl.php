@@ -1,6 +1,22 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Bijhouden wie elke back-up heeft gestart',
+        'description' => 'Back-ups registreren nu welke gebruiker ze heeft gestart. Handmatige uitvoeringen (via de interface of de API) en back-ups van een volledige stack worden toegewezen aan de aangemelde gebruiker, de veiligheidsback-up die vóór een in-place herstel wordt gemaakt erft de gebruiker die het herstel heeft gestart, en geplande uitvoeringen blijven zonder toewijzing. De initiator verschijnt in de uitvoeringsgeschiedenis van de taak en in de back-updetails, wordt opgenomen in back-upmeldingen en is beschikbaar als nieuw {{ user }}-token voor aangepaste meldingssjablonen.',
+    ],
+    'restore_history_on_job' => [
+        'title' => 'Herstelgeschiedenis bij back-uptaken',
+        'description' => 'De pagina van elke back-uptaak splitst de geschiedenis nu op in twee tabbladen: "Runhistorie" toont de back-ups van de taak en een nieuw tabblad "Herstelgeschiedenis" toont elke herstelactie die voor die taak is uitgevoerd — met status, modus, bron- en doelvolume, starttijd, duur en een link naar de volledige herstelgegevens. Beide tabbladen zijn nu gepagineerd, zodat lange geschiedenissen niet langer beperkt zijn tot 50 rijen.',
+    ],
+    'restore_in_place_modes' => [
+        'title' => 'Modi voor herstel ter plekke',
+        'description' => 'De herstelwizard kan een back-up nu rechtstreeks terugzetten in het Docker-bronvolume. „Ter plekke herstellen" wist en vervangt het volume nadat je de naam ter bevestiging opnieuw typt; „Veilig herstel ter plekke" stopt daarnaast de containers die het volume gebruiken tijdens het herstel en start ze daarna opnieuw. De back-upkiezer toont nu standaard de archieven van de geselecteerde taak, voegt filters op naam en datum toe, markeert het nieuwste archief en een knop „Deze back-up herstellen" opent de wizard rechtstreeks vanuit een back-uprun. Beide ter-plekke-modi kunnen optioneel een back-up maken van de huidige inhoud van het volume voordat het wordt overschreven; het herstel wordt afgebroken als die veiligheidsback-up mislukt.',
+    ],
+    'restore_notifications' => [
+        'title' => 'Herstelmeldingen',
+        'description' => 'VolumeVault stuurt nu een melding wanneer een herstel start, slaagt of mislukt, met hergebruik van de meldingskanalen die al voor de back-uptaak zijn ingesteld. Start- en succesberichten gaan naar kanalen die elke uitvoering ontvangen, terwijl mislukkingen alle kanalen bereiken. Een meldingsprobleem onderbreekt het herstel zelf nooit.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Een hele stack in één keer back-uppen',
         'description' => 'De Stacks-pagina kan nu een hele stack met één klik back-uppen. Volledig geconfigureerde stacks krijgen een knop "Alle taken uitvoeren" die voor elke taak een back-up in de wachtrij plaatst; stacks met niet-gedekte volumes krijgen een venster "Stack back-uppen" dat voor elk volume zonder taak een dagelijkse (of aangepaste) backuptaak aanmaakt en daarna een back-up voor de hele stack in de wachtrij plaatst. Dezelfde bewerking is beschikbaar via de API (POST /stacks/backup).',

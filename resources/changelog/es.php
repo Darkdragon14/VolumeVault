@@ -1,6 +1,22 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Seguimiento de quién inició cada copia de seguridad',
+        'description' => 'Las copias de seguridad ahora registran qué usuario las inició. Las ejecuciones manuales (desde la interfaz o la API) y las copias de seguridad de toda la pila se atribuyen al usuario conectado, la copia de seguridad de protección realizada antes de una restauración in situ hereda el usuario que inició la restauración, y las ejecuciones programadas quedan sin atribuir. El iniciador aparece en el historial de ejecuciones del trabajo y en los detalles de la copia de seguridad, se incluye en las notificaciones de copia de seguridad y está disponible como un nuevo token {{ user }} para las plantillas de notificación personalizadas.',
+    ],
+    'restore_history_on_job' => [
+        'title' => 'Historial de restauraciones en los trabajos de copia',
+        'description' => 'La página de cada trabajo de copia de seguridad divide ahora su historial en dos pestañas: «Historial» enumera las copias del trabajo y una nueva pestaña «Historial de restauraciones» enumera todas las restauraciones realizadas para ese trabajo, con estado, modo, volúmenes de origen y destino, hora de inicio, duración y un enlace a los detalles completos de la restauración. Ambas pestañas están ahora paginadas, por lo que los historiales largos ya no se limitan a 50 filas.',
+    ],
+    'restore_in_place_modes' => [
+        'title' => 'Modos de restauración en sitio',
+        'description' => 'El asistente de restauración ahora puede restaurar una copia directamente en su volumen Docker de origen. «Restaurar en sitio» vacía y reemplaza el volumen tras volver a escribir su nombre para confirmar; «Restauración en sitio segura» además detiene los contenedores que usan el volumen durante la restauración y los reinicia después. El selector de copias se limita por defecto a los archivos de la tarea seleccionada, añade filtros por nombre y fecha, marca la copia más reciente, y un botón «Restaurar esta copia» abre el asistente desde una ejecución de copia. Ambos modos en sitio pueden, opcionalmente, hacer una copia de seguridad del contenido actual del volumen antes de sobrescribirlo; la restauración se cancela si esa copia falla.',
+    ],
+    'restore_notifications' => [
+        'title' => 'Notificaciones de restauración',
+        'description' => 'VolumeVault ahora te avisa cuando una restauración comienza, se completa o falla, reutilizando los canales de notificación ya configurados en la tarea de copia de seguridad. Los mensajes de inicio y de éxito se envían a los canales configurados para recibir cada ejecución, mientras que los fallos llegan a todos los canales. Un problema de notificación nunca interrumpe la propia restauración.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Copia de seguridad de todo un stack a la vez',
         'description' => 'La página de stacks ahora permite hacer una copia de seguridad de un stack completo con un clic. Los stacks totalmente configurados muestran un botón "Ejecutar todas las tareas" que pone en cola una ejecución para cada tarea; los stacks con volúmenes sin cubrir muestran un cuadro "Copia de seguridad del stack" que crea una tarea de copia (diaria o personalizada) para cada volumen que no tiene una y, después, pone en cola una copia de todo el stack. La misma operación está disponible a través de la API (POST /stacks/backup).',

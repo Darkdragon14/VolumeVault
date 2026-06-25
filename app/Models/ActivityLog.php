@@ -12,6 +12,7 @@ class ActivityLog extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'user_id',
         'event_type',
         'subject_type',
         'subject_id',
@@ -31,6 +32,7 @@ class ActivityLog extends Model
     public static function record(string $eventType, string $message, ?Model $subject = null, array $context = []): self
     {
         return self::create([
+            'user_id' => auth()->id(),
             'event_type' => $eventType,
             'subject_type' => $subject ? $subject::class : null,
             'subject_id' => $subject?->getKey(),

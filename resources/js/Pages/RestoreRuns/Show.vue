@@ -19,12 +19,19 @@ const { t, formatDate } = useI18n();
         <section class="card p-4 sm:p-5">
             <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="run.status" /></dd></div>
-                <div><dt class="text-xs uppercase text-slate-400">{{ t('Mode') }}</dt><dd class="mt-1 text-white">{{ run.mode }}</dd></div>
+                <div><dt class="text-xs uppercase text-slate-400">{{ t('Mode') }}</dt><dd class="mt-1 text-white">{{ t(run.mode) }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ run.source_volume_name }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Target') }}</dt><dd class="mt-1 break-all text-white">{{ run.target_volume_name }}</dd></div>
                 <div class="lg:col-span-2"><dt class="text-xs uppercase text-slate-400">{{ t('Backup key') }}</dt><dd class="mt-1 break-all text-white">{{ run.selected_backup_key }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Started') }}</dt><dd class="mt-1 text-white">{{ formatDate(run.started_at) }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Duration') }}</dt><dd class="mt-1 text-white">{{ run.duration_seconds ?? '-' }}s</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Initiated by') }}</dt><dd class="mt-1 break-all text-white">{{ run.initiated_by ? `${run.initiated_by.name} (${run.initiated_by.email})` : '—' }}</dd></div>
+                <div v-if="run.pre_restore_backup" class="min-w-0">
+                    <dt class="text-xs uppercase text-slate-400">{{ t('Safety backup') }}</dt>
+                    <dd class="mt-1 break-all text-white">
+                        <Link :href="`/backup-runs/${run.pre_restore_backup.id}`" class="text-sky-300 hover:underline">{{ run.pre_restore_backup.backup_key || t('Backup run #{id}', { id: run.pre_restore_backup.id }) }}</Link>
+                    </dd>
+                </div>
             </dl>
             <p v-if="run.error_message" class="mt-5 break-words rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ run.error_message }}</p>
         </section>

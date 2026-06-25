@@ -142,7 +142,7 @@ class OpenApiController extends Controller
                     'id' => ['type' => 'integer'],
                     'backup_job_id' => ['type' => 'integer'],
                     'status' => ['type' => 'string', 'enum' => ['queued', 'running', 'success', 'failed', 'cancelled']],
-                    'trigger' => ['type' => 'string', 'enum' => ['scheduled', 'manual']],
+                    'trigger' => ['type' => 'string', 'enum' => ['scheduled', 'manual', 'pre_restore'], 'description' => 'pre_restore marks a safety backup taken automatically before an in-place restore overwrote the volume.'],
                     'started_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
                     'finished_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
                     'duration_seconds' => ['type' => ['integer', 'null']],
@@ -200,9 +200,10 @@ class OpenApiController extends Controller
                 'required' => ['selected_backup_key', 'mode'],
                 'properties' => [
                     'selected_backup_key' => ['type' => 'string', 'maxLength' => 2048, 'description' => 'Object key of the backup to restore. Must be one of the keys returned by GET /backup-jobs/{id}/backups; it is checked against the destination listing (fail-closed), so arbitrary or path-traversal keys such as "../../etc/passwd" are rejected.'],
-                    'mode' => ['type' => 'string', 'enum' => ['new_volume']],
-                    'target_volume_name' => ['type' => ['string', 'null'], 'pattern' => '^[A-Za-z0-9_.-]+$', 'maxLength' => 128, 'description' => 'Name for the new volume created by the restore. Must match ^[A-Za-z0-9_.-]+$.'],
-                    'confirmation_text' => ['type' => ['string', 'null']],
+                    'mode' => ['type' => 'string', 'enum' => ['new_volume', 'inplace', 'safe_inplace'], 'description' => 'new_volume restores into a fresh volume (never destructive). inplace and safe_inplace overwrite the source volume and are only valid for Docker-volume sources; safe_inplace also stops the affected containers during the restore and restarts them afterwards. Both in-place modes require confirmation_text to equal the source volume name.'],
+                    'target_volume_name' => ['type' => ['string', 'null'], 'pattern' => '^[A-Za-z0-9_.-]+$', 'maxLength' => 128, 'description' => 'Name for the new volume created by a new_volume restore. Must match ^[A-Za-z0-9_.-]+$. Ignored by the in-place modes, which always target the source volume.'],
+                    'backup_before_overwrite' => ['type' => ['boolean', 'null'], 'description' => 'Only honoured by the destructive in-place modes: when true, a safety backup of the source volume is taken before it is overwritten. Ignored for new_volume.'],
+                    'confirmation_text' => ['type' => ['string', 'null'], 'description' => 'Required for the in-place modes: must equal the source volume name to arm the destructive restore.'],
                 ],
             ],
             'DestinationCreateRequest' => [

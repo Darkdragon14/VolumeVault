@@ -40,21 +40,41 @@ class RunBackup
 
     public function handle(BackupRun $run): void
     {
+        $startedAt = now();
+
+        // Atomically claim the run: flip a non-terminal row → RUNNING in one
+        // conditional UPDATE. A lock loser requeued by WithoutOverlapping may be
+        // delivered after stale-run reconciliation marked the row failed; checking
+        // the in-memory status then saving would race that and re-run it. If the
+        // row is already terminal the update matches zero rows and we bail.
+        $claimed = BackupRun::query()
+            ->whereKey($run->getKey())
+            ->whereNotIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
+            ->update([
+                'status' => BackupRun::STATUS_RUNNING,
+                'started_at' => $startedAt,
+            ]);
+
+        if ($claimed === 0) {
+            return;
+        }
+
+        $run->refresh();
         $run->loadMissing('job.destination');
 
         $job = $run->job;
-        $startedAt = now();
         $stoppedContainers = [];
 
-        $run->forceFill([
-            'status' => BackupRun::STATUS_RUNNING,
-            'started_at' => $startedAt,
-        ])->save();
-
-        $job->forceFill([
-            'status' => BackupJob::STATUS_RUNNING,
-            'last_run_at' => $startedAt,
-        ])->save();
+        // A pre-restore safety backup borrows the full backup pipeline but must
+        // stay invisible to the job's lifecycle: touching the job here would, for
+        // a manually paused job, flip it to running/active and clear pause_reason,
+        // silently unpausing it. Only real scheduled/manual runs drive job state.
+        if (! $this->isPreRestore($run)) {
+            $job->forceFill([
+                'status' => BackupJob::STATUS_RUNNING,
+                'last_run_at' => $startedAt,
+            ])->save();
+        }
 
         ActivityLog::record('backup_run_started', 'Backup run started.', $run, [
             'backup_job_id' => $job->id,
@@ -118,13 +138,17 @@ class RunBackup
             // next_run_at is owned by CreateBackupRun, which already advanced it to
             // the next theoretical slot when this run was queued. Recomputing it here
             // from finishedAt would skip the slot whenever a run overruns its interval.
-            $job->forceFill([
-                'status' => BackupJob::STATUS_ACTIVE,
-                'last_success_at' => $finishedAt,
-                'last_error' => null,
-                'last_error_at' => null,
-                'pause_reason' => null,
-            ])->save();
+            // Skipped for a pre-restore safety backup so it never unpauses or
+            // reschedules the job (see the start-of-run note).
+            if (! $this->isPreRestore($run)) {
+                $job->forceFill([
+                    'status' => BackupJob::STATUS_ACTIVE,
+                    'last_success_at' => $finishedAt,
+                    'last_error' => null,
+                    'last_error_at' => null,
+                    'pause_reason' => null,
+                ])->save();
+            }
 
             $this->recordBackupArchiveMetadata($run->fresh(['job.destination']));
             $this->sendNotifications($run->fresh(['job.destination']));
@@ -230,35 +254,60 @@ class RunBackup
     }
 
     /**
+     * A safety backup taken automatically before an in-place restore overwrites a
+     * volume. It reuses this pipeline for the actual tar+upload but must not drive
+     * the job's lifecycle (status, pause, scheduling).
+     */
+    private function isPreRestore(BackupRun $run): bool
+    {
+        return $run->trigger === BackupRun::TRIGGER_PRE_RESTORE;
+    }
+
+    /**
      * Force a run into the FAILED state and reschedule its job.
      *
      * Shared by the in-process catch block, the queue job's failed() hook
      * (worker timeout / restart) and the stale-run reconciliation command.
-     * Idempotent: runs that already reached a terminal state are left untouched.
+     *
+     * The transition is a conditional UPDATE (non-terminal → failed), not an
+     * in-memory check + save: reconciliation holds models it materialized earlier
+     * and the worker may finish a run between that snapshot and this call. The
+     * condition makes the write lose that race rather than overwrite a
+     * just-succeeded run. Returns whether it actually transitioned so callers can
+     * tell a genuinely-failed stuck run from a no-op on an already-terminal run.
      */
-    public function markFailed(BackupRun $run, Throwable $exception): void
+    public function markFailed(BackupRun $run, Throwable $exception): bool
     {
         $run->loadMissing('job.destination');
-
-        if (in_array($run->status, [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED], true)) {
-            return;
-        }
 
         $job = $run->job;
         $finishedAt = now();
         $startedAt = $run->started_at ?? $finishedAt;
         $message = str($exception->getMessage() ?: 'Backup failed.')->limit(1000)->toString();
 
-        $run->forceFill([
-            'status' => BackupRun::STATUS_FAILED,
-            'finished_at' => $finishedAt,
-            'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
-            'error_message' => $message,
-        ])->save();
+        $transitioned = BackupRun::query()
+            ->whereKey($run->getKey())
+            ->whereNotIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
+            ->update([
+                'status' => BackupRun::STATUS_FAILED,
+                'finished_at' => $finishedAt,
+                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
+                'error_message' => $message,
+            ]);
+
+        if ($transitioned === 0) {
+            return false;
+        }
+
+        $run->refresh();
 
         $this->appendRunLog->handle($run, $message);
 
-        if ($job) {
+        // A failed pre-restore safety backup must not flip the job to error or
+        // reschedule it — the failure belongs to the restore, which aborts and is
+        // surfaced through its own RestoreRun. Leaving the job (incl. a paused one)
+        // untouched keeps its lifecycle intact.
+        if ($job && ! $this->isPreRestore($run)) {
             $job->forceFill([
                 'status' => BackupJob::STATUS_ERROR,
                 'last_error' => $message,
@@ -277,6 +326,8 @@ class RunBackup
         ]);
 
         $this->sendNotifications($run->fresh(['job.destination']));
+
+        return true;
     }
 
     private function recordBackupArchiveMetadata(BackupRun $run): void

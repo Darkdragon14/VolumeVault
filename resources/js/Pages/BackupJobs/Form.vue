@@ -467,7 +467,7 @@ const submit = () => {
                                 <span v-if="channel.is_default" class="rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-xs text-sky-700 dark:border-sky-300/30 dark:bg-sky-400/10 dark:text-sky-100">{{ t('Default') }}</span>
                                 <span v-if="!channel.is_active" class="rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-100">{{ t('Inactive') }}</span>
                             </span>
-                            <span class="mt-1 block text-slate-400">{{ channel.service }} / {{ channel.notification_level === 'info' ? t('Every backup run') : t('Errors only') }}</span>
+                            <span class="mt-1 block text-slate-400">{{ channel.service }} / {{ channel.notification_level === 'info' ? t('Every backup and restore run') : t('Errors only') }}</span>
                         </span>
                         <button
                             type="button"

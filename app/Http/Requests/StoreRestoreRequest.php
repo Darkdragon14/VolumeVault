@@ -27,6 +27,7 @@ class StoreRestoreRequest extends FormRequest
                 RestoreRun::MODE_SAFE_INPLACE,
             ])],
             'target_volume_name' => ['nullable', 'string', 'max:128', 'regex:/^[A-Za-z0-9_.-]+$/'],
+            'backup_before_overwrite' => ['nullable', 'boolean'],
             'confirmation_text' => ['nullable', 'string', 'max:255'],
         ];
     }
@@ -34,12 +35,48 @@ class StoreRestoreRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            if ($validator->errors()->has('selected_backup_key')) {
-                return;
+            if (! $validator->errors()->has('selected_backup_key')) {
+                $this->validateSelectedBackupKey($validator);
             }
 
-            $this->validateSelectedBackupKey($validator);
+            $this->validateInPlaceMode($validator);
         });
+    }
+
+    /**
+     * Guard the destructive in-place modes.
+     *
+     * They overwrite the source volume itself, so they are restricted to
+     * Docker-volume sources and require the user to retype the exact target
+     * (= source) volume name — the same "type the name to arm it" pattern used
+     * for dangerous actions elsewhere. Both in-place modes are equally
+     * destructive to the data, so both demand the confirmation.
+     */
+    private function validateInPlaceMode(Validator $validator): void
+    {
+        $mode = (string) $this->input('mode', '');
+
+        if (! in_array($mode, [RestoreRun::MODE_INPLACE, RestoreRun::MODE_SAFE_INPLACE], true)) {
+            return;
+        }
+
+        $backupJob = $this->route('backupJob');
+
+        if (! $backupJob instanceof BackupJob) {
+            $validator->errors()->add('mode', 'Unable to resolve the backup job for this restore.');
+
+            return;
+        }
+
+        if (! $backupJob->isDockerVolumeSource()) {
+            $validator->errors()->add('mode', 'In-place restore is only available for Docker volume sources.');
+
+            return;
+        }
+
+        if ((string) $this->input('confirmation_text', '') !== (string) $backupJob->volume_name) {
+            $validator->errors()->add('confirmation_text', 'Type the exact volume name to confirm this in-place restore.');
+        }
     }
 
     /**

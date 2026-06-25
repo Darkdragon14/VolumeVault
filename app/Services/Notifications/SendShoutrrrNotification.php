@@ -10,6 +10,7 @@ use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\NotificationChannel;
+use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Support\FormatBytes;
@@ -26,7 +27,7 @@ class SendShoutrrrNotification
 
     public function sendBackupRunFinished(BackupRun $run): void
     {
-        $run->loadMissing('job.destination');
+        $run->loadMissing('job.destination', 'initiatedBy');
         $failed = $run->status === BackupRun::STATUS_FAILED;
 
         foreach ($this->resolveNotificationChannels->forJob($run->job) as $channel) {
@@ -37,6 +38,30 @@ class SendShoutrrrNotification
             $title = $this->backupRunTitle($run, $channel);
             $message = $this->backupRunMessage($run, $channel);
             $this->send($channel, $title, $message);
+        }
+    }
+
+    /**
+     * Notify the backup job's channels about a restore lifecycle event
+     * (started / succeeded / failed). Reuses the job's channels and its
+     * notifications_enabled toggle. Started and succeeded are info-level
+     * events (info channels only); a failure reaches every channel.
+     */
+    public function sendRestoreRun(RestoreRun $run): void
+    {
+        $run->loadMissing('job.destination', 'initiatedBy');
+        $failed = $run->status === RestoreRun::STATUS_FAILED;
+
+        if ($run->job === null) {
+            return;
+        }
+
+        foreach ($this->resolveNotificationChannels->forJob($run->job) as $channel) {
+            if (! $failed && $channel->notification_level !== NotificationChannel::LEVEL_INFO) {
+                continue;
+            }
+
+            $this->send($channel, $this->restoreRunTitle($run, $channel), $this->restoreRunMessage($run, $channel));
         }
     }
 
@@ -159,6 +184,45 @@ class SendShoutrrrNotification
         return $this->renderTemplate($channel->title_template, $run) ?: $default;
     }
 
+    private function restoreRunTitle(RestoreRun $run, NotificationChannel $channel): string
+    {
+        $default = match ($run->status) {
+            RestoreRun::STATUS_SUCCESS => 'VolumeVault restore succeeded',
+            RestoreRun::STATUS_FAILED => 'VolumeVault restore failed',
+            default => 'VolumeVault restore started',
+        };
+
+        return $this->renderRestoreTemplate($channel->restore_title_template, $run) ?: $default;
+    }
+
+    private function restoreRunMessage(RestoreRun $run, NotificationChannel $channel): string
+    {
+        $customMessage = $this->renderRestoreTemplate($channel->restore_body_template, $run);
+
+        if ($customMessage !== '') {
+            return $customMessage;
+        }
+
+        $lines = [
+            'Job: '.($run->job?->name ?? 'Unknown'),
+            'Source volume: '.$run->source_volume_name,
+            'Target volume: '.$run->target_volume_name,
+            'Mode: '.$run->mode,
+            'Status: '.$run->status,
+            'Initiated by: '.($run->initiatedBy?->name ?? 'Unknown'),
+        ];
+
+        if ($run->duration_seconds !== null) {
+            $lines[] = 'Duration: '.$run->duration_seconds.'s';
+        }
+
+        if ($run->error_message) {
+            $lines[] = 'Error: '.$run->error_message;
+        }
+
+        return implode("\n", $lines);
+    }
+
     private function alertTitle(Alert $alert, string $type): string
     {
         if ($type === 'resolved') {
@@ -183,6 +247,7 @@ class SendShoutrrrNotification
             'Destination: '.($job->destination?->name ?? 'Unknown'),
             'Status: '.$run->status,
             'Trigger: '.$run->trigger,
+            'Initiated by: '.($run->initiatedBy?->name ?? 'Unknown'),
         ];
 
         if ($run->duration_seconds !== null) {
@@ -240,18 +305,46 @@ class SendShoutrrrNotification
         }
 
         $job = $run->job;
-        $values = [
+
+        return $this->applyTokens($template, [
             'job' => $job->name,
             'volume' => $job->sourceName(),
             'source' => $job->sourceName(),
             'destination' => $job->destination?->name ?? 'Unknown',
             'status' => $run->status,
             'trigger' => $run->trigger,
+            'user' => $run->initiatedBy?->name ?? '',
             'duration' => $run->duration_seconds !== null ? $run->duration_seconds.'s' : '',
             'backup_size' => $run->backup_size_bytes !== null ? FormatBytes::format($run->backup_size_bytes) : '',
             'error' => $run->error_message ?? '',
-        ];
+        ]);
+    }
 
+    private function renderRestoreTemplate(?string $template, RestoreRun $run): string
+    {
+        $template = trim((string) $template);
+
+        if ($template === '') {
+            return '';
+        }
+
+        return $this->applyTokens($template, [
+            'job' => $run->job?->name ?? 'Unknown',
+            'source' => $run->source_volume_name,
+            'target' => $run->target_volume_name,
+            'mode' => $run->mode,
+            'status' => $run->status,
+            'user' => $run->initiatedBy?->name ?? '',
+            'duration' => $run->duration_seconds !== null ? $run->duration_seconds.'s' : '',
+            'error' => $run->error_message ?? '',
+        ]);
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     */
+    private function applyTokens(string $template, array $values): string
+    {
         return preg_replace_callback('/{{\s*([a-z_]+)\s*}}/i', fn ($matches) => $values[strtolower($matches[1])] ?? $matches[0], $template);
     }
 

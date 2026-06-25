@@ -24,8 +24,11 @@ class BackupRun extends Model
 
     public const TRIGGER_MANUAL = 'manual';
 
+    public const TRIGGER_PRE_RESTORE = 'pre_restore';
+
     protected $fillable = [
         'backup_job_id',
+        'initiated_by_user_id',
         'status',
         'trigger',
         'started_at',
@@ -53,5 +56,10 @@ class BackupRun extends Model
     public function job(): BelongsTo
     {
         return $this->belongsTo(BackupJob::class, 'backup_job_id');
+    }
+
+    public function initiatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'initiated_by_user_id');
     }
 }

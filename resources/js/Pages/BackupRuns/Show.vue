@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
 
-defineProps<{ run: any }>();
+const props = defineProps<{ run: any }>();
 
 const { t, formatDate } = useI18n();
+const page = usePage();
+const can = page.props.can as { runDockerActions?: boolean };
+
+const restoreHref = `/backup-jobs/${props.run.job.id}/restore?backup=${encodeURIComponent(props.run.backup_key ?? '')}`;
 </script>
 
 <template>
     <Head :title="t('Backup run #{id}', { id: run.id })" />
     <AppLayout :title="t('Backup run #{id}', { id: run.id })" :subtitle="t('Inspect container output, status, timing, and errors for this backup run.')">
         <template #actions>
+            <Link v-if="can.runDockerActions && run.status === 'success' && run.backup_key" :href="restoreHref" class="btn-secondary">{{ t('Restore this backup') }}</Link>
             <Link :href="`/backup-jobs/${run.job.id}`" class="btn-secondary">{{ t('Back to job') }}</Link>
         </template>
 
@@ -22,6 +27,7 @@ const { t, formatDate } = useI18n();
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Job') }}</dt><dd class="mt-1 break-words text-white">{{ run.job.name }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="run.status" /></dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Trigger') }}</dt><dd class="mt-1 text-white">{{ t(run.trigger) }}</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Initiated by') }}</dt><dd class="mt-1 break-all text-white">{{ run.initiated_by ? `${run.initiated_by.name} (${run.initiated_by.email})` : '—' }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Duration') }}</dt><dd class="mt-1 text-white">{{ run.duration_seconds ?? '-' }}s</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Started') }}</dt><dd class="mt-1 text-white">{{ formatDate(run.started_at) }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Finished') }}</dt><dd class="mt-1 text-white">{{ formatDate(run.finished_at) }}</dd></div>

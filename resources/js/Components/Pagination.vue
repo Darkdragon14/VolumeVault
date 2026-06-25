@@ -8,9 +8,12 @@ const props = defineProps<{
     baseUrl: string;
     /** Extra query params to preserve (search, filters, etc.) */
     extraParams?: Record<string, string | number | undefined>;
+    /** Query param name carrying the page number (lets several paginators coexist on one page). */
+    pageParam?: string;
 }>();
 
 const { t } = useI18n();
+const pageKey = computed(() => props.pageParam ?? 'page');
 const meta = computed(() => props.data.meta);
 const totalPages = computed(() => meta.value.last_page);
 const currentPage = computed(() => meta.value.current_page);
@@ -21,25 +24,43 @@ const perPageLabel = (value: number) => value === 0 ? t('All') : String(value);
 
 const currentPerPage = computed(() => meta.value.per_page === 0 ? 0 : meta.value.per_page);
 
+// Keep query params this paginator does not own (e.g. a sibling paginator's
+// page on the same page, active tab, filters) so paging one list never resets
+// another. The managed keys passed in `overrides` take precedence.
+function buildQuery(overrides: Record<string, string | number>) {
+    const existing = Object.fromEntries(new URLSearchParams(window.location.search));
+    return { ...existing, ...props.extraParams, ...overrides };
+}
+
 function goToPage(page: number) {
     if (page < 1 || page > totalPages.value || page === currentPage.value) return;
 
-    router.get(props.baseUrl, {
-        ...props.extraParams,
-        page,
+    router.get(props.baseUrl, buildQuery({
+        [pageKey.value]: page,
         per_page: currentPerPage.value === 0 ? 'all' : currentPerPage.value,
-    }, { preserveState: true, replace: true });
+    }), { preserveState: true, preserveScroll: true, replace: true });
 }
 
 function changePerPage(event: Event) {
     const value = (event.target as HTMLSelectElement).value;
     const perPage = value === 'all' || value === '0' ? 'all' : Number(value);
 
+    // per_page is shared by every paginator on the page, so a new page size can
+    // push a sibling list (kept on its old page) out of range and show a false
+    // empty state. Reset all paginators to page 1 by dropping every *_page param.
+    const existing = Object.fromEntries(new URLSearchParams(window.location.search));
+    for (const key of Object.keys(existing)) {
+        if (key === 'page' || key.endsWith('_page')) {
+            delete existing[key];
+        }
+    }
+
     router.get(props.baseUrl, {
+        ...existing,
         ...props.extraParams,
-        page: 1,
+        [pageKey.value]: 1,
         per_page: perPage,
-    }, { preserveState: true, replace: true });
+    }, { preserveState: true, preserveScroll: true, replace: true });
 }
 
 const visiblePages = computed(() => {

@@ -183,7 +183,7 @@ class NotificationChannelTest extends TestCase
         $dockerProcess->shouldReceive('run')
             ->once()
             ->with(
-                Mockery::on(fn (array $command) => in_array("Job: Nightly\nSource: app_data\nDestination: S3\nStatus: success\nTrigger: manual\nDuration: 3s\nBackup size: 2 KB", $command, true)),
+                Mockery::on(fn (array $command) => in_array("Job: Nightly\nSource: app_data\nDestination: S3\nStatus: success\nTrigger: manual\nInitiated by: Unknown\nDuration: 3s\nBackup size: 2 KB", $command, true)),
                 60,
                 Mockery::any(),
             )
@@ -265,6 +265,41 @@ class NotificationChannelTest extends TestCase
         app(SendShoutrrrNotification::class)->sendBackupRunFinished($run);
     }
 
+    public function test_custom_template_renders_the_user_token(): void
+    {
+        [$job] = $this->createJobs();
+        $user = User::factory()->admin()->create(['name' => 'Ada Lovelace']);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'initiated_by_user_id' => $user->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'duration_seconds' => 3,
+        ]);
+
+        $channel = NotificationChannel::create([
+            'name' => 'Ntfy',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/all',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'body_template' => '{{ status }} backup by {{ user }}',
+        ]);
+        $job->notificationChannels()->attach($channel);
+
+        $dockerProcess = Mockery::mock(DockerProcess::class);
+        $dockerProcess->shouldReceive('run')
+            ->once()
+            ->with(
+                Mockery::on(fn (array $command) => in_array('success backup by Ada Lovelace', $command, true)),
+                60,
+                Mockery::any(),
+            )
+            ->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $this->app->instance(DockerProcess::class, $dockerProcess);
+
+        app(SendShoutrrrNotification::class)->sendBackupRunFinished($run);
+    }
+
     public function test_setting_default_channel_clears_previous_default(): void
     {
         $admin = User::factory()->admin()->create();
@@ -295,6 +330,46 @@ class NotificationChannelTest extends TestCase
 
         $this->assertFalse($first->fresh()->is_default);
         $this->assertTrue($second->fresh()->is_default);
+    }
+
+    public function test_clearing_custom_templates_wipes_the_saved_values(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Ntfy',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/all',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'title_template' => 'Backup {{ status }}',
+            'body_template' => 'Body',
+            'restore_title_template' => 'Restore {{ status }}',
+            'restore_body_template' => 'Restore body',
+        ]);
+
+        // Disabling the custom-message toggles submits empty strings, which the
+        // ConvertEmptyStringsToNull middleware turns into null. The update must
+        // wipe the stored templates rather than silently keep them.
+        $this->actingAs($admin)
+            ->put('/notifications/'.$channel->id, [
+                'name' => 'Ntfy',
+                'service' => NotificationChannel::SERVICE_ADVANCED,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'title_template' => '',
+                'body_template' => '',
+                'restore_title_template' => '',
+                'restore_body_template' => '',
+                'is_active' => true,
+                'config' => [],
+            ])
+            ->assertRedirect('/notifications');
+
+        $channel->refresh();
+        $this->assertNull($channel->title_template);
+        $this->assertNull($channel->body_template);
+        $this->assertNull($channel->restore_title_template);
+        $this->assertNull($channel->restore_body_template);
+        // The saved encrypted URL is untouched when no new config is provided.
+        $this->assertSame('ntfy://ntfy.sh/all', $channel->url);
     }
 
     public function test_admin_can_toggle_notification_channel_active_state_inline(): void

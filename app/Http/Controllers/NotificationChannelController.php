@@ -26,6 +26,7 @@ class NotificationChannelController extends Controller
             $query->where('name', 'like', "%{$search}%");
         }
         $query->latest();
+
         return Inertia::render('Notifications/Index', [
             'channels' => $this->paginateForInertia($query, $perPage, fn (NotificationChannel $c): array => $c->safeForFrontend()),
             'defaultPerPage' => $request->user()->default_per_page ?? 10,
@@ -121,6 +122,8 @@ class NotificationChannelController extends Controller
             'scope' => ['nullable', 'string', Rule::in(NotificationChannel::SCOPES)],
             'title_template' => ['nullable', 'string', 'max:255'],
             'body_template' => ['nullable', 'string', 'max:4000'],
+            'restore_title_template' => ['nullable', 'string', 'max:255'],
+            'restore_body_template' => ['nullable', 'string', 'max:4000'],
             'is_active' => ['boolean'],
             'is_default' => ['boolean'],
             'config' => ['nullable', 'array'],
@@ -129,17 +132,24 @@ class NotificationChannelController extends Controller
 
     private function payload(array $data, Request $request): array
     {
-        return array_filter([
+        // Filter out null url/scope so an update without a new URL keeps the saved
+        // encrypted value. Template fields are intentionally excluded from the filter:
+        // clearing a template sends an empty string, which Laravel coerces to null, and
+        // that null must reach the database to actually wipe the previous template.
+        return array_merge(array_filter([
             'name' => $data['name'],
             'service' => $data['service'],
             'url' => $data['url'] ?? null,
             'notification_level' => $data['notification_level'],
             'scope' => $data['scope'] ?? NotificationChannel::SCOPE_ALL,
-            'title_template' => $data['title_template'] ?? null,
-            'body_template' => $data['body_template'] ?? null,
             'is_active' => $request->boolean('is_active', true),
             'is_default' => $request->boolean('is_default'),
-        ], fn ($value) => $value !== null);
+        ], fn ($value) => $value !== null), [
+            'title_template' => $data['title_template'] ?? null,
+            'body_template' => $data['body_template'] ?? null,
+            'restore_title_template' => $data['restore_title_template'] ?? null,
+            'restore_body_template' => $data['restore_body_template'] ?? null,
+        ]);
     }
 
     private function buildUrl(ShoutrrrUrlBuilder $urlBuilder, string $service, array $config): string
@@ -164,5 +174,4 @@ class NotificationChannelController extends Controller
     {
         return collect($config)->contains(fn ($value) => filled($value));
     }
-
 }

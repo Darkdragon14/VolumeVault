@@ -1,6 +1,22 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Annak nyomon követése, ki indította az egyes mentéseket',
+        'description' => 'A mentések mostantól rögzítik, melyik felhasználó indította őket. A kézi futtatások (a felületről vagy az API-ból) és a teljes verem mentései a bejelentkezett felhasználóhoz vannak rendelve, a helyben történő visszaállítás előtt készített biztonsági mentés a visszaállítást indító felhasználót örökli, az ütemezett futtatások pedig hozzárendelés nélkül maradnak. A kezdeményező megjelenik a feladat futtatási előzményeiben és a mentés részleteiben, szerepel a mentési értesítésekben, és új {{ user }} tokenként elérhető az egyéni értesítési sablonokhoz.',
+    ],
+    'restore_history_on_job' => [
+        'title' => 'Visszaállítási előzmények a biztonsági mentési feladatoknál',
+        'description' => 'Minden biztonsági mentési feladat oldala mostantól két fülre osztja az előzményeket: a „Futási előzmények" a feladat biztonsági mentéseit sorolja fel, egy új „Visszaállítási előzmények" fül pedig az adott feladathoz végrehajtott összes visszaállítást – állapottal, móddal, forrás- és célkötettel, kezdési idővel, időtartammal és a teljes visszaállítási részletekre mutató hivatkozással. Mindkét fül mostantól lapozható, így a hosszú előzmények már nem korlátozódnak 50 sorra.',
+    ],
+    'restore_in_place_modes' => [
+        'title' => 'Helyben visszaállítási módok',
+        'description' => 'A visszaállítási varázsló mostantól közvetlenül a forrás Docker kötetébe tud visszaállítani egy mentést. A „Helyben visszaállítás" a név újragépelésével történő megerősítés után kiüríti és lecseréli a kötetet; a „Biztonságos helyben visszaállítás" a visszaállítás alatt ezenfelül leállítja a kötetet használó konténereket, majd a végén újraindítja őket. A mentésválasztó mostantól alapértelmezetten a kiválasztott feladat archívumait mutatja, név és dátum szerinti szűrőket ad, kiemeli a legújabb archívumot, és a „Mentés visszaállítása" gomb közvetlenül egy mentési futásból nyitja meg a varázslót. Mindkét helyben visszaállítási mód opcionálisan elmentheti a kötet jelenlegi tartalmát a felülírás előtt; ha ez a biztonsági mentés sikertelen, a visszaállítás megszakad.',
+    ],
+    'restore_notifications' => [
+        'title' => 'Visszaállítási értesítések',
+        'description' => 'A VolumeVault mostantól értesít, amikor egy visszaállítás elindul, sikerül vagy meghiúsul, és ehhez a mentési feladathoz már beállított értesítési csatornákat használja. Az indítási és sikerüzenetek a minden futtatást fogadó csatornákra kerülnek, míg a hibák minden csatornát elérnek. Egy értesítési hiba soha nem szakítja meg magát a visszaállítást.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Egy teljes stack mentése egyszerre',
         'description' => 'A Stackek oldal mostantól egyetlen kattintással menthet egy teljes stacket. A teljesen beállított stackeknél megjelenik az "Összes feladat futtatása" gomb, amely minden feladathoz sorba állít egy futtatást; a nem lefedett kötetekkel rendelkező stackeknél a "Stack mentése" ablak minden feladat nélküli kötethez létrehoz egy napi (vagy egyéni) mentési feladatot, majd sorba állít egy mentést a teljes stackhez. Ugyanez a művelet elérhető az API-n keresztül is (POST /stacks/backup).',

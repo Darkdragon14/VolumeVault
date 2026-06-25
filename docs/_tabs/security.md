@@ -66,7 +66,7 @@ To migrate an installation, start a fresh VolumeVault instance, choose `Import e
 
 - Always test restore before trusting backups.
 - Restore-to-new-volume is safest because it does not overwrite the source volume.
-- In-place restore can overwrite data and should be used carefully when implemented later.
+- In-place restore overwrites the source Docker volume and requires typed confirmation of that volume name. Use safe in-place restore when containers using the volume should be stopped during the overwrite and restarted afterward.
 - For databases, application-consistent backups may require stopping containers or using database-native dumps.
 - Optional job setting `Stop containers before backup` stops containers using the volume before backup and restarts them afterward.
 - Local backup destinations require a filesystem path shared by VolumeVault and the temporary Offen container.

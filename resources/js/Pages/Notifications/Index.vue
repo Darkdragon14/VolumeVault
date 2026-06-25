@@ -84,7 +84,7 @@ const toggleChannelActive = (channel: any) => router.patch(`/notifications/${cha
                         <dl class="grid gap-3 text-sm">
                             <div class="grid grid-cols-2 gap-3">
                                 <div><dt class="text-xs uppercase text-slate-500">{{ t('Jobs') }}</dt><dd class="mt-1 text-slate-200">{{ t('Used by {count} jobs', { count: channel.backup_job_ids.length }) }}</dd></div>
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Level') }}</dt><dd class="mt-1 text-slate-200">{{ channel.notification_level === 'info' ? t('Every backup run') : t('Errors only') }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Level') }}</dt><dd class="mt-1 text-slate-200">{{ channel.notification_level === 'info' ? t('Every backup and restore run') : t('Errors only') }}</dd></div>
                             </div>
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Last test') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(channel.last_tested_at) }}</dd><dd v-if="channel.last_test_status === 'failed'" class="mt-1 break-words text-xs text-rose-300">{{ channel.last_test_error }}</dd></div>
                         </dl>
@@ -118,7 +118,7 @@ const toggleChannelActive = (channel: any) => router.patch(`/notifications/${cha
                             </td>
                             <td class="px-4 py-3 text-slate-300">{{ channel.service }}</td>
                             <td class="px-4 py-3 text-slate-300">{{ t('Used by {count} jobs', { count: channel.backup_job_ids.length }) }}</td>
-                            <td class="px-4 py-3 text-slate-300">{{ channel.notification_level === 'info' ? t('Every backup run') : t('Errors only') }}</td>
+                            <td class="px-4 py-3 text-slate-300">{{ channel.notification_level === 'info' ? t('Every backup and restore run') : t('Errors only') }}</td>
                             <td class="px-4 py-3">
                                 <button
                                     type="button"

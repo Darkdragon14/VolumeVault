@@ -1,6 +1,22 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Nachverfolgen, wer jede Sicherung ausgelöst hat',
+        'description' => 'Sicherungen erfassen jetzt, welcher Benutzer sie gestartet hat. Manuelle Durchläufe (über die Oberfläche oder die API) und Sicherungen eines ganzen Stacks werden dem angemeldeten Benutzer zugeordnet, die Sicherheitssicherung vor einer In-Place-Wiederherstellung übernimmt den Benutzer, der die Wiederherstellung gestartet hat, und geplante Durchläufe bleiben ohne Zuordnung. Der Initiator erscheint im Ausführungsverlauf des Auftrags und in den Details der Sicherung, wird in Sicherungsbenachrichtigungen aufgenommen und steht als neues Token {{ user }} für benutzerdefinierte Benachrichtigungsvorlagen zur Verfügung.',
+    ],
+    'restore_history_on_job' => [
+        'title' => 'Wiederherstellungsverlauf bei Backup-Aufträgen',
+        'description' => 'Die Seite jedes Backup-Auftrags teilt ihren Verlauf jetzt in zwei Registerkarten auf: „Verlauf" listet die Backups des Auftrags auf, und eine neue Registerkarte „Wiederherstellungsverlauf" listet jede für diesen Auftrag durchgeführte Wiederherstellung auf – mit Status, Modus, Quell- und Zielvolume, Startzeit, Dauer und einem Link zu den vollständigen Wiederherstellungsdetails. Beide Registerkarten sind jetzt paginiert, sodass lange Verläufe nicht mehr auf 50 Zeilen begrenzt sind.',
+    ],
+    'restore_in_place_modes' => [
+        'title' => 'Modi für direkte Wiederherstellung',
+        'description' => 'Der Wiederherstellungsassistent kann ein Backup jetzt direkt in sein Docker-Quellvolume zurückspielen. „Direkt wiederherstellen" leert und ersetzt das Volume, nachdem du seinen Namen zur Bestätigung erneut eingegeben hast; „Sichere direkte Wiederherstellung" stoppt während der Wiederherstellung zusätzlich die Container, die das Volume verwenden, und startet sie danach neu. Die Backup-Auswahl zeigt jetzt standardmäßig die Archive des gewählten Auftrags, bietet Filter nach Name und Datum, hebt das neueste Archiv hervor, und eine Schaltfläche „Dieses Backup wiederherstellen" öffnet den Assistenten direkt aus einem Backup-Lauf. Beide direkten Wiederherstellungsmodi können vor dem Überschreiben optional eine Sicherheitskopie des aktuellen Volume-Inhalts erstellen; schlägt diese Sicherung fehl, wird die Wiederherstellung abgebrochen.',
+    ],
+    'restore_notifications' => [
+        'title' => 'Benachrichtigungen bei Wiederherstellung',
+        'description' => 'VolumeVault benachrichtigt dich jetzt, wenn eine Wiederherstellung startet, erfolgreich ist oder fehlschlägt, und nutzt dafür die bereits für den Backup-Auftrag konfigurierten Benachrichtigungskanäle. Start- und Erfolgsmeldungen gehen an Kanäle, die jeden Lauf erhalten, während Fehler an alle Kanäle gehen. Ein Benachrichtigungsproblem unterbricht die Wiederherstellung selbst nie.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Ganzen Stack auf einmal sichern',
         'description' => 'Die Stack-Seite kann jetzt einen ganzen Stack mit einem Klick sichern. Vollständig konfigurierte Stacks erhalten eine Schaltfläche "Alle Jobs ausführen", die für jeden Job eine Sicherung einreiht; Stacks mit nicht abgedeckten Volumes erhalten einen Dialog "Stack sichern", der für jedes Volume ohne Job einen täglichen (oder benutzerdefinierten) Backup-Job anlegt und anschließend eine Sicherung für den gesamten Stack einreiht. Dieselbe Operation ist auch über die API verfügbar (POST /stacks/backup).',

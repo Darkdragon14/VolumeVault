@@ -22,10 +22,10 @@ trait PaginateWithPreference
             : $userPerPage;
     }
 
-    private function paginateForInertia(mixed $query, int $perPage, ?callable $map = null): array
+    private function paginateForInertia(mixed $query, int $perPage, ?callable $map = null, string $pageName = 'page'): array
     {
         if ($perPage > 0) {
-            $paginator = $query->paginate($perPage)->withQueryString();
+            $paginator = $query->paginate($perPage, ['*'], $pageName)->withQueryString();
 
             if ($map) {
                 $paginator->through($map);

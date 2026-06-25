@@ -13,15 +13,21 @@ const props = defineProps<{
 const editing = computed(() => Boolean(props.channel));
 const { t } = useI18n();
 const useCustomMessage = ref(Boolean(props.channel?.title_template || props.channel?.body_template));
-const templateTokens = '{{ job }}, {{ source }}, {{ volume }}, {{ destination }}, {{ status }}, {{ trigger }}, {{ duration }}, {{ backup_size }}, {{ error }}';
+const useCustomRestoreMessage = ref(Boolean(props.channel?.restore_title_template || props.channel?.restore_body_template));
+const templateTokens = '{{ job }}, {{ source }}, {{ volume }}, {{ destination }}, {{ status }}, {{ trigger }}, {{ user }}, {{ duration }}, {{ backup_size }}, {{ error }}';
 const titleTemplatePlaceholder = 'VolumeVault: {{ status }} backup for {{ job }}';
 const bodyTemplatePlaceholder = 'Job: {{ job }}\nSource: {{ source }}\nDestination: {{ destination }}\nStatus: {{ status }}\nDuration: {{ duration }}';
+const restoreTemplateTokens = '{{ job }}, {{ source }}, {{ target }}, {{ mode }}, {{ status }}, {{ user }}, {{ duration }}, {{ error }}';
+const restoreTitleTemplatePlaceholder = 'VolumeVault: {{ status }} restore for {{ job }}';
+const restoreBodyTemplatePlaceholder = 'Job: {{ job }}\nSource: {{ source }}\nTarget: {{ target }}\nMode: {{ mode }}\nStatus: {{ status }}';
 const form = useForm({
     name: props.channel?.name || '',
     service: props.channel?.service || 'discord',
     notification_level: props.channel?.notification_level || 'error',
     title_template: props.channel?.title_template || '',
     body_template: props.channel?.body_template || '',
+    restore_title_template: props.channel?.restore_title_template || '',
+    restore_body_template: props.channel?.restore_body_template || '',
     is_active: props.channel?.is_active ?? true,
     is_default: props.channel?.is_default ?? false,
     config: {} as Record<string, any>,
@@ -44,6 +50,10 @@ const toggleCustomMessage = () => {
     useCustomMessage.value = !useCustomMessage.value;
 };
 
+const toggleCustomRestoreMessage = () => {
+    useCustomRestoreMessage.value = !useCustomRestoreMessage.value;
+};
+
 const toggleChannelActive = () => {
     form.is_active = !form.is_active;
 };
@@ -56,6 +66,11 @@ const submit = () => {
     if (!useCustomMessage.value) {
         form.title_template = '';
         form.body_template = '';
+    }
+
+    if (!useCustomRestoreMessage.value) {
+        form.restore_title_template = '';
+        form.restore_body_template = '';
     }
 
     if (editing.value) {
@@ -190,48 +205,89 @@ const submit = () => {
                     </label>
                     <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm">
                         <input v-model="form.notification_level" type="radio" value="info" class="text-sky-400">
-                        {{ t('Every backup run') }}
+                        {{ t('Every backup and restore run') }}
                     </label>
                 </div>
             </section>
 
-            <section class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h2 class="text-lg font-semibold">{{ t('Message format') }}</h2>
-                        <p class="mt-1 text-sm text-slate-400">{{ t('Keep the default message, or override the title and body sent after backup runs.') }}</p>
-                    </div>
-                    <button
-                        type="button"
-                        role="switch"
-                        class="inline-flex shrink-0 items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
-                        :aria-checked="useCustomMessage"
-                        :aria-label="t('Use custom message')"
-                        @click="toggleCustomMessage"
-                    >
-                        <span class="relative inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition" :class="useCustomMessage ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50' : 'border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-slate-800'">
-                            <span class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" :class="useCustomMessage ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
-                        </span>
-                        <span class="font-medium">{{ t('Use custom message') }}</span>
-                    </button>
+            <section class="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+                <div>
+                    <h2 class="text-lg font-semibold">{{ t('Message format') }}</h2>
+                    <p class="mt-1 text-sm text-slate-400">{{ t('Keep the default message, or override the title and body sent after backup and restore runs.') }}</p>
                 </div>
 
-                <div v-if="useCustomMessage" class="mt-4 grid gap-4">
-                    <label class="space-y-2">
-                        <span class="label">{{ t('Title template') }}</span>
-                        <input v-model="form.title_template" class="input" maxlength="255" :placeholder="titleTemplatePlaceholder">
-                        <span v-if="form.errors.title_template" class="text-sm text-rose-300">{{ form.errors.title_template }}</span>
-                    </label>
+                <div class="rounded-xl border border-white/10 bg-slate-950/40 p-4">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 class="font-medium text-white">{{ t('Backup messages') }}</h3>
+                        <button
+                            type="button"
+                            role="switch"
+                            class="inline-flex shrink-0 items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
+                            :aria-checked="useCustomMessage"
+                            :aria-label="t('Use custom message')"
+                            @click="toggleCustomMessage"
+                        >
+                            <span class="relative inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition" :class="useCustomMessage ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50' : 'border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-slate-800'">
+                                <span class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" :class="useCustomMessage ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
+                            </span>
+                            <span class="font-medium">{{ t('Use custom message') }}</span>
+                        </button>
+                    </div>
 
-                    <label class="space-y-2">
-                        <span class="label">{{ t('Body template') }}</span>
-                        <textarea v-model="form.body_template" class="input min-h-36" maxlength="4000" :placeholder="bodyTemplatePlaceholder"></textarea>
-                        <span v-if="form.errors.body_template" class="text-sm text-rose-300">{{ form.errors.body_template }}</span>
-                    </label>
+                    <div v-if="useCustomMessage" class="mt-4 grid gap-4">
+                        <label class="space-y-2">
+                            <span class="label">{{ t('Title template') }}</span>
+                            <input v-model="form.title_template" class="input" maxlength="255" :placeholder="titleTemplatePlaceholder">
+                            <span v-if="form.errors.title_template" class="text-sm text-rose-300">{{ form.errors.title_template }}</span>
+                        </label>
 
-                    <p class="rounded-xl border border-sky-300/20 bg-sky-400/10 p-3 text-sm text-sky-100">
-                        {{ t('Available tokens: {tokens}', { tokens: templateTokens }) }}
-                    </p>
+                        <label class="space-y-2">
+                            <span class="label">{{ t('Body template') }}</span>
+                            <textarea v-model="form.body_template" class="input min-h-36" maxlength="4000" :placeholder="bodyTemplatePlaceholder"></textarea>
+                            <span v-if="form.errors.body_template" class="text-sm text-rose-300">{{ form.errors.body_template }}</span>
+                        </label>
+
+                        <p class="rounded-xl border border-sky-300/20 bg-sky-400/10 p-3 text-sm text-sky-100">
+                            {{ t('Available tokens: {tokens}', { tokens: templateTokens }) }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="rounded-xl border border-white/10 bg-slate-950/40 p-4">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 class="font-medium text-white">{{ t('Restore messages') }}</h3>
+                        <button
+                            type="button"
+                            role="switch"
+                            class="inline-flex shrink-0 items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
+                            :aria-checked="useCustomRestoreMessage"
+                            :aria-label="t('Use custom restore message')"
+                            @click="toggleCustomRestoreMessage"
+                        >
+                            <span class="relative inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition" :class="useCustomRestoreMessage ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50' : 'border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-slate-800'">
+                                <span class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" :class="useCustomRestoreMessage ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
+                            </span>
+                            <span class="font-medium">{{ t('Use custom message') }}</span>
+                        </button>
+                    </div>
+
+                    <div v-if="useCustomRestoreMessage" class="mt-4 grid gap-4">
+                        <label class="space-y-2">
+                            <span class="label">{{ t('Title template') }}</span>
+                            <input v-model="form.restore_title_template" class="input" maxlength="255" :placeholder="restoreTitleTemplatePlaceholder">
+                            <span v-if="form.errors.restore_title_template" class="text-sm text-rose-300">{{ form.errors.restore_title_template }}</span>
+                        </label>
+
+                        <label class="space-y-2">
+                            <span class="label">{{ t('Body template') }}</span>
+                            <textarea v-model="form.restore_body_template" class="input min-h-36" maxlength="4000" :placeholder="restoreBodyTemplatePlaceholder"></textarea>
+                            <span v-if="form.errors.restore_body_template" class="text-sm text-rose-300">{{ form.errors.restore_body_template }}</span>
+                        </label>
+
+                        <p class="rounded-xl border border-sky-300/20 bg-sky-400/10 p-3 text-sm text-sky-100">
+                            {{ t('Available tokens: {tokens}', { tokens: restoreTemplateTokens }) }}
+                        </p>
+                    </div>
                 </div>
             </section>
 

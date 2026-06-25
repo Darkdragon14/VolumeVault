@@ -1,6 +1,22 @@
 <?php
 
 return [
+    'backup_initiator_tracking' => [
+        'title' => 'Sledování, kdo spustil každou zálohu',
+        'description' => 'Zálohy nyní zaznamenávají, který uživatel je spustil. Ruční spuštění (z rozhraní nebo přes API) a zálohy celého stacku jsou přiřazeny přihlášenému uživateli, bezpečnostní záloha pořízená před obnovou na místě přebírá uživatele, který obnovu spustil, a naplánovaná spuštění zůstávají bez přiřazení. Iniciátor se zobrazuje v historii spuštění úlohy a v podrobnostech zálohy, je součástí oznámení o zálohách a je k dispozici jako nový token {{ user }} pro vlastní šablony oznámení.',
+    ],
+    'restore_history_on_job' => [
+        'title' => 'Historie obnovení u záloh',
+        'description' => 'Stránka každé zálohovací úlohy nyní rozděluje historii do dvou karet: „Historie běhu" zobrazuje zálohy úlohy a nová karta „Historie obnovení" zobrazuje každé obnovení provedené pro danou úlohu – se stavem, režimem, zdrojovým a cílovým svazkem, časem zahájení, dobou trvání a odkazem na úplné podrobnosti obnovení. Obě karty jsou nyní stránkované, takže dlouhá historie již není omezena na 50 řádků.',
+    ],
+    'restore_in_place_modes' => [
+        'title' => 'Režimy obnovy na místě',
+        'description' => 'Průvodce obnovou nyní umí obnovit zálohu přímo do jejího zdrojového Docker svazku. „Obnovit na místě" vymaže a nahradí svazek po opětovném napsání jeho názvu pro potvrzení; „Bezpečná obnova na místě" navíc během obnovy zastaví kontejnery používající svazek a po dokončení je restartuje. Výběr zálohy se nyní ve výchozím nastavení omezuje na archivy vybrané úlohy, přidává filtry podle názvu a data, označuje nejnovější archiv a tlačítko „Obnovit tuto zálohu" otevře průvodce přímo z běhu zálohy. Oba režimy obnovy na místě mohou volitelně před přepsáním zazálohovat aktuální obsah svazku; pokud tato bezpečnostní záloha selže, obnova se zruší.',
+    ],
+    'restore_notifications' => [
+        'title' => 'Oznámení o obnovení',
+        'description' => 'VolumeVault vás nyní upozorní, když obnovení začne, uspěje nebo selže, a využívá k tomu oznamovací kanály již nastavené pro zálohovací úlohu. Zprávy o spuštění a úspěchu se odesílají na kanály nastavené pro každé spuštění, zatímco selhání dorazí na všechny kanály. Problém s oznámením nikdy nepřeruší samotné obnovení.',
+    ],
     'stack_bulk_backup' => [
         'title' => 'Záloha celého stacku najednou',
         'description' => 'Stránka Stacky nyní umožňuje zálohovat celý stack jedním kliknutím. Plně nakonfigurované stacky mají tlačítko "Spustit všechny úlohy", které zařadí spuštění pro každou úlohu; stacky s nepokrytými svazky mají dialog "Zálohovat stack", který pro každý svazek bez úlohy vytvoří denní (nebo vlastní) zálohovací úlohu a poté zařadí zálohu celého stacku. Stejná operace je dostupná i přes API (POST /stacks/backup).',

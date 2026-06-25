@@ -11,7 +11,7 @@ class BackupRunController extends Controller
     public function show(BackupRun $backupRun): Response
     {
         return Inertia::render('BackupRuns/Show', [
-            'run' => $backupRun->load('job.destination'),
+            'run' => $backupRun->load('job.destination', 'initiatedBy:id,name,email'),
         ]);
     }
 }

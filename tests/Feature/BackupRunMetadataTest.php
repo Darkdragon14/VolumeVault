@@ -81,6 +81,53 @@ class BackupRunMetadataTest extends TestCase
         $this->assertStringContainsString('Backup archive size could not be detected.', $run->logs);
     }
 
+    public function test_pre_restore_safety_backup_does_not_unpause_or_touch_the_job(): void
+    {
+        $archivePath = sys_get_temp_dir().'/volumevault-backup-metadata-pre-restore';
+        File::deleteDirectory($archivePath);
+        File::ensureDirectoryExists($archivePath);
+
+        $this->app->instance(DockerProcess::class, $this->dockerProcess(createArchive: true));
+
+        // A manually paused job whose volume is being restored in place with the
+        // safety-backup option on.
+        $run = $this->backupRun($archivePath, [
+            'status' => BackupJob::STATUS_PAUSED,
+            'pause_reason' => 'maintenance window',
+        ]);
+        $run->forceFill(['trigger' => BackupRun::TRIGGER_PRE_RESTORE])->save();
+
+        app(RunBackup::class)->handle($run);
+        $run->refresh();
+        $job = $run->job->refresh();
+
+        // The safety backup itself succeeds, but the job stays exactly as paused.
+        $this->assertSame(BackupRun::STATUS_SUCCESS, $run->status);
+        $this->assertSame(BackupJob::STATUS_PAUSED, $job->status);
+        $this->assertSame('maintenance window', $job->pause_reason);
+        $this->assertNull($job->last_success_at);
+    }
+
+    public function test_terminal_backup_is_not_rerun(): void
+    {
+        $archivePath = sys_get_temp_dir().'/volumevault-backup-metadata-terminal';
+        File::deleteDirectory($archivePath);
+        File::ensureDirectoryExists($archivePath);
+
+        $this->app->instance(DockerProcess::class, $this->dockerProcess(createArchive: true));
+
+        // Reconciliation already failed this run; a late-delivered queued job must
+        // not resurrect it. The atomic claim matches zero rows and bails.
+        $run = $this->backupRun($archivePath);
+        $run->forceFill(['status' => BackupRun::STATUS_FAILED, 'finished_at' => now()->subHour()])->save();
+
+        app(RunBackup::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
+        $this->assertNull($run->backup_key);
+    }
+
     private function backupRun(string $archivePath, array $jobOverrides = []): BackupRun
     {
         DockerVolume::create(['name' => 'app_data', 'exists' => true]);

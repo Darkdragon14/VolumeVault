@@ -11,7 +11,7 @@ class StackController extends Controller
 {
     public function backup(StackBackupRequest $request, BackupStack $backupStack): JsonResponse
     {
-        $summary = $backupStack->handle($request->stackName(), $request->validated());
+        $summary = $backupStack->handle($request->stackName(), $request->validated(), $request->user());
 
         return response()->json(['data' => $summary], 202);
     }

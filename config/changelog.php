@@ -1,7 +1,24 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'restore_history_on_job',
+        ],
+        [
+            'type' => 'feature',
+            'key' => 'restore_in_place_modes',
+        ],
+        [
+            'type' => 'feature',
+            'key' => 'restore_notifications',
+        ],
+        [
+            'type' => 'feature',
+            'key' => 'backup_initiator_tracking',
+        ],
+    ],
     'releases' => [
         'v1.13.0' => [
             'date' => '2026-06-15',

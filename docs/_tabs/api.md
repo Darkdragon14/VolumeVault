@@ -31,6 +31,14 @@ Write operations still require an admin user, and secrets are never returned in 
 
 When restoring, `selected_backup_key` must be one of the keys returned by `GET /api/v1/backup-jobs/{id}/backups` - it is checked against the destination listing, so arbitrary or path-traversal keys are rejected. Volume names (`volume_name`, `target_volume_name`) must match `^[A-Za-z0-9_.-]+$`.
 
+`POST /api/v1/backup-jobs/{id}/restore` accepts these restore modes:
+
+- `new_volume`: restore into a fresh Docker volume. Provide `target_volume_name`; this is the safest mode and is also the only mode available for host-path backup jobs.
+- `inplace`: overwrite the source Docker volume. This is available only for Docker-volume backup jobs and requires `confirmation_text` to exactly match the source volume name.
+- `safe_inplace`: overwrite the source Docker volume after stopping containers that currently use it, then restart those containers after the restore finishes or fails. This has the same Docker-volume-only and `confirmation_text` requirements as `inplace`.
+
+For `inplace` and `safe_inplace`, set `backup_before_overwrite` to `true` to take a safety backup before clearing the source volume. That safety backup appears as a backup run with trigger `pre_restore`; scheduled and manual backup runs continue to use `scheduled` and `manual`.
+
 `POST /api/v1/stacks/backup` backs up a whole Compose or Swarm stack in one call. Pass `{ "stack": "<name>" }` (use `null` for volumes that carry no stack label). For every Docker volume in the stack that has no backup job yet, a job is created from `backup_destination_id` and the `schedule_type` / `schedule_config` / `timezone` you provide, then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, those fields can be omitted to simply queue a run for each existing job. The response (`202`) is a `{ "data": { "created", "queued", "skipped" } }` summary; jobs that cannot run right now (inactive, already running, missing volume) are counted in `skipped` instead of aborting the batch.
 
 Host-path backup sources and local destinations (`settings.archive_path` / `archive_mount_source`) must match the fail-closed `VOLUMEVAULT_HOST_PATH_ALLOWLIST`. `GET /api/v1/host-path-allowlist` returns the allowed prefixes (`configured: false` means host paths are refused), so an integration can validate paths before creating a job or destination instead of relying on `422` errors.

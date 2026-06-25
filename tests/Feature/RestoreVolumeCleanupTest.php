@@ -155,6 +155,12 @@ class RestoreVolumeCleanupTest extends TestCase
 
             public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
             {
+                // The archive readability check (tar -tzf) always passes; only the
+                // extraction (tar -xzf) reflects the simulated restore outcome.
+                if (collect($command)->contains(fn (string $arg): bool => str_contains($arg, 'tzf'))) {
+                    return new DockerProcessResult($command, 0, "data/\n", '');
+                }
+
                 return $this->run($command, $timeout, $environment);
             }
         };
