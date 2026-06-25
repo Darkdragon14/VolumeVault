@@ -167,32 +167,46 @@ class RunRestore
      *
      * Shared by the in-process catch block, the queue job's failed() hook
      * (worker timeout / restart) and the stale-run reconciliation command.
-     * Idempotent: runs that already reached a terminal state are left untouched.
+     *
+     * The transition is a conditional UPDATE (non-terminal → failed), not an
+     * in-memory check + save: the reconciliation command holds models it
+     * materialized earlier, and the worker may finish a run between that snapshot
+     * and this call. The condition makes the write lose that race instead of
+     * overwriting a just-succeeded run. Returns whether it actually transitioned,
+     * so callers know if a stuck run was genuinely failed (and e.g. its lock can
+     * be released) versus the call being a no-op on an already-terminal run.
      */
-    public function markFailed(RestoreRun $run, Throwable $exception): void
+    public function markFailed(RestoreRun $run, Throwable $exception): bool
     {
-        if (in_array($run->status, [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED], true)) {
-            return;
-        }
-
         $finishedAt = now();
         $startedAt = $run->started_at ?? $finishedAt;
         $message = str($exception->getMessage() ?: 'Restore failed.')->limit(1000)->toString();
 
-        $run->forceFill([
-            'status' => RestoreRun::STATUS_FAILED,
-            'finished_at' => $finishedAt,
-            'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
-            'error_message' => $message,
-        ])->save();
+        $transitioned = RestoreRun::query()
+            ->whereKey($run->getKey())
+            ->whereNotIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
+            ->update([
+                'status' => RestoreRun::STATUS_FAILED,
+                'finished_at' => $finishedAt,
+                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
+                'error_message' => $message,
+            ]);
+
+        if ($transitioned === 0) {
+            return false;
+        }
+
+        $run->refresh();
 
         $this->appendRunLog->handle($run, $message);
 
         // Central failure notification: markFailed is reached from the in-process
         // catch block, the queue job's failed() hook and stale-run reconciliation,
-        // so every failure path notifies. The terminal-state guard above keeps it
+        // so every failure path notifies. The conditional transition above keeps it
         // to a single send.
         $this->notify($run);
+
+        return true;
     }
 
     /**

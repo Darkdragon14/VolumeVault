@@ -22,15 +22,21 @@ class VolumeJobLock
 
     /**
      * The Cache lock key the WithoutOverlapping middleware uses for a shared()
-     * volume key — its default prefix plus {@see key()}. Reconciliation uses this
+     * lock — its default prefix plus the job's lock key. Reconciliation uses this
      * to force-release a lock a crashed worker left orphaned (WithoutOverlapping
-     * sets a 24h expiry, so the volume would otherwise stay blocked for a day).
+     * sets a 24h expiry, so the resource would otherwise stay blocked for a day).
      *
      * Mirrors Illuminate\Queue\Middleware\WithoutOverlapping::$prefix; kept in
      * sync here so the release targets the exact key the jobs lock on.
      */
+    public static function cacheKeyFor(string $lockKey): string
+    {
+        return 'laravel-queue-overlap:'.$lockKey;
+    }
+
+    /** Convenience for the volume-based lock key (used by tests and volume runs). */
     public static function cacheKey(string $volumeName): string
     {
-        return 'laravel-queue-overlap:'.self::key($volumeName, '');
+        return self::cacheKeyFor(self::key($volumeName, ''));
     }
 }

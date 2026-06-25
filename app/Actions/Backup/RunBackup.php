@@ -254,13 +254,6 @@ class RunBackup
     }
 
     /**
-     * Force a run into the FAILED state and reschedule its job.
-     *
-     * Shared by the in-process catch block, the queue job's failed() hook
-     * (worker timeout / restart) and the stale-run reconciliation command.
-     * Idempotent: runs that already reached a terminal state are left untouched.
-     */
-    /**
      * A safety backup taken automatically before an in-place restore overwrites a
      * volume. It reuses this pipeline for the actual tar+upload but must not drive
      * the job's lifecycle (status, pause, scheduling).
@@ -270,25 +263,43 @@ class RunBackup
         return $run->trigger === BackupRun::TRIGGER_PRE_RESTORE;
     }
 
-    public function markFailed(BackupRun $run, Throwable $exception): void
+    /**
+     * Force a run into the FAILED state and reschedule its job.
+     *
+     * Shared by the in-process catch block, the queue job's failed() hook
+     * (worker timeout / restart) and the stale-run reconciliation command.
+     *
+     * The transition is a conditional UPDATE (non-terminal → failed), not an
+     * in-memory check + save: reconciliation holds models it materialized earlier
+     * and the worker may finish a run between that snapshot and this call. The
+     * condition makes the write lose that race rather than overwrite a
+     * just-succeeded run. Returns whether it actually transitioned so callers can
+     * tell a genuinely-failed stuck run from a no-op on an already-terminal run.
+     */
+    public function markFailed(BackupRun $run, Throwable $exception): bool
     {
         $run->loadMissing('job.destination');
-
-        if (in_array($run->status, [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED], true)) {
-            return;
-        }
 
         $job = $run->job;
         $finishedAt = now();
         $startedAt = $run->started_at ?? $finishedAt;
         $message = str($exception->getMessage() ?: 'Backup failed.')->limit(1000)->toString();
 
-        $run->forceFill([
-            'status' => BackupRun::STATUS_FAILED,
-            'finished_at' => $finishedAt,
-            'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
-            'error_message' => $message,
-        ])->save();
+        $transitioned = BackupRun::query()
+            ->whereKey($run->getKey())
+            ->whereNotIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
+            ->update([
+                'status' => BackupRun::STATUS_FAILED,
+                'finished_at' => $finishedAt,
+                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
+                'error_message' => $message,
+            ]);
+
+        if ($transitioned === 0) {
+            return false;
+        }
+
+        $run->refresh();
 
         $this->appendRunLog->handle($run, $message);
 
@@ -315,6 +326,8 @@ class RunBackup
         ]);
 
         $this->sendNotifications($run->fresh(['job.destination']));
+
+        return true;
     }
 
     private function recordBackupArchiveMetadata(BackupRun $run): void

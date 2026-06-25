@@ -51,10 +51,13 @@ class ReconcileStaleRuns extends Command
         $backupCount = 0;
         $this->staleBackupRuns($cutoff)->each(function (BackupRun $run) use ($runBackup, $reason, &$backupCount): void {
             $wasRunning = $run->status === BackupRun::STATUS_RUNNING;
-            $volume = $run->job?->volume_name;
-            $runBackup->markFailed($run, new RuntimeException($reason));
-            if ($wasRunning) {
-                $this->releaseVolumeLock($volume);
+            $lockKey = VolumeJobLock::key($run->job?->volume_name, 'backup-job-'.$run->backup_job_id);
+
+            // Only release the lock when we actually failed a run that was running:
+            // a no-op markFailed (the run finished first) means the lock may now be
+            // held by the next job — releasing it would break serialization.
+            if ($runBackup->markFailed($run, new RuntimeException($reason)) && $wasRunning) {
+                $this->releaseLock($lockKey);
             }
             $backupCount++;
         });
@@ -62,10 +65,10 @@ class ReconcileStaleRuns extends Command
         $restoreCount = 0;
         $this->staleRestoreRuns($cutoff)->each(function (RestoreRun $run) use ($runRestore, $reason, &$restoreCount): void {
             $wasRunning = $run->status === RestoreRun::STATUS_RUNNING;
-            $volume = $run->target_volume_name;
-            $runRestore->markFailed($run, new RuntimeException($reason));
-            if ($wasRunning) {
-                $this->releaseVolumeLock($volume);
+            $lockKey = VolumeJobLock::key($run->target_volume_name, 'restore-run-'.$run->id);
+
+            if ($runRestore->markFailed($run, new RuntimeException($reason)) && $wasRunning) {
+                $this->releaseLock($lockKey);
             }
             $restoreCount++;
         });
@@ -121,19 +124,15 @@ class ReconcileStaleRuns extends Command
     }
 
     /**
-     * Force-release the volume's WithoutOverlapping lock after reconciliation
-     * fails the RUNNING holder that crashed without releasing it. The lock is set
-     * with a 24h expiry, so without this a crash would block every same-volume
-     * backup/restore — and keep failing released waiters — for up to a day.
-     * No-op for volume-less runs (host-path backups lock on a job key instead).
+     * Force-release the WithoutOverlapping lock a crashed RUNNING holder left
+     * behind. The lock has a 24h expiry, so without this a crash would block every
+     * same-key backup/restore — and keep failing released waiters — for up to a
+     * day. The key is the same one the job locked on, so this also frees
+     * volume-less holders (host-path backups, which lock on backup-job-{id}).
      */
-    private function releaseVolumeLock(?string $volume): void
+    private function releaseLock(string $lockKey): void
     {
-        if (! filled($volume)) {
-            return;
-        }
-
-        Cache::lock(VolumeJobLock::cacheKey($volume))->forceRelease();
+        Cache::lock(VolumeJobLock::cacheKeyFor($lockKey))->forceRelease();
     }
 
     /**

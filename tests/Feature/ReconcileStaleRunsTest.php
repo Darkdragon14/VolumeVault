@@ -328,6 +328,44 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get());
     }
 
+    public function test_failing_a_running_host_path_backup_releases_its_orphaned_job_lock(): void
+    {
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/tmp/vv'],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Host path job',
+            'source_type' => BackupJob::SOURCE_TYPE_HOST_PATH,
+            'host_path' => '/srv/data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_RUNNING,
+        ]);
+
+        // Host-path jobs have no volume, so they lock on the backup-job fallback key.
+        $lockKey = 'backup-job-'.$job->id;
+        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400)->get());
+
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subDays(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
+        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400)->get());
+    }
+
     public function test_queued_restore_is_not_swept_just_after_its_lock_holder_finishes(): void
     {
         $job = $this->backupJob(BackupJob::STATUS_ACTIVE);

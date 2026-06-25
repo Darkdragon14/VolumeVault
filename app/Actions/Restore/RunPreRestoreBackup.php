@@ -75,6 +75,20 @@ class RunPreRestoreBackup
             );
         }
 
+        // Re-verify after the backup: RunBackup re-reads the (mutable) job and backs
+        // up its CURRENT volume, so a job edited while the backup ran could have
+        // captured a different volume than the one we are about to wipe. The check
+        // before the backup catches a pre-existing mismatch; this one catches a
+        // change during the backup. Abort rather than wipe with a useless backup.
+        $job = $run->load('job')->job;
+
+        if (! $job?->isDockerVolumeSource() || $job->volume_name !== $run->target_volume_name) {
+            throw new RuntimeException(
+                'The backup job changed its volume during the safety backup; aborting before overwriting ['.
+                $run->target_volume_name.'] to avoid relying on a safety backup of a different volume.'
+            );
+        }
+
         $this->appendRunLog->handle($run, 'Safety backup completed: '.($backup->backup_key ?: 'backup #'.$backup->id).'.');
     }
 }

@@ -124,6 +124,33 @@ class PreRestoreBackupTest extends TestCase
         $this->assertFalse($docker->ranClear, 'The volume must not be wiped when the job no longer matches.');
     }
 
+    public function test_safety_backup_aborts_when_the_job_volume_changes_during_the_backup(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+            'backup_before_overwrite' => true,
+        ]);
+
+        // The safety backup "succeeds" but the job's volume is edited mid-run, as
+        // if an admin changed it while the backup streamed. The after-backup
+        // re-check must catch it and abort before the wipe.
+        $this->app->instance(RunBackup::class, $this->fakeRunBackup(BackupRun::STATUS_SUCCESS, function () use ($run): void {
+            $run->job->forceFill(['volume_name' => 'other_volume'])->save();
+        }));
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('changed its volume during the safety backup', $run->error_message);
+        $this->assertFalse($docker->ranClear, 'The volume must not be wiped after a volume change during the safety backup.');
+    }
+
     public function test_no_safety_backup_runs_when_the_toggle_is_off(): void
     {
         $docker = $this->docker(volumeExists: true);

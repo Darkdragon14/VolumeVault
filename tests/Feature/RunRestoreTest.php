@@ -324,6 +324,20 @@ class RunRestoreTest extends TestCase
         $this->assertNull($run->error_message);
     }
 
+    public function test_mark_failed_does_not_overwrite_a_run_that_already_succeeded(): void
+    {
+        $run = $this->restoreRun(['status' => RestoreRun::STATUS_SUCCESS, 'finished_at' => now()]);
+
+        // Reconciliation holds a snapshot that still says running, but the worker
+        // already finished. The conditional transition must lose this race.
+        $run->forceFill(['status' => RestoreRun::STATUS_RUNNING]); // in-memory only, not saved
+
+        $failed = app(RunRestore::class)->markFailed($run, new \RuntimeException('stale sweep'));
+
+        $this->assertFalse($failed, 'markFailed must report no transition for an already-terminal run.');
+        $this->assertSame(RestoreRun::STATUS_SUCCESS, RestoreRun::findOrFail($run->id)->status);
+    }
+
     private function restoreRun(array $overrides = []): RestoreRun
     {
         $destination = BackupDestination::create([
