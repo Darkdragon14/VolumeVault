@@ -39,8 +39,9 @@ const toggleRecovery = () => {
 
             <label v-if="!useRecovery" class="space-y-2">
                 <span class="label">{{ t('Authentication code') }}</span>
-                <input id="otp" v-model="form.code" name="otp" class="input" type="text" inputmode="numeric"
-                    autocomplete="one-time-code" autofocus required maxlength="6" placeholder="000000">
+                <input id="totp" v-model="form.code" name="totp" class="input" type="text" inputmode="numeric"
+                    autocomplete="one-time-code" aria-label="Two-factor verification code" autofocus required
+                    maxlength="6" placeholder="000000">
                 <span v-if="form.errors.code" class="text-sm text-rose-300">{{ form.errors.code }}</span>
             </label>
 
