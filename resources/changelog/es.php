@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'optional_two_factor_auth' => [
+        'title' => 'Autenticación de dos factores opcional',
+        'description' => 'Ahora puede proteger su cuenta con una autenticación de dos factores opcional basada en una contraseña de un solo uso y limitada en el tiempo (TOTP). Actívela desde su perfil escaneando un código QR con una aplicación de autenticación como Google Authenticator o Authy y confirmando con un código generado. Una vez activada, al iniciar sesión se solicita un código de seis dígitos justo después de la contraseña. Se proporciona un conjunto de códigos de recuperación de un solo uso por si pierde el acceso a su aplicación de autenticación, y los administradores pueden restablecer la autenticación de dos factores de cualquier usuario desde la página Usuarios. En la pantalla del código también puede marcar un navegador como de confianza para omitir el código —nunca la contraseña— durante 30 días.',
+    ],
     'backup_initiator_tracking' => [
         'title' => 'Seguimiento de quién inició cada copia de seguridad',
         'description' => 'Las copias de seguridad ahora registran qué usuario las inició. Las ejecuciones manuales (desde la interfaz o la API) y las copias de seguridad de toda la pila se atribuyen al usuario conectado, la copia de seguridad de protección realizada antes de una restauración in situ hereda el usuario que inició la restauración, y las ejecuciones programadas quedan sin atribuir. El iniciador aparece en el historial de ejecuciones del trabajo y en los detalles de la copia de seguridad, se incluye en las notificaciones de copia de seguridad y está disponible como un nuevo token {{ user }} para las plantillas de notificación personalizadas.',

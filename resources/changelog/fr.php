@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'optional_two_factor_auth' => [
+        'title' => 'Authentification à deux facteurs facultative',
+        'description' => 'Vous pouvez désormais protéger votre compte avec une authentification à deux facteurs facultative reposant sur un mot de passe à usage unique basé sur le temps (TOTP). Activez-la depuis votre profil en scannant un QR code avec une application d\'authentification comme Google Authenticator ou Authy, puis confirmez avec un code généré. Une fois activée, la connexion demande un code à six chiffres juste après le mot de passe. Une série de codes de récupération à usage unique est fournie au cas où vous perdriez l\'accès à votre application d\'authentification, et les administrateurs peuvent réinitialiser l\'authentification à deux facteurs de n\'importe quel utilisateur depuis la page Utilisateurs. Sur l\'écran du code, vous pouvez aussi marquer un navigateur comme fiable pour sauter le code — jamais le mot de passe — pendant 30 jours.',
+    ],
     'backup_initiator_tracking' => [
         'title' => 'Suivi de l\'auteur de chaque sauvegarde',
         'description' => 'Les sauvegardes enregistrent désormais quel utilisateur les a lancées. Les exécutions manuelles (depuis l\'interface ou l\'API) et les sauvegardes de pile complète sont attribuées à l\'utilisateur connecté, la sauvegarde de sécurité réalisée avant une restauration sur place hérite de l\'utilisateur ayant lancé la restauration, et les exécutions planifiées restent sans auteur. L\'initiateur apparaît dans l\'historique des exécutions de la tâche et sur le détail de la sauvegarde, est inclus dans les notifications de sauvegarde et est disponible via un nouveau jeton {{ user }} pour les modèles de notification personnalisés.',

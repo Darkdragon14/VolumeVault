@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'optional_two_factor_auth' => [
+        'title' => 'Optional two-factor authentication',
+        'description' => 'You can now protect your account with optional two-factor authentication based on a time-based one-time password (TOTP). Enable it from your profile by scanning a QR code with an authenticator app such as Google Authenticator or Authy, then confirming with a generated code. Once enabled, signing in asks for a six-digit code right after your password. A set of single-use recovery codes is provided in case you lose access to your authenticator app, and administrators can reset two-factor authentication for any user from the Users page. On the code screen you can also mark a browser as trusted to skip the code — never the password — for the next 30 days.',
+    ],
     'backup_initiator_tracking' => [
         'title' => 'Track who triggered each backup',
         'description' => 'Backups now record which user started them. Manual runs (from the UI or the API) and whole-stack backups are attributed to the signed-in user, the safety backup taken before an in-place restore inherits the user who launched the restore, and scheduled runs stay unattributed. The initiator appears in the job\'s run history and on the backup run details, is included in backup notifications, and is available as a new {{ user }} token for custom notification templates.',
