@@ -346,10 +346,12 @@ class TwoFactorAuthTest extends TestCase
     {
         $secret = $this->google2fa()->generateSecretKey();
         $user = $this->userWithTwoFactor($secret);
-        $this->seedTrustedDevice($user);
+        $this->seedTrustedDevice($user, 'known-token');
         $this->assertDatabaseCount('two_factor_trusted_devices', 1);
 
-        $this->actingAs($user)->delete('/profile/two-factor', ['password' => 'secret-password'])
+        $this->actingAs($user)
+            ->withCookie(TrustedDeviceManager::COOKIE, 'known-token')
+            ->delete('/profile/two-factor', ['password' => 'secret-password'])
             ->assertRedirect(route('profile.edit'))
             ->assertCookieExpired(TrustedDeviceManager::COOKIE);
 
@@ -461,6 +463,7 @@ class TwoFactorAuthTest extends TestCase
         $this->seedTrustedDevice($user, 'token-two');
 
         $this->actingAs($user)
+            ->withCookie(TrustedDeviceManager::COOKIE, 'token-one')
             ->delete('/profile/two-factor/devices')
             ->assertRedirect(route('profile.edit'))
             ->assertCookieExpired(TrustedDeviceManager::COOKIE);
