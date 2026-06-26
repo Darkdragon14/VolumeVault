@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'optional_two_factor_auth',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.15.0' => [
+            'date' => '2026-06-26',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.15.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'optional_two_factor_auth',
+                ],
+            ],
+        ],
         'v1.14.0' => [
             'date' => '2026-06-25',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.14.0',
