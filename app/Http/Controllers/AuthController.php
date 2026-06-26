@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -29,11 +30,24 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        $user = User::where('email', $credentials['email'])->first();
+
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'email' => 'The provided credentials do not match our records.',
             ]);
         }
+
+        // Defer the login until the second factor is satisfied: stash just the
+        // user id (and the remember preference) so the challenge can complete it.
+        if ($user->hasTwoFactorEnabled()) {
+            $request->session()->put('login.id', $user->getKey());
+            $request->session()->put('login.remember', $request->boolean('remember'));
+
+            return redirect()->route('two-factor.challenge');
+        }
+
+        Auth::login($user, $request->boolean('remember'));
 
         $request->session()->regenerate();
 

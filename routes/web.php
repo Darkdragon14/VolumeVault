@@ -19,6 +19,8 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RestoreController;
 use App\Http\Controllers\RestoreRunController;
 use App\Http\Controllers\StackController;
+use App\Http\Controllers\TwoFactorAuthController;
+use App\Http\Controllers\TwoFactorChallengeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserLocaleController;
 use App\Http\Controllers\UserThemeController;
@@ -38,6 +40,8 @@ Route::middleware('guest')->group(function () {
     Route::post('/forgot-password', [PasswordResetController::class, 'store'])->middleware('throttle:5,1')->name('password.email');
     Route::get('/reset-password/{token}', [PasswordResetController::class, 'edit'])->name('password.reset');
     Route::post('/reset-password', [PasswordResetController::class, 'update'])->name('password.update');
+    Route::get('/two-factor-challenge', [TwoFactorChallengeController::class, 'create'])->name('two-factor.challenge');
+    Route::post('/two-factor-challenge', [TwoFactorChallengeController::class, 'store'])->middleware('throttle:5,1')->name('two-factor.challenge.store');
 });
 
 Route::post('/logout', [AuthController::class, 'destroy'])->middleware('auth')->name('logout');
@@ -48,6 +52,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/user/dashboard-preferences', [DashboardPreferenceController::class, 'update'])->name('user.dashboard-preferences.update');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::post('/profile/two-factor', [TwoFactorAuthController::class, 'store'])->name('two-factor.enable');
+    Route::post('/profile/two-factor/confirm', [TwoFactorAuthController::class, 'confirm'])->name('two-factor.confirm');
+    Route::delete('/profile/two-factor', [TwoFactorAuthController::class, 'destroy'])->name('two-factor.disable');
+    Route::post('/profile/two-factor/recovery-codes', [TwoFactorAuthController::class, 'recoveryCodes'])->name('two-factor.recovery-codes');
     Route::get('/changelog', [ChangelogController::class, 'index'])->name('changelog.index');
     Route::patch('/changelog/seen', [ChangelogController::class, 'seen'])->name('changelog.seen');
     Route::patch('/updates/available/dismiss', [AvailableUpdateController::class, 'dismiss'])->name('updates.available.dismiss');
@@ -85,6 +93,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/notifications/{notification}/test', [NotificationChannelController::class, 'test'])->name('notifications.test');
 
         Route::resource('users', UserController::class)->except(['show']);
+        Route::delete('/users/{user}/two-factor', [UserController::class, 'resetTwoFactor'])->name('users.two-factor.reset');
         Route::resource('api-tokens', ApiTokenController::class)->only(['index', 'store', 'destroy']);
 
         Route::get('/backup-jobs/{backupJob}/restore', [RestoreController::class, 'create'])->name('backup-jobs.restore');

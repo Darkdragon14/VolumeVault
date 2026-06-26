@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'optional_two_factor_auth' => [
+        'title' => 'Volitelné dvoufaktorové ověření',
+        'description' => 'Svůj účet nyní můžete chránit volitelným dvoufaktorovým ověřením založeným na časově omezeném jednorázovém heslu (TOTP). Aktivujte jej ve svém profilu naskenováním QR kódu pomocí ověřovací aplikace, jako je Google Authenticator nebo Authy, a potvrzením vygenerovaným kódem. Po aktivaci se při přihlášení hned po hesle vyžaduje šestimístný kód. Pro případ, že ztratíte přístup k ověřovací aplikaci, je k dispozici sada jednorázových obnovovacích kódů a správci mohou dvoufaktorové ověření kteréhokoli uživatele resetovat na stránce Uživatelé.',
+    ],
     'backup_initiator_tracking' => [
         'title' => 'Sledování, kdo spustil každou zálohu',
         'description' => 'Zálohy nyní zaznamenávají, který uživatel je spustil. Ruční spuštění (z rozhraní nebo přes API) a zálohy celého stacku jsou přiřazeny přihlášenému uživateli, bezpečnostní záloha pořízená před obnovou na místě přebírá uživatele, který obnovu spustil, a naplánovaná spuštění zůstávají bez přiřazení. Iniciátor se zobrazuje v historii spuštění úlohy a v podrobnostech zálohy, je součástí oznámení o zálohách a je k dispozici jako nový token {{ user }} pro vlastní šablony oznámení.',

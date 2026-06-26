@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'optional_two_factor_auth' => [
+        'title' => 'Optionale Zwei-Faktor-Authentifizierung',
+        'description' => 'Sie können Ihr Konto jetzt mit einer optionalen Zwei-Faktor-Authentifizierung auf Basis eines zeitbasierten Einmalpassworts (TOTP) schützen. Aktivieren Sie sie in Ihrem Profil, indem Sie einen QR-Code mit einer Authentifizierungs-App wie Google Authenticator oder Authy scannen und anschließend mit einem generierten Code bestätigen. Nach der Aktivierung wird bei der Anmeldung direkt nach dem Passwort ein sechsstelliger Code abgefragt. Für den Fall, dass Sie den Zugriff auf Ihre Authentifizierungs-App verlieren, wird eine Reihe von Einmal-Wiederherstellungscodes bereitgestellt, und Administratoren können die Zwei-Faktor-Authentifizierung jedes Benutzers auf der Seite Benutzer zurücksetzen.',
+    ],
     'backup_initiator_tracking' => [
         'title' => 'Nachverfolgen, wer jede Sicherung ausgelöst hat',
         'description' => 'Sicherungen erfassen jetzt, welcher Benutzer sie gestartet hat. Manuelle Durchläufe (über die Oberfläche oder die API) und Sicherungen eines ganzen Stacks werden dem angemeldeten Benutzer zugeordnet, die Sicherheitssicherung vor einer In-Place-Wiederherstellung übernimmt den Benutzer, der die Wiederherstellung gestartet hat, und geplante Durchläufe bleiben ohne Zuordnung. Der Initiator erscheint im Ausführungsverlauf des Auftrags und in den Details der Sicherung, wird in Sicherungsbenachrichtigungen aufgenommen und steht als neues Token {{ user }} für benutzerdefinierte Benachrichtigungsvorlagen zur Verfügung.',

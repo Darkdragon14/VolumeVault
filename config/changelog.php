@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'optional_two_factor_auth',
+        ],
+    ],
     'releases' => [
         'v1.14.0' => [
             'date' => '2026-06-25',

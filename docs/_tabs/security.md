@@ -44,6 +44,16 @@ docker compose exec volumevault php artisan volumevault:reset-password admin@exa
 
 Both reset methods invalidate existing browser sessions for the user. Existing API tokens are kept so integrations are not interrupted.
 
+## Two-Factor Authentication
+
+Each user can optionally protect their account with a second factor based on a time-based one-time password (TOTP). It is disabled by default and configured per user — it never blocks accounts that have not enabled it.
+
+Enable it from **Profile → Two-factor authentication**: scan the QR code with an authenticator app (Google Authenticator, Authy, 1Password, …) or enter the setup key manually, then confirm with a generated code to activate it. Because TOTP is computed locally by the app, two-factor authentication works without any mail or SMS configuration. After it is enabled, signing in asks for a six-digit code right after the password; API tokens are unaffected.
+
+When you enable it, VolumeVault shows a set of single-use **recovery codes**. Store them somewhere safe — each one logs you in once if you lose access to your authenticator app, and you can regenerate the set at any time from the same screen. Disabling two-factor authentication requires confirming your current password.
+
+The TOTP secret and recovery codes are encrypted at rest with `APP_KEY`. If a user loses both their authenticator app and their recovery codes, an administrator can clear their second factor from the **Users** page (the reset action appears only for users who have it enabled); the action is recorded in the activity log.
+
 ## SFTP Host Key Pinning
 
 SSH/SFTP destinations accept an optional pinned host key. When set, VolumeVault verifies the server key before sending any credentials and refuses the connection on mismatch, blocking man-in-the-middle attacks.

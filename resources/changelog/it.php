@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'optional_two_factor_auth' => [
+        'title' => 'Autenticazione a due fattori facoltativa',
+        'description' => 'Ora puoi proteggere il tuo account con un\'autenticazione a due fattori facoltativa basata su una password monouso temporanea (TOTP). Attivala dal tuo profilo scansionando un codice QR con un\'app di autenticazione come Google Authenticator o Authy e confermando con un codice generato. Una volta attivata, l\'accesso richiede un codice di sei cifre subito dopo la password. Viene fornita una serie di codici di recupero monouso nel caso in cui tu perda l\'accesso all\'app di autenticazione e gli amministratori possono reimpostare l\'autenticazione a due fattori di qualsiasi utente dalla pagina Utenti.',
+    ],
     'backup_initiator_tracking' => [
         'title' => 'Traccia chi ha avviato ogni backup',
         'description' => 'I backup ora registrano quale utente li ha avviati. Le esecuzioni manuali (dall\'interfaccia o dall\'API) e i backup dell\'intero stack sono attribuiti all\'utente connesso, il backup di sicurezza eseguito prima di un ripristino in loco eredita l\'utente che ha avviato il ripristino e le esecuzioni pianificate restano senza attribuzione. L\'iniziatore compare nella cronologia delle esecuzioni del processo e nei dettagli del backup, è incluso nelle notifiche di backup ed è disponibile come nuovo token {{ user }} per i modelli di notifica personalizzati.',

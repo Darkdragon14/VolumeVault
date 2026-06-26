@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'optional_two_factor_auth' => [
+        'title' => 'Választható kétfaktoros hitelesítés',
+        'description' => 'Mostantól védheti fiókját választható, időalapú egyszer használatos jelszón (TOTP) alapuló kétfaktoros hitelesítéssel. Kapcsolja be a profiljában egy QR-kód beolvasásával egy hitelesítő alkalmazással, például a Google Authenticatorral vagy az Authyval, majd erősítse meg a generált kóddal. Bekapcsolás után a bejelentkezés a jelszó után közvetlenül egy hatjegyű kódot kér. Egyszer használatos helyreállítási kódok készlete áll rendelkezésre arra az esetre, ha elveszítené a hozzáférést a hitelesítő alkalmazáshoz, az adminisztrátorok pedig bármely felhasználó kétfaktoros hitelesítését visszaállíthatják a Felhasználók oldalon.',
+    ],
     'backup_initiator_tracking' => [
         'title' => 'Annak nyomon követése, ki indította az egyes mentéseket',
         'description' => 'A mentések mostantól rögzítik, melyik felhasználó indította őket. A kézi futtatások (a felületről vagy az API-ból) és a teljes verem mentései a bejelentkezett felhasználóhoz vannak rendelve, a helyben történő visszaállítás előtt készített biztonsági mentés a visszaállítást indító felhasználót örökli, az ütemezett futtatások pedig hozzárendelés nélkül maradnak. A kezdeményező megjelenik a feladat futtatási előzményeiben és a mentés részleteiben, szerepel a mentési értesítésekben, és új {{ user }} tokenként elérhető az egyéni értesítési sablonokhoz.',
