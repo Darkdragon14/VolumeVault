@@ -1,4 +1,13 @@
 {
+  "Trusted devices": "Vertrouwde apparaten",
+  "Browsers you trust to skip the code for 30 days.": "Browsers die je vertrouwt om de code 30 dagen lang over te slaan.",
+  "This device": "Dit apparaat",
+  "Unknown device": "Onbekend apparaat",
+  "No trusted devices.": "Geen vertrouwde apparaten.",
+  "Remove": "Verwijderen",
+  "Remove this trusted device?": "Dit vertrouwde apparaat verwijderen?",
+  "Remove all trusted devices": "Alle vertrouwde apparaten verwijderen",
+  "Remove all trusted devices?": "Alle vertrouwde apparaten verwijderen?",
   "Trust this device for 30 days": "Dit apparaat 30 dagen vertrouwen",
   "Two-factor authentication": "Tweefactorauthenticatie",
   "Reset two-factor authentication": "Tweefactorauthenticatie opnieuw instellen",

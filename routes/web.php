@@ -56,6 +56,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/profile/two-factor/confirm', [TwoFactorAuthController::class, 'confirm'])->name('two-factor.confirm');
     Route::delete('/profile/two-factor', [TwoFactorAuthController::class, 'destroy'])->name('two-factor.disable');
     Route::post('/profile/two-factor/recovery-codes', [TwoFactorAuthController::class, 'recoveryCodes'])->name('two-factor.recovery-codes');
+    Route::delete('/profile/two-factor/devices', [TwoFactorAuthController::class, 'destroyDevices'])->name('two-factor.devices.clear');
+    Route::delete('/profile/two-factor/devices/{device}', [TwoFactorAuthController::class, 'destroyDevice'])->name('two-factor.devices.destroy');
     Route::get('/changelog', [ChangelogController::class, 'index'])->name('changelog.index');
     Route::patch('/changelog/seen', [ChangelogController::class, 'seen'])->name('changelog.seen');
     Route::patch('/updates/available/dismiss', [AvailableUpdateController::class, 'dismiss'])->name('updates.available.dismiss');

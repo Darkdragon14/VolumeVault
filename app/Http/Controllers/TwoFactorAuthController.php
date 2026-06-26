@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\TwoFactorTrustedDevice;
 use App\Services\TwoFactor\TwoFactorAuthenticator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -105,5 +106,28 @@ class TwoFactorAuthController extends Controller
         return redirect()->route('profile.edit')
             ->with('success', 'Recovery codes regenerated.')
             ->with('two_factor_show_recovery', true);
+    }
+
+    /**
+     * Revoke a single trusted device. The next login from that browser will be
+     * challenged again.
+     */
+    public function destroyDevice(Request $request, TwoFactorTrustedDevice $device)
+    {
+        abort_unless($device->user_id === $request->user()->getKey(), 403);
+
+        $device->delete();
+
+        return redirect()->route('profile.edit')->with('success', 'Trusted device removed.');
+    }
+
+    /**
+     * Revoke every trusted device for the current user.
+     */
+    public function destroyDevices(Request $request)
+    {
+        $request->user()->twoFactorTrustedDevices()->delete();
+
+        return redirect()->route('profile.edit')->with('success', 'Trusted devices removed.');
     }
 }

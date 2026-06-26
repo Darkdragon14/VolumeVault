@@ -7,6 +7,7 @@ use App\Services\TwoFactor\TrustedDeviceManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Inertia\Testing\AssertableInertia as Assert;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\TestCase;
 
@@ -366,6 +367,73 @@ class TwoFactorAuthTest extends TestCase
         $this->actingAs(User::factory()->admin()->create())
             ->delete('/users/'.$target->id.'/two-factor')
             ->assertRedirect(route('users.index'));
+
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
+    }
+
+    public function test_profile_lists_trusted_devices(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user);
+
+        $this->actingAs($user)
+            ->get('/profile')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Profile/Edit')
+                ->has('twoFactorDevices', 1)
+                ->where('twoFactorDevices.0.is_current', false));
+    }
+
+    public function test_expired_trusted_devices_are_not_listed(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user, 'expired-token', now()->subDay());
+
+        $this->actingAs($user)
+            ->get('/profile')
+            ->assertInertia(fn (Assert $page) => $page->has('twoFactorDevices', 0));
+    }
+
+    public function test_user_can_revoke_a_trusted_device(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user);
+        $device = $user->twoFactorTrustedDevices()->first();
+
+        $this->actingAs($user)
+            ->delete('/profile/two-factor/devices/'.$device->id)
+            ->assertRedirect(route('profile.edit'));
+
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
+    }
+
+    public function test_user_cannot_revoke_another_users_trusted_device(): void
+    {
+        $owner = $this->userWithTwoFactor($this->google2fa()->generateSecretKey());
+        $this->seedTrustedDevice($owner);
+        $device = $owner->twoFactorTrustedDevices()->first();
+
+        $this->actingAs(User::factory()->create())
+            ->delete('/profile/two-factor/devices/'.$device->id)
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('two_factor_trusted_devices', 1);
+    }
+
+    public function test_user_can_revoke_all_trusted_devices(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user, 'token-one');
+        $this->seedTrustedDevice($user, 'token-two');
+
+        $this->actingAs($user)
+            ->delete('/profile/two-factor/devices')
+            ->assertRedirect(route('profile.edit'));
 
         $this->assertDatabaseCount('two_factor_trusted_devices', 0);
     }

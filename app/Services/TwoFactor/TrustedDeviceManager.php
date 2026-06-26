@@ -2,6 +2,7 @@
 
 namespace App\Services\TwoFactor;
 
+use App\Models\TwoFactorTrustedDevice;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
@@ -38,6 +39,23 @@ class TrustedDeviceManager
         $device->forceFill(['last_used_at' => now()])->save();
 
         return true;
+    }
+
+    /**
+     * The trusted device the current request's cookie points to, if any — used
+     * to flag "this device" in the management list. Does not touch last_used_at.
+     */
+    public function currentDevice(Request $request, User $user): ?TwoFactorTrustedDevice
+    {
+        $token = $request->cookie(self::COOKIE);
+
+        if (! is_string($token) || $token === '') {
+            return null;
+        }
+
+        return $user->twoFactorTrustedDevices()
+            ->where('token', hash('sha256', $token))
+            ->first();
     }
 
     /**

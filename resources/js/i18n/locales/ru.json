@@ -1,4 +1,13 @@
 {
+  "Trusted devices": "Доверенные устройства",
+  "Browsers you trust to skip the code for 30 days.": "Браузеры, которым вы доверяете и в которых 30 дней пропускается код.",
+  "This device": "Это устройство",
+  "Unknown device": "Неизвестное устройство",
+  "No trusted devices.": "Нет доверенных устройств.",
+  "Remove": "Удалить",
+  "Remove this trusted device?": "Удалить это доверенное устройство?",
+  "Remove all trusted devices": "Удалить все доверенные устройства",
+  "Remove all trusted devices?": "Удалить все доверенные устройства?",
   "Trust this device for 30 days": "Доверять этому устройству 30 дней",
   "Two-factor authentication": "Двухфакторная аутентификация",
   "Reset two-factor authentication": "Сбросить двухфакторную аутентификацию",

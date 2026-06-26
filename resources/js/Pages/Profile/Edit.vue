@@ -2,7 +2,7 @@
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PasswordInput from '@/Components/PasswordInput.vue';
 import { languageNames, useI18n } from '@/i18n';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 
 const props = defineProps<{
     profileUser: {
@@ -19,9 +19,16 @@ const props = defineProps<{
     twoFactorQrSvg?: string;
     twoFactorSecret?: string;
     twoFactorRecoveryCodes?: string[];
+    twoFactorDevices?: Array<{
+        id: number;
+        user_agent: string | null;
+        last_used_at: string | null;
+        expires_at: string | null;
+        is_current: boolean;
+    }>;
 }>();
 
-const { t } = useI18n();
+const { t, formatDate } = useI18n();
 const languageName = (locale: string) => languageNames[locale as keyof typeof languageNames] || locale;
 const perPageLabel = (value: number) => value === 0 ? t('All') : String(value);
 const form = useForm({
@@ -51,6 +58,12 @@ const disableTwoFactor = () => disableForm.delete('/profile/two-factor', {
     onSuccess: () => disableForm.reset(),
 });
 const regenerateCodes = () => recoveryForm.post('/profile/two-factor/recovery-codes', { preserveScroll: true });
+const revokeDevice = (id: number) => {
+    if (confirm(t('Remove this trusted device?'))) router.delete(`/profile/two-factor/devices/${id}`, { preserveScroll: true });
+};
+const revokeAllDevices = () => {
+    if (confirm(t('Remove all trusted devices?'))) router.delete('/profile/two-factor/devices', { preserveScroll: true });
+};
 </script>
 
 <template>
@@ -178,6 +191,31 @@ const regenerateCodes = () => recoveryForm.post('/profile/two-factor/recovery-co
 
                 <div class="flex flex-wrap gap-3">
                     <button class="btn-secondary" :disabled="recoveryForm.processing" @click="regenerateCodes">{{ t('Regenerate recovery codes') }}</button>
+                </div>
+
+                <div class="space-y-3 border-t border-white/10 pt-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-semibold text-white">{{ t('Trusted devices') }}</h3>
+                            <p class="mt-1 text-xs text-slate-400">{{ t('Browsers you trust to skip the code for 30 days.') }}</p>
+                        </div>
+                        <button v-if="twoFactorDevices && twoFactorDevices.length" type="button" class="btn-secondary" @click="revokeAllDevices">{{ t('Remove all trusted devices') }}</button>
+                    </div>
+
+                    <p v-if="!twoFactorDevices || !twoFactorDevices.length" class="text-sm text-slate-400">{{ t('No trusted devices.') }}</p>
+
+                    <ul v-else class="divide-y divide-white/10 rounded-lg bg-slate-950">
+                        <li v-for="device in twoFactorDevices" :key="device.id" class="flex items-center justify-between gap-3 px-3 py-3">
+                            <div class="min-w-0">
+                                <p class="flex items-center gap-2 truncate text-sm text-slate-200">
+                                    <span class="truncate">{{ device.user_agent || t('Unknown device') }}</span>
+                                    <span v-if="device.is_current" class="shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-emerald-200">{{ t('This device') }}</span>
+                                </p>
+                                <p class="mt-1 text-xs text-slate-500">{{ t('Last used') }}: {{ formatDate(device.last_used_at) }} · {{ t('Expires') }}: {{ formatDate(device.expires_at) }}</p>
+                            </div>
+                            <button type="button" class="btn-danger shrink-0" @click="revokeDevice(device.id)">{{ t('Remove') }}</button>
+                        </li>
+                    </ul>
                 </div>
 
                 <form class="space-y-3 border-t border-white/10 pt-4" @submit.prevent="disableTwoFactor">

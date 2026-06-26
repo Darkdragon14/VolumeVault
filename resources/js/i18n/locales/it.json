@@ -1,4 +1,13 @@
 {
+  "Trusted devices": "Dispositivi attendibili",
+  "Browsers you trust to skip the code for 30 days.": "Browser che ritieni attendibili per saltare il codice per 30 giorni.",
+  "This device": "Questo dispositivo",
+  "Unknown device": "Dispositivo sconosciuto",
+  "No trusted devices.": "Nessun dispositivo attendibile.",
+  "Remove": "Rimuovi",
+  "Remove this trusted device?": "Rimuovere questo dispositivo attendibile?",
+  "Remove all trusted devices": "Rimuovi tutti i dispositivi attendibili",
+  "Remove all trusted devices?": "Rimuovere tutti i dispositivi attendibili?",
   "Trust this device for 30 days": "Considera attendibile questo dispositivo per 30 giorni",
   "Two-factor authentication": "Autenticazione a due fattori",
   "Reset two-factor authentication": "Reimposta l'autenticazione a due fattori",

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\TwoFactor\TrustedDeviceManager;
 use App\Services\TwoFactor\TwoFactorAuthenticator;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,7 +15,7 @@ class ProfileController extends Controller
 {
     public const VALID_PER_PAGE_VALUES = [10, 20, 50, 100, 0];
 
-    public function edit(Request $request, TwoFactorAuthenticator $authenticator): Response
+    public function edit(Request $request, TwoFactorAuthenticator $authenticator, TrustedDeviceManager $trustedDevices): Response
     {
         $user = $request->user();
 
@@ -38,6 +39,22 @@ class ProfileController extends Controller
 
         if ($pending || $request->session()->get('two_factor_show_recovery')) {
             $props['twoFactorRecoveryCodes'] = $user->two_factor_recovery_codes;
+        }
+
+        if ($user->hasTwoFactorEnabled()) {
+            $current = $trustedDevices->currentDevice($request, $user);
+
+            $props['twoFactorDevices'] = $user->twoFactorTrustedDevices()
+                ->where('expires_at', '>', now())
+                ->orderByDesc('last_used_at')
+                ->get(['id', 'user_agent', 'last_used_at', 'expires_at'])
+                ->map(fn ($device) => [
+                    'id' => $device->id,
+                    'user_agent' => $device->user_agent,
+                    'last_used_at' => $device->last_used_at,
+                    'expires_at' => $device->expires_at,
+                    'is_current' => $current?->id === $device->id,
+                ]);
         }
 
         return Inertia::render('Profile/Edit', $props);

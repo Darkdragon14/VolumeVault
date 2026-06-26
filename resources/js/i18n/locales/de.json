@@ -1,4 +1,13 @@
 {
+  "Trusted devices": "Vertrauenswuerdige Geraete",
+  "Browsers you trust to skip the code for 30 days.": "Browser, denen Sie vertrauen, um den Code 30 Tage lang zu ueberspringen.",
+  "This device": "Dieses Geraet",
+  "Unknown device": "Unbekanntes Geraet",
+  "No trusted devices.": "Keine vertrauenswuerdigen Geraete.",
+  "Remove": "Entfernen",
+  "Remove this trusted device?": "Dieses vertrauenswuerdige Geraet entfernen?",
+  "Remove all trusted devices": "Alle vertrauenswuerdigen Geraete entfernen",
+  "Remove all trusted devices?": "Alle vertrauenswuerdigen Geraete entfernen?",
   "Trust this device for 30 days": "Diesem Geraet 30 Tage vertrauen",
   "Two-factor authentication": "Zwei-Faktor-Authentifizierung",
   "Reset two-factor authentication": "Zwei-Faktor-Authentifizierung zuruecksetzen",

@@ -1,4 +1,13 @@
 {
+  "Trusted devices": "Dispositivos de confianza",
+  "Browsers you trust to skip the code for 30 days.": "Navegadores en los que confia para omitir el codigo durante 30 dias.",
+  "This device": "Este dispositivo",
+  "Unknown device": "Dispositivo desconocido",
+  "No trusted devices.": "No hay dispositivos de confianza.",
+  "Remove": "Eliminar",
+  "Remove this trusted device?": "Eliminar este dispositivo de confianza?",
+  "Remove all trusted devices": "Eliminar todos los dispositivos de confianza",
+  "Remove all trusted devices?": "Eliminar todos los dispositivos de confianza?",
   "Trust this device for 30 days": "Confiar en este dispositivo durante 30 dias",
   "Two-factor authentication": "Autenticacion de dos factores",
   "Reset two-factor authentication": "Restablecer la autenticacion de dos factores",
