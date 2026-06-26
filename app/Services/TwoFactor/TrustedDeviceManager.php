@@ -90,6 +90,15 @@ class TrustedDeviceManager
     {
         $user->twoFactorTrustedDevices()->delete();
 
+        $this->forgetCookie();
+    }
+
+    /**
+     * Drop the trusted-device cookie on the current browser. The cookie is
+     * already inert server-side once its row is gone; this just tidies it up.
+     */
+    public function forgetCookie(): void
+    {
         Cookie::queue(Cookie::forget(self::COOKIE));
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TwoFactorTrustedDevice;
+use App\Services\TwoFactor\TrustedDeviceManager;
 use App\Services\TwoFactor\TwoFactorAuthenticator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -10,7 +11,10 @@ use Illuminate\Validation\ValidationException;
 
 class TwoFactorAuthController extends Controller
 {
-    public function __construct(private readonly TwoFactorAuthenticator $authenticator) {}
+    public function __construct(
+        private readonly TwoFactorAuthenticator $authenticator,
+        private readonly TrustedDeviceManager $trustedDevices,
+    ) {}
 
     /**
      * Begin enrolment: generate a secret and recovery codes but leave the second
@@ -114,9 +118,15 @@ class TwoFactorAuthController extends Controller
      */
     public function destroyDevice(Request $request, TwoFactorTrustedDevice $device)
     {
-        abort_unless($device->user_id === $request->user()->getKey(), 403);
+        abort_unless($device->user_id === (int) $request->user()->getKey(), 403);
+
+        $isCurrent = $this->trustedDevices->currentDevice($request, $request->user())?->is($device) ?? false;
 
         $device->delete();
+
+        if ($isCurrent) {
+            $this->trustedDevices->forgetCookie();
+        }
 
         return redirect()->route('profile.edit')->with('success', 'Trusted device removed.');
     }
@@ -126,7 +136,7 @@ class TwoFactorAuthController extends Controller
      */
     public function destroyDevices(Request $request)
     {
-        $request->user()->twoFactorTrustedDevices()->delete();
+        $this->trustedDevices->clearForUser($request->user());
 
         return redirect()->route('profile.edit')->with('success', 'Trusted devices removed.');
     }

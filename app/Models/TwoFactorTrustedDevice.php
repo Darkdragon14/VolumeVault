@@ -17,6 +17,7 @@ class TwoFactorTrustedDevice extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
             'last_used_at' => 'datetime',
             'expires_at' => 'datetime',
         ];

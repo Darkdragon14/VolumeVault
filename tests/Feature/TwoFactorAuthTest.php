@@ -386,6 +386,34 @@ class TwoFactorAuthTest extends TestCase
                 ->where('twoFactorDevices.0.is_current', false));
     }
 
+    public function test_listing_flags_the_current_device(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user, 'known-token');
+
+        $this->actingAs($user)
+            ->withCookie(TrustedDeviceManager::COOKIE, 'known-token')
+            ->get('/profile')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('twoFactorDevices', 1)
+                ->where('twoFactorDevices.0.is_current', true));
+    }
+
+    public function test_revoking_the_current_device_forgets_the_cookie(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user, 'known-token');
+        $device = $user->twoFactorTrustedDevices()->first();
+
+        $this->actingAs($user)
+            ->withCookie(TrustedDeviceManager::COOKIE, 'known-token')
+            ->delete('/profile/two-factor/devices/'.$device->id)
+            ->assertRedirect(route('profile.edit'))
+            ->assertCookieExpired(TrustedDeviceManager::COOKIE);
+    }
+
     public function test_expired_trusted_devices_are_not_listed(): void
     {
         $secret = $this->google2fa()->generateSecretKey();
