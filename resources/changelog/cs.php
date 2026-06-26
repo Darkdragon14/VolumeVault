@@ -3,7 +3,7 @@
 return [
     'optional_two_factor_auth' => [
         'title' => 'Volitelné dvoufaktorové ověření',
-        'description' => 'Svůj účet nyní můžete chránit volitelným dvoufaktorovým ověřením založeným na časově omezeném jednorázovém heslu (TOTP). Aktivujte jej ve svém profilu naskenováním QR kódu pomocí ověřovací aplikace, jako je Google Authenticator nebo Authy, a potvrzením vygenerovaným kódem. Po aktivaci se při přihlášení hned po hesle vyžaduje šestimístný kód. Pro případ, že ztratíte přístup k ověřovací aplikaci, je k dispozici sada jednorázových obnovovacích kódů a správci mohou dvoufaktorové ověření kteréhokoli uživatele resetovat na stránce Uživatelé.',
+        'description' => 'Svůj účet nyní můžete chránit volitelným dvoufaktorovým ověřením založeným na časově omezeném jednorázovém heslu (TOTP). Aktivujte jej ve svém profilu naskenováním QR kódu pomocí ověřovací aplikace, jako je Google Authenticator nebo Authy, a potvrzením vygenerovaným kódem. Po aktivaci se při přihlášení hned po hesle vyžaduje šestimístný kód. Pro případ, že ztratíte přístup k ověřovací aplikaci, je k dispozici sada jednorázových obnovovacích kódů a správci mohou dvoufaktorové ověření kteréhokoli uživatele resetovat na stránce Uživatelé. Na obrazovce s kódem můžete také označit prohlížeč jako důvěryhodný a po dobu 30 dnů přeskočit kód — nikdy ne heslo.',
     ],
     'backup_initiator_tracking' => [
         'title' => 'Sledování, kdo spustil každou zálohu',

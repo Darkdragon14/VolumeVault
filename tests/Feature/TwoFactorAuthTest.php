@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\TwoFactor\TrustedDeviceManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -44,6 +45,20 @@ class TwoFactorAuthTest extends TestCase
         ])->save();
 
         return $user->fresh();
+    }
+
+    /**
+     * Persist a trusted device for the user keyed on a known plaintext token.
+     * Tests then send that token via withCookie(); the test harness encrypts it
+     * exactly as a browser cookie would arrive, so the request decrypts back to
+     * this token and matches the stored hash.
+     */
+    private function seedTrustedDevice(User $user, string $token = 'known-trusted-token', ?\DateTimeInterface $expiresAt = null): void
+    {
+        $user->twoFactorTrustedDevices()->create([
+            'token' => hash('sha256', $token),
+            'expires_at' => $expiresAt ?? now()->addDays(TrustedDeviceManager::DAYS),
+        ]);
     }
 
     public function test_user_can_enable_and_confirm_two_factor(): void
@@ -269,5 +284,89 @@ class TwoFactorAuthTest extends TestCase
         }
 
         $this->post('/two-factor-challenge', ['code' => $invalid])->assertStatus(429);
+    }
+
+    public function test_trusting_a_device_records_it_and_sets_a_cookie(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+
+        $this->post('/login', ['email' => 'user@example.com', 'password' => 'secret-password']);
+        $response = $this->post('/two-factor-challenge', [
+            'code' => $this->google2fa()->getCurrentOtp($secret),
+            'trust_device' => true,
+        ]);
+
+        $response->assertRedirect(route('dashboard'))->assertCookie(TrustedDeviceManager::COOKIE);
+        $this->assertAuthenticatedAs($user->fresh());
+        $this->assertDatabaseCount('two_factor_trusted_devices', 1);
+    }
+
+    public function test_trusted_device_lets_the_next_login_skip_the_challenge(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user, 'known-token');
+
+        $this->withCookie(TrustedDeviceManager::COOKIE, 'known-token')
+            ->post('/login', ['email' => 'user@example.com', 'password' => 'secret-password'])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticatedAs($user->fresh());
+    }
+
+    public function test_trusted_device_cookie_does_not_bypass_the_password(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user, 'known-token');
+
+        $this->withCookie(TrustedDeviceManager::COOKIE, 'known-token')
+            ->post('/login', ['email' => 'user@example.com', 'password' => 'wrong-password'])
+            ->assertSessionHasErrors('email');
+
+        $this->assertGuest();
+    }
+
+    public function test_expired_trusted_device_still_requires_the_challenge(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user, 'known-token', now()->subDay());
+
+        $this->withCookie(TrustedDeviceManager::COOKIE, 'known-token')
+            ->post('/login', ['email' => 'user@example.com', 'password' => 'secret-password'])
+            ->assertRedirect(route('two-factor.challenge'));
+
+        $this->assertGuest();
+    }
+
+    public function test_disabling_two_factor_clears_trusted_devices(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user);
+        $this->assertDatabaseCount('two_factor_trusted_devices', 1);
+
+        $this->actingAs($user)->delete('/profile/two-factor', ['password' => 'secret-password'])
+            ->assertRedirect(route('profile.edit'));
+
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
+    }
+
+    public function test_admin_reset_clears_a_users_trusted_devices(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $target = $this->userWithTwoFactor($secret);
+        $target->twoFactorTrustedDevices()->create([
+            'token' => hash('sha256', 'seed-token'),
+            'expires_at' => now()->addDays(30),
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->delete('/users/'.$target->id.'/two-factor')
+            ->assertRedirect(route('users.index'));
+
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
     }
 }

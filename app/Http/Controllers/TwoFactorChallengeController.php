@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\TwoFactor\TrustedDeviceManager;
 use App\Services\TwoFactor\TwoFactorAuthenticator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,10 @@ use Inertia\Response;
 
 class TwoFactorChallengeController extends Controller
 {
-    public function __construct(private readonly TwoFactorAuthenticator $authenticator) {}
+    public function __construct(
+        private readonly TwoFactorAuthenticator $authenticator,
+        private readonly TrustedDeviceManager $trustedDevices,
+    ) {}
 
     public function create(Request $request): Response|RedirectResponse
     {
@@ -29,6 +33,7 @@ class TwoFactorChallengeController extends Controller
         $request->validate([
             'code' => ['nullable', 'string'],
             'recovery_code' => ['nullable', 'string'],
+            'trust_device' => ['nullable', 'boolean'],
         ]);
 
         $userId = $request->session()->get('login.id');
@@ -56,6 +61,12 @@ class TwoFactorChallengeController extends Controller
 
         // No remember-me for 2FA accounts: the challenge is required every session.
         Auth::login($user, false);
+
+        // Optionally remember this browser so it can skip the challenge (but not
+        // the password) for the next 30 days.
+        if ($request->boolean('trust_device')) {
+            $this->trustedDevices->trust($user, $request);
+        }
 
         $request->session()->forget(['login.id', 'login.remember']);
         $request->session()->regenerate();

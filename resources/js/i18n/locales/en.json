@@ -19,6 +19,7 @@
   "Verify": "Verify",
   "Use a recovery code": "Use a recovery code",
   "Use an authenticator code": "Use an authenticator code",
+  "Trust this device for 30 days": "Trust this device for 30 days",
   "Overwrites the source volume. Requires typed confirmation.": "Overwrites the source volume. Requires typed confirmation.",
   "Stops affected containers, overwrites the source volume, then restarts them.": "Stops affected containers, overwrites the source volume, then restarts them.",
   "This permanently overwrites the contents of volume \"{name}\" with the selected backup. This cannot be undone.": "This permanently overwrites the contents of volume \"{name}\" with the selected backup. This cannot be undone.",

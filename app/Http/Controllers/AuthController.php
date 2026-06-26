@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\TwoFactor\TrustedDeviceManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -23,7 +24,7 @@ class AuthController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, TrustedDeviceManager $trustedDevices)
     {
         $credentials = $request->validate([
             'email' => ['required', 'email'],
@@ -38,17 +39,21 @@ class AuthController extends Controller
             ]);
         }
 
-        // Defer the login until the second factor is satisfied: stash just the
-        // user id (and the remember preference) so the challenge can complete it.
         if ($user->hasTwoFactorEnabled()) {
-            // 2FA accounts never get a persistent "remember me" recaller: every
-            // new session must clear the challenge again.
-            $request->session()->put('login.id', $user->getKey());
+            // A trusted browser waives only the second factor (the password was
+            // just verified above); otherwise defer the login to the challenge,
+            // stashing just the user id. 2FA accounts never get a persistent
+            // "remember me" recaller, so every new session is re-evaluated here.
+            if (! $trustedDevices->hasValidDevice($request, $user)) {
+                $request->session()->put('login.id', $user->getKey());
 
-            return redirect()->route('two-factor.challenge');
+                return redirect()->route('two-factor.challenge');
+            }
         }
 
-        Auth::login($user, $request->boolean('remember'));
+        // Honor "remember me" only for non-2FA accounts; a trusted 2FA browser
+        // still re-enters its password each session.
+        Auth::login($user, ! $user->hasTwoFactorEnabled() && $request->boolean('remember'));
 
         $request->session()->regenerate();
 

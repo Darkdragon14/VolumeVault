@@ -138,6 +138,8 @@ class UserController extends Controller
             'remember_token' => Str::random(60),
         ])->save();
 
+        $user->twoFactorTrustedDevices()->delete();
+
         ActivityLog::record('user_two_factor_reset', 'Two-factor authentication reset.', $user, [
             'reset_by' => $request->user()->id,
         ]);

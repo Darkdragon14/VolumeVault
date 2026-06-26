@@ -3,7 +3,7 @@
 return [
     'optional_two_factor_auth' => [
         'title' => 'Optionele tweefactorauthenticatie',
-        'description' => 'Je kunt je account nu beveiligen met optionele tweefactorauthenticatie op basis van een tijdgebonden eenmalig wachtwoord (TOTP). Schakel het in vanuit je profiel door een QR-code te scannen met een authenticator-app zoals Google Authenticator of Authy en te bevestigen met een gegenereerde code. Zodra het is ingeschakeld, wordt bij het inloggen direct na je wachtwoord om een zescijferige code gevraagd. Er wordt een set eenmalige herstelcodes verstrekt voor het geval je de toegang tot je authenticator-app verliest, en beheerders kunnen de tweefactorauthenticatie van elke gebruiker opnieuw instellen via de pagina Gebruikers.',
+        'description' => 'Je kunt je account nu beveiligen met optionele tweefactorauthenticatie op basis van een tijdgebonden eenmalig wachtwoord (TOTP). Schakel het in vanuit je profiel door een QR-code te scannen met een authenticator-app zoals Google Authenticator of Authy en te bevestigen met een gegenereerde code. Zodra het is ingeschakeld, wordt bij het inloggen direct na je wachtwoord om een zescijferige code gevraagd. Er wordt een set eenmalige herstelcodes verstrekt voor het geval je de toegang tot je authenticator-app verliest, en beheerders kunnen de tweefactorauthenticatie van elke gebruiker opnieuw instellen via de pagina Gebruikers. Op het codescherm kun je een browser ook als vertrouwd markeren om 30 dagen lang de code — nooit je wachtwoord — over te slaan.',
     ],
     'backup_initiator_tracking' => [
         'title' => 'Bijhouden wie elke back-up heeft gestart',

@@ -10,6 +10,7 @@ const useRecovery = ref(false);
 const form = useForm({
     code: '',
     recovery_code: '',
+    trust_device: false,
 });
 
 const submit = () => form.post('/two-factor-challenge');
@@ -48,6 +49,11 @@ const toggleRecovery = () => {
                 <input v-model="form.recovery_code" class="input" type="text" autocomplete="one-time-code"
                     autofocus required>
                 <span v-if="form.errors.code" class="text-sm text-rose-300">{{ form.errors.code }}</span>
+            </label>
+
+            <label class="flex items-center gap-3 text-sm text-slate-300">
+                <input v-model="form.trust_device" type="checkbox" class="rounded border-slate-600 bg-slate-950 text-sky-400">
+                {{ t('Trust this device for 30 days') }}
             </label>
 
             <button class="btn-primary w-full" :disabled="form.processing">{{ t('Verify') }}</button>

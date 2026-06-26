@@ -19,6 +19,7 @@
   "Verify": "Verifier",
   "Use a recovery code": "Utiliser un code de recuperation",
   "Use an authenticator code": "Utiliser un code d'authentification",
+  "Trust this device for 30 days": "Faire confiance a cet appareil pendant 30 jours",
   "Overwrites the source volume. Requires typed confirmation.": "Ecrase le volume source. Confirmation a saisir requise.",
   "Stops affected containers, overwrites the source volume, then restarts them.": "Arrete les conteneurs concernes, ecrase le volume source, puis les redemarre.",
   "This permanently overwrites the contents of volume \"{name}\" with the selected backup. This cannot be undone.": "Cela ecrase definitivement le contenu du volume \"{name}\" avec la sauvegarde selectionnee. Cette action est irreversible.",

@@ -3,7 +3,7 @@
 return [
     'optional_two_factor_auth' => [
         'title' => 'Autenticazione a due fattori facoltativa',
-        'description' => 'Ora puoi proteggere il tuo account con un\'autenticazione a due fattori facoltativa basata su una password monouso temporanea (TOTP). Attivala dal tuo profilo scansionando un codice QR con un\'app di autenticazione come Google Authenticator o Authy e confermando con un codice generato. Una volta attivata, l\'accesso richiede un codice di sei cifre subito dopo la password. Viene fornita una serie di codici di recupero monouso nel caso in cui tu perda l\'accesso all\'app di autenticazione e gli amministratori possono reimpostare l\'autenticazione a due fattori di qualsiasi utente dalla pagina Utenti.',
+        'description' => 'Ora puoi proteggere il tuo account con un\'autenticazione a due fattori facoltativa basata su una password monouso temporanea (TOTP). Attivala dal tuo profilo scansionando un codice QR con un\'app di autenticazione come Google Authenticator o Authy e confermando con un codice generato. Una volta attivata, l\'accesso richiede un codice di sei cifre subito dopo la password. Viene fornita una serie di codici di recupero monouso nel caso in cui tu perda l\'accesso all\'app di autenticazione e gli amministratori possono reimpostare l\'autenticazione a due fattori di qualsiasi utente dalla pagina Utenti. Nella schermata del codice puoi anche contrassegnare un browser come attendibile per saltare il codice — mai la password — per 30 giorni.',
     ],
     'backup_initiator_tracking' => [
         'title' => 'Traccia chi ha avviato ogni backup',
