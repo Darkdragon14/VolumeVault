@@ -87,7 +87,8 @@ class TwoFactorAuthController extends Controller
             'remember_token' => Str::random(60),
         ])->save();
 
-        $user->twoFactorTrustedDevices()->delete();
+        // Drop every trusted device and expire the cookie on this browser too.
+        $this->trustedDevices->clearForUser($user);
 
         return redirect()->route('profile.edit')->with('success', 'Two-factor authentication disabled.');
     }

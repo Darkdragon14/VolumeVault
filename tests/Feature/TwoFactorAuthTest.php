@@ -350,7 +350,8 @@ class TwoFactorAuthTest extends TestCase
         $this->assertDatabaseCount('two_factor_trusted_devices', 1);
 
         $this->actingAs($user)->delete('/profile/two-factor', ['password' => 'secret-password'])
-            ->assertRedirect(route('profile.edit'));
+            ->assertRedirect(route('profile.edit'))
+            ->assertCookieExpired(TrustedDeviceManager::COOKIE);
 
         $this->assertDatabaseCount('two_factor_trusted_devices', 0);
     }
@@ -461,8 +462,23 @@ class TwoFactorAuthTest extends TestCase
 
         $this->actingAs($user)
             ->delete('/profile/two-factor/devices')
-            ->assertRedirect(route('profile.edit'));
+            ->assertRedirect(route('profile.edit'))
+            ->assertCookieExpired(TrustedDeviceManager::COOKIE);
 
         $this->assertDatabaseCount('two_factor_trusted_devices', 0);
+    }
+
+    public function test_trusted_device_user_id_is_cast_to_integer(): void
+    {
+        $user = $this->userWithTwoFactor($this->google2fa()->generateSecretKey());
+        $this->seedTrustedDevice($user);
+        $device = $user->twoFactorTrustedDevices()->first();
+
+        // Some drivers hydrate bigint columns as strings; the cast keeps the
+        // ownership check (===) type-safe regardless of the connection.
+        $this->assertIsInt($device->user_id);
+
+        $device->user_id = (string) $user->id;
+        $this->assertSame($user->id, $device->user_id);
     }
 }
