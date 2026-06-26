@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\TwoFactor\TwoFactorAuthenticator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class TwoFactorAuthController extends Controller
@@ -50,7 +51,12 @@ class TwoFactorAuthController extends Controller
             ]);
         }
 
-        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
+        // Rotate the remember token so any browser remembered before 2FA was
+        // enabled can no longer skip the challenge with its old recaller cookie.
+        $user->forceFill([
+            'two_factor_confirmed_at' => now(),
+            'remember_token' => Str::random(60),
+        ])->save();
 
         return redirect()->route('profile.edit')
             ->with('success', 'Two-factor authentication enabled.')
@@ -73,6 +79,7 @@ class TwoFactorAuthController extends Controller
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
+            'remember_token' => Str::random(60),
         ])->save();
 
         return redirect()->route('profile.edit')->with('success', 'Two-factor authentication disabled.');

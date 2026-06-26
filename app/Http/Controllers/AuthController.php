@@ -41,8 +41,9 @@ class AuthController extends Controller
         // Defer the login until the second factor is satisfied: stash just the
         // user id (and the remember preference) so the challenge can complete it.
         if ($user->hasTwoFactorEnabled()) {
+            // 2FA accounts never get a persistent "remember me" recaller: every
+            // new session must clear the challenge again.
             $request->session()->put('login.id', $user->getKey());
-            $request->session()->put('login.remember', $request->boolean('remember'));
 
             return redirect()->route('two-factor.challenge');
         }

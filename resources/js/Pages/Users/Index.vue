@@ -41,7 +41,7 @@ const resetTwoFactor = (id: number) => {
                         </div>
                         <div class="flex shrink-0 flex-wrap gap-2">
                             <ActionIcon :label="t('Edit')" icon="edit" :href="`/users/${user.id}/edit`" />
-                            <ActionIcon v-if="user.two_factor_confirmed_at" :label="t('Reset two-factor authentication')" icon="refresh" variant="danger" @click="resetTwoFactor(user.id)" />
+                            <ActionIcon v-if="user.two_factor_confirmed_at && auth.user?.id !== user.id" :label="t('Reset two-factor authentication')" icon="refresh" variant="danger" @click="resetTwoFactor(user.id)" />
                             <ActionIcon :label="t('Delete')" icon="delete" variant="danger" :disabled="auth.user?.id === user.id" @click="destroyUser(user.id)" />
                         </div>
                     </div>
@@ -74,7 +74,7 @@ const resetTwoFactor = (id: number) => {
                             <td class="px-4 py-3">
                                 <div class="flex flex-wrap gap-2">
                                     <ActionIcon :label="t('Edit')" icon="edit" :href="`/users/${user.id}/edit`" />
-                                    <ActionIcon v-if="user.two_factor_confirmed_at" :label="t('Reset two-factor authentication')" icon="refresh" variant="danger" @click="resetTwoFactor(user.id)" />
+                                    <ActionIcon v-if="user.two_factor_confirmed_at && auth.user?.id !== user.id" :label="t('Reset two-factor authentication')" icon="refresh" variant="danger" @click="resetTwoFactor(user.id)" />
                                     <ActionIcon :label="t('Delete')" icon="delete" variant="danger" :disabled="auth.user?.id === user.id" @click="destroyUser(user.id)" />
                                 </div>
                             </td>

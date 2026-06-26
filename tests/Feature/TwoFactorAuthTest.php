@@ -19,6 +19,15 @@ class TwoFactorAuthTest extends TestCase
     }
 
     /**
+     * A six-digit code guaranteed to differ from the current valid OTP, so the
+     * "invalid code" assertions never collide with a genuinely valid one.
+     */
+    private function invalidCodeFor(string $secret): string
+    {
+        return $this->google2fa()->getCurrentOtp($secret) === '000000' ? '111111' : '000000';
+    }
+
+    /**
      * @param  list<string>  $recoveryCodes
      */
     private function userWithTwoFactor(string $secret, array $recoveryCodes = ['aaaaaaaaaa-bbbbbbbbbb']): User
@@ -66,7 +75,7 @@ class TwoFactorAuthTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user)->post('/profile/two-factor');
 
-        $this->actingAs($user)->post('/profile/two-factor/confirm', ['code' => '000000'])
+        $this->actingAs($user)->post('/profile/two-factor/confirm', ['code' => $this->invalidCodeFor($user->fresh()->two_factor_secret)])
             ->assertSessionHasErrors('code');
 
         $this->assertFalse($user->fresh()->hasTwoFactorEnabled());
@@ -112,7 +121,7 @@ class TwoFactorAuthTest extends TestCase
             'password' => 'secret-password',
         ]);
 
-        $this->post('/two-factor-challenge', ['code' => '000000'])
+        $this->post('/two-factor-challenge', ['code' => $this->invalidCodeFor($secret)])
             ->assertSessionHasErrors('code');
 
         $this->assertGuest();
@@ -200,6 +209,37 @@ class TwoFactorAuthTest extends TestCase
         ]);
     }
 
+    public function test_admin_cannot_reset_their_own_two_factor(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $admin = User::factory()->admin()->create(['password' => Hash::make('secret-password')]);
+        $admin->forceFill([
+            'two_factor_secret' => $secret,
+            'two_factor_recovery_codes' => ['aaaaaaaaaa-bbbbbbbbbb'],
+            'two_factor_confirmed_at' => now(),
+        ])->save();
+
+        $this->actingAs($admin->fresh())
+            ->delete('/users/'.$admin->id.'/two-factor')
+            ->assertSessionHasErrors('user');
+
+        $this->assertTrue($admin->fresh()->hasTwoFactorEnabled());
+    }
+
+    public function test_enabling_two_factor_rotates_the_remember_token(): void
+    {
+        $user = User::factory()->create(['remember_token' => 'old-remember-token']);
+
+        $this->actingAs($user)->post('/profile/two-factor');
+        $user->refresh();
+
+        $this->actingAs($user)->post('/profile/two-factor/confirm', [
+            'code' => $this->google2fa()->getCurrentOtp($user->two_factor_secret),
+        ]);
+
+        $this->assertNotSame('old-remember-token', $user->fresh()->remember_token);
+    }
+
     public function test_regular_user_cannot_reset_two_factor(): void
     {
         $secret = $this->google2fa()->generateSecretKey();
@@ -222,10 +262,12 @@ class TwoFactorAuthTest extends TestCase
             'password' => 'secret-password',
         ]);
 
+        $invalid = $this->invalidCodeFor($secret);
+
         for ($attempt = 0; $attempt < 5; $attempt++) {
-            $this->post('/two-factor-challenge', ['code' => '000000']);
+            $this->post('/two-factor-challenge', ['code' => $invalid]);
         }
 
-        $this->post('/two-factor-challenge', ['code' => '000000'])->assertStatus(429);
+        $this->post('/two-factor-challenge', ['code' => $invalid])->assertStatus(429);
     }
 }
