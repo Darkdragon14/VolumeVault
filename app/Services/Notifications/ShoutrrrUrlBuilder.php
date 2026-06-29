@@ -111,11 +111,20 @@ class ShoutrrrUrlBuilder
         $auth = $username !== '' || $password !== '' ? $username.':'.$password.'@' : '';
         $port = (int) ($config['port'] ?? 587);
 
-        return 'smtp://'.$auth.$this->host($host).':'.$port.'/?'.http_build_query([
+        $query = [
             'from' => $from,
             'to' => $to,
             'subject' => $config['subject'] ?? 'VolumeVault backup notification',
-        ], '', '&', PHP_QUERY_RFC3986);
+        ];
+
+        // Force a plaintext connection for trusted local SMTP servers. Both keys are
+        // required: encryption=None alone would still let Shoutrrr attempt STARTTLS.
+        if (filter_var($config['unencrypted'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $query['encryption'] = 'None';
+            $query['usestarttls'] = 'No';
+        }
+
+        return 'smtp://'.$auth.$this->host($host).':'.$port.'/?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986);
     }
 
     private function advanced(array $config): string

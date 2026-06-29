@@ -132,6 +132,44 @@ class ShoutrrrUrlBuilderTest extends TestCase
         $this->assertStringStartsWith('smtp://smtp.example.com:587/?', $url);
     }
 
+    public function test_smtp_unencrypted_adds_encryption_none_and_disables_starttls(): void
+    {
+        $url = $this->builder->build(NotificationChannel::SERVICE_SMTP, [
+            'host' => 'smtp.example.com',
+            'from' => 'vault@example.com',
+            'to' => 'ops@example.com',
+            'port' => 25,
+            'unencrypted' => true,
+        ]);
+
+        $this->assertStringContainsString('encryption=None', $url);
+        $this->assertStringContainsString('usestarttls=No', $url);
+    }
+
+    public function test_smtp_stays_encrypted_by_default(): void
+    {
+        $url = $this->builder->build(NotificationChannel::SERVICE_SMTP, [
+            'host' => 'smtp.example.com',
+            'from' => 'vault@example.com',
+            'to' => 'ops@example.com',
+        ]);
+
+        $this->assertStringNotContainsString('encryption=', $url);
+        $this->assertStringNotContainsString('usestarttls=', $url);
+    }
+
+    public function test_smtp_unencrypted_false_does_not_add_encryption(): void
+    {
+        $url = $this->builder->build(NotificationChannel::SERVICE_SMTP, [
+            'host' => 'smtp.example.com',
+            'from' => 'vault@example.com',
+            'to' => 'ops@example.com',
+            'unencrypted' => false,
+        ]);
+
+        $this->assertStringNotContainsString('encryption=', $url);
+    }
+
     public function test_smtp_requires_host_from_and_to(): void
     {
         $this->expectException(InvalidArgumentException::class);

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unencrypted_smtp_notifications' => [
+        'title' => 'Prise en charge des serveurs SMTP non chiffrés',
+        'description' => 'Les canaux de notification SMTP peuvent désormais envoyer vers des serveurs qui n\'utilisent pas de chiffrement. Une nouvelle option « Serveur SMTP non chiffré » dans le formulaire de notification désactive TLS et STARTTLS afin que VolumeVault puisse atteindre un relais SMTP local de confiance qui refuserait sinon la connexion avec une erreur « unencrypted connection ». L\'envoi chiffré reste l\'option par défaut et est inchangé.',
+    ],
     'optional_two_factor_auth' => [
         'title' => 'Authentification à deux facteurs facultative',
         'description' => 'Vous pouvez désormais protéger votre compte avec une authentification à deux facteurs facultative reposant sur un mot de passe à usage unique basé sur le temps (TOTP). Activez-la depuis votre profil en scannant un QR code avec une application d\'authentification comme Google Authenticator ou Authy, puis confirmez avec un code généré. Une fois activée, la connexion demande un code à six chiffres juste après le mot de passe. Une série de codes de récupération à usage unique est fournie au cas où vous perdriez l\'accès à votre application d\'authentification, et les administrateurs peuvent réinitialiser l\'authentification à deux facteurs de n\'importe quel utilisateur depuis la page Utilisateurs. Sur l\'écran du code, vous pouvez aussi marquer un navigateur comme fiable pour sauter le code — jamais le mot de passe — pendant 30 jours.',

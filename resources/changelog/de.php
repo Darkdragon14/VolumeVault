@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unencrypted_smtp_notifications' => [
+        'title' => 'Unterstützung für unverschlüsselte SMTP-Server',
+        'description' => 'SMTP-Benachrichtigungskanäle können jetzt auch an Server zustellen, die keine Verschlüsselung verwenden. Eine neue Option „SMTP-Server ist unverschlüsselt" im Benachrichtigungsformular deaktiviert TLS und STARTTLS, sodass VolumeVault ein vertrauenswürdiges lokales SMTP-Relay erreichen kann, das die Verbindung andernfalls mit dem Fehler „unencrypted connection" ablehnen würde. Die verschlüsselte Zustellung bleibt die Standardeinstellung und ist unverändert.',
+    ],
     'optional_two_factor_auth' => [
         'title' => 'Optionale Zwei-Faktor-Authentifizierung',
         'description' => 'Sie können Ihr Konto jetzt mit einer optionalen Zwei-Faktor-Authentifizierung auf Basis eines zeitbasierten Einmalpassworts (TOTP) schützen. Aktivieren Sie sie in Ihrem Profil, indem Sie einen QR-Code mit einer Authentifizierungs-App wie Google Authenticator oder Authy scannen und anschließend mit einem generierten Code bestätigen. Nach der Aktivierung wird bei der Anmeldung direkt nach dem Passwort ein sechsstelliger Code abgefragt. Für den Fall, dass Sie den Zugriff auf Ihre Authentifizierungs-App verlieren, wird eine Reihe von Einmal-Wiederherstellungscodes bereitgestellt, und Administratoren können die Zwei-Faktor-Authentifizierung jedes Benutzers auf der Seite Benutzer zurücksetzen. Im Code-Bildschirm können Sie einen Browser außerdem als vertrauenswürdig markieren, um den Code — nie das Passwort — 30 Tage lang zu überspringen.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unencrypted_smtp_notifications' => [
+        'title' => 'Ondersteuning voor onversleutelde SMTP-servers',
+        'description' => 'SMTP-meldingskanalen kunnen nu ook bezorgen bij servers die geen versleuteling gebruiken. Een nieuwe optie "SMTP-server is onversleuteld" in het meldingsformulier schakelt TLS en STARTTLS uit, zodat VolumeVault een vertrouwde lokale SMTP-relay kan bereiken die de verbinding anders zou weigeren met een "unencrypted connection"-fout. Versleutelde bezorging blijft de standaard en verandert niet.',
+    ],
     'optional_two_factor_auth' => [
         'title' => 'Optionele tweefactorauthenticatie',
         'description' => 'Je kunt je account nu beveiligen met optionele tweefactorauthenticatie op basis van een tijdgebonden eenmalig wachtwoord (TOTP). Schakel het in vanuit je profiel door een QR-code te scannen met een authenticator-app zoals Google Authenticator of Authy en te bevestigen met een gegenereerde code. Zodra het is ingeschakeld, wordt bij het inloggen direct na je wachtwoord om een zescijferige code gevraagd. Er wordt een set eenmalige herstelcodes verstrekt voor het geval je de toegang tot je authenticator-app verliest, en beheerders kunnen de tweefactorauthenticatie van elke gebruiker opnieuw instellen via de pagina Gebruikers. Op het codescherm kun je een browser ook als vertrouwd markeren om 30 dagen lang de code — nooit je wachtwoord — over te slaan.',

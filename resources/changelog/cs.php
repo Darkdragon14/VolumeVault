@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unencrypted_smtp_notifications' => [
+        'title' => 'Podpora nešifrovaných serverů SMTP',
+        'description' => 'Oznamovací kanály SMTP nyní mohou doručovat i na servery, které nepoužívají šifrování. Nová možnost „Server SMTP je nešifrovaný" ve formuláři oznámení vypne TLS a STARTTLS, takže VolumeVault může oslovit důvěryhodný místní SMTP relay, který by jinak spojení odmítl chybou „unencrypted connection". Šifrované doručování zůstává výchozí a nemění se.',
+    ],
     'optional_two_factor_auth' => [
         'title' => 'Volitelné dvoufaktorové ověření',
         'description' => 'Svůj účet nyní můžete chránit volitelným dvoufaktorovým ověřením založeným na časově omezeném jednorázovém heslu (TOTP). Aktivujte jej ve svém profilu naskenováním QR kódu pomocí ověřovací aplikace, jako je Google Authenticator nebo Authy, a potvrzením vygenerovaným kódem. Po aktivaci se při přihlášení hned po hesle vyžaduje šestimístný kód. Pro případ, že ztratíte přístup k ověřovací aplikaci, je k dispozici sada jednorázových obnovovacích kódů a správci mohou dvoufaktorové ověření kteréhokoli uživatele resetovat na stránce Uživatelé. Na obrazovce s kódem můžete také označit prohlížeč jako důvěryhodný a po dobu 30 dnů přeskočit kód — nikdy ne heslo.',

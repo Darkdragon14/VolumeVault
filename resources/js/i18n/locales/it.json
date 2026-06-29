@@ -667,6 +667,8 @@
   "Sign in": "Accedi",
   "Sign in to VolumeVault": "Accedi a VolumeVault",
   "SMTP host": "Host SMTP",
+  "SMTP server is unencrypted": "Server SMTP non crittografato",
+  "Unencrypted connection: credentials and emails are sent in plain text. Only use this for a trusted local SMTP server.": "Connessione non crittografata: credenziali ed e-mail vengono inviate in chiaro. Usa questa opzione solo per un server SMTP locale attendibile.",
   "SQLite database and useful files from storage.": "Database SQLite e file utili dallo storage.",
   "SSH host": "Host SSH",
   "Start fresh or import a secure save from an existing installation.": "Inizia da zero o importa un salvataggio sicuro da un'installazione esistente.",

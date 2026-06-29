@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'unencrypted_smtp_notifications',
+        ],
+    ],
     'releases' => [
         'v1.15.0' => [
             'date' => '2026-06-26',
