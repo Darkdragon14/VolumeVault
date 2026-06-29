@@ -191,6 +191,43 @@ class ShoutrrrUrlBuilderTest extends TestCase
         $this->builder->build(NotificationChannel::SERVICE_ADVANCED, ['url' => 'not-a-url']);
     }
 
+    public function test_webhook_builds_json_map_of_generic_urls_per_event(): void
+    {
+        $url = $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, [
+            'start_url' => 'https://hc-ping.com/uuid/start',
+            'success_url' => 'https://hc-ping.com/uuid',
+            'fail_url' => 'https://hc-ping.com/uuid/fail',
+        ]);
+
+        $this->assertSame([
+            'start' => 'generic+https://hc-ping.com/uuid/start',
+            'success' => 'generic+https://hc-ping.com/uuid',
+            'fail' => 'generic+https://hc-ping.com/uuid/fail',
+        ], json_decode($url, true));
+    }
+
+    public function test_webhook_keeps_only_the_filled_urls(): void
+    {
+        $url = $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, [
+            'success_url' => 'http://example.test/hook',
+            'fail_url' => '',
+        ]);
+
+        $this->assertSame(['success' => 'generic+http://example.test/hook'], json_decode($url, true));
+    }
+
+    public function test_webhook_rejects_a_non_http_url(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, ['success_url' => 'ftp://example.test/hook']);
+    }
+
+    public function test_webhook_requires_at_least_one_url(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, ['start_url' => '', 'success_url' => '', 'fail_url' => '']);
+    }
+
     public function test_unsupported_service_throws(): void
     {
         $this->expectException(InvalidArgumentException::class);

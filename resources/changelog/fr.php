@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'webhook_notifications' => [
+        'title' => 'Notifications par webhook',
+        'description' => 'Un nouveau canal de notification « Webhook » appelle vos propres URL lors des événements de sauvegarde et de restauration. Définissez une URL différente pour chaque action — démarrage, succès et échec — et VolumeVault appelle celle qui correspond lorsqu\'une sauvegarde ou une restauration démarre, réussit ou échoue. Remplissez les champs souhaités ; réglez le niveau du canal sur « Chaque sauvegarde et restauration » pour envoyer aussi les URL de démarrage et de succès. Cela facilite l\'intégration avec les services de supervision et de type « homme mort ». Les canaux de notification peuvent désormais aussi être modifiés via l\'API.',
+    ],
+    'backup_start_notifications' => [
+        'title' => 'Notifications de démarrage des sauvegardes',
+        'description' => 'Les sauvegardes envoient désormais une notification au démarrage d\'une exécution, et plus seulement à la fin, comme le font déjà les restaurations. Les messages de démarrage sont envoyés aux canaux réglés pour recevoir chaque exécution ; les canaux « erreurs uniquement » ne sont pas affectés. Les services de supervision peuvent ainsi mesurer la durée d\'une sauvegarde.',
+    ],
     'unencrypted_smtp_notifications' => [
         'title' => 'Prise en charge des serveurs SMTP non chiffrés',
         'description' => 'Les canaux de notification SMTP peuvent désormais envoyer vers des serveurs qui n\'utilisent pas de chiffrement. Une nouvelle option « Serveur SMTP non chiffré » dans le formulaire de notification désactive TLS et STARTTLS afin que VolumeVault puisse atteindre un relais SMTP local de confiance qui refuserait sinon la connexion avec une erreur « unencrypted connection ». L\'envoi chiffré reste l\'option par défaut et est inchangé.',

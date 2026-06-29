@@ -393,6 +393,109 @@ class NotificationChannelTest extends TestCase
         $this->assertFalse($channel->fresh()->is_active);
     }
 
+    public function test_webhook_channel_pings_the_event_specific_url(): void
+    {
+        [$job] = $this->createJobs();
+        $channel = $this->webhookChannel($job, NotificationChannel::LEVEL_INFO);
+
+        $cases = [
+            [BackupRun::STATUS_SUCCESS, 'generic+https://hc-ping.com/uuid', 'finished'],
+            [BackupRun::STATUS_FAILED, 'generic+https://hc-ping.com/uuid/fail', 'finished'],
+            [BackupRun::STATUS_RUNNING, 'generic+https://hc-ping.com/uuid/start', 'started'],
+        ];
+
+        foreach ($cases as [$status, $expectedUrl, $phase]) {
+            $run = BackupRun::create([
+                'backup_job_id' => $job->id,
+                'status' => $status,
+                'trigger' => BackupRun::TRIGGER_MANUAL,
+            ]);
+
+            $docker = Mockery::mock(DockerProcess::class);
+            $docker->shouldReceive('run')
+                ->once()
+                ->with(
+                    Mockery::any(),
+                    60,
+                    Mockery::on(fn (array $environment) => $environment['SHOUTRRR_URL'] === $expectedUrl),
+                )
+                ->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+            $this->app->instance(DockerProcess::class, $docker);
+
+            $sender = app(SendShoutrrrNotification::class);
+            $phase === 'started' ? $sender->sendBackupRunStarted($run) : $sender->sendBackupRunFinished($run);
+        }
+    }
+
+    public function test_webhook_channel_skips_an_event_without_a_configured_url(): void
+    {
+        [$job] = $this->createJobs();
+        // Only a success URL is configured, so a failure has nothing to ping.
+        $channel = NotificationChannel::create([
+            'name' => 'HC partial',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://hc-ping.com/uuid']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $job->notificationChannels()->attach($channel);
+
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'error_message' => 'Boom',
+        ]);
+
+        $docker = Mockery::mock(DockerProcess::class);
+        $docker->shouldNotReceive('run');
+        $this->app->instance(DockerProcess::class, $docker);
+
+        app(SendShoutrrrNotification::class)->sendBackupRunFinished($run);
+    }
+
+    public function test_backup_start_notification_only_reaches_info_channels(): void
+    {
+        [$job] = $this->createJobs();
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+        ]);
+
+        foreach ([NotificationChannel::LEVEL_ERROR, NotificationChannel::LEVEL_INFO] as $level) {
+            $channel = NotificationChannel::create([
+                'name' => 'Start '.$level,
+                'service' => NotificationChannel::SERVICE_ADVANCED,
+                'url' => 'ntfy://ntfy.sh/start-'.$level,
+                'notification_level' => $level,
+            ]);
+            $job->notificationChannels()->attach($channel);
+        }
+
+        $docker = Mockery::mock(DockerProcess::class);
+        $docker->shouldReceive('run')->once()->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $this->app->instance(DockerProcess::class, $docker);
+
+        app(SendShoutrrrNotification::class)->sendBackupRunStarted($run);
+    }
+
+    private function webhookChannel(BackupJob $job, string $level): NotificationChannel
+    {
+        $channel = NotificationChannel::create([
+            'name' => 'Healthchecks',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode([
+                'start' => 'generic+https://hc-ping.com/uuid/start',
+                'success' => 'generic+https://hc-ping.com/uuid',
+                'fail' => 'generic+https://hc-ping.com/uuid/fail',
+            ]),
+            'notification_level' => $level,
+        ]);
+        $job->notificationChannels()->attach($channel);
+
+        return $channel;
+    }
+
     private function createJobs(): array
     {
         $destination = BackupDestination::create([

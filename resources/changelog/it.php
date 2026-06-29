@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'webhook_notifications' => [
+        'title' => 'Notifiche tramite webhook',
+        'description' => 'Un nuovo canale di notifica «Webhook» chiama i tuoi URL agli eventi di backup e ripristino. Imposta un URL diverso per ogni azione — avvio, successo ed errore — e VolumeVault chiama quello corrispondente quando un backup o un ripristino inizia, riesce o fallisce. Compila quelli che vuoi; imposta il livello del canale su «Ogni backup e ripristino» per inviare anche gli URL di avvio e di successo. Semplifica l\'integrazione con i servizi di monitoraggio e di tipo «interruttore dell\'uomo morto». I canali di notifica ora possono anche essere aggiornati tramite l\'API.',
+    ],
+    'backup_start_notifications' => [
+        'title' => 'Notifiche di avvio del backup',
+        'description' => 'I backup ora inviano una notifica all\'avvio di un\'esecuzione, non solo al termine, come già fanno i ripristini. I messaggi di avvio vengono inviati ai canali impostati per ricevere ogni esecuzione; i canali solo errori non sono interessati. I servizi di monitoraggio possono così misurare la durata di un backup.',
+    ],
     'unencrypted_smtp_notifications' => [
         'title' => 'Supporto per i server SMTP non crittografati',
         'description' => 'I canali di notifica SMTP possono ora inviare verso server che non usano la crittografia. Una nuova opzione "Server SMTP non crittografato" nel modulo di notifica disattiva TLS e STARTTLS, così VolumeVault può raggiungere un relay SMTP locale attendibile che altrimenti rifiuterebbe la connessione con un errore "unencrypted connection". L\'invio crittografato rimane l\'impostazione predefinita ed è invariato.',

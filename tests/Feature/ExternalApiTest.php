@@ -453,4 +453,88 @@ class ExternalApiTest extends TestCase
 
         File::deleteDirectory($archivePath);
     }
+
+    public function test_admin_write_token_can_update_a_webhook_notification_channel(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Healthchecks',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://hc-ping.com/old']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Healthchecks prod',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => [
+                    'start_url' => 'https://hc-ping.com/uuid/start',
+                    'success_url' => 'https://hc-ping.com/uuid',
+                    'fail_url' => 'https://hc-ping.com/uuid/fail',
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Healthchecks prod')
+            ->assertJsonPath('data.service', NotificationChannel::SERVICE_WEBHOOK)
+            ->assertJsonPath('data.masked_url', '********');
+
+        $this->assertSame([
+            'start' => 'generic+https://hc-ping.com/uuid/start',
+            'success' => 'generic+https://hc-ping.com/uuid',
+            'fail' => 'generic+https://hc-ping.com/uuid/fail',
+        ], json_decode($channel->fresh()->url, true));
+    }
+
+    public function test_updating_a_notification_channel_rejects_an_invalid_webhook_url(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Healthchecks',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://hc-ping.com/uuid']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Healthchecks',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => ['success_url' => 'ftp://nope'],
+            ])
+            ->assertStatus(422);
+    }
+
+    public function test_updating_a_notification_channel_requires_write_ability(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Ntfy',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/all',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-read', ['read'])->plainTextToken;
+
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Ntfy',
+                'service' => NotificationChannel::SERVICE_ADVANCED,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => [],
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_openapi_documents_the_notification_update(): void
+    {
+        $this->getJson('/api/v1/openapi.json')
+            ->assertOk()
+            ->assertJsonPath('paths./notifications/{id}.put.requestBody.content.application/json.schema.$ref', '#/components/schemas/NotificationChannelUpdateRequest')
+            ->assertJsonPath('components.schemas.NotificationChannelUpdateRequest.properties.service.enum', NotificationChannel::SERVICES);
+    }
 }

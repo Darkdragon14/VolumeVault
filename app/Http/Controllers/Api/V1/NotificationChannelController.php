@@ -2,13 +2,18 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Concerns\PersistsNotificationChannel;
 use App\Http\Controllers\Controller;
 use App\Models\NotificationChannel;
 use App\Services\Notifications\SendShoutrrrNotification;
+use App\Services\Notifications\ShoutrrrUrlBuilder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class NotificationChannelController extends Controller
 {
+    use PersistsNotificationChannel;
+
     public function index(): JsonResponse
     {
         return response()->json([
@@ -22,6 +27,22 @@ class NotificationChannelController extends Controller
     public function show(NotificationChannel $notification): JsonResponse
     {
         return response()->json(['data' => $notification->load('backupJobs')->safeForFrontend()]);
+    }
+
+    public function update(Request $request, NotificationChannel $notification, ShoutrrrUrlBuilder $urlBuilder): JsonResponse
+    {
+        $data = $this->validated($request);
+        $config = $request->input('config', []);
+        $shouldReplaceUrl = $data['service'] !== $notification->service || $this->hasFilledConfig($config);
+
+        if ($shouldReplaceUrl) {
+            $data['url'] = $this->buildUrl($urlBuilder, $data['service'], $config);
+        }
+
+        $notification->update($this->payload($data, $request));
+        $this->keepSingleDefaultChannel($notification);
+
+        return response()->json(['data' => $notification->fresh()->load('backupJobs')->safeForFrontend()]);
     }
 
     public function test(NotificationChannel $notification, SendShoutrrrNotification $sendShoutrrrNotification): JsonResponse

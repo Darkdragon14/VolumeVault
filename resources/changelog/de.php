@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'webhook_notifications' => [
+        'title' => 'Webhook-Benachrichtigungen',
+        'description' => 'Ein neuer Benachrichtigungskanal „Webhook“ ruft Ihre eigenen URLs bei Backup- und Wiederherstellungsereignissen auf. Legen Sie für jede Aktion – Start, Erfolg und Fehler – eine eigene URL fest; VolumeVault ruft die passende auf, wenn ein Backup oder eine Wiederherstellung startet, erfolgreich ist oder fehlschlägt. Füllen Sie beliebige Felder aus; stellen Sie die Kanalstufe auf „Jeder Backup- und Wiederherstellungslauf“, um auch die Start- und Erfolgs-URLs zu senden. Das vereinfacht die Anbindung an Überwachungs- und Totmannschalter-Dienste. Benachrichtigungskanäle lassen sich jetzt auch über die API aktualisieren.',
+    ],
+    'backup_start_notifications' => [
+        'title' => 'Benachrichtigungen beim Backup-Start',
+        'description' => 'Backups senden jetzt auch beim Start eines Laufs eine Benachrichtigung, nicht nur am Ende – wie es Wiederherstellungen bereits tun. Start-Nachrichten gehen an Kanäle, die jeden Lauf empfangen; reine Fehlerkanäle sind nicht betroffen. Überwachungsdienste können so die Dauer eines Backups messen.',
+    ],
     'unencrypted_smtp_notifications' => [
         'title' => 'Unterstützung für unverschlüsselte SMTP-Server',
         'description' => 'SMTP-Benachrichtigungskanäle können jetzt auch an Server zustellen, die keine Verschlüsselung verwenden. Eine neue Option „SMTP-Server ist unverschlüsselt" im Benachrichtigungsformular deaktiviert TLS und STARTTLS, sodass VolumeVault ein vertrauenswürdiges lokales SMTP-Relay erreichen kann, das die Verbindung andernfalls mit dem Fehler „unencrypted connection" ablehnen würde. Die verschlüsselte Zustellung bleibt die Standardeinstellung und ist unverändert.',

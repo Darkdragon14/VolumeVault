@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'webhook_notifications' => [
+        'title' => 'Oznámení přes webhook',
+        'description' => 'Nový oznamovací kanál „Webhook“ volá vaše vlastní adresy URL při událostech zálohování a obnovy. Nastavte pro každou akci — spuštění, úspěch a selhání — jinou adresu URL a VolumeVault zavolá odpovídající, když záloha nebo obnova začne, uspěje nebo selže. Vyplňte libovolnou část; nastavte úroveň kanálu na „Každá záloha a obnova“, aby se odeslaly i adresy URL spuštění a úspěchu. Usnadňuje to integraci s monitorovacími službami a službami typu „pojistka mrtvého muže“. Oznamovací kanály lze nyní také upravovat přes API.',
+    ],
+    'backup_start_notifications' => [
+        'title' => 'Oznámení o spuštění zálohy',
+        'description' => 'Zálohy nyní odesílají oznámení i při spuštění běhu, nejen po jeho dokončení — stejně jako už to dělají obnovy. Zprávy o spuštění míří na kanály nastavené na příjem každého běhu; kanály jen pro chyby nejsou dotčeny. Monitorovací služby tak mohou měřit, jak dlouho záloha trvá.',
+    ],
     'unencrypted_smtp_notifications' => [
         'title' => 'Podpora nešifrovaných serverů SMTP',
         'description' => 'Oznamovací kanály SMTP nyní mohou doručovat i na servery, které nepoužívají šifrování. Nová možnost „Server SMTP je nešifrovaný" ve formuláři oznámení vypne TLS a STARTTLS, takže VolumeVault může oslovit důvěryhodný místní SMTP relay, který by jinak spojení odmítl chybou „unencrypted connection". Šifrované doručování zůstává výchozí a nemění se.',

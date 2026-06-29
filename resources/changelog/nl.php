@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'webhook_notifications' => [
+        'title' => 'Webhook-meldingen',
+        'description' => 'Een nieuw meldingskanaal ‘Webhook’ roept je eigen URL\'s aan bij back-up- en herstelgebeurtenissen. Stel voor elke actie — start, succes en fout — een andere URL in; VolumeVault roept de bijbehorende aan wanneer een back-up of herstelactie start, slaagt of mislukt. Vul een willekeurige selectie in; zet het kanaalniveau op ‘Elke back-up en herstelactie’ om ook de start- en succes-URL\'s te versturen. Zo integreer je eenvoudig met monitoring- en dodemansknop-diensten. Meldingskanalen kunnen nu ook via de API worden bijgewerkt.',
+    ],
+    'backup_start_notifications' => [
+        'title' => 'Meldingen bij start van back-up',
+        'description' => 'Back-ups sturen nu ook een melding wanneer een run start, niet alleen wanneer die klaar is — net als herstelacties al deden. Startmeldingen gaan naar kanalen die elke run ontvangen; kanalen met alleen fouten blijven ongewijzigd. Monitoringdiensten kunnen zo meten hoe lang een back-up duurt.',
+    ],
     'unencrypted_smtp_notifications' => [
         'title' => 'Ondersteuning voor onversleutelde SMTP-servers',
         'description' => 'SMTP-meldingskanalen kunnen nu ook bezorgen bij servers die geen versleuteling gebruiken. Een nieuwe optie "SMTP-server is onversleuteld" in het meldingsformulier schakelt TLS en STARTTLS uit, zodat VolumeVault een vertrouwde lokale SMTP-relay kan bereiken die de verbinding anders zou weigeren met een "unencrypted connection"-fout. Versleutelde bezorging blijft de standaard en verandert niet.',

@@ -80,6 +80,12 @@ class RunBackup
             'backup_job_id' => $job->id,
         ]);
 
+        // A pre-restore safety backup stays invisible to the job lifecycle, so it
+        // must not emit a start notification either (see the job-state guard above).
+        if (! $this->isPreRestore($run)) {
+            $this->sendStartNotification($run);
+        }
+
         try {
             if (! $job->destination?->is_active) {
                 throw new RuntimeException('The backup destination is inactive.');
@@ -374,6 +380,17 @@ class RunBackup
             $this->sendShoutrrrNotification->sendBackupRunFinished($run);
         } catch (Throwable $exception) {
             ActivityLog::record('notification_send_failed', 'Backup notification failed.', $run, [
+                'error' => str($exception->getMessage())->limit(1000)->toString(),
+            ]);
+        }
+    }
+
+    private function sendStartNotification(BackupRun $run): void
+    {
+        try {
+            $this->sendShoutrrrNotification->sendBackupRunStarted($run);
+        } catch (Throwable $exception) {
+            ActivityLog::record('notification_send_failed', 'Backup start notification failed.', $run, [
                 'error' => str($exception->getMessage())->limit(1000)->toString(),
             ]);
         }

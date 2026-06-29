@@ -16,6 +16,7 @@ class ShoutrrrUrlBuilder
             NotificationChannel::SERVICE_GOTIFY => $this->gotify($config),
             NotificationChannel::SERVICE_SMTP => $this->smtp($config),
             NotificationChannel::SERVICE_ADVANCED => $this->advanced($config),
+            NotificationChannel::SERVICE_WEBHOOK => $this->webhook($config),
             default => throw new InvalidArgumentException('Unsupported notification service.'),
         };
     }
@@ -136,6 +137,43 @@ class ShoutrrrUrlBuilder
         }
 
         return $url;
+    }
+
+    /**
+     * A webhook channel stores up to three plain HTTP(S) URLs — one per lifecycle
+     * event (start / success / fail) — wrapped as Shoutrrr generic URLs. They are
+     * kept together as a JSON map in the single (encrypted) url column; the sender
+     * decodes it and pings the URL matching the event. This drives Healthchecks.io
+     * and any ping-based monitor without leaving the existing Shoutrrr pipeline.
+     */
+    private function webhook(array $config): string
+    {
+        $urls = [];
+
+        foreach (['start', 'success', 'fail'] as $event) {
+            $url = trim((string) ($config[$event.'_url'] ?? ''));
+
+            if ($url !== '') {
+                $urls[$event] = $this->genericWebhook($url);
+            }
+        }
+
+        if ($urls === []) {
+            throw new InvalidArgumentException('Add at least one webhook URL (start, success or failure).');
+        }
+
+        return json_encode($urls, JSON_THROW_ON_ERROR);
+    }
+
+    private function genericWebhook(string $url): string
+    {
+        if (! preg_match('#^https?://#i', $url)) {
+            throw new InvalidArgumentException('Webhook URLs must start with http:// or https://.');
+        }
+
+        // Shoutrrr's generic service POSTs to any endpoint. The generic+scheme shortcut
+        // keeps the original host, path and query intact: https://x → generic+https://x.
+        return 'generic+'.$url;
     }
 
     private function host(string $host): string

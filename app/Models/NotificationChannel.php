@@ -22,6 +22,8 @@ class NotificationChannel extends Model
 
     public const SERVICE_ADVANCED = 'advanced';
 
+    public const SERVICE_WEBHOOK = 'webhook';
+
     public const SERVICES = [
         self::SERVICE_DISCORD,
         self::SERVICE_TELEGRAM,
@@ -29,6 +31,7 @@ class NotificationChannel extends Model
         self::SERVICE_GOTIFY,
         self::SERVICE_SMTP,
         self::SERVICE_ADVANCED,
+        self::SERVICE_WEBHOOK,
     ];
 
     public const LEVEL_ERROR = 'error';
