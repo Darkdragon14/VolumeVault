@@ -167,8 +167,15 @@ class ShoutrrrUrlBuilder
 
     private function genericWebhook(string $url): string
     {
-        if (! preg_match('#^https?://#i', $url)) {
-            throw new InvalidArgumentException('Webhook URLs must start with http:// or https://.');
+        // Validate structure, not just the scheme prefix: filter_var rejects an empty
+        // host, spaces and other malformed URLs (e.g. "https://", "https://?x=1") that a
+        // bare "starts with http(s)://" check would let through, only to fail later at the
+        // Shoutrrr send. The scheme check keeps it to http/https (filter_var alone accepts
+        // ftp:// and friends).
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+        if (! in_array($scheme, ['http', 'https'], true) || filter_var($url, FILTER_VALIDATE_URL) === false) {
+            throw new InvalidArgumentException('Webhook URLs must be a valid http:// or https:// URL.');
         }
 
         // Shoutrrr's generic service POSTs to any endpoint. The generic+scheme shortcut

@@ -228,6 +228,20 @@ class ShoutrrrUrlBuilderTest extends TestCase
         $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, ['start_url' => '', 'success_url' => '', 'fail_url' => '']);
     }
 
+    public function test_webhook_rejects_malformed_urls(): void
+    {
+        // Scheme-prefix checks alone would accept these; only structural validation
+        // (FILTER_VALIDATE_URL) rejects an empty host, a query-only URL or whitespace.
+        foreach (['https://', 'https://?x=1', 'https://exa mple.com', 'http://', 'not-a-url'] as $bad) {
+            try {
+                $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, ['success_url' => $bad]);
+                $this->fail("Expected an invalid webhook URL to be rejected: {$bad}");
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
     public function test_unsupported_service_throws(): void
     {
         $this->expectException(InvalidArgumentException::class);
