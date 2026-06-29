@@ -382,6 +382,11 @@ const submit = () => {
                             type="url"
                             placeholder="https://example.com/job-succeeded"
                         />
+                        <span
+                            v-if="form.errors['config.success_url']"
+                            class="block text-sm text-rose-300"
+                            >{{ form.errors["config.success_url"] }}</span
+                        >
                     </label>
                     <label class="space-y-2">
                         <span class="label">{{ t("Start URL") }}</span>
@@ -391,6 +396,11 @@ const submit = () => {
                             type="url"
                             placeholder="https://example.com/job-started"
                         />
+                        <span
+                            v-if="form.errors['config.start_url']"
+                            class="block text-sm text-rose-300"
+                            >{{ form.errors["config.start_url"] }}</span
+                        >
                     </label>
                     <label class="space-y-2">
                         <span class="label">{{ t("Failure URL") }}</span>
@@ -400,6 +410,11 @@ const submit = () => {
                             type="url"
                             placeholder="https://example.com/job-failed"
                         />
+                        <span
+                            v-if="form.errors['config.fail_url']"
+                            class="block text-sm text-rose-300"
+                            >{{ form.errors["config.fail_url"] }}</span
+                        >
                     </label>
                     <p class="text-xs text-slate-400 sm:col-span-2">
                         {{

@@ -35,6 +35,12 @@ trait PersistsNotificationChannel
             'config.start_url' => ['nullable', 'string', 'max:2048'],
             'config.success_url' => ['nullable', 'string', 'max:2048'],
             'config.fail_url' => ['nullable', 'string', 'max:2048'],
+        ], [], [
+            // Readable attribute names so the (English) message reads "The Success URL …"
+            // instead of "The config.success url …".
+            'config.start_url' => 'Start URL',
+            'config.success_url' => 'Success URL',
+            'config.fail_url' => 'Failure URL',
         ]);
     }
 

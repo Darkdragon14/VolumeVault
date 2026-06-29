@@ -621,6 +621,30 @@ class ExternalApiTest extends TestCase
                 'notification_level' => NotificationChannel::LEVEL_INFO,
                 'config' => ['success_url' => ['https://example.com']],
             ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['config.success_url' => 'Success URL']);
+    }
+
+    public function test_updating_a_channel_rejects_a_non_string_config_value_for_any_service(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Discord',
+            'service' => NotificationChannel::SERVICE_DISCORD,
+            'url' => 'discord://token@123456',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // A nested array for any service's config field must be a 422, not an
+        // "Array to string conversion" 500 in the URL builder.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Discord',
+                'service' => NotificationChannel::SERVICE_DISCORD,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => ['webhook_url' => ['https://discord.com/api/webhooks/1/2']],
+            ])
             ->assertStatus(422);
     }
 

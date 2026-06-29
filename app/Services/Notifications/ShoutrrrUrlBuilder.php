@@ -14,6 +14,13 @@ class ShoutrrrUrlBuilder
      */
     public function build(string $service, array $config, array $existing = []): string
     {
+        // Config sub-values are validated only as part of an array, not per key. Coerce any
+        // non-scalar value (e.g. a nested array sent through the API for any service, like
+        // config.webhook_url or config.url) to null so the string casts in the builders below
+        // cannot raise an "Array to string conversion"; a now-empty required field then
+        // surfaces a clean 422 instead of a 500.
+        $config = array_map(fn ($value) => is_scalar($value) ? $value : null, $config);
+
         return match ($service) {
             NotificationChannel::SERVICE_DISCORD => $this->discord($config),
             NotificationChannel::SERVICE_TELEGRAM => $this->telegram($config),
