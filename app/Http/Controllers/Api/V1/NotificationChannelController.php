@@ -32,7 +32,7 @@ class NotificationChannelController extends Controller
     public function update(Request $request, NotificationChannel $notification, ShoutrrrUrlBuilder $urlBuilder): JsonResponse
     {
         $data = $this->validated($request);
-        $config = $request->input('config', []);
+        $config = $this->configFromRequest($request);
         $shouldReplaceUrl = $data['service'] !== $notification->service || $this->hasFilledConfig($config);
 
         if ($shouldReplaceUrl) {

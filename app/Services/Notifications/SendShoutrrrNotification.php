@@ -186,10 +186,13 @@ class SendShoutrrrNotification
     {
         $url = $this->resolveUrl($channel, $event);
 
-        // A webhook channel with no URL for this event has nothing to ping: report a
-        // no-op success rather than spinning a Shoutrrr container with an empty URL.
+        // A webhook channel with no URL for this event has nothing to ping. Report it as
+        // not-sent (exit code 1), not a no-op success, so the alert flow does not record a
+        // phantom "notified" event or count it as delivered. Run notifications ignore the
+        // result, so an intentionally-unconfigured event (e.g. a success-only webhook on a
+        // failed run) still stays silent with no side effects.
         if ($url === null) {
-            return new DockerProcessResult([], 0, '', '');
+            return new DockerProcessResult([], 1, '', 'No webhook URL configured for this event.');
         }
 
         $command = [

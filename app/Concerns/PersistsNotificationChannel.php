@@ -35,24 +35,56 @@ trait PersistsNotificationChannel
 
     protected function payload(array $data, Request $request): array
     {
-        // Filter out null url/scope so an update without a new URL keeps the saved
-        // encrypted value. Template fields are intentionally excluded from the filter:
-        // clearing a template sends an empty string, which Laravel coerces to null, and
-        // that null must reach the database to actually wipe the previous template.
-        return array_merge(array_filter([
+        // name / service / notification_level are required by validation, so they
+        // always apply.
+        $payload = [
             'name' => $data['name'],
             'service' => $data['service'],
-            'url' => $data['url'] ?? null,
             'notification_level' => $data['notification_level'],
-            'scope' => $data['scope'] ?? NotificationChannel::SCOPE_ALL,
-            'is_active' => $request->boolean('is_active', true),
-            'is_default' => $request->boolean('is_default'),
-        ], fn ($value) => $value !== null), [
-            'title_template' => $data['title_template'] ?? null,
-            'body_template' => $data['body_template'] ?? null,
-            'restore_title_template' => $data['restore_title_template'] ?? null,
-            'restore_body_template' => $data['restore_body_template'] ?? null,
-        ]);
+        ];
+
+        // A rebuilt URL is only present when the caller regenerated it; otherwise the
+        // saved encrypted URL is left untouched.
+        if (isset($data['url'])) {
+            $payload['url'] = $data['url'];
+        }
+
+        // Optional fields are written only when the request actually carries them, so a
+        // partial API update never silently resets scope, the toggles, or the templates.
+        // On create, omitted fields fall back to the column defaults. The web form always
+        // submits these (templates are sent as empty strings when cleared, so the key is
+        // still present and the template is wiped as before), so its behaviour is unchanged.
+        if ($request->has('scope')) {
+            $payload['scope'] = $data['scope'] ?? NotificationChannel::SCOPE_ALL;
+        }
+
+        if ($request->has('is_active')) {
+            $payload['is_active'] = $request->boolean('is_active');
+        }
+
+        if ($request->has('is_default')) {
+            $payload['is_default'] = $request->boolean('is_default');
+        }
+
+        foreach (['title_template', 'body_template', 'restore_title_template', 'restore_body_template'] as $field) {
+            if ($request->has($field)) {
+                $payload[$field] = $data[$field] ?? null;
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Read the guided-setup config as an array. The field is nullable in validation,
+     * so an explicit `config: null` (or a non-array) is normalised to an empty array
+     * before it reaches the array-typed builder/helpers.
+     */
+    protected function configFromRequest(Request $request): array
+    {
+        $config = $request->input('config');
+
+        return is_array($config) ? $config : [];
     }
 
     protected function buildUrl(ShoutrrrUrlBuilder $urlBuilder, string $service, array $config): string

@@ -537,4 +537,60 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('paths./notifications/{id}.put.requestBody.content.application/json.schema.$ref', '#/components/schemas/NotificationChannelUpdateRequest')
             ->assertJsonPath('components.schemas.NotificationChannelUpdateRequest.properties.service.enum', NotificationChannel::SERVICES);
     }
+
+    public function test_partial_api_update_preserves_omitted_optional_fields(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://example.com/ok']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'is_active' => false,
+            'is_default' => true,
+            'title_template' => 'Backup {{ status }}',
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // A partial update that only sends the required fields must not reset the
+        // optional ones the client omitted.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Webhook renamed',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Webhook renamed');
+
+        $channel->refresh();
+        $this->assertFalse($channel->is_active);
+        $this->assertTrue($channel->is_default);
+        $this->assertSame('Backup {{ status }}', $channel->title_template);
+        $this->assertSame(['success' => 'generic+https://example.com/ok'], json_decode($channel->url, true));
+    }
+
+    public function test_updating_a_notification_channel_tolerates_null_config(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://example.com/ok']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // config is nullable; an explicit null must be a no-op, not a TypeError.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Webhook',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => null,
+            ])
+            ->assertOk();
+
+        $this->assertSame(['success' => 'generic+https://example.com/ok'], json_decode($channel->fresh()->url, true));
+    }
 }

@@ -43,7 +43,7 @@ class NotificationChannelController extends Controller
     public function store(Request $request, ShoutrrrUrlBuilder $urlBuilder)
     {
         $data = $this->validated($request);
-        $data['url'] = $this->buildUrl($urlBuilder, $data['service'], $request->input('config', []));
+        $data['url'] = $this->buildUrl($urlBuilder, $data['service'], $this->configFromRequest($request));
 
         $channel = NotificationChannel::create($this->payload($data, $request));
         $this->keepSingleDefaultChannel($channel);
@@ -66,7 +66,7 @@ class NotificationChannelController extends Controller
     public function update(Request $request, NotificationChannel $notification, ShoutrrrUrlBuilder $urlBuilder)
     {
         $data = $this->validated($request);
-        $config = $request->input('config', []);
+        $config = $this->configFromRequest($request);
         $shouldReplaceUrl = $data['service'] !== $notification->service || $this->hasFilledConfig($config);
 
         if ($shouldReplaceUrl) {
