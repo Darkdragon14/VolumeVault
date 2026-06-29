@@ -570,6 +570,60 @@ class ExternalApiTest extends TestCase
         $this->assertSame(['success' => 'generic+https://example.com/ok'], json_decode($channel->url, true));
     }
 
+    public function test_partial_webhook_update_preserves_other_event_urls(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode([
+                'start' => 'generic+https://example.com/start',
+                'success' => 'generic+https://example.com',
+                'fail' => 'generic+https://example.com/fail',
+            ]),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // Rotating only the failure URL must not silently drop start/success.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Webhook',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => ['fail_url' => 'https://example.com/rotated-fail'],
+            ])
+            ->assertOk();
+
+        $this->assertSame([
+            'start' => 'generic+https://example.com/start',
+            'success' => 'generic+https://example.com',
+            'fail' => 'generic+https://example.com/rotated-fail',
+        ], json_decode($channel->fresh()->url, true));
+    }
+
+    public function test_updating_a_webhook_channel_rejects_a_non_string_url_value(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://example.com']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // A non-string URL value must be a 422, not an "Array to string conversion" 500.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Webhook',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => ['success_url' => ['https://example.com']],
+            ])
+            ->assertStatus(422);
+    }
+
     public function test_updating_a_notification_channel_tolerates_null_config(): void
     {
         $admin = User::factory()->admin()->create();

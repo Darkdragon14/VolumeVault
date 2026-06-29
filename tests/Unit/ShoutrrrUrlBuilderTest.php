@@ -242,6 +242,26 @@ class ShoutrrrUrlBuilderTest extends TestCase
         }
     }
 
+    public function test_webhook_merges_submitted_urls_with_the_existing_map(): void
+    {
+        $existing = [
+            'start' => 'generic+https://example.com/start',
+            'success' => 'generic+https://example.com',
+            'fail' => 'generic+https://example.com/fail',
+        ];
+
+        // Only the failure URL is resubmitted; start and success must be kept.
+        $url = $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, [
+            'fail_url' => 'https://example.com/new-fail',
+        ], $existing);
+
+        $this->assertSame([
+            'start' => 'generic+https://example.com/start',
+            'success' => 'generic+https://example.com',
+            'fail' => 'generic+https://example.com/new-fail',
+        ], json_decode($url, true));
+    }
+
     public function test_unsupported_service_throws(): void
     {
         $this->expectException(InvalidArgumentException::class);

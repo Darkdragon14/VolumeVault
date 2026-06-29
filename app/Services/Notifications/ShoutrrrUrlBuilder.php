@@ -7,7 +7,12 @@ use InvalidArgumentException;
 
 class ShoutrrrUrlBuilder
 {
-    public function build(string $service, array $config): string
+    /**
+     * @param  array<string, mixed>  $config  guided-setup fields submitted by the user
+     * @param  array<string, mixed>  $existing  the decoded saved webhook map, so a partial
+     *                                          webhook edit merges instead of dropping URLs
+     */
+    public function build(string $service, array $config, array $existing = []): string
     {
         return match ($service) {
             NotificationChannel::SERVICE_DISCORD => $this->discord($config),
@@ -16,7 +21,7 @@ class ShoutrrrUrlBuilder
             NotificationChannel::SERVICE_GOTIFY => $this->gotify($config),
             NotificationChannel::SERVICE_SMTP => $this->smtp($config),
             NotificationChannel::SERVICE_ADVANCED => $this->advanced($config),
-            NotificationChannel::SERVICE_WEBHOOK => $this->webhook($config),
+            NotificationChannel::SERVICE_WEBHOOK => $this->webhook($config, $existing),
             default => throw new InvalidArgumentException('Unsupported notification service.'),
         };
     }
@@ -146,15 +151,28 @@ class ShoutrrrUrlBuilder
      * decodes it and pings the URL matching the event. This drives Healthchecks.io
      * and any ping-based monitor without leaving the existing Shoutrrr pipeline.
      */
-    private function webhook(array $config): string
+    private function webhook(array $config, array $existing = []): string
     {
+        // For each event use the submitted URL when provided, otherwise keep the saved one.
+        // The form does not prefill the hidden URLs, so a blank field means "keep the saved
+        // one" and a filled field overwrites just that event — an edit never silently drops
+        // the other events. Iterating in a fixed order also keeps the stored map canonical.
         $urls = [];
-
         foreach (['start', 'success', 'fail'] as $event) {
-            $url = trim((string) ($config[$event.'_url'] ?? ''));
+            // Guard the cast: config sub-values are only validated as part of an array, so a
+            // non-string (e.g. an array) is treated as absent rather than crashing.
+            $raw = $config[$event.'_url'] ?? '';
+            $submitted = is_string($raw) ? trim($raw) : '';
 
-            if ($url !== '') {
-                $urls[$event] = $this->genericWebhook($url);
+            if ($submitted !== '') {
+                $urls[$event] = $this->genericWebhook($submitted);
+
+                continue;
+            }
+
+            $saved = $existing[$event] ?? null;
+            if (is_string($saved) && $saved !== '') {
+                $urls[$event] = $saved;
             }
         }
 

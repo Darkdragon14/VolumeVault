@@ -36,7 +36,8 @@ class NotificationChannelController extends Controller
         $shouldReplaceUrl = $data['service'] !== $notification->service || $this->hasFilledConfig($config);
 
         if ($shouldReplaceUrl) {
-            $data['url'] = $this->buildUrl($urlBuilder, $data['service'], $config);
+            $existing = $this->existingWebhookMap($notification, $data['service']);
+            $data['url'] = $this->buildUrl($urlBuilder, $data['service'], $config, $existing);
         }
 
         $notification->update($this->payload($data, $request));

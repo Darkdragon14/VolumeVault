@@ -30,6 +30,11 @@ trait PersistsNotificationChannel
             'is_active' => ['boolean'],
             'is_default' => ['boolean'],
             'config' => ['nullable', 'array'],
+            // Webhook URL fields are cast to strings by the builder; rejecting non-string
+            // values here returns a 422 instead of an "Array to string conversion" 500.
+            'config.start_url' => ['nullable', 'string', 'max:2048'],
+            'config.success_url' => ['nullable', 'string', 'max:2048'],
+            'config.fail_url' => ['nullable', 'string', 'max:2048'],
         ]);
     }
 
@@ -87,13 +92,31 @@ trait PersistsNotificationChannel
         return is_array($config) ? $config : [];
     }
 
-    protected function buildUrl(ShoutrrrUrlBuilder $urlBuilder, string $service, array $config): string
+    protected function buildUrl(ShoutrrrUrlBuilder $urlBuilder, string $service, array $config, array $existing = []): string
     {
         try {
-            return $urlBuilder->build($service, $config);
+            return $urlBuilder->build($service, $config, $existing);
         } catch (InvalidArgumentException $exception) {
             throw ValidationException::withMessages(['config' => $exception->getMessage()]);
         }
+    }
+
+    /**
+     * The saved per-event webhook map, so a same-service webhook update can merge the
+     * submitted URLs onto the existing ones instead of dropping the untouched events.
+     * Empty for non-webhook channels or when the service is changing.
+     *
+     * @return array<string, mixed>
+     */
+    protected function existingWebhookMap(NotificationChannel $channel, string $service): array
+    {
+        if ($service !== NotificationChannel::SERVICE_WEBHOOK || $channel->service !== NotificationChannel::SERVICE_WEBHOOK) {
+            return [];
+        }
+
+        $decoded = json_decode((string) $channel->url, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     protected function keepSingleDefaultChannel(NotificationChannel $channel): void
