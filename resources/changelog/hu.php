@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unencrypted_smtp_notifications' => [
+        'title' => 'Titkosítatlan SMTP-kiszolgálók támogatása',
+        'description' => 'Az SMTP értesítési csatornák mostantól olyan kiszolgálókra is kézbesíthetnek, amelyek nem használnak titkosítást. Az értesítési űrlapon egy új „Az SMTP-kiszolgáló titkosítatlan" beállítás kikapcsolja a TLS-t és a STARTTLS-t, így a VolumeVault elérhet egy megbízható helyi SMTP-továbbítót, amely egyébként „unencrypted connection" hibával utasítaná el a kapcsolatot. A titkosított kézbesítés marad az alapértelmezett, és változatlan.',
+    ],
     'optional_two_factor_auth' => [
         'title' => 'Választható kétfaktoros hitelesítés',
         'description' => 'Mostantól védheti fiókját választható, időalapú egyszer használatos jelszón (TOTP) alapuló kétfaktoros hitelesítéssel. Kapcsolja be a profiljában egy QR-kód beolvasásával egy hitelesítő alkalmazással, például a Google Authenticatorral vagy az Authyval, majd erősítse meg a generált kóddal. Bekapcsolás után a bejelentkezés a jelszó után közvetlenül egy hatjegyű kódot kér. Egyszer használatos helyreállítási kódok készlete áll rendelkezésre arra az esetre, ha elveszítené a hozzáférést a hitelesítő alkalmazáshoz, az adminisztrátorok pedig bármely felhasználó kétfaktoros hitelesítését visszaállíthatják a Felhasználók oldalon. A kód képernyőjén egy böngészőt megbízhatóként is megjelölhet, hogy 30 napig kihagyja a kódot – de a jelszót soha.',

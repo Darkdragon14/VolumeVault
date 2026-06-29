@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unencrypted_smtp_notifications' => [
+        'title' => 'Support for unencrypted SMTP servers',
+        'description' => 'SMTP notification channels can now deliver to servers that do not use encryption. A new "SMTP server is unencrypted" option on the notification form turns off TLS and STARTTLS so VolumeVault can reach a trusted local SMTP relay that would otherwise reject the connection with an "unencrypted connection" error. Encrypted delivery stays the default and is unchanged.',
+    ],
     'optional_two_factor_auth' => [
         'title' => 'Optional two-factor authentication',
         'description' => 'You can now protect your account with optional two-factor authentication based on a time-based one-time password (TOTP). Enable it from your profile by scanning a QR code with an authenticator app such as Google Authenticator or Authy, then confirming with a generated code. Once enabled, signing in asks for a six-digit code right after your password. A set of single-use recovery codes is provided in case you lose access to your authenticator app, and administrators can reset two-factor authentication for any user from the Users page. On the code screen you can also mark a browser as trusted to skip the code — never the password — for the next 30 days.',

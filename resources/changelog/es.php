@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unencrypted_smtp_notifications' => [
+        'title' => 'Compatibilidad con servidores SMTP sin cifrar',
+        'description' => 'Los canales de notificación SMTP ahora pueden entregar a servidores que no usan cifrado. Una nueva opción «Servidor SMTP sin cifrar» en el formulario de notificación desactiva TLS y STARTTLS para que VolumeVault pueda alcanzar un relé SMTP local de confianza que de otro modo rechazaría la conexión con un error «unencrypted connection». La entrega cifrada sigue siendo la opción predeterminada y no cambia.',
+    ],
     'optional_two_factor_auth' => [
         'title' => 'Autenticación de dos factores opcional',
         'description' => 'Ahora puede proteger su cuenta con una autenticación de dos factores opcional basada en una contraseña de un solo uso y limitada en el tiempo (TOTP). Actívela desde su perfil escaneando un código QR con una aplicación de autenticación como Google Authenticator o Authy y confirmando con un código generado. Una vez activada, al iniciar sesión se solicita un código de seis dígitos justo después de la contraseña. Se proporciona un conjunto de códigos de recuperación de un solo uso por si pierde el acceso a su aplicación de autenticación, y los administradores pueden restablecer la autenticación de dos factores de cualquier usuario desde la página Usuarios. En la pantalla del código también puede marcar un navegador como de confianza para omitir el código —nunca la contraseña— durante 30 días.',
