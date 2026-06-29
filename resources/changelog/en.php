@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'webhook_notifications' => [
+        'title' => 'Webhook notifications',
+        'description' => 'A new "Webhook" notification channel calls your own URLs on backup and restore events. Set a different URL for each action — start, success and failure — and VolumeVault calls the matching one when a backup or restore starts, succeeds, or fails. Fill any subset; set the channel level to "Every backup and restore run" to also send the start and success URLs. It makes integrating with uptime and dead man\'s switch monitors straightforward. Notification channels can now also be updated through the API.',
+    ],
+    'backup_start_notifications' => [
+        'title' => 'Backup start notifications',
+        'description' => 'Backups now send a notification when a run starts, not only when it finishes, matching the start notifications restores already send. Start messages go to channels set to receive every run; error-only channels are unaffected. Monitoring services can use it to measure how long a backup takes.',
+    ],
     'unencrypted_smtp_notifications' => [
         'title' => 'Support for unencrypted SMTP servers',
         'description' => 'SMTP notification channels can now deliver to servers that do not use encryption. A new "SMTP server is unencrypted" option on the notification form turns off TLS and STARTTLS so VolumeVault can reach a trusted local SMTP relay that would otherwise reject the connection with an "unencrypted connection" error. Encrypted delivery stays the default and is unchanged.',

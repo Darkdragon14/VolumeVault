@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'webhook_notifications' => [
+        'title' => 'Notificaciones por webhook',
+        'description' => 'Un nuevo canal de notificación «Webhook» llama a tus propias URL en los eventos de copia de seguridad y restauración. Define una URL distinta para cada acción —inicio, éxito y error— y VolumeVault llama a la correspondiente cuando una copia o restauración empieza, termina con éxito o falla. Rellena los que quieras; establece el nivel del canal en «Cada copia de seguridad y restauración» para enviar también las URL de inicio y de éxito. Facilita la integración con servicios de monitorización y de tipo «interruptor de hombre muerto». Los canales de notificación también pueden actualizarse ahora mediante la API.',
+    ],
+    'backup_start_notifications' => [
+        'title' => 'Notificaciones de inicio de copia de seguridad',
+        'description' => 'Las copias de seguridad ahora envían una notificación cuando empieza una ejecución, no solo al terminar, igual que ya hacen las restauraciones. Los mensajes de inicio se envían a los canales configurados para recibir cada ejecución; los canales de solo errores no se ven afectados. Los servicios de monitorización pueden así medir cuánto tarda una copia.',
+    ],
     'unencrypted_smtp_notifications' => [
         'title' => 'Compatibilidad con servidores SMTP sin cifrar',
         'description' => 'Los canales de notificación SMTP ahora pueden entregar a servidores que no usan cifrado. Una nueva opción «Servidor SMTP sin cifrar» en el formulario de notificación desactiva TLS y STARTTLS para que VolumeVault pueda alcanzar un relé SMTP local de confianza que de otro modo rechazaría la conexión con un error «unencrypted connection». La entrega cifrada sigue siendo la opción predeterminada y no cambia.',

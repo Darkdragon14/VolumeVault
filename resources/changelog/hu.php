@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'webhook_notifications' => [
+        'title' => 'Webhook-értesítések',
+        'description' => 'Egy új „Webhook“ értesítési csatorna a saját URL-jeit hívja meg a mentési és visszaállítási eseményeknél. Állítson be külön URL-t minden művelethez — indítás, siker és hiba —, és a VolumeVault a megfelelőt hívja meg, amikor egy mentés vagy visszaállítás elindul, sikerül vagy meghiúsul. Töltse ki tetszés szerint; állítsa a csatorna szintjét „Minden mentés és visszaállítás“ értékre, hogy az indítási és sikeres URL-ek is elküldésre kerüljenek. Ez megkönnyíti a felügyeleti és „holtember-kapcsoló“ típusú szolgáltatásokkal való integrációt. Az értesítési csatornák mostantól az API-n keresztül is frissíthetők.',
+    ],
+    'backup_start_notifications' => [
+        'title' => 'Mentésindítási értesítések',
+        'description' => 'A mentések mostantól a futás indulásakor is küldenek értesítést, nemcsak a végén — ahogy a visszaállítások már teszik. Az indítási üzenetek a minden futást fogadó csatornákra mennek; a csak hibákat fogadó csatornákat nem érinti. A felügyeleti szolgáltatások így mérni tudják, mennyi ideig tart egy mentés.',
+    ],
     'unencrypted_smtp_notifications' => [
         'title' => 'Titkosítatlan SMTP-kiszolgálók támogatása',
         'description' => 'Az SMTP értesítési csatornák mostantól olyan kiszolgálókra is kézbesíthetnek, amelyek nem használnak titkosítást. Az értesítési űrlapon egy új „Az SMTP-kiszolgáló titkosítatlan" beállítás kikapcsolja a TLS-t és a STARTTLS-t, így a VolumeVault elérhet egy megbízható helyi SMTP-továbbítót, amely egyébként „unencrypted connection" hibával utasítaná el a kapcsolatot. A titkosított kézbesítés marad az alapértelmezett, és változatlan.',

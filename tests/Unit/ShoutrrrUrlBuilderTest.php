@@ -191,6 +191,77 @@ class ShoutrrrUrlBuilderTest extends TestCase
         $this->builder->build(NotificationChannel::SERVICE_ADVANCED, ['url' => 'not-a-url']);
     }
 
+    public function test_webhook_builds_json_map_of_generic_urls_per_event(): void
+    {
+        $url = $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, [
+            'start_url' => 'https://hc-ping.com/uuid/start',
+            'success_url' => 'https://hc-ping.com/uuid',
+            'fail_url' => 'https://hc-ping.com/uuid/fail',
+        ]);
+
+        $this->assertSame([
+            'start' => 'generic+https://hc-ping.com/uuid/start',
+            'success' => 'generic+https://hc-ping.com/uuid',
+            'fail' => 'generic+https://hc-ping.com/uuid/fail',
+        ], json_decode($url, true));
+    }
+
+    public function test_webhook_keeps_only_the_filled_urls(): void
+    {
+        $url = $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, [
+            'success_url' => 'http://example.test/hook',
+            'fail_url' => '',
+        ]);
+
+        $this->assertSame(['success' => 'generic+http://example.test/hook'], json_decode($url, true));
+    }
+
+    public function test_webhook_rejects_a_non_http_url(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, ['success_url' => 'ftp://example.test/hook']);
+    }
+
+    public function test_webhook_requires_at_least_one_url(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, ['start_url' => '', 'success_url' => '', 'fail_url' => '']);
+    }
+
+    public function test_webhook_rejects_malformed_urls(): void
+    {
+        // Scheme-prefix checks alone would accept these; only structural validation
+        // (FILTER_VALIDATE_URL) rejects an empty host, a query-only URL or whitespace.
+        foreach (['https://', 'https://?x=1', 'https://exa mple.com', 'http://', 'not-a-url'] as $bad) {
+            try {
+                $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, ['success_url' => $bad]);
+                $this->fail("Expected an invalid webhook URL to be rejected: {$bad}");
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
+    public function test_webhook_merges_submitted_urls_with_the_existing_map(): void
+    {
+        $existing = [
+            'start' => 'generic+https://example.com/start',
+            'success' => 'generic+https://example.com',
+            'fail' => 'generic+https://example.com/fail',
+        ];
+
+        // Only the failure URL is resubmitted; start and success must be kept.
+        $url = $this->builder->build(NotificationChannel::SERVICE_WEBHOOK, [
+            'fail_url' => 'https://example.com/new-fail',
+        ], $existing);
+
+        $this->assertSame([
+            'start' => 'generic+https://example.com/start',
+            'success' => 'generic+https://example.com',
+            'fail' => 'generic+https://example.com/new-fail',
+        ], json_decode($url, true));
+    }
+
     public function test_unsupported_service_throws(): void
     {
         $this->expectException(InvalidArgumentException::class);

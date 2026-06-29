@@ -50,6 +50,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/destinations/{destination}', [DestinationController::class, 'update']);
         Route::delete('/destinations/{destination}', [DestinationController::class, 'destroy']);
         Route::post('/destinations/{destination}/test', [DestinationController::class, 'test']);
+        Route::put('/notifications/{notification}', [NotificationChannelController::class, 'update']);
         Route::post('/notifications/{notification}/test', [NotificationChannelController::class, 'test']);
     });
 });

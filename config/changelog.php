@@ -4,6 +4,14 @@ return [
     'unreleased' => [
         [
             'type' => 'feature',
+            'key' => 'webhook_notifications',
+        ],
+        [
+            'type' => 'feature',
+            'key' => 'backup_start_notifications',
+        ],
+        [
+            'type' => 'feature',
             'key' => 'unencrypted_smtp_notifications',
         ],
     ],

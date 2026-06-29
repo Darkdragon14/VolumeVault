@@ -385,6 +385,36 @@ class AlertSystemTest extends TestCase
         ]);
     }
 
+    public function test_webhook_alert_channel_without_the_event_url_is_not_recorded_as_notified(): void
+    {
+        $directory = $this->storageLimitDirectory('webhook-skip');
+        File::put($directory.'/archive.tar.gz', str_repeat('x', 2048));
+        $this->localDestination($directory, ['storage_limit_warning_bytes' => 1024]);
+        $rule = $this->enabledRule(AlertType::DestinationStorageLimit);
+
+        // The webhook channel only has a success URL. An alert maps to the fail event,
+        // which has no URL, so nothing is pinged — and nothing must be recorded as a
+        // notified send (the no-op skip used to be counted as a successful delivery).
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook alerts',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://example.com/ok']),
+            'notification_level' => NotificationChannel::LEVEL_ERROR,
+        ]);
+        $rule->notificationChannels()->attach($channel);
+
+        $dockerProcess = Mockery::mock(DockerProcess::class);
+        $dockerProcess->shouldReceive('run')->never();
+        $this->app->instance(DockerProcess::class, $dockerProcess);
+
+        app(RunAllAlertChecks::class)->handle($rule);
+
+        $this->assertSame(AlertStatus::Active, Alert::firstOrFail()->status);
+        $this->assertDatabaseMissing('alert_events', [
+            'event_type' => AlertEventType::Notified->value,
+        ]);
+    }
+
     public function test_destination_storage_limit_alert_without_channels_stays_in_app_only(): void
     {
         $directory = $this->storageLimitDirectory('silent');

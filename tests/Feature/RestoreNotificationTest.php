@@ -128,6 +128,43 @@ class RestoreNotificationTest extends TestCase
         File::deleteDirectory($storagePath);
     }
 
+    public function test_webhook_channel_pings_event_specific_urls_for_restores(): void
+    {
+        $cases = [
+            [RestoreRun::STATUS_RUNNING, 'generic+https://hc-ping.com/uuid/start'],
+            [RestoreRun::STATUS_SUCCESS, 'generic+https://hc-ping.com/uuid'],
+            [RestoreRun::STATUS_FAILED, 'generic+https://hc-ping.com/uuid/fail'],
+        ];
+
+        foreach ($cases as [$status, $expectedUrl]) {
+            $run = $this->restoreRun(['status' => $status]);
+            $channel = NotificationChannel::create([
+                'name' => 'Healthchecks',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'url' => json_encode([
+                    'start' => 'generic+https://hc-ping.com/uuid/start',
+                    'success' => 'generic+https://hc-ping.com/uuid',
+                    'fail' => 'generic+https://hc-ping.com/uuid/fail',
+                ]),
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+            ]);
+            $run->job->notificationChannels()->attach($channel);
+
+            $docker = Mockery::mock(DockerProcess::class);
+            $docker->shouldReceive('run')
+                ->once()
+                ->with(
+                    Mockery::any(),
+                    60,
+                    Mockery::on(fn (array $environment) => $environment['SHOUTRRR_URL'] === $expectedUrl),
+                )
+                ->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+            $this->app->instance(DockerProcess::class, $docker);
+
+            app(SendShoutrrrNotification::class)->sendRestoreRun($run);
+        }
+    }
+
     private function attachChannels(BackupJob $job, array $levels): void
     {
         foreach ($levels as $level) {

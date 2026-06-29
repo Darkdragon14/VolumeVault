@@ -7,8 +7,20 @@ use InvalidArgumentException;
 
 class ShoutrrrUrlBuilder
 {
-    public function build(string $service, array $config): string
+    /**
+     * @param  array<string, mixed>  $config  guided-setup fields submitted by the user
+     * @param  array<string, mixed>  $existing  the decoded saved webhook map, so a partial
+     *                                          webhook edit merges instead of dropping URLs
+     */
+    public function build(string $service, array $config, array $existing = []): string
     {
+        // Config sub-values are validated only as part of an array, not per key. Coerce any
+        // non-scalar value (e.g. a nested array sent through the API for any service, like
+        // config.webhook_url or config.url) to null so the string casts in the builders below
+        // cannot raise an "Array to string conversion"; a now-empty required field then
+        // surfaces a clean 422 instead of a 500.
+        $config = array_map(fn ($value) => is_scalar($value) ? $value : null, $config);
+
         return match ($service) {
             NotificationChannel::SERVICE_DISCORD => $this->discord($config),
             NotificationChannel::SERVICE_TELEGRAM => $this->telegram($config),
@@ -16,6 +28,7 @@ class ShoutrrrUrlBuilder
             NotificationChannel::SERVICE_GOTIFY => $this->gotify($config),
             NotificationChannel::SERVICE_SMTP => $this->smtp($config),
             NotificationChannel::SERVICE_ADVANCED => $this->advanced($config),
+            NotificationChannel::SERVICE_WEBHOOK => $this->webhook($config, $existing),
             default => throw new InvalidArgumentException('Unsupported notification service.'),
         };
     }
@@ -136,6 +149,63 @@ class ShoutrrrUrlBuilder
         }
 
         return $url;
+    }
+
+    /**
+     * A webhook channel stores up to three plain HTTP(S) URLs — one per lifecycle
+     * event (start / success / fail) — wrapped as Shoutrrr generic URLs. They are
+     * kept together as a JSON map in the single (encrypted) url column; the sender
+     * decodes it and pings the URL matching the event. This drives Healthchecks.io
+     * and any ping-based monitor without leaving the existing Shoutrrr pipeline.
+     */
+    private function webhook(array $config, array $existing = []): string
+    {
+        // For each event use the submitted URL when provided, otherwise keep the saved one.
+        // The form does not prefill the hidden URLs, so a blank field means "keep the saved
+        // one" and a filled field overwrites just that event — an edit never silently drops
+        // the other events. Iterating in a fixed order also keeps the stored map canonical.
+        $urls = [];
+        foreach (['start', 'success', 'fail'] as $event) {
+            // Guard the cast: config sub-values are only validated as part of an array, so a
+            // non-string (e.g. an array) is treated as absent rather than crashing.
+            $raw = $config[$event.'_url'] ?? '';
+            $submitted = is_string($raw) ? trim($raw) : '';
+
+            if ($submitted !== '') {
+                $urls[$event] = $this->genericWebhook($submitted);
+
+                continue;
+            }
+
+            $saved = $existing[$event] ?? null;
+            if (is_string($saved) && $saved !== '') {
+                $urls[$event] = $saved;
+            }
+        }
+
+        if ($urls === []) {
+            throw new InvalidArgumentException('Add at least one webhook URL (start, success or failure).');
+        }
+
+        return json_encode($urls, JSON_THROW_ON_ERROR);
+    }
+
+    private function genericWebhook(string $url): string
+    {
+        // Validate structure, not just the scheme prefix: filter_var rejects an empty
+        // host, spaces and other malformed URLs (e.g. "https://", "https://?x=1") that a
+        // bare "starts with http(s)://" check would let through, only to fail later at the
+        // Shoutrrr send. The scheme check keeps it to http/https (filter_var alone accepts
+        // ftp:// and friends).
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+        if (! in_array($scheme, ['http', 'https'], true) || filter_var($url, FILTER_VALIDATE_URL) === false) {
+            throw new InvalidArgumentException('Webhook URLs must be a valid http:// or https:// URL.');
+        }
+
+        // Shoutrrr's generic service POSTs to any endpoint. The generic+scheme shortcut
+        // keeps the original host, path and query intact: https://x → generic+https://x.
+        return 'generic+'.$url;
     }
 
     private function host(string $host): string

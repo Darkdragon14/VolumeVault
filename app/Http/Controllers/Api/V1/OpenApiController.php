@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\BackupDestination;
+use App\Models\NotificationChannel;
 use Illuminate\Http\JsonResponse;
 
 class OpenApiController extends Controller
@@ -77,7 +78,10 @@ class OpenApiController extends Controller
             '/destinations/{id}/test' => ['post' => $this->operation('Test a backup destination.', ['write'], null, true, true)],
             '/destinations/host-key' => ['post' => $this->operation('Read the SSH host key a server presents, to pin it as settings.host_key (trust on first use). Connects without authenticating.', ['write'], ['$ref' => '#/components/schemas/HostKeyRequest'], false, true)],
             '/notifications' => ['get' => $this->operation('List notification channels without plaintext URLs.', ['read'], null, false, true)],
-            '/notifications/{id}' => ['get' => $this->operation('Read one notification channel without plaintext URL.', ['read'], null, true, true)],
+            '/notifications/{id}' => [
+                'get' => $this->operation('Read one notification channel without plaintext URL.', ['read'], null, true, true),
+                'put' => $this->operation('Update a notification channel.', ['write'], ['$ref' => '#/components/schemas/NotificationChannelUpdateRequest'], true, true),
+            ],
             '/notifications/{id}/test' => ['post' => $this->operation('Send a notification test.', ['write'], null, true, true)],
         ];
     }
@@ -222,6 +226,27 @@ class OpenApiController extends Controller
                 'properties' => [
                     'host' => ['type' => 'string', 'description' => 'SSH server hostname or IP.'],
                     'port' => ['type' => ['integer', 'null'], 'minimum' => 1, 'maximum' => 65535, 'default' => 22],
+                ],
+            ],
+            'NotificationChannelUpdateRequest' => [
+                'type' => 'object',
+                'required' => ['name', 'service', 'notification_level'],
+                'properties' => [
+                    'name' => ['type' => 'string', 'maxLength' => 255],
+                    'service' => ['type' => 'string', 'enum' => NotificationChannel::SERVICES],
+                    'notification_level' => ['type' => 'string', 'enum' => NotificationChannel::LEVELS, 'description' => 'error sends failures only; info sends start, success and failure.'],
+                    'scope' => ['type' => ['string', 'null'], 'enum' => [NotificationChannel::SCOPE_ALL, NotificationChannel::SCOPE_SPECIFIC, null]],
+                    'title_template' => ['type' => ['string', 'null'], 'maxLength' => 255, 'description' => 'Backup title template. Tokens: {{ job }}, {{ source }}, {{ status }}, {{ trigger }}, {{ duration }}, {{ backup_size }}, {{ error }}, …'],
+                    'body_template' => ['type' => ['string', 'null'], 'maxLength' => 4000],
+                    'restore_title_template' => ['type' => ['string', 'null'], 'maxLength' => 255],
+                    'restore_body_template' => ['type' => ['string', 'null'], 'maxLength' => 4000],
+                    'is_active' => ['type' => 'boolean'],
+                    'is_default' => ['type' => 'boolean'],
+                    'config' => [
+                        'type' => ['object', 'null'],
+                        'additionalProperties' => true,
+                        'description' => 'Guided setup fields used to (re)build the encrypted delivery URL; leave empty to keep the saved URL. For the webhook service: start_url, success_url, fail_url (any subset of HTTP(S) URLs called on the matching lifecycle event — start, success or failure — for backups and restores).',
+                    ],
                 ],
             ],
         ];

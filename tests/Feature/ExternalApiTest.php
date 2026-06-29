@@ -453,4 +453,222 @@ class ExternalApiTest extends TestCase
 
         File::deleteDirectory($archivePath);
     }
+
+    public function test_admin_write_token_can_update_a_webhook_notification_channel(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Healthchecks',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://hc-ping.com/old']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Healthchecks prod',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => [
+                    'start_url' => 'https://hc-ping.com/uuid/start',
+                    'success_url' => 'https://hc-ping.com/uuid',
+                    'fail_url' => 'https://hc-ping.com/uuid/fail',
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Healthchecks prod')
+            ->assertJsonPath('data.service', NotificationChannel::SERVICE_WEBHOOK)
+            ->assertJsonPath('data.masked_url', '********');
+
+        $this->assertSame([
+            'start' => 'generic+https://hc-ping.com/uuid/start',
+            'success' => 'generic+https://hc-ping.com/uuid',
+            'fail' => 'generic+https://hc-ping.com/uuid/fail',
+        ], json_decode($channel->fresh()->url, true));
+    }
+
+    public function test_updating_a_notification_channel_rejects_an_invalid_webhook_url(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Healthchecks',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://hc-ping.com/uuid']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Healthchecks',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => ['success_url' => 'ftp://nope'],
+            ])
+            ->assertStatus(422);
+    }
+
+    public function test_updating_a_notification_channel_requires_write_ability(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Ntfy',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/all',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-read', ['read'])->plainTextToken;
+
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Ntfy',
+                'service' => NotificationChannel::SERVICE_ADVANCED,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => [],
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_openapi_documents_the_notification_update(): void
+    {
+        $this->getJson('/api/v1/openapi.json')
+            ->assertOk()
+            ->assertJsonPath('paths./notifications/{id}.put.requestBody.content.application/json.schema.$ref', '#/components/schemas/NotificationChannelUpdateRequest')
+            ->assertJsonPath('components.schemas.NotificationChannelUpdateRequest.properties.service.enum', NotificationChannel::SERVICES);
+    }
+
+    public function test_partial_api_update_preserves_omitted_optional_fields(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://example.com/ok']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'is_active' => false,
+            'is_default' => true,
+            'title_template' => 'Backup {{ status }}',
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // A partial update that only sends the required fields must not reset the
+        // optional ones the client omitted.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Webhook renamed',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Webhook renamed');
+
+        $channel->refresh();
+        $this->assertFalse($channel->is_active);
+        $this->assertTrue($channel->is_default);
+        $this->assertSame('Backup {{ status }}', $channel->title_template);
+        $this->assertSame(['success' => 'generic+https://example.com/ok'], json_decode($channel->url, true));
+    }
+
+    public function test_partial_webhook_update_preserves_other_event_urls(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode([
+                'start' => 'generic+https://example.com/start',
+                'success' => 'generic+https://example.com',
+                'fail' => 'generic+https://example.com/fail',
+            ]),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // Rotating only the failure URL must not silently drop start/success.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Webhook',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => ['fail_url' => 'https://example.com/rotated-fail'],
+            ])
+            ->assertOk();
+
+        $this->assertSame([
+            'start' => 'generic+https://example.com/start',
+            'success' => 'generic+https://example.com',
+            'fail' => 'generic+https://example.com/rotated-fail',
+        ], json_decode($channel->fresh()->url, true));
+    }
+
+    public function test_updating_a_webhook_channel_rejects_a_non_string_url_value(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://example.com']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // A non-string URL value must be a 422, not an "Array to string conversion" 500.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Webhook',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => ['success_url' => ['https://example.com']],
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['config.success_url' => 'Success URL']);
+    }
+
+    public function test_updating_a_channel_rejects_a_non_string_config_value_for_any_service(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Discord',
+            'service' => NotificationChannel::SERVICE_DISCORD,
+            'url' => 'discord://token@123456',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // A nested array for any service's config field must be a 422, not an
+        // "Array to string conversion" 500 in the URL builder.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Discord',
+                'service' => NotificationChannel::SERVICE_DISCORD,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => ['webhook_url' => ['https://discord.com/api/webhooks/1/2']],
+            ])
+            ->assertStatus(422);
+    }
+
+    public function test_updating_a_notification_channel_tolerates_null_config(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $channel = NotificationChannel::create([
+            'name' => 'Webhook',
+            'service' => NotificationChannel::SERVICE_WEBHOOK,
+            'url' => json_encode(['success' => 'generic+https://example.com/ok']),
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        // config is nullable; an explicit null must be a no-op, not a TypeError.
+        $this->withToken($token)
+            ->putJson("/api/v1/notifications/{$channel->id}", [
+                'name' => 'Webhook',
+                'service' => NotificationChannel::SERVICE_WEBHOOK,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+                'config' => null,
+            ])
+            ->assertOk();
+
+        $this->assertSame(['success' => 'generic+https://example.com/ok'], json_decode($channel->fresh()->url, true));
+    }
 }

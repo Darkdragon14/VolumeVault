@@ -67,6 +67,10 @@ const serviceHelp = computed(() => {
         return t(
             "Use your SMTP server details. The password is encrypted after saving.",
         );
+    if (form.service === "webhook")
+        return t(
+            "Set a webhook URL for each action — start, success and failure. VolumeVault calls the matching URL on the corresponding backup or restore event.",
+        );
     return t("Paste a complete Shoutrrr URL for any supported service.");
 });
 
@@ -364,6 +368,61 @@ const submit = () => {
                             }}
                         </p>
                     </div>
+                </div>
+
+                <div
+                    v-else-if="form.service === 'webhook'"
+                    class="grid gap-4 sm:grid-cols-2"
+                >
+                    <label class="space-y-2 sm:col-span-2">
+                        <span class="label">{{ t("Success URL") }}</span>
+                        <input
+                            v-model="form.config.success_url"
+                            class="input"
+                            type="url"
+                            placeholder="https://example.com/job-succeeded"
+                        />
+                        <span
+                            v-if="form.errors['config.success_url']"
+                            class="block text-sm text-rose-300"
+                            >{{ form.errors["config.success_url"] }}</span
+                        >
+                    </label>
+                    <label class="space-y-2">
+                        <span class="label">{{ t("Start URL") }}</span>
+                        <input
+                            v-model="form.config.start_url"
+                            class="input"
+                            type="url"
+                            placeholder="https://example.com/job-started"
+                        />
+                        <span
+                            v-if="form.errors['config.start_url']"
+                            class="block text-sm text-rose-300"
+                            >{{ form.errors["config.start_url"] }}</span
+                        >
+                    </label>
+                    <label class="space-y-2">
+                        <span class="label">{{ t("Failure URL") }}</span>
+                        <input
+                            v-model="form.config.fail_url"
+                            class="input"
+                            type="url"
+                            placeholder="https://example.com/job-failed"
+                        />
+                        <span
+                            v-if="form.errors['config.fail_url']"
+                            class="block text-sm text-rose-300"
+                            >{{ form.errors["config.fail_url"] }}</span
+                        >
+                    </label>
+                    <p class="text-xs text-slate-400 sm:col-span-2">
+                        {{
+                            t(
+                                "Fill any subset. Each URL is called on its action, for both backups and restores. Set the level below to “Every backup and restore run” to also send the start and success URLs.",
+                            )
+                        }}
+                    </p>
                 </div>
 
                 <label v-else class="block space-y-2">
