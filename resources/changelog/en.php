@@ -241,4 +241,8 @@ return [
         'title' => 'Safer default environment settings',
         'description' => '.env.example now defaults new deployments to APP_ENV=production and APP_DEBUG=false. It also adds guidance for SESSION_SECURE_COOKIE so HTTPS deployments can enable secure cookies without accidentally breaking HTTP-only setups.',
     ],
+    'trusted_proxy_host_hardening' => [
+        'title' => 'Trusted proxy host hardening',
+        'description' => 'Trusted proxy handling now ignores forwarded host and prefix headers and password reset links are generated from APP_URL to prevent poisoned links.',
+    ],
 ];

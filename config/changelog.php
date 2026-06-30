@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'trusted_proxy_host_hardening',
+        ],
+    ],
     'releases' => [
         'v1.16.0' => [
             'date' => '2026-06-30',

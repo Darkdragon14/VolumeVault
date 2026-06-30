@@ -33,6 +33,28 @@ class PasswordResetTest extends TestCase
             ->assertSessionHas('success', 'If this email matches an account, a password reset link has been sent.');
     }
 
+    public function test_password_reset_link_is_anchored_to_app_url_even_when_request_host_is_spoofed(): void
+    {
+        Config::set('app.url', 'https://volumevault.example.com');
+        Config::set('mail.default', 'smtp');
+        Notification::fake();
+        $user = User::factory()->create(['email' => 'admin@example.com']);
+
+        // Host-header poisoning attempt: the request arrives on an attacker-controlled host.
+        $this->post('https://evil.example.com/forgot-password', ['email' => 'admin@example.com'])
+            ->assertRedirect();
+
+        Notification::assertSentTo($user, ResetPassword::class, function (ResetPassword $notification) use ($user) {
+            $url = $notification->toMail($user)->actionUrl;
+
+            $this->assertStringStartsWith('https://volumevault.example.com/reset-password/', $url);
+            $this->assertStringContainsString('email=admin%40example.com', $url);
+            $this->assertStringNotContainsString('evil.example.com', $url);
+
+            return true;
+        });
+    }
+
     public function test_password_can_be_reset_with_valid_token_and_sessions_are_invalidated(): void
     {
         $user = User::factory()->create(['email' => 'admin@example.com']);

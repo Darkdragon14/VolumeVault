@@ -241,4 +241,8 @@ return [
         'title' => 'Biztonsagosabb alapertelmezett kornyezeti beallitasok',
         'description' => 'A .env.example mostantol alapertelmezetten APP_ENV=production es APP_DEBUG=false ertekkel indul az uj telepiteseknel. Emellett utmutatast ad a SESSION_SECURE_COOKIE beallitasahoz is, hogy a HTTPS telepitesek biztonsagos cookie-kat kapcsolhassanak be anelkul, hogy veletlenul elrontanak a csak HTTP-s telepiteseket.',
     ],
+    'trusted_proxy_host_hardening' => [
+        'title' => 'Megbizhato proxy host kemenyites',
+        'description' => 'A megbizhato proxy kezeles most figyelmen kivul hagyja a tovabbitott host es prefix fejleceket, a jelszo-visszaallitasi linkek pedig az APP_URL alapjan keszulnek a mergezett linkek megelozesere.',
+    ],
 ];

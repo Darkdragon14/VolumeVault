@@ -241,4 +241,8 @@ return [
         'title' => 'Parametres d environnement par defaut plus surs',
         'description' => '.env.example utilise maintenant APP_ENV=production et APP_DEBUG=false pour les nouveaux deploiements. Une indication pour SESSION_SECURE_COOKIE est egalement ajoutee afin que les deploiements HTTPS puissent activer des cookies securises sans casser par inadvertance les installations en HTTP seul.',
     ],
+    'trusted_proxy_host_hardening' => [
+        'title' => "Durcissement de l'hote proxy de confiance",
+        'description' => 'La gestion des proxys de confiance ignore maintenant les en-tetes host et prefix transmis, et les liens de reinitialisation de mot de passe sont generes depuis APP_URL pour eviter les liens empoisonnes.',
+    ],
 ];

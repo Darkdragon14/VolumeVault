@@ -241,4 +241,8 @@ return [
         'title' => 'Veiligere standaard omgevingsinstellingen',
         'description' => '.env.example zet nieuwe deployments nu standaard op APP_ENV=production en APP_DEBUG=false. Er is ook uitleg toegevoegd voor SESSION_SECURE_COOKIE, zodat HTTPS-deployments veilige cookies kunnen inschakelen zonder per ongeluk alleen-HTTP-opstellingen te breken.',
     ],
+    'trusted_proxy_host_hardening' => [
+        'title' => 'Verharding van trusted proxy-host',
+        'description' => 'Trusted-proxyverwerking negeert nu doorgestuurde host- en prefixheaders en wachtwoordresetlinks worden uit APP_URL gegenereerd om vergiftigde links te voorkomen.',
+    ],
 ];

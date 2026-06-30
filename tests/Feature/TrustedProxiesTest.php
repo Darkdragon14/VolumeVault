@@ -17,7 +17,7 @@ class TrustedProxiesTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_trusted_proxy_https_header_generates_https_vite_assets(): void
+    public function test_trusted_proxy_https_header_generates_https_vite_assets_without_trusting_forwarded_host(): void
     {
         $this->setTrustedProxies('172.18.0.0/16');
         $this->refreshApplication();
@@ -26,7 +26,7 @@ class TrustedProxiesTest extends TestCase
         $response = $this
             ->withServerVariables(['REMOTE_ADDR' => '172.18.0.5'])
             ->withHeaders([
-                'X-Forwarded-Host' => 'volumevault.example.com',
+                'X-Forwarded-Host' => 'evil.example.com',
                 'X-Forwarded-Port' => '443',
                 'X-Forwarded-Proto' => 'https',
             ])
@@ -35,6 +35,7 @@ class TrustedProxiesTest extends TestCase
         $response->assertOk();
         $response->assertSee('href="https://volumevault.example.com/build/assets/', false);
         $response->assertSee('src="https://volumevault.example.com/build/assets/', false);
+        $response->assertDontSee('https://evil.example.com/build/assets/', false);
     }
 
     public function test_untrusted_proxy_https_header_does_not_change_vite_asset_scheme(): void
