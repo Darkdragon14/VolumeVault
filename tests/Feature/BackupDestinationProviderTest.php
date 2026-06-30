@@ -246,4 +246,43 @@ class BackupDestinationProviderTest extends TestCase
         $this->assertSame('/backup', $call['environment']['BACKUP_SOURCES'] ?? null);
         $this->assertSame('volumevault-srv_app-data-run-'.$run->id.'.tar.gz', $call['environment']['BACKUP_FILENAME'] ?? null);
     }
+
+    public function test_docker_volume_destination_cannot_target_the_source_volume(): void
+    {
+        $process = new class extends DockerProcess
+        {
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                return new DockerProcessResult($command, 0, 'ok', '');
+            }
+        };
+        $action = new RunBackupContainer($process);
+        $destination = BackupDestination::create([
+            'name' => 'Self',
+            'provider' => BackupDestination::PROVIDER_DOCKER_VOLUME,
+            'bucket' => 'app_data',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['volume_name' => 'app_data'],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Self backup',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('same volume being backed up');
+
+        $action->handle($run);
+    }
 }

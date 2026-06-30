@@ -75,14 +75,30 @@ class DockerProcess
         $errorOutput = '';
 
         try {
-            $process->run(function (string $type, string $buffer) use ($output, &$errorOutput): void {
-                if ($type === Process::OUT) {
-                    fwrite($output, $buffer);
+            $process->run(function (string $type, string $buffer) use ($output, $outputPath, &$errorOutput, $process): void {
+                if ($type !== Process::OUT) {
+                    $errorOutput .= $buffer;
+                    // stderr stays tiny, but clear it too so nothing accumulates.
+                    $process->clearErrorOutput();
 
                     return;
                 }
 
-                $errorOutput .= $buffer;
+                // fwrite can do a short write; loop until the whole chunk lands.
+                for ($offset = 0, $length = strlen($buffer); $offset < $length;) {
+                    $written = fwrite($output, substr($buffer, $offset));
+
+                    if ($written === false) {
+                        throw new RuntimeException('Unable to write Docker output to file: '.$outputPath);
+                    }
+
+                    $offset += $written;
+                }
+
+                // Symfony keeps appending stdout to the Process buffer even when a
+                // callback streams it; clear it after each chunk so a multi-GB
+                // archive is never duplicated into memory (or the temp spool).
+                $process->clearOutput();
             });
 
             return new DockerProcessResult(

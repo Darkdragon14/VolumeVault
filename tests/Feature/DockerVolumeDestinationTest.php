@@ -98,6 +98,39 @@ class DockerVolumeDestinationTest extends TestCase
 
         $this->assertCommandRecorded($process, ['docker', 'volume', 'inspect', 'barril-backups']);
         $this->assertSomeCommandContains($process, 'barril-backups:/archive:ro');
+        // The limit is enforced inside the helper command, not just in PHP.
+        $this->assertTrue(
+            collect($process->calls)->flatten()->contains(fn ($arg): bool => is_string($arg) && str_contains($arg, 'head -n 1000')),
+            'the listing command should cap output with head -n 1000',
+        );
+    }
+
+    public function test_list_handles_a_filename_that_contains_a_colon(): void
+    {
+        // Filename templates may render a colon (e.g. daily:123.tar.gz); listing
+        // and restoring such an archive must work.
+        $process = $this->fakeProcess();
+        $process->listing = '512|1700000200|/archive/daily:123.tar.gz';
+
+        $objects = $this->storage($process)->listBackupObjects($this->destination());
+
+        $this->assertCount(1, $objects);
+        $this->assertSame('daily:123.tar.gz', $objects[0]['key']);
+    }
+
+    public function test_test_uses_a_noclobber_unique_write_probe(): void
+    {
+        // The write test must never truncate or delete a pre-existing file.
+        $process = $this->fakeProcess();
+
+        $this->storage($process)->test($this->destination());
+
+        $script = collect($process->calls)->flatten()
+            ->first(fn ($arg): bool => is_string($arg) && str_contains($arg, 'vv-write-test'));
+
+        $this->assertNotNull($script);
+        $this->assertStringContainsString('set -C', $script);
+        $this->assertStringNotContainsString('.volumevault-write-test"', $script);
     }
 
     public function test_download_streams_the_archive_into_the_target_file(): void
@@ -120,6 +153,21 @@ class DockerVolumeDestinationTest extends TestCase
         $this->expectExceptionMessage('Invalid Docker volume object key.');
 
         $this->storage($this->fakeProcess())->download($this->destination(), '../../etc/passwd', tempnam(sys_get_temp_dir(), 'vv-dl-'));
+    }
+
+    public function test_download_accepts_a_colon_in_the_key(): void
+    {
+        // A colon is a valid filename character (passed as an argv path, never in
+        // a mount spec), so an archive named daily:123.tar.gz must be restorable.
+        $process = $this->fakeProcess();
+        $target = tempnam(sys_get_temp_dir(), 'vv-dl-');
+
+        $this->storage($process)->download($this->destination(), 'daily:123.tar.gz', $target);
+
+        $this->assertSame('ARCHIVE-BYTES', file_get_contents($target));
+        $this->assertSomeCommandContains($process, '/archive/daily:123.tar.gz');
+
+        @unlink($target);
     }
 
     public function test_upload_streams_the_file_into_the_volume(): void

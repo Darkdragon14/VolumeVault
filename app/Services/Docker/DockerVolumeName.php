@@ -85,13 +85,17 @@ class DockerVolumeName
 
     /**
      * A relative object key (download/upload), confined under the archive
-     * directory: never absolute, no `..` segment, no colon.
+     * directory: never absolute and no `..` segment. A colon is allowed here —
+     * unlike a volume name (which lands in a `-v src:dst` spec), a key is only
+     * ever passed as a single argv path to `cat`/`sh`, so a colon is just a
+     * filename character. Rejecting it would make archives whose filename
+     * template renders a colon (e.g. `daily:123.tar.gz`) impossible to restore.
      */
     public static function assertKey(string $key): string
     {
         $key = ltrim($key, '/');
 
-        if ($key === '' || str_contains($key, ':') || strlen($key) > 1024) {
+        if ($key === '' || strlen($key) > 1024) {
             throw new RuntimeException('Invalid Docker volume object key.');
         }
 

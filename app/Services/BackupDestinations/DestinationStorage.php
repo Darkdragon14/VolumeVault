@@ -1118,15 +1118,18 @@ class DestinationStorage
     {
         [$volume, $dir] = $this->dockerVolumeTarget($destination);
 
-        // The archive dir is passed as a positional argument ($1), never
-        // interpolated into the script, so it cannot break out of the command.
-        $script = 'set -e; mkdir -p "$1"; probe="$1/.volumevault-write-test"; : > "$probe"; rm -f "$probe"';
+        // Probe with a random, per-test filename and `set -C` (noclobber) so the
+        // write test can never truncate or delete a pre-existing file in the
+        // destination. The dir ($1) and probe name ($2) are positional arguments,
+        // never interpolated into the script, so they cannot break out of it.
+        $probe = Str::lower(Str::random(16));
+        $script = 'set -e; mkdir -p "$1"; set -C; : > "$1/.vv-write-test-$2"; set +C; rm -f "$1/.vv-write-test-$2"';
         $command = [
             'docker', 'run', '--rm',
             '-v', $volume.':'.DockerVolumeName::MOUNT_POINT,
             '--entrypoint', 'sh',
             RunBackupContainer::IMAGE,
-            '-c', $script, 'sh', $dir,
+            '-c', $script, 'sh', $dir, $probe,
         ];
 
         $result = $this->dockerProcess->run($command, 120);
@@ -1145,7 +1148,12 @@ class DestinationStorage
     {
         [$volume, $dir] = $this->dockerVolumeTarget($destination);
 
-        $script = 'find "$1" -type f -exec stat -c "%s|%Y|%n" {} + 2>/dev/null || true';
+        // Cap the output inside the container so a huge volume cannot fill the
+        // process buffer or time out: `head` stops `find` (via SIGPIPE) once the
+        // limit is reached. The limit is a trusted int, so interpolating it is
+        // safe; usage aggregation passes PHP_INT_MAX and is left uncapped.
+        $cap = $limit < PHP_INT_MAX ? ' | head -n '.(int) $limit : '';
+        $script = 'find "$1" -type f -exec stat -c "%s|%Y|%n" {} + 2>/dev/null'.$cap.' || true';
         $command = [
             'docker', 'run', '--rm',
             '-v', $volume.':'.DockerVolumeName::MOUNT_POINT.':ro',

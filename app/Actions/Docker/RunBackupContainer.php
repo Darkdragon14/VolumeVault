@@ -82,6 +82,8 @@ class RunBackupContainer
         $job = $run->job;
         $destination = $job->destination;
 
+        $this->assertSourceAndDestinationDiffer($job, $destination);
+
         // offen/docker-volume-backup controls destinations and archive behavior through env vars.
         // Check offen/docker-volume-backup documentation if an environment variable changes.
         $environment = [
@@ -264,6 +266,26 @@ class RunBackupContainer
 
         if (! $result->successful()) {
             throw new \RuntimeException('The Docker volume "'.$volume.'" does not exist. Create it (for example in your Compose file) before running backups.');
+        }
+    }
+
+    /**
+     * Refuse to back a Docker volume up into itself. A docker_volume destination
+     * pointing at the same volume the job archives would mount it at /archive
+     * while it is also mounted read-only at /backup, so Offen would write the
+     * growing archive into the very data it is archiving.
+     */
+    private function assertSourceAndDestinationDiffer(BackupJob $job, BackupDestination $destination): void
+    {
+        if ($destination->provider !== BackupDestination::PROVIDER_DOCKER_VOLUME || $job->isHostPathSource()) {
+            return;
+        }
+
+        $sourceVolume = (string) $job->volume_name;
+        $destinationVolume = (string) $destination->setting('volume_name');
+
+        if ($sourceVolume !== '' && $sourceVolume === $destinationVolume) {
+            throw new \RuntimeException('The Docker volume destination "'.$destinationVolume.'" is the same volume being backed up; choose a different destination volume.');
         }
     }
 
