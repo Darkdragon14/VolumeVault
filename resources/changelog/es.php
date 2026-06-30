@@ -241,4 +241,8 @@ return [
         'title' => 'Configuracion de entorno predeterminada mas segura',
         'description' => '.env.example ahora configura las nuevas instalaciones con APP_ENV=production y APP_DEBUG=false. Tambien agrega una guia para SESSION_SECURE_COOKIE, de modo que los despliegues con HTTPS puedan activar cookies seguras sin romper por accidente instalaciones solo HTTP.',
     ],
+    'trusted_proxy_host_hardening' => [
+        'title' => 'Refuerzo del host de proxy confiable',
+        'description' => 'El manejo de proxies confiables ahora ignora las cabeceras reenviadas de host y prefijo, y los enlaces de restablecimiento de contrasena se generan desde APP_URL para evitar enlaces envenenados.',
+    ],
 ];

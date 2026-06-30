@@ -241,4 +241,8 @@ return [
         'title' => 'Sicherere Standard-Umgebungseinstellungen',
         'description' => 'Neue Deployments verwenden in der .env.example jetzt standardmaessig APP_ENV=production und APP_DEBUG=false. Ausserdem gibt es einen Hinweis zu SESSION_SECURE_COOKIE, damit HTTPS-Deployments sichere Cookies aktivieren koennen, ohne versehentlich reine HTTP-Setups auszusperren.',
     ],
+    'trusted_proxy_host_hardening' => [
+        'title' => 'Haertung des Trusted-Proxy-Hosts',
+        'description' => 'Trusted-Proxy-Verarbeitung ignoriert jetzt weitergeleitete Host- und Prefix-Header, und Passwort-Zuruecksetzen-Links werden aus APP_URL erzeugt, um vergiftete Links zu verhindern.',
+    ],
 ];

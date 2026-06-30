@@ -241,4 +241,8 @@ return [
         'title' => 'Bezpecnejsi vychozi nastaveni prostredi',
         'description' => '.env.example ted pro nova nasazeni standardne nastavuje APP_ENV=production a APP_DEBUG=false. Zaroven pridava pokyny pro SESSION_SECURE_COOKIE, aby bylo mozne u HTTPS nasazeni zapnout zabezpecene cookies bez nechteneho rozbiti ciste HTTP instalaci.',
     ],
+    'trusted_proxy_host_hardening' => [
+        'title' => 'Zpevneni hostu duveryhodne proxy',
+        'description' => 'Zpracovani duveryhodne proxy ted ignoruje preposlane hlavicky hostu a prefixu a odkazy pro obnovu hesla se generuji z APP_URL, aby neslo vytvaret podvrzene odkazy.',
+    ],
 ];

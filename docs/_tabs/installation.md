@@ -74,7 +74,7 @@ You can inspect the Docker network subnet with:
 docker network inspect proxy_network
 ```
 
-`TRUSTED_PROXIES="*"` is also supported for simple homelab setups where proxy IPs change, but using the proxy IP or network CIDR is stricter. If `TRUSTED_PROXIES` is empty, VolumeVault does not trust forwarded proxy headers.
+`TRUSTED_PROXIES="*"` is also supported for simple homelab setups where proxy IPs change, but using the proxy IP or network CIDR is stricter. Only use `*` when the VolumeVault container is not directly reachable by clients and your reverse proxy overwrites forwarded headers from clients. If `TRUSTED_PROXIES` is empty, VolumeVault does not trust forwarded proxy headers.
 
 ### Forwarded headers
 
@@ -89,12 +89,11 @@ Without it, Laravel still generates `http://` URLs. The visible symptom is that 
 Optionally also forward:
 
 ```text
-X-Forwarded-Host: <the original Host header>
 X-Forwarded-Port: 443
 X-Forwarded-For: <client-ip>
 ```
 
-For `X-Forwarded-Host`, pass through the original request host rather than a hardcoded value (for example, HAProxy `http-request set-header X-Forwarded-Host %[req.hdr(Host)]`). A hardcoded or mismatched host can break asset and redirect URLs.
+VolumeVault intentionally ignores forwarded host and prefix headers (`X-Forwarded-Host`, `X-Forwarded-Prefix`). The request host comes from the `Host` header instead, so your reverse proxy must forward the original public `Host` to the container. Most proxies (HAProxy, Traefik, Caddy) preserve it by default; nginx needs `proxy_set_header Host $host`. Keep `APP_URL` set to the public URL you use — password reset links are always built from `APP_URL` — and configure your reverse proxy to overwrite forwarded headers instead of passing through client-supplied values.
 
 This applies to any HTTPS-terminating proxy (HAProxy/OPNsense, Pangolin, Caddy, Traefik, nginx). The recommended path keeps HTTPS at the proxy and plain HTTP to the container on port `8080`:
 
@@ -176,7 +175,7 @@ When `APP_VERSION` is a tagged release, VolumeVault can also check GitHub for a 
 - `APP_DEBUG`: defaults to `false`.
 - `APP_TIMEZONE`: timezone used to interpret backup schedules and display backup job dates, defaults to `UTC`. Use an IANA timezone such as `Europe/Paris`.
 - `APP_URL`: public URL, defaults to `http://localhost:8080`.
-- `TRUSTED_PROXIES`: reverse proxy IP, CIDR, comma-separated list, or `*` when running behind HTTPS termination. Leave empty when exposing VolumeVault directly.
+- `TRUSTED_PROXIES`: reverse proxy IP, CIDR, comma-separated list, or `*` when running behind HTTPS termination. Leave empty when exposing VolumeVault directly. If you use `*`, ensure the backend is only reachable through a proxy that overwrites forwarded headers.
 - `VOLUMEVAULT_HOST_PATH_ALLOWLIST`: comma-separated list of Docker host path prefixes allowed for host-path backup sources **and local backup destinations**, for example `/srv,/mnt/data`. Fail-closed: when empty, host-path sources and local destinations are refused. Set the prefixes you intend to back up to/from.
 - `DB_CONNECTION`: defaults to `sqlite`.
 - `DB_DATABASE`: defaults to `/app/storage/database/database.sqlite` inside the Docker image.
