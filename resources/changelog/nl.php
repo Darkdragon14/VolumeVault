@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_volume_destinations' => [
+        'title' => 'Docker-volumebestemmingen',
+        'description' => 'Een nieuwe bestemming ‘Docker-volume’ maakt back-ups naar een benoemd Docker-volume — elke driver, inclusief NFS of andere netwerkshares. Declareer het volume in je Compose-bestand en VolumeVault koppelt het op naam aan de tijdelijke back-upcontainer, zodat back-ups, herstelacties, lijstweergave en opslaggebruik werken zonder een hostpad met VolumeVault te delen. Als het volume niet meer bestaat, mislukt de bestemming met een duidelijke fout in plaats van stilletjes naar een leeg, nieuw aangemaakt volume te schrijven.',
+    ],
     'webhook_notifications' => [
         'title' => 'Webhook-meldingen',
         'description' => 'Een nieuw meldingskanaal ‘Webhook’ roept je eigen URL\'s aan bij back-up- en herstelgebeurtenissen. Stel voor elke actie — start, succes en fout — een andere URL in; VolumeVault roept de bijbehorende aan wanneer een back-up of herstelactie start, slaagt of mislukt. Vul een willekeurige selectie in; zet het kanaalniveau op ‘Elke back-up en herstelactie’ om ook de start- en succes-URL\'s te versturen. Zo integreer je eenvoudig met monitoring- en dodemansknop-diensten. Meldingskanalen kunnen nu ook via de API worden bijgewerkt.',

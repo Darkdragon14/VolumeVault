@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_volume_destinations' => [
+        'title' => 'Docker-kötet célok',
+        'description' => 'Egy új „Docker-kötet“ célállomás egy névvel ellátott Docker-kötetre készít biztonsági mentést — bármilyen illesztőprogram, beleértve az NFS-t vagy más hálózati megosztásokat. Deklarálja a kötetet a Compose-fájlban, és a VolumeVault név szerint csatolja az ideiglenes mentési konténerbe, így a mentések, a visszaállítások, a listázás és a tárhelyhasználat anélkül működik, hogy gazdagép-elérési utat kellene megosztani a VolumeVault-tal. Ha a kötet már nem létezik, a célállomás egyértelmű hibával hiúsul meg, ahelyett hogy észrevétlenül egy üres, újonnan létrehozott kötetbe írna.',
+    ],
     'webhook_notifications' => [
         'title' => 'Webhook-értesítések',
         'description' => 'Egy új „Webhook“ értesítési csatorna a saját URL-jeit hívja meg a mentési és visszaállítási eseményeknél. Állítson be külön URL-t minden művelethez — indítás, siker és hiba —, és a VolumeVault a megfelelőt hívja meg, amikor egy mentés vagy visszaállítás elindul, sikerül vagy meghiúsul. Töltse ki tetszés szerint; állítsa a csatorna szintjét „Minden mentés és visszaállítás“ értékre, hogy az indítási és sikeres URL-ek is elküldésre kerüljenek. Ez megkönnyíti a felügyeleti és „holtember-kapcsoló“ típusú szolgáltatásokkal való integrációt. Az értesítési csatornák mostantól az API-n keresztül is frissíthetők.',

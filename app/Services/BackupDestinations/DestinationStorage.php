@@ -2,7 +2,10 @@
 
 namespace App\Services\BackupDestinations;
 
+use App\Actions\Docker\RunBackupContainer;
 use App\Models\BackupDestination;
+use App\Services\Docker\DockerProcess;
+use App\Services\Docker\DockerVolumeName;
 use App\Services\S3\S3ClientFactory;
 use App\Services\Security\OutboundHostGuard;
 use Illuminate\Http\Client\Response;
@@ -21,11 +24,15 @@ class DestinationStorage
 
     private readonly OutboundHostGuard $outboundHostGuard;
 
+    private readonly DockerProcess $dockerProcess;
+
     public function __construct(
         private readonly S3ClientFactory $s3ClientFactory,
         ?OutboundHostGuard $outboundHostGuard = null,
+        ?DockerProcess $dockerProcess = null,
     ) {
         $this->outboundHostGuard = $outboundHostGuard ?? new OutboundHostGuard;
+        $this->dockerProcess = $dockerProcess ?? new DockerProcess;
     }
 
     public function test(BackupDestination $destination): void
@@ -42,6 +49,7 @@ class DestinationStorage
             BackupDestination::PROVIDER_DROPBOX => $this->listDropbox($destination, 1),
             BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->listGoogleDrive($destination, 1),
             BackupDestination::PROVIDER_LOCAL => $this->testLocal($destination),
+            BackupDestination::PROVIDER_DOCKER_VOLUME => $this->testDockerVolume($destination),
             default => throw new RuntimeException('Unsupported backup destination provider.'),
         };
     }
@@ -60,6 +68,7 @@ class DestinationStorage
             BackupDestination::PROVIDER_DROPBOX => $this->listDropbox($destination),
             BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->listGoogleDrive($destination),
             BackupDestination::PROVIDER_LOCAL => $this->listLocal($destination),
+            BackupDestination::PROVIDER_DOCKER_VOLUME => $this->listDockerVolume($destination),
             default => throw new RuntimeException('Unsupported backup destination provider.'),
         };
 
@@ -86,6 +95,13 @@ class DestinationStorage
     private function aggregateUsage(BackupDestination $destination): array
     {
         $this->guardOutbound($destination);
+
+        // The Docker volume provider aggregates size and count inside the helper
+        // container (a single "bytes|count" line), so a volume with very many
+        // files never streams a full listing back into the process buffer.
+        if ($destination->provider === BackupDestination::PROVIDER_DOCKER_VOLUME) {
+            return $this->dockerVolumeUsage($destination);
+        }
 
         $usedBytes = 0;
         $objectCount = 0;
@@ -122,6 +138,7 @@ class DestinationStorage
             BackupDestination::PROVIDER_DROPBOX => $this->uploadDropbox($destination, $sourcePath, $filename, $directory),
             BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->uploadGoogleDrive($destination, $sourcePath, $filename),
             BackupDestination::PROVIDER_LOCAL => $this->uploadLocal($destination, $sourcePath, $filename, $directory),
+            BackupDestination::PROVIDER_DOCKER_VOLUME => $this->uploadDockerVolume($destination, $sourcePath, $filename, $directory),
             default => throw new RuntimeException('Unsupported backup destination provider.'),
         };
     }
@@ -140,6 +157,7 @@ class DestinationStorage
             BackupDestination::PROVIDER_DROPBOX => $this->downloadDropbox($destination, $key, $targetPath),
             BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->downloadGoogleDrive($destination, $key, $targetPath),
             BackupDestination::PROVIDER_LOCAL => $this->downloadLocal($destination, $key, $targetPath),
+            BackupDestination::PROVIDER_DOCKER_VOLUME => $this->downloadDockerVolume($destination, $key, $targetPath),
             default => throw new RuntimeException('Unsupported backup destination provider.'),
         };
     }
@@ -156,6 +174,7 @@ class DestinationStorage
             BackupDestination::PROVIDER_DROPBOX => $this->listDropbox($destination, PHP_INT_MAX),
             BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->listGoogleDrive($destination, PHP_INT_MAX),
             BackupDestination::PROVIDER_LOCAL => $this->listLocal($destination, PHP_INT_MAX),
+            BackupDestination::PROVIDER_DOCKER_VOLUME => $this->listDockerVolume($destination, PHP_INT_MAX),
             default => throw new RuntimeException('Unsupported backup destination provider.'),
         };
     }
@@ -1060,6 +1079,233 @@ class DestinationStorage
         }
 
         File::copy($source, $targetPath);
+    }
+
+    /**
+     * The validated [volume name, archive directory] for a Docker volume
+     * destination. The name is re-checked here (fail-closed / TOCTOU) before it
+     * ever reaches a `-v` spec, so a `/` cannot turn the source into a host bind
+     * mount and a `:` cannot inject extra mount options.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function dockerVolumeTarget(BackupDestination $destination): array
+    {
+        $volume = DockerVolumeName::assertName((string) $destination->setting('volume_name'));
+
+        // `docker run -v <name>:...` silently re-creates a missing named volume
+        // as an empty `local` volume, which would make testing/listing report a
+        // healthy-but-empty destination and let backups write to the wrong place.
+        // Fail loudly instead so a deleted volume surfaces as a clear error.
+        $this->assertVolumeExists($volume);
+
+        return [
+            $volume,
+            DockerVolumeName::archiveDir((string) $destination->setting('path_prefix')),
+        ];
+    }
+
+    private function assertVolumeExists(string $volume): void
+    {
+        $result = $this->dockerProcess->run(['docker', 'volume', 'inspect', $volume], 60);
+
+        if (! $result->successful()) {
+            throw new RuntimeException('The Docker volume "'.$volume.'" does not exist. Create it (for example in your Compose file) before using this destination.');
+        }
+    }
+
+    /**
+     * Prove the volume mounts and its (optional) sub-directory is writable from
+     * a throwaway container — the same way the Offen backup container will write
+     * there. A bare `docker volume inspect` would miss a read-only NFS export,
+     * so we actually create and remove a probe file. This also provisions the
+     * sub-directory so the first scheduled backup does not fail on a missing dir.
+     */
+    private function testDockerVolume(BackupDestination $destination): void
+    {
+        [$volume, $dir] = $this->dockerVolumeTarget($destination);
+
+        // Probe with a random, per-test filename and `set -C` (noclobber) so the
+        // write test can never truncate or delete a pre-existing file in the
+        // destination. The dir ($1) and probe name ($2) are positional arguments,
+        // never interpolated into the script, so they cannot break out of it.
+        $probe = Str::lower(Str::random(16));
+        $script = 'set -e; mkdir -p "$1"; set -C; : > "$1/.vv-write-test-$2"; set +C; rm -f "$1/.vv-write-test-$2"';
+        $command = [
+            'docker', 'run', '--rm',
+            '-v', $volume.':'.DockerVolumeName::MOUNT_POINT,
+            '--entrypoint', 'sh',
+            RunBackupContainer::IMAGE,
+            '-c', $script, 'sh', $dir, $probe,
+        ];
+
+        $result = $this->dockerProcess->run($command, 120);
+
+        if (! $result->successful()) {
+            throw new RuntimeException('Docker volume destination is not usable: '.($result->combinedOutput() ?: 'unknown error'));
+        }
+    }
+
+    /**
+     * List backup objects from a read-only mount of the volume. `|| true` keeps
+     * an absent sub-directory (nothing backed up yet) from being a hard error,
+     * matching the "empty listing is fine" behaviour of the other providers.
+     */
+    private function listDockerVolume(BackupDestination $destination, int $limit = 1000): array
+    {
+        [$volume, $dir] = $this->dockerVolumeTarget($destination);
+
+        // Cap the output inside the container so a huge volume cannot fill the
+        // process buffer or time out: `head` stops `find` (via SIGPIPE) once the
+        // limit is reached. The limit is a trusted int, so interpolating it is
+        // safe; usage aggregation passes PHP_INT_MAX and is left uncapped.
+        $cap = $limit < PHP_INT_MAX ? ' | head -n '.(int) $limit : '';
+        $script = 'find "$1" -type f -exec stat -c "%s|%Y|%n" {} + 2>/dev/null'.$cap.' || true';
+        $command = [
+            'docker', 'run', '--rm',
+            '-v', $volume.':'.DockerVolumeName::MOUNT_POINT.':ro',
+            '--entrypoint', 'sh',
+            RunBackupContainer::IMAGE,
+            '-c', $script, 'sh', $dir,
+        ];
+
+        $result = $this->dockerProcess->run($command, 120);
+
+        if (! $result->successful()) {
+            throw new RuntimeException('Unable to list the Docker volume destination: '.($result->combinedOutput() ?: 'unknown error'));
+        }
+
+        $objects = [];
+
+        foreach (preg_split('/\R/', trim($result->output)) ?: [] as $line) {
+            if (count($objects) >= $limit) {
+                break;
+            }
+
+            if ($line === '') {
+                continue;
+            }
+
+            $parts = explode('|', $line, 3);
+
+            if (count($parts) < 3) {
+                continue;
+            }
+
+            [$size, $mtime, $path] = $parts;
+            $relative = ltrim(Str::after($path, $dir), '/');
+
+            if ($relative === '') {
+                continue;
+            }
+
+            $objects[] = [
+                'key' => $relative,
+                'display_name' => $relative,
+                'size' => (int) $size,
+                'last_modified' => date(DATE_ATOM, (int) $mtime),
+            ];
+        }
+
+        return $objects;
+    }
+
+    /**
+     * Sum size and count inside a read-only helper container with `awk`, so the
+     * output is a single "bytes|count" line no matter how many files the volume
+     * holds. Unlike listing every object back to PHP (and summing here), this
+     * never buffers a huge listing in memory — the path the storage-limit alert
+     * check takes for a docker_volume destination.
+     *
+     * @return array{used_bytes: int, object_count: int}
+     */
+    private function dockerVolumeUsage(BackupDestination $destination): array
+    {
+        [$volume, $dir] = $this->dockerVolumeTarget($destination);
+
+        // `$1` is the archive dir (positional, never interpolated). A missing
+        // sub-directory yields no input, so awk prints "0|0" (empty destination).
+        $script = 'find "$1" -type f -exec stat -c "%s" {} + 2>/dev/null | awk \'BEGIN { bytes = 0; count = 0 } { bytes += $1; count++ } END { print bytes "|" count }\'';
+        $command = [
+            'docker', 'run', '--rm',
+            '-v', $volume.':'.DockerVolumeName::MOUNT_POINT.':ro',
+            '--entrypoint', 'sh',
+            RunBackupContainer::IMAGE,
+            '-c', $script, 'sh', $dir,
+        ];
+
+        $result = $this->dockerProcess->run($command, 300);
+
+        if (! $result->successful()) {
+            throw new RuntimeException('Unable to compute the Docker volume destination usage: '.($result->combinedOutput() ?: 'unknown error'));
+        }
+
+        $parts = explode('|', trim($result->output), 2);
+
+        return [
+            'used_bytes' => (int) ($parts[0] ?? 0),
+            'object_count' => (int) ($parts[1] ?? 0),
+        ];
+    }
+
+    /**
+     * Stream a local file into the volume via stdin (`cat > target`) from a
+     * throwaway container, creating the parent directory first. The target path
+     * is passed as a positional argument, not interpolated into the script, and
+     * the key is sanitised against traversal by {@see DockerVolumeName::assertKey()}.
+     */
+    private function uploadDockerVolume(BackupDestination $destination, string $sourcePath, string $filename, ?string $directory): string
+    {
+        [$volume, $dir] = $this->dockerVolumeTarget($destination);
+        $key = DockerVolumeName::assertKey($this->joinRelative($directory, $filename));
+        $path = $dir.'/'.$key;
+
+        $script = 'set -e; mkdir -p "$(dirname "$1")"; cat > "$1"';
+        $command = [
+            'docker', 'run', '--rm', '-i',
+            '-v', $volume.':'.DockerVolumeName::MOUNT_POINT,
+            '--entrypoint', 'sh',
+            RunBackupContainer::IMAGE,
+            '-c', $script, 'sh', $path,
+        ];
+
+        $result = $this->dockerProcess->runWithInputFile($command, $sourcePath, 0);
+
+        if (! $result->successful()) {
+            throw new RuntimeException('Unable to upload to the Docker volume destination: '.($result->combinedOutput() ?: 'unknown error'));
+        }
+
+        return $key;
+    }
+
+    /**
+     * `cat` the selected object straight into the target file (streamed, never
+     * buffered in memory — archives can be many gigabytes) from a read-only
+     * mount. No shell: the path is a single argv element and the key has already
+     * been rejected if it contains a traversal segment or a colon.
+     */
+    private function downloadDockerVolume(BackupDestination $destination, string $key, string $targetPath): void
+    {
+        [$volume, $dir] = $this->dockerVolumeTarget($destination);
+        $path = $dir.'/'.DockerVolumeName::assertKey($key);
+
+        $command = [
+            'docker', 'run', '--rm',
+            '-v', $volume.':'.DockerVolumeName::MOUNT_POINT.':ro',
+            '--entrypoint', 'cat',
+            RunBackupContainer::IMAGE,
+            $path,
+        ];
+
+        $result = $this->dockerProcess->runWithOutputFile($command, $targetPath, 0);
+
+        if (! $result->successful()) {
+            if (File::exists($targetPath)) {
+                File::delete($targetPath);
+            }
+
+            throw new RuntimeException('Unable to download from the Docker volume destination: '.($result->errorOutput ?: 'unknown error'));
+        }
     }
 
     private function joinRelative(mixed ...$parts): string

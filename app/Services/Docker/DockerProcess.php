@@ -56,6 +56,74 @@ class DockerProcess
         }
     }
 
+    /**
+     * Run a command and stream its stdout straight into a file instead of
+     * buffering it in memory. Used to pull a backup archive out of a Docker
+     * volume (`cat`-ing it from a throwaway container): an archive can be many
+     * gigabytes, so {@see run()}'s in-memory capture is not an option here.
+     * stderr is small (error messages only) and is captured for reporting.
+     */
+    public function runWithOutputFile(array $command, string $outputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+    {
+        $output = @fopen($outputPath, 'wb');
+
+        if ($output === false) {
+            throw new RuntimeException('Unable to open Docker process output file: '.$outputPath);
+        }
+
+        $process = new Process($command, null, $this->environment($environment), null, $timeout);
+        $errorOutput = '';
+
+        try {
+            $process->run(function (string $type, string $buffer) use ($output, $outputPath, &$errorOutput, $process): void {
+                if ($type !== Process::OUT) {
+                    $errorOutput .= $buffer;
+                    // stderr stays tiny, but clear it too so nothing accumulates.
+                    $process->clearErrorOutput();
+
+                    return;
+                }
+
+                // fwrite can do a short write; loop until the whole chunk lands.
+                for ($offset = 0, $length = strlen($buffer); $offset < $length;) {
+                    $written = fwrite($output, substr($buffer, $offset));
+
+                    if ($written === false) {
+                        throw new RuntimeException('Unable to write Docker output to file: '.$outputPath);
+                    }
+
+                    $offset += $written;
+                }
+
+                // Symfony keeps appending stdout to the Process buffer even when a
+                // callback streams it; clear it after each chunk so a multi-GB
+                // archive is never duplicated into memory (or the temp spool).
+                $process->clearOutput();
+            });
+
+            return new DockerProcessResult(
+                command: $this->sanitizeCommand($command),
+                exitCode: $process->getExitCode() ?? 1,
+                output: '',
+                errorOutput: $errorOutput,
+            );
+        } catch (ProcessTimedOutException) {
+            $process->stop(3);
+
+            return new DockerProcessResult(
+                command: $this->sanitizeCommand($command),
+                exitCode: 124,
+                output: '',
+                errorOutput: 'Docker command timed out.',
+                timedOut: true,
+            );
+        } finally {
+            if (is_resource($output)) {
+                fclose($output);
+            }
+        }
+    }
+
     private function runProcess(Process $process, array $command): DockerProcessResult
     {
         try {

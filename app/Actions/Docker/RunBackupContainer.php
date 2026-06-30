@@ -9,6 +9,7 @@ use App\Models\BackupRun;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Services\Docker\DockerVolumeName;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -81,6 +82,8 @@ class RunBackupContainer
         $job = $run->job;
         $destination = $job->destination;
 
+        $this->assertSourceAndDestinationDiffer($job, $destination);
+
         // offen/docker-volume-backup controls destinations and archive behavior through env vars.
         // Check offen/docker-volume-backup documentation if an environment variable changes.
         $environment = [
@@ -124,6 +127,7 @@ class RunBackupContainer
             BackupDestination::PROVIDER_DROPBOX => $runtime['environment'] = $this->dropboxEnvironment($destination),
             BackupDestination::PROVIDER_GOOGLE_DRIVE => $runtime['environment'] = $this->googleDriveEnvironment($destination),
             BackupDestination::PROVIDER_LOCAL => $runtime = $this->localRuntime($destination),
+            BackupDestination::PROVIDER_DOCKER_VOLUME => $runtime = $this->dockerVolumeRuntime($destination),
             default => throw new \RuntimeException('Unsupported backup destination provider.'),
         };
 
@@ -229,6 +233,60 @@ class RunBackupContainer
             'mounts' => [$mountSource.':'.$archivePath],
             'cleanup' => [],
         ];
+    }
+
+    private function dockerVolumeRuntime(BackupDestination $destination): array
+    {
+        // Mount the named Docker volume into the Offen container by name and let
+        // Offen write the archive into it. Re-validate the name and sub-path at
+        // run time (fail-closed + TOCTOU): an unconstrained value could turn the
+        // `-v` spec into a host bind mount or inject extra mount options. Unlike
+        // the local provider, no host path is touched, so the volume is sandboxed.
+        $volume = DockerVolumeName::assertName((string) $destination->setting('volume_name'));
+
+        // `docker run -v <name>:...` silently re-creates a missing named volume
+        // as an empty `local` volume. Without this guard, a volume that was
+        // deleted (e.g. an NFS share removed from Compose) would let the backup
+        // "succeed" into the wrong, empty volume. Fail the run instead — it is
+        // surfaced and notified like any other backup error.
+        $this->assertVolumeExists($volume);
+
+        $archivePath = DockerVolumeName::archiveDir((string) $destination->setting('path_prefix'));
+
+        return [
+            'environment' => ['BACKUP_ARCHIVE' => $archivePath],
+            'mounts' => [$volume.':'.DockerVolumeName::MOUNT_POINT],
+            'cleanup' => [],
+        ];
+    }
+
+    private function assertVolumeExists(string $volume): void
+    {
+        $result = $this->dockerProcess->run(['docker', 'volume', 'inspect', $volume], 60);
+
+        if (! $result->successful()) {
+            throw new \RuntimeException('The Docker volume "'.$volume.'" does not exist. Create it (for example in your Compose file) before running backups.');
+        }
+    }
+
+    /**
+     * Refuse to back a Docker volume up into itself. A docker_volume destination
+     * pointing at the same volume the job archives would mount it at /archive
+     * while it is also mounted read-only at /backup, so Offen would write the
+     * growing archive into the very data it is archiving.
+     */
+    private function assertSourceAndDestinationDiffer(BackupJob $job, BackupDestination $destination): void
+    {
+        if ($destination->provider !== BackupDestination::PROVIDER_DOCKER_VOLUME || $job->isHostPathSource()) {
+            return;
+        }
+
+        $sourceVolume = (string) $job->volume_name;
+        $destinationVolume = (string) $destination->setting('volume_name');
+
+        if ($sourceVolume !== '' && $sourceVolume === $destinationVolume) {
+            throw new \RuntimeException('The Docker volume destination "'.$destinationVolume.'" is the same volume being backed up; choose a different destination volume.');
+        }
     }
 
     private function writeSecretFile(BackupRun $run, string $name, string $contents): string

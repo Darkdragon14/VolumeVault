@@ -29,6 +29,8 @@ class BackupDestination extends Model
 
     public const PROVIDER_LOCAL = 'local';
 
+    public const PROVIDER_DOCKER_VOLUME = 'docker_volume';
+
     public const S3_PROVIDERS = [
         self::PROVIDER_AWS_S3,
         self::PROVIDER_CLOUDFLARE_R2,
@@ -45,6 +47,7 @@ class BackupDestination extends Model
         self::PROVIDER_DROPBOX,
         self::PROVIDER_GOOGLE_DRIVE,
         self::PROVIDER_LOCAL,
+        self::PROVIDER_DOCKER_VOLUME,
     ];
 
     public const PROVIDER_LABELS = [
@@ -57,6 +60,7 @@ class BackupDestination extends Model
         self::PROVIDER_DROPBOX => 'Dropbox',
         self::PROVIDER_GOOGLE_DRIVE => 'Google Drive',
         self::PROVIDER_LOCAL => 'Local filesystem',
+        self::PROVIDER_DOCKER_VOLUME => 'Docker volume',
     ];
 
     public const SECRET_FIELDS = [
@@ -69,6 +73,7 @@ class BackupDestination extends Model
         self::PROVIDER_DROPBOX => ['app_key', 'app_secret', 'refresh_token'],
         self::PROVIDER_GOOGLE_DRIVE => ['credentials_json'],
         self::PROVIDER_LOCAL => [],
+        self::PROVIDER_DOCKER_VOLUME => [],
     ];
 
     protected $fillable = [
@@ -164,8 +169,17 @@ class BackupDestination extends Model
             self::PROVIDER_DROPBOX => (string) ($this->setting('remote_path') ?: '/'),
             self::PROVIDER_GOOGLE_DRIVE => (string) $this->setting('folder_id', $this->bucket),
             self::PROVIDER_LOCAL => (string) $this->setting('archive_path', $this->bucket),
+            self::PROVIDER_DOCKER_VOLUME => $this->dockerVolumeTargetLabel(),
             default => $this->bucket,
         };
+    }
+
+    private function dockerVolumeTargetLabel(): string
+    {
+        $volume = (string) $this->setting('volume_name', $this->bucket);
+        $prefix = trim((string) $this->setting('path_prefix'), '/');
+
+        return $prefix !== '' ? $volume.'/'.$prefix : $volume;
     }
 
     public static function providerOptions(): array

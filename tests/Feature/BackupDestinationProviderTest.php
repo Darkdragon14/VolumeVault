@@ -77,6 +77,13 @@ class BackupDestinationProviderTest extends TestCase
                 'expected' => ['BACKUP_ARCHIVE' => '/archive'],
                 'expected_mount' => '/host/archive:/archive',
             ],
+            [
+                'provider' => BackupDestination::PROVIDER_DOCKER_VOLUME,
+                'settings' => ['volume_name' => 'barril-backups', 'path_prefix' => 'volumevault'],
+                'secrets' => [],
+                'expected' => ['BACKUP_ARCHIVE' => '/archive/volumevault'],
+                'expected_mount' => 'barril-backups:/archive',
+            ],
         ];
 
         foreach ($cases as $index => $case) {
@@ -105,7 +112,14 @@ class BackupDestinationProviderTest extends TestCase
             ]);
 
             $action->handle($run);
-            $call = $process->calls[$index];
+            // The Docker volume provider runs `docker volume inspect` before the
+            // backup, so a case can record more than one call; pick the backup
+            // command (the one that runs the Offen `/usr/bin/backup` entrypoint).
+            $backupCalls = array_values(array_filter(
+                $process->calls,
+                fn (array $call): bool => in_array('/usr/bin/backup', $call['command'], true),
+            ));
+            $call = $backupCalls[$index];
 
             $this->assertContains('--entrypoint', $call['command']);
             $this->assertContains('/usr/bin/backup', $call['command']);
@@ -231,5 +245,44 @@ class BackupDestinationProviderTest extends TestCase
         $this->assertSame('type=bind,src=/srv/app-data,dst=/backup/srv_app-data,readonly', $call['command'][$mountIndex + 1]);
         $this->assertSame('/backup', $call['environment']['BACKUP_SOURCES'] ?? null);
         $this->assertSame('volumevault-srv_app-data-run-'.$run->id.'.tar.gz', $call['environment']['BACKUP_FILENAME'] ?? null);
+    }
+
+    public function test_docker_volume_destination_cannot_target_the_source_volume(): void
+    {
+        $process = new class extends DockerProcess
+        {
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                return new DockerProcessResult($command, 0, 'ok', '');
+            }
+        };
+        $action = new RunBackupContainer($process);
+        $destination = BackupDestination::create([
+            'name' => 'Self',
+            'provider' => BackupDestination::PROVIDER_DOCKER_VOLUME,
+            'bucket' => 'app_data',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['volume_name' => 'app_data'],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Self backup',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('same volume being backed up');
+
+        $action->handle($run);
     }
 }

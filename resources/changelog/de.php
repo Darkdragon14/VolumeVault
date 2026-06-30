@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_volume_destinations' => [
+        'title' => 'Docker-Volume-Ziele',
+        'description' => 'Ein neues Ziel „Docker-Volume“ sichert in ein benanntes Docker-Volume — jeder Treiber, einschließlich NFS oder anderer Netzwerkfreigaben. Deklarieren Sie das Volume in Ihrer Compose-Datei, und VolumeVault bindet es per Namen in den temporären Backup-Container ein, sodass Backups, Wiederherstellungen, Auflistung und Speichernutzung funktionieren, ohne einen Host-Pfad mit VolumeVault zu teilen. Wenn das Volume nicht mehr existiert, schlägt das Ziel mit einer klaren Fehlermeldung fehl, anstatt unbemerkt in ein leeres, neu erstelltes Volume zu schreiben.',
+    ],
     'webhook_notifications' => [
         'title' => 'Webhook-Benachrichtigungen',
         'description' => 'Ein neuer Benachrichtigungskanal „Webhook“ ruft Ihre eigenen URLs bei Backup- und Wiederherstellungsereignissen auf. Legen Sie für jede Aktion – Start, Erfolg und Fehler – eine eigene URL fest; VolumeVault ruft die passende auf, wenn ein Backup oder eine Wiederherstellung startet, erfolgreich ist oder fehlschlägt. Füllen Sie beliebige Felder aus; stellen Sie die Kanalstufe auf „Jeder Backup- und Wiederherstellungslauf“, um auch die Start- und Erfolgs-URLs zu senden. Das vereinfacht die Anbindung an Überwachungs- und Totmannschalter-Dienste. Benachrichtigungskanäle lassen sich jetzt auch über die API aktualisieren.',
