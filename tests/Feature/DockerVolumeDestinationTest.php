@@ -133,6 +133,24 @@ class DockerVolumeDestinationTest extends TestCase
         $this->assertStringNotContainsString('.volumevault-write-test"', $script);
     }
 
+    public function test_storage_usage_is_aggregated_inside_the_helper_container(): void
+    {
+        // The helper returns a single "bytes|count" line, so no full listing is
+        // streamed back to PHP even for a volume with very many files.
+        $process = $this->fakeProcess();
+        $process->listing = '8192|5';
+
+        $usage = $this->storage($process)->storageUsage($this->destination());
+
+        $this->assertSame(8192, $usage['used_bytes']);
+        $this->assertSame(5, $usage['object_count']);
+        $this->assertTrue(
+            collect($process->calls)->flatten()->contains(fn ($arg): bool => is_string($arg) && str_contains($arg, 'awk')),
+            'usage should be aggregated in-container with awk, not by listing every object',
+        );
+        $this->assertSomeCommandContains($process, 'barril-backups:/archive:ro');
+    }
+
     public function test_download_streams_the_archive_into_the_target_file(): void
     {
         $process = $this->fakeProcess();

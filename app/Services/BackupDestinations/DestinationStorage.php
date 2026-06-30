@@ -96,6 +96,13 @@ class DestinationStorage
     {
         $this->guardOutbound($destination);
 
+        // The Docker volume provider aggregates size and count inside the helper
+        // container (a single "bytes|count" line), so a volume with very many
+        // files never streams a full listing back into the process buffer.
+        if ($destination->provider === BackupDestination::PROVIDER_DOCKER_VOLUME) {
+            return $this->dockerVolumeUsage($destination);
+        }
+
         $usedBytes = 0;
         $objectCount = 0;
         $accumulate = function (array $object) use (&$usedBytes, &$objectCount): void {
@@ -1201,6 +1208,44 @@ class DestinationStorage
         }
 
         return $objects;
+    }
+
+    /**
+     * Sum size and count inside a read-only helper container with `awk`, so the
+     * output is a single "bytes|count" line no matter how many files the volume
+     * holds. Unlike listing every object back to PHP (and summing here), this
+     * never buffers a huge listing in memory — the path the storage-limit alert
+     * check takes for a docker_volume destination.
+     *
+     * @return array{used_bytes: int, object_count: int}
+     */
+    private function dockerVolumeUsage(BackupDestination $destination): array
+    {
+        [$volume, $dir] = $this->dockerVolumeTarget($destination);
+
+        // `$1` is the archive dir (positional, never interpolated). A missing
+        // sub-directory yields no input, so awk prints "0|0" (empty destination).
+        $script = 'find "$1" -type f -exec stat -c "%s" {} + 2>/dev/null | awk \'BEGIN { bytes = 0; count = 0 } { bytes += $1; count++ } END { print bytes "|" count }\'';
+        $command = [
+            'docker', 'run', '--rm',
+            '-v', $volume.':'.DockerVolumeName::MOUNT_POINT.':ro',
+            '--entrypoint', 'sh',
+            RunBackupContainer::IMAGE,
+            '-c', $script, 'sh', $dir,
+        ];
+
+        $result = $this->dockerProcess->run($command, 300);
+
+        if (! $result->successful()) {
+            throw new RuntimeException('Unable to compute the Docker volume destination usage: '.($result->combinedOutput() ?: 'unknown error'));
+        }
+
+        $parts = explode('|', trim($result->output), 2);
+
+        return [
+            'used_bytes' => (int) ($parts[0] ?? 0),
+            'object_count' => (int) ($parts[1] ?? 0),
+        ];
     }
 
     /**
