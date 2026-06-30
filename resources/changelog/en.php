@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_volume_destinations' => [
+        'title' => 'Docker volume destinations',
+        'description' => 'A new "Docker volume" destination backs up to a named Docker volume — any driver, including NFS or other network shares. Declare the volume in your Compose file and VolumeVault mounts it by name into the temporary backup container, so backups, restores, listing and storage usage all work without sharing a host path with VolumeVault. If the volume no longer exists, the destination fails with a clear error instead of silently writing to an empty, freshly created volume.',
+    ],
     'webhook_notifications' => [
         'title' => 'Webhook notifications',
         'description' => 'A new "Webhook" notification channel calls your own URLs on backup and restore events. Set a different URL for each action — start, success and failure — and VolumeVault calls the matching one when a backup or restore starts, succeeds, or fails. Fill any subset; set the channel level to "Every backup and restore run" to also send the start and success URLs. It makes integrating with uptime and dead man\'s switch monitors straightforward. Notification channels can now also be updated through the API.',

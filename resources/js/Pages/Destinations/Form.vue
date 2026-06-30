@@ -53,6 +53,8 @@ const form = useForm({
         token_url: settings.token_url || '',
         archive_path: settings.archive_path || '',
         archive_mount_source: settings.archive_mount_source || '',
+        volume_name: settings.volume_name || '',
+        path_prefix: settings.path_prefix || '',
         storage_limit_warning_bytes: settings.storage_limit_warning_bytes ?? null,
         storage_limit_critical_bytes: settings.storage_limit_critical_bytes ?? null,
     },
@@ -361,6 +363,24 @@ const fetchHostKey = async () => {
                 </label>
                 <div class="rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100 sm:col-span-2">
                     {{ t('Local destinations need a path shared between VolumeVault and the temporary Offen container. Test the destination before trusting scheduled backups.') }}
+                </div>
+            </section>
+
+            <section v-else-if="form.provider === 'docker_volume'" class="grid gap-4 sm:grid-cols-2">
+                <label class="space-y-2 sm:col-span-2">
+                    <span class="label">{{ t('Docker volume name') }}</span>
+                    <input v-model="form.settings.volume_name" class="input" required placeholder="barril-backups">
+                    <span class="text-xs text-slate-400">{{ t('Name of a Docker volume defined in your Compose file (e.g. an NFS volume). VolumeVault mounts it into the temporary Offen container for backups and restores.') }}</span>
+                    <span v-if="error('settings.volume_name')" class="block text-sm text-rose-300">{{ translateError(error('settings.volume_name') as string) }}</span>
+                </label>
+                <label class="space-y-2 sm:col-span-2">
+                    <span class="label">{{ t('Subpath (optional)') }}</span>
+                    <input v-model="form.settings.path_prefix" class="input" placeholder="volumevault">
+                    <span class="text-xs text-slate-400">{{ t('Optional sub-directory inside the volume where archives are stored. Leave empty to use the volume root.') }}</span>
+                    <span v-if="error('settings.path_prefix')" class="block text-sm text-rose-300">{{ translateError(error('settings.path_prefix') as string) }}</span>
+                </label>
+                <div class="rounded-xl border border-sky-300/30 bg-sky-300/10 p-4 text-sm text-sky-100 sm:col-span-2">
+                    {{ t('The volume is mounted by name into throwaway containers, so no host path needs to be shared with VolumeVault. Test the destination before trusting scheduled backups.') }}
                 </div>
             </section>
 

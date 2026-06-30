@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_volume_destinations' => [
+        'title' => 'Destinations volume Docker',
+        'description' => 'Une nouvelle destination « Volume Docker » sauvegarde vers un volume Docker nommé — n\'importe quel pilote, y compris NFS ou d\'autres partages réseau. Déclarez le volume dans votre fichier Compose et VolumeVault le monte par son nom dans le conteneur de sauvegarde temporaire : les sauvegardes, les restaurations, le listing et l\'utilisation du stockage fonctionnent sans partager de chemin hôte avec VolumeVault. Si le volume n\'existe plus, la destination échoue avec une erreur claire au lieu d\'écrire silencieusement dans un volume vide recréé automatiquement.',
+    ],
     'webhook_notifications' => [
         'title' => 'Notifications par webhook',
         'description' => 'Un nouveau canal de notification « Webhook » appelle vos propres URL lors des événements de sauvegarde et de restauration. Définissez une URL différente pour chaque action — démarrage, succès et échec — et VolumeVault appelle celle qui correspond lorsqu\'une sauvegarde ou une restauration démarre, réussit ou échoue. Remplissez les champs souhaités ; réglez le niveau du canal sur « Chaque sauvegarde et restauration » pour envoyer aussi les URL de démarrage et de succès. Cela facilite l\'intégration avec les services de supervision et de type « homme mort ». Les canaux de notification peuvent désormais aussi être modifiés via l\'API.',

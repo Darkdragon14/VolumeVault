@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_volume_destinations' => [
+        'title' => 'Destinos de volumen de Docker',
+        'description' => 'Un nuevo destino «Volumen de Docker» realiza copias de seguridad en un volumen de Docker con nombre —cualquier controlador, incluido NFS u otros recursos de red—. Declara el volumen en tu archivo Compose y VolumeVault lo monta por su nombre en el contenedor de copia temporal, de modo que las copias, las restauraciones, el listado y el uso de almacenamiento funcionan sin compartir ninguna ruta del host con VolumeVault. Si el volumen ya no existe, el destino falla con un error claro en lugar de escribir en silencio en un volumen vacío recién creado.',
+    ],
     'webhook_notifications' => [
         'title' => 'Notificaciones por webhook',
         'description' => 'Un nuevo canal de notificación «Webhook» llama a tus propias URL en los eventos de copia de seguridad y restauración. Define una URL distinta para cada acción —inicio, éxito y error— y VolumeVault llama a la correspondiente cuando una copia o restauración empieza, termina con éxito o falla. Rellena los que quieras; establece el nivel del canal en «Cada copia de seguridad y restauración» para enviar también las URL de inicio y de éxito. Facilita la integración con servicios de monitorización y de tipo «interruptor de hombre muerto». Los canales de notificación también pueden actualizarse ahora mediante la API.',

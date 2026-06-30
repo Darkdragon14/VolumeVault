@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_volume_destinations' => [
+        'title' => 'Destinazioni volume Docker',
+        'description' => 'Una nuova destinazione «Volume Docker» esegue il backup su un volume Docker con nome — qualsiasi driver, incluso NFS o altre condivisioni di rete. Dichiara il volume nel tuo file Compose e VolumeVault lo monta per nome nel container di backup temporaneo, così backup, ripristini, elenco e utilizzo dello spazio funzionano senza condividere alcun percorso host con VolumeVault. Se il volume non esiste più, la destinazione fallisce con un errore chiaro invece di scrivere silenziosamente in un volume vuoto appena creato.',
+    ],
     'webhook_notifications' => [
         'title' => 'Notifiche tramite webhook',
         'description' => 'Un nuovo canale di notifica «Webhook» chiama i tuoi URL agli eventi di backup e ripristino. Imposta un URL diverso per ogni azione — avvio, successo ed errore — e VolumeVault chiama quello corrispondente quando un backup o un ripristino inizia, riesce o fallisce. Compila quelli che vuoi; imposta il livello del canale su «Ogni backup e ripristino» per inviare anche gli URL di avvio e di successo. Semplifica l\'integrazione con i servizi di monitoraggio e di tipo «interruttore dell\'uomo morto». I canali di notifica ora possono anche essere aggiornati tramite l\'API.',

@@ -109,6 +109,7 @@ class NormalizeDestinationData
             BackupDestination::PROVIDER_DROPBOX => ['remote_path', 'concurrency_level'],
             BackupDestination::PROVIDER_GOOGLE_DRIVE => ['folder_id', 'impersonate_subject', 'endpoint', 'token_url'],
             BackupDestination::PROVIDER_LOCAL => ['archive_path', 'archive_mount_source'],
+            BackupDestination::PROVIDER_DOCKER_VOLUME => ['volume_name', 'path_prefix'],
             default => [],
         };
 
@@ -179,6 +180,12 @@ class NormalizeDestinationData
                 'region' => null,
                 'bucket' => $settings['archive_path'] ?? null,
                 'path_prefix' => $settings['archive_path'] ?? null,
+            ],
+            BackupDestination::PROVIDER_DOCKER_VOLUME => [
+                'endpoint' => null,
+                'region' => null,
+                'bucket' => $settings['volume_name'] ?? null,
+                'path_prefix' => $settings['path_prefix'] ?? null,
             ],
             default => ['endpoint' => null, 'region' => null, 'bucket' => null, 'path_prefix' => null],
         };

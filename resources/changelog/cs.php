@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_volume_destinations' => [
+        'title' => 'Cíle svazku Docker',
+        'description' => 'Nový cíl „Svazek Docker“ zálohuje do pojmenovaného svazku Docker — libovolný ovladač, včetně NFS nebo jiných síťových sdílení. Deklarujte svazek ve svém souboru Compose a VolumeVault jej připojí podle názvu do dočasného zálohovacího kontejneru, takže zálohy, obnovy, výpis i využití úložiště fungují, aniž byste s VolumeVault sdíleli cestu hostitele. Pokud svazek již neexistuje, cíl selže s jasnou chybou místo toho, aby nepozorovaně zapisoval do prázdného, nově vytvořeného svazku.',
+    ],
     'webhook_notifications' => [
         'title' => 'Oznámení přes webhook',
         'description' => 'Nový oznamovací kanál „Webhook“ volá vaše vlastní adresy URL při událostech zálohování a obnovy. Nastavte pro každou akci — spuštění, úspěch a selhání — jinou adresu URL a VolumeVault zavolá odpovídající, když záloha nebo obnova začne, uspěje nebo selže. Vyplňte libovolnou část; nastavte úroveň kanálu na „Každá záloha a obnova“, aby se odeslaly i adresy URL spuštění a úspěchu. Usnadňuje to integraci s monitorovacími službami a službami typu „pojistka mrtvého muže“. Oznamovací kanály lze nyní také upravovat přes API.',

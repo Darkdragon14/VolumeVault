@@ -77,6 +77,13 @@ class BackupDestinationProviderTest extends TestCase
                 'expected' => ['BACKUP_ARCHIVE' => '/archive'],
                 'expected_mount' => '/host/archive:/archive',
             ],
+            [
+                'provider' => BackupDestination::PROVIDER_DOCKER_VOLUME,
+                'settings' => ['volume_name' => 'barril-backups', 'path_prefix' => 'volumevault'],
+                'secrets' => [],
+                'expected' => ['BACKUP_ARCHIVE' => '/archive/volumevault'],
+                'expected_mount' => 'barril-backups:/archive',
+            ],
         ];
 
         foreach ($cases as $index => $case) {
@@ -105,7 +112,14 @@ class BackupDestinationProviderTest extends TestCase
             ]);
 
             $action->handle($run);
-            $call = $process->calls[$index];
+            // The Docker volume provider runs `docker volume inspect` before the
+            // backup, so a case can record more than one call; pick the backup
+            // command (the one that runs the Offen `/usr/bin/backup` entrypoint).
+            $backupCalls = array_values(array_filter(
+                $process->calls,
+                fn (array $call): bool => in_array('/usr/bin/backup', $call['command'], true),
+            ));
+            $call = $backupCalls[$index];
 
             $this->assertContains('--entrypoint', $call['command']);
             $this->assertContains('/usr/bin/backup', $call['command']);

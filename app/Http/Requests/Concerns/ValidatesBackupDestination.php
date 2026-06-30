@@ -4,6 +4,7 @@ namespace App\Http\Requests\Concerns;
 
 use App\Models\BackupDestination;
 use App\Services\BackupSources\HostPathPolicy;
+use App\Services\Docker\DockerVolumeName;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -107,6 +108,10 @@ trait ValidatesBackupDestination
                 'settings.archive_path' => ['required', 'string', 'max:2048'],
                 'settings.archive_mount_source' => ['nullable', 'string', 'max:2048'],
             ],
+            BackupDestination::PROVIDER_DOCKER_VOLUME => [
+                'settings.volume_name' => ['required', 'string', 'max:255'],
+                'settings.path_prefix' => ['nullable', 'string', 'max:255'],
+            ],
             default => [],
         };
     }
@@ -116,7 +121,42 @@ trait ValidatesBackupDestination
         $validator->after(function (Validator $validator): void {
             $this->validateStorageLimits($validator);
             $this->validateLocalDestinationPaths($validator);
+            $this->validateDockerVolumeSettings($validator);
         });
+    }
+
+    /**
+     * The Docker volume provider mounts `<volume_name>:/archive` into the Offen
+     * container and into throwaway helper containers. Hold the name to Docker's
+     * named-volume grammar and the optional sub-path to a safe relative path, so
+     * a `/` cannot turn the source into a host bind mount, a `:` cannot inject
+     * extra mount options, and a `..` cannot escape the archive directory.
+     */
+    protected function validateDockerVolumeSettings(Validator $validator): void
+    {
+        if ($this->input('provider') !== BackupDestination::PROVIDER_DOCKER_VOLUME) {
+            return;
+        }
+
+        $volumeName = (string) $this->input('settings.volume_name', '');
+
+        // The `required` rule already reports an empty name; only flag a
+        // non-empty name that fails Docker's named-volume grammar.
+        if ($volumeName !== '' && ! DockerVolumeName::isValidName($volumeName)) {
+            $validator->errors()->add(
+                'settings.volume_name',
+                'The Docker volume name may only contain letters, numbers, and the characters _ . - (it cannot contain slashes or colons).'
+            );
+        }
+
+        $pathPrefix = (string) $this->input('settings.path_prefix', '');
+
+        if ($pathPrefix !== '' && ! DockerVolumeName::isValidSubpath($pathPrefix)) {
+            $validator->errors()->add(
+                'settings.path_prefix',
+                'The sub-path must be a relative path and cannot contain "..", a colon, or a leading slash.'
+            );
+        }
     }
 
     /**

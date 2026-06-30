@@ -4,6 +4,10 @@ return [
     'unreleased' => [
         [
             'type' => 'feature',
+            'key' => 'docker_volume_destinations',
+        ],
+        [
+            'type' => 'feature',
             'key' => 'webhook_notifications',
         ],
         [

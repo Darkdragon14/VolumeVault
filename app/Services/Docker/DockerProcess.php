@@ -56,6 +56,58 @@ class DockerProcess
         }
     }
 
+    /**
+     * Run a command and stream its stdout straight into a file instead of
+     * buffering it in memory. Used to pull a backup archive out of a Docker
+     * volume (`cat`-ing it from a throwaway container): an archive can be many
+     * gigabytes, so {@see run()}'s in-memory capture is not an option here.
+     * stderr is small (error messages only) and is captured for reporting.
+     */
+    public function runWithOutputFile(array $command, string $outputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+    {
+        $output = @fopen($outputPath, 'wb');
+
+        if ($output === false) {
+            throw new RuntimeException('Unable to open Docker process output file: '.$outputPath);
+        }
+
+        $process = new Process($command, null, $this->environment($environment), null, $timeout);
+        $errorOutput = '';
+
+        try {
+            $process->run(function (string $type, string $buffer) use ($output, &$errorOutput): void {
+                if ($type === Process::OUT) {
+                    fwrite($output, $buffer);
+
+                    return;
+                }
+
+                $errorOutput .= $buffer;
+            });
+
+            return new DockerProcessResult(
+                command: $this->sanitizeCommand($command),
+                exitCode: $process->getExitCode() ?? 1,
+                output: '',
+                errorOutput: $errorOutput,
+            );
+        } catch (ProcessTimedOutException) {
+            $process->stop(3);
+
+            return new DockerProcessResult(
+                command: $this->sanitizeCommand($command),
+                exitCode: 124,
+                output: '',
+                errorOutput: 'Docker command timed out.',
+                timedOut: true,
+            );
+        } finally {
+            if (is_resource($output)) {
+                fclose($output);
+            }
+        }
+    }
+
     private function runProcess(Process $process, array $command): DockerProcessResult
     {
         try {
