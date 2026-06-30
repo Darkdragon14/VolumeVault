@@ -1,25 +1,30 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'docker_volume_destinations',
-        ],
-        [
-            'type' => 'feature',
-            'key' => 'webhook_notifications',
-        ],
-        [
-            'type' => 'feature',
-            'key' => 'backup_start_notifications',
-        ],
-        [
-            'type' => 'feature',
-            'key' => 'unencrypted_smtp_notifications',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.16.0' => [
+            'date' => '2026-06-30',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.16.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'docker_volume_destinations',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'webhook_notifications',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'backup_start_notifications',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'unencrypted_smtp_notifications',
+                ],
+            ],
+        ],
         'v1.15.0' => [
             'date' => '2026-06-26',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.15.0',
