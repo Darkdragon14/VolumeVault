@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'trusted_proxy_host_hardening',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.16.1' => [
+            'date' => '2026-06-30',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.16.1',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'trusted_proxy_host_hardening',
+                ],
+            ],
+        ],
         'v1.16.0' => [
             'date' => '2026-06-30',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.16.0',
