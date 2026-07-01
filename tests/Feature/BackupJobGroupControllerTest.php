@@ -158,6 +158,48 @@ class BackupJobGroupControllerTest extends TestCase
         $this->assertSame(1, $group->groupRuns()->count());
     }
 
+    public function test_a_group_member_cannot_be_run_as_a_standalone_job(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+
+        $this->actingAs($this->admin())
+            ->post(route('backup-jobs.run', $member))
+            ->assertSessionHasErrors('job');
+
+        $this->assertSame(0, $member->runs()->count());
+    }
+
+    public function test_updating_a_group_without_the_toggle_keeps_notifications_disabled(): void
+    {
+        $group = $this->group();
+        $group->forceFill(['notifications_enabled' => false])->save();
+
+        $this->actingAs($this->admin())
+            ->put(route('backup-groups.update', $group), [
+                'name' => 'Renamed',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '03:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+                // notifications_enabled intentionally omitted
+            ])
+            ->assertRedirect(route('backup-groups.index'));
+
+        $this->assertFalse($group->fresh()->notifications_enabled);
+    }
+
+    public function test_missing_schedule_input_is_a_validation_error_not_a_server_error(): void
+    {
+        // schedule_type/schedule_config omitted must surface as a 422 validation
+        // error, never a TypeError 500 from the schedule normalizer.
+        $this->actingAs($this->admin())
+            ->post(route('backup-groups.store'), [
+                'name' => 'No schedule',
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+            ])
+            ->assertSessionHasErrors('schedule_type');
+    }
+
     private function admin(): User
     {
         return User::factory()->admin()->create();

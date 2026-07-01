@@ -19,6 +19,15 @@ class CreateBackupRun
     {
         $job->loadMissing('destination');
 
+        // A group member is only ever run as part of its group run (which creates
+        // its BackupRun directly). Block the standalone run paths — manual "run
+        // now" (web/API) and stack backups all funnel through here.
+        if ($job->isGroupMember()) {
+            throw ValidationException::withMessages([
+                'job' => 'This job belongs to a backup group; run the group instead.',
+            ]);
+        }
+
         if ($job->status !== BackupJob::STATUS_ACTIVE) {
             throw ValidationException::withMessages([
                 'job' => 'Only active backup jobs can run.',

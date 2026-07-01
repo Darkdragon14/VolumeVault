@@ -48,7 +48,7 @@ class BackupJobGroupController extends Controller
 
     public function update(BackupJobGroupRequest $request, BackupJobGroup $backupGroup): JsonResponse
     {
-        $backupGroup->update($this->payload($request, $backupGroup->status));
+        $backupGroup->update($this->payload($request, $backupGroup->status, $backupGroup));
         $this->syncNotificationChannels($backupGroup, $request);
         $this->syncMemberSchedules($backupGroup);
 
@@ -112,7 +112,7 @@ class BackupJobGroupController extends Controller
         return response()->json(['data' => $this->serializeGroup($backupGroup->fresh()->loadCount('members')->load('notificationChannels'))]);
     }
 
-    private function payload(BackupJobGroupRequest $request, ?string $status = BackupJobGroup::STATUS_ACTIVE): array
+    private function payload(BackupJobGroupRequest $request, ?string $status = BackupJobGroup::STATUS_ACTIVE, ?BackupJobGroup $group = null): array
     {
         $scheduleType = $request->input('schedule_type');
         $scheduleConfig = $request->normalizedScheduleConfig();
@@ -126,7 +126,7 @@ class BackupJobGroupController extends Controller
             'timezone' => $timezone,
             'status' => $status ?: BackupJobGroup::STATUS_ACTIVE,
             'failure_policy' => $request->input('failure_policy', BackupJobGroup::FAILURE_POLICY_CONTINUE),
-            'notifications_enabled' => $request->has('notifications_enabled') ? $request->boolean('notifications_enabled') : true,
+            'notifications_enabled' => $request->has('notifications_enabled') ? $request->boolean('notifications_enabled') : (bool) ($group?->notifications_enabled ?? true),
             'next_run_at' => $this->scheduleCalculator->nextRunAt($scheduleType, $scheduleConfig, null, $timezone),
         ];
     }

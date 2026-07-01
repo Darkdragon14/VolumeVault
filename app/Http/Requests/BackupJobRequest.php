@@ -117,7 +117,7 @@ class BackupJobRequest extends FormRequest
             // A grouped job has no schedule of its own — the group owns it.
             if (! $this->isGroupMode()) {
                 try {
-                    app(BackupScheduleCalculator::class)->normalize($this->input('schedule_type'), $this->input('schedule_config', []));
+                    app(BackupScheduleCalculator::class)->normalize((string) $this->input('schedule_type'), (array) $this->input('schedule_config'));
                 } catch (InvalidArgumentException $exception) {
                     $validator->errors()->add('schedule_config', $exception->getMessage());
                 }
@@ -125,7 +125,7 @@ class BackupJobRequest extends FormRequest
 
             if ($this->isNewGroupMode()) {
                 try {
-                    app(BackupScheduleCalculator::class)->normalize($this->input('new_group.schedule_type'), $this->input('new_group.schedule_config', []) ?? []);
+                    app(BackupScheduleCalculator::class)->normalize((string) $this->input('new_group.schedule_type'), (array) $this->input('new_group.schedule_config'));
                 } catch (InvalidArgumentException $exception) {
                     $validator->errors()->add('new_group.schedule_config', $exception->getMessage());
                 }
@@ -154,7 +154,7 @@ class BackupJobRequest extends FormRequest
 
     public function normalizedScheduleConfig(): array
     {
-        return app(BackupScheduleCalculator::class)->normalize($this->input('schedule_type'), $this->input('schedule_config', []));
+        return app(BackupScheduleCalculator::class)->normalize((string) $this->input('schedule_type'), (array) $this->input('schedule_config'));
     }
 
     private function validateHostPathSource(Validator $validator): void

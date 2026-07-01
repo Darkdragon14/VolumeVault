@@ -34,9 +34,13 @@ class RunBackupGroupJob implements ShouldQueue
 
     public function middleware(): array
     {
-        // Serialize on the group run itself: a redelivery must not start a second
-        // pass while the first is still fanning out to members.
-        return [(new WithoutOverlapping('backup-group-run-'.$this->backupGroupRunId))->expireAfter(86400)];
+        // Serialize on the group (not the individual run) so two runs of the same
+        // group — e.g. a manual run racing a scheduled one — can never fan out to
+        // the same member volumes concurrently.
+        $run = BackupGroupRun::find($this->backupGroupRunId);
+        $key = 'backup-group-'.($run?->backup_job_group_id ?? $this->backupGroupRunId);
+
+        return [(new WithoutOverlapping($key))->expireAfter(86400)];
     }
 
     public function handle(RunBackupGroup $runBackupGroup): void

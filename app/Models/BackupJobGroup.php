@@ -76,9 +76,16 @@ class BackupJobGroup extends Model
         return $this->hasMany(BackupJob::class, 'backup_job_group_id');
     }
 
-    public function activeMembers(): HasMany
+    /**
+     * Members a group run should back up: everything except paused ones. An
+     * errored member is retried on the next run (the group owns scheduling, so a
+     * transient failure must not drop a volume until it is manually resumed); a
+     * successful retry clears its error. Pausing a member is the deliberate way
+     * to skip its volume.
+     */
+    public function runnableMembers(): HasMany
     {
-        return $this->members()->where('status', BackupJob::STATUS_ACTIVE);
+        return $this->members()->where('status', '!=', BackupJob::STATUS_PAUSED);
     }
 
     public function groupRuns(): HasMany

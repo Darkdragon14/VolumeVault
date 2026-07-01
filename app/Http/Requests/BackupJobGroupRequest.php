@@ -47,7 +47,10 @@ class BackupJobGroupRequest extends FormRequest
     {
         $validator->after(function (Validator $validator): void {
             try {
-                app(BackupScheduleCalculator::class)->normalize($this->input('schedule_type'), $this->input('schedule_config', []));
+                app(BackupScheduleCalculator::class)->normalize(
+                    (string) $this->input('schedule_type'),
+                    (array) $this->input('schedule_config'),
+                );
             } catch (InvalidArgumentException $exception) {
                 $validator->errors()->add('schedule_config', $exception->getMessage());
             }
@@ -56,6 +59,11 @@ class BackupJobGroupRequest extends FormRequest
 
     public function normalizedScheduleConfig(): array
     {
-        return app(BackupScheduleCalculator::class)->normalize($this->input('schedule_type'), $this->input('schedule_config', []));
+        // Coerce so a null/missing/scalar schedule input surfaces as a validation
+        // error (via normalize's InvalidArgumentException) rather than a TypeError.
+        return app(BackupScheduleCalculator::class)->normalize(
+            (string) $this->input('schedule_type'),
+            (array) $this->input('schedule_config'),
+        );
     }
 }

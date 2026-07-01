@@ -29,9 +29,9 @@ class CreateBackupGroupRun
             ]);
         }
 
-        if ($group->activeMembers()->count() === 0) {
+        if ($group->runnableMembers()->count() === 0) {
             throw ValidationException::withMessages([
-                'group' => 'This backup group has no active member jobs to run.',
+                'group' => 'This backup group has no runnable member jobs (all are paused or it has none).',
             ]);
         }
 

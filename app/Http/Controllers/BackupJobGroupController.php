@@ -72,7 +72,7 @@ class BackupJobGroupController extends Controller
 
     public function update(BackupJobGroupRequest $request, BackupJobGroup $backupGroup)
     {
-        $backupGroup->update($this->payload($request, $backupGroup->status));
+        $backupGroup->update($this->payload($request, $backupGroup->status, $backupGroup));
         $this->syncNotificationChannels($backupGroup, $request);
 
         // Members mirror the group's schedule columns (they are never dispatched on
@@ -152,7 +152,7 @@ class BackupJobGroupController extends Controller
         ];
     }
 
-    private function payload(BackupJobGroupRequest $request, ?string $status = BackupJobGroup::STATUS_ACTIVE): array
+    private function payload(BackupJobGroupRequest $request, ?string $status = BackupJobGroup::STATUS_ACTIVE, ?BackupJobGroup $group = null): array
     {
         $scheduleType = $request->input('schedule_type');
         $scheduleConfig = $request->normalizedScheduleConfig();
@@ -166,7 +166,9 @@ class BackupJobGroupController extends Controller
             'timezone' => $timezone,
             'status' => $status ?: BackupJobGroup::STATUS_ACTIVE,
             'failure_policy' => $request->input('failure_policy', BackupJobGroup::FAILURE_POLICY_CONTINUE),
-            'notifications_enabled' => $request->has('notifications_enabled') ? $request->boolean('notifications_enabled') : true,
+            // On update, keep the stored value when the request omits the toggle,
+            // so an API caller cannot silently re-enable disabled notifications.
+            'notifications_enabled' => $request->has('notifications_enabled') ? $request->boolean('notifications_enabled') : (bool) ($group?->notifications_enabled ?? true),
             'next_run_at' => $this->scheduleCalculator->nextRunAt($scheduleType, $scheduleConfig, null, $timezone),
         ];
     }

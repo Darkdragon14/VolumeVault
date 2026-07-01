@@ -64,7 +64,7 @@ class RunBackupGroup
         }
 
         /** @var \Illuminate\Database\Eloquent\Collection<int, BackupJob> $members */
-        $members = $group->activeMembers()->orderBy('id')->get();
+        $members = $group->runnableMembers()->orderBy('id')->get();
 
         $group->forceFill([
             'status' => BackupJobGroup::STATUS_RUNNING,

@@ -137,6 +137,47 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(1, BackupRun::where('backup_group_run_id', $run->id)->count());
     }
 
+    public function test_a_failed_member_is_retried_on_the_next_group_run(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+        $memberB = $this->member($group, 'vol_b');
+
+        // First run: vol_b fails, so its member job is left in error.
+        $this->app->instance(DockerProcess::class, $this->fakeDocker(['vol_b']));
+        $run1 = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        app(RunBackupGroup::class)->handle($run1);
+        $this->assertSame(BackupJob::STATUS_ERROR, $memberB->fresh()->status);
+
+        // Second run: nothing fails. The errored member must be retried (not
+        // dropped) and recover, and the group must succeed.
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $run2 = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        app(RunBackupGroup::class)->handle($run2);
+
+        $run2->refresh();
+        $this->assertSame(BackupGroupRun::STATUS_SUCCESS, $run2->status);
+        $this->assertSame(2, $run2->total_members, 'the previously failed member is included again');
+        $this->assertSame(2, BackupRun::where('backup_group_run_id', $run2->id)->count());
+        $this->assertSame(BackupJob::STATUS_ACTIVE, $memberB->fresh()->status);
+    }
+
+    public function test_a_paused_member_is_skipped_by_the_group_run(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+        $paused = $this->member($group, 'vol_b');
+        $paused->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        app(RunBackupGroup::class)->handle($run);
+
+        $run->refresh();
+        $this->assertSame(1, $run->total_members, 'the paused member is skipped');
+        $this->assertSame(1, BackupRun::where('backup_group_run_id', $run->id)->count());
+    }
+
     public function test_the_scheduler_dispatches_due_groups_and_skips_group_members(): void
     {
         Bus::fake([RunBackupGroupJob::class, RunBackupJob::class]);
