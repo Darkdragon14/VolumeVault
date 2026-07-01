@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Gruppierte Backup-Jobs',
+        'description' => 'Sichern Sie mehrere Volumes als einen einzigen geplanten Vorgang: Eine Backup-Gruppe besitzt den Zeitplan und die Benachrichtigungen, und Jobs werden ihr über das Backup-Job-Formular hinzugefügt. Die Gruppe sendet eine Start- und eine Erfolgs-/Fehlerbenachrichtigung für alle ihre Volumes — ideal für einen einzelnen Dead-Man\'s-Switch-Monitor — und Sie können wählen, ob ein fehlgeschlagenes Volume den Lauf stoppt oder die Gruppe fortfährt und den Fehler dennoch meldet. Backup-Gruppen sind auch über die API verfügbar.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-Volume-Ziele',
         'description' => 'Ein neues Ziel „Docker-Volume“ sichert in ein benanntes Docker-Volume — jeder Treiber, einschließlich NFS oder anderer Netzwerkfreigaben. Deklarieren Sie das Volume in Ihrer Compose-Datei, und VolumeVault bindet es per Namen in den temporären Backup-Container ein, sodass Backups, Wiederherstellungen, Auflistung und Speichernutzung funktionieren, ohne einen Host-Pfad mit VolumeVault zu teilen. Wenn das Volume nicht mehr existiert, schlägt das Ziel mit einer klaren Fehlermeldung fehl, anstatt unbemerkt in ein leeres, neu erstelltes Volume zu schreiben.',

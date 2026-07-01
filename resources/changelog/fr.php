@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Jobs de sauvegarde groupés',
+        'description' => 'Sauvegardez plusieurs volumes en une seule opération planifiée : un groupe de sauvegarde possède le planning et les notifications, et les jobs y sont rattachés depuis le formulaire de job de sauvegarde. Le groupe envoie une seule notification de début et une seule notification de succès/échec pour tous ses volumes — idéal pour un unique moniteur de type dead man\'s switch — et vous pouvez choisir si un volume en échec arrête l\'exécution ou si le groupe continue en signalant tout de même l\'échec. Les groupes de sauvegarde sont aussi disponibles via l\'API.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Destinations volume Docker',
         'description' => 'Une nouvelle destination « Volume Docker » sauvegarde vers un volume Docker nommé — n\'importe quel pilote, y compris NFS ou d\'autres partages réseau. Déclarez le volume dans votre fichier Compose et VolumeVault le monte par son nom dans le conteneur de sauvegarde temporaire : les sauvegardes, les restaurations, le listing et l\'utilisation du stockage fonctionnent sans partager de chemin hôte avec VolumeVault. Si le volume n\'existe plus, la destination échoue avec une erreur claire au lieu d\'écrire silencieusement dans un volume vide recréé automatiquement.',

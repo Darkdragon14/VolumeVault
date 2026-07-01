@@ -74,6 +74,30 @@ php artisan queue:work --tries=1 --timeout=0
 php artisan schedule:work
 ```
 
+## Backup Groups
+
+A backup group backs up several volumes as a single scheduled operation, with **one** start notification and **one** success/failure notification for the whole set. This suits monitors that treat a check like a dead man's switch (for example Healthchecks.io), where a single endpoint should cover many volumes without one endpoint per volume.
+
+The group owns the schedule, the notification channels, and the failure policy. Each volume is still an ordinary backup job with its own destination, retention, and archive, so restores stay per-volume and unchanged.
+
+To create a group:
+
+1. Open `Backup groups` and create a group, or select `Part of a group` while creating a backup job and choose `Create a new group`.
+2. Set the group schedule (hourly, daily, weekly, or cron), timezone, notification channels, and failure policy.
+3. Attach jobs from the backup job form: switch a job to group mode and pick the group. The job's own schedule and notifications are then managed by the group and its next run is driven by the group.
+
+When a group runs:
+
+- It sends one start notification, then backs up each active member volume in turn (one archive per volume).
+- It sends one success notification if every volume succeeded, or one failure notification if any volume failed.
+- The failure policy decides what happens after a volume fails: `Continue, report failure` backs up the remaining volumes and still reports failure, while `Stop at first failure` halts the run immediately. Either way the group reports failure when any volume fails.
+
+Disable (pause) a member to skip its volume without removing it, and edit a member to switch it back to individual scheduling to detach it from the group. A group cannot be deleted while it still has members.
+
+The dashboard shows groups as their own widgets (group counts, recent group runs, and groups in error), separate from standalone jobs, so a member failure surfaces as one group in error rather than many individual jobs. Each member volume keeps its own run history and restore, reachable from the job.
+
+Proactive alerts still evaluate each member volume individually (backup too old, job in error too long, and so on); because the group owns notifications, a member's alert is delivered through the group's notification channels.
+
 ## Backup Engine Details
 
 Backups are run by launching a temporary `offen/docker-volume-backup:latest` container.

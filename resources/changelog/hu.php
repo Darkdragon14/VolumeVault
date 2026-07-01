@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Csoportosított biztonsági mentési feladatok',
+        'description' => 'Több kötetet menthet egyetlen ütemezett műveletként: egy biztonsági mentési csoport birtokolja az ütemezést és az értesítéseket, a feladatokat pedig a biztonsági mentési feladat űrlapjáról csatolja hozzá. A csoport egyetlen indítási és egyetlen sikeres/hibás értesítést küld az összes kötetéről — ideális egyetlen dead man\'s switch típusú figyelőhöz —, és megválaszthatja, hogy egy hibás kötet leállítja-e a futást, vagy a csoport folytatja és mégis jelzi a hibát. A biztonsági mentési csoportok API-n keresztül is elérhetők.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-kötet célok',
         'description' => 'Egy új „Docker-kötet“ célállomás egy névvel ellátott Docker-kötetre készít biztonsági mentést — bármilyen illesztőprogram, beleértve az NFS-t vagy más hálózati megosztásokat. Deklarálja a kötetet a Compose-fájlban, és a VolumeVault név szerint csatolja az ideiglenes mentési konténerbe, így a mentések, a visszaállítások, a listázás és a tárhelyhasználat anélkül működik, hogy gazdagép-elérési utat kellene megosztani a VolumeVault-tal. Ha a kötet már nem létezik, a célállomás egyértelmű hibával hiúsul meg, ahelyett hogy észrevétlenül egy üres, újonnan létrehozott kötetbe írna.',

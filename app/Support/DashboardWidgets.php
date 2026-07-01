@@ -20,6 +20,10 @@ class DashboardWidgets
         'active_jobs',
         'paused_jobs',
         'error_jobs',
+        'total_groups',
+        'active_groups',
+        'paused_groups',
+        'error_groups',
         'last_backup_run_status',
         'last_successful_backup_size',
         'next_scheduled_backup',
@@ -32,8 +36,10 @@ class DashboardWidgets
      */
     public const SECTION_KEYS = [
         'recent_backups',
+        'recent_group_runs',
         'recent_restores',
         'jobs_with_errors',
+        'groups_with_errors',
     ];
 
     /**

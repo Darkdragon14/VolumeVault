@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Job di backup raggruppati',
+        'description' => 'Esegui il backup di più volumi come un\'unica operazione pianificata: un gruppo di backup possiede la pianificazione e le notifiche e i job vengono collegati ad esso dal modulo del job di backup. Il gruppo invia un\'unica notifica di avvio e una di successo/errore per tutti i suoi volumi — ideale per un unico monitor di tipo dead man\'s switch — e puoi scegliere se un volume fallito interrompe l\'esecuzione o se il gruppo continua segnalando comunque l\'errore. I gruppi di backup sono disponibili anche tramite l\'API.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Destinazioni volume Docker',
         'description' => 'Una nuova destinazione «Volume Docker» esegue il backup su un volume Docker con nome — qualsiasi driver, incluso NFS o altre condivisioni di rete. Dichiara il volume nel tuo file Compose e VolumeVault lo monta per nome nel container di backup temporaneo, così backup, ripristini, elenco e utilizzo dello spazio funzionano senza condividere alcun percorso host con VolumeVault. Se il volume non esiste più, la destinazione fallisce con un errore chiaro invece di scrivere silenziosamente in un volume vuoto appena creato.',

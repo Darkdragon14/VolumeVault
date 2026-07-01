@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Trabajos de copia de seguridad agrupados',
+        'description' => 'Haz una copia de seguridad de varios volúmenes como una única operación programada: un grupo de copia de seguridad posee la programación y las notificaciones, y los trabajos se adjuntan a él desde el formulario de trabajo de copia de seguridad. El grupo envía una única notificación de inicio y una de éxito/fallo para todos sus volúmenes —ideal para un único monitor de tipo dead man\'s switch— y puedes elegir si un volumen fallido detiene la ejecución o si el grupo continúa e informa igualmente del fallo. Los grupos de copia de seguridad también están disponibles a través de la API.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Destinos de volumen de Docker',
         'description' => 'Un nuevo destino «Volumen de Docker» realiza copias de seguridad en un volumen de Docker con nombre —cualquier controlador, incluido NFS u otros recursos de red—. Declara el volumen en tu archivo Compose y VolumeVault lo monta por su nombre en el contenedor de copia temporal, de modo que las copias, las restauraciones, el listado y el uso de almacenamiento funcionan sin compartir ninguna ruta del host con VolumeVault. Si el volumen ya no existe, el destino falla con un error claro en lugar de escribir en silencio en un volumen vacío recién creado.',

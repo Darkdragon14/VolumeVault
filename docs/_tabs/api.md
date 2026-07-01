@@ -45,6 +45,8 @@ Host-path backup sources and local destinations (`settings.archive_path` / `arch
 
 For SSH/SFTP destinations, set `settings.host_key` (an OpenSSH public host key line or a `SHA256:` fingerprint) on create/update to pin the server and block man-in-the-middle attacks. `POST /api/v1/destinations/host-key` (`{ "host": "...", "port": 22 }`) connects without authenticating and returns the key and fingerprint a server currently presents, so an integration can pin it (trust on first use).
 
+`POST /api/v1/backup-groups` creates a backup group that owns the schedule, notifications and failure policy (`continue` or `stop`) for a set of member jobs. Attach a job to a group by creating or updating a backup job with `planning_mode: "group"` and either `backup_job_group_id` (an existing group) or `group_selection: "new"` plus a `new_group` object. `POST /api/v1/backup-groups/{id}/run` queues one group run that backs up every active member volume and emits a single start and success/fail notification; `GET /api/v1/backup-group-runs/{id}` returns the aggregated outcome with its per-volume member runs. A group cannot be deleted while it still has members.
+
 Useful API calls:
 
 ```text
@@ -65,6 +67,17 @@ POST   /api/v1/backup-jobs/{id}/pause
 POST   /api/v1/backup-jobs/{id}/resume
 GET    /api/v1/backup-jobs/{id}/backups
 POST   /api/v1/backup-jobs/{id}/restore
+GET    /api/v1/backup-groups
+POST   /api/v1/backup-groups
+GET    /api/v1/backup-groups/{id}
+PUT    /api/v1/backup-groups/{id}
+DELETE /api/v1/backup-groups/{id}
+POST   /api/v1/backup-groups/{id}/run
+POST   /api/v1/backup-groups/{id}/pause
+POST   /api/v1/backup-groups/{id}/resume
+PATCH  /api/v1/backup-groups/{id}/notifications
+GET    /api/v1/backup-group-runs
+GET    /api/v1/backup-group-runs/{id}
 GET    /api/v1/backup-runs
 GET    /api/v1/backup-runs/{id}
 GET    /api/v1/restore-runs

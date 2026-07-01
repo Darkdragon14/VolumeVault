@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Actions\Backup\RunBackup;
+use App\Actions\Backup\RunBackupGroup;
 use App\Actions\Docker\ContainerIsAlive;
 use App\Actions\Restore\RunRestore;
+use App\Models\BackupGroupRun;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
 use App\Support\VolumeJobLock;
@@ -37,7 +39,7 @@ class ReconcileStaleRuns extends Command
         parent::__construct();
     }
 
-    public function handle(RunBackup $runBackup, RunRestore $runRestore): int
+    public function handle(RunBackup $runBackup, RunRestore $runRestore, RunBackupGroup $runBackupGroup): int
     {
         $minutes = (int) ($this->option('minutes') ?: self::DEFAULT_THRESHOLD_MINUTES);
 
@@ -73,6 +75,17 @@ class ReconcileStaleRuns extends Command
             $restoreCount++;
         });
 
+        // Close backup group runs whose worker crashed. Only once no member run is
+        // still active (a live member is reconciled on its own liveness first, and
+        // the group is closed on a later sweep). markFailed emits the single
+        // aggregated failure notification for the whole group.
+        $groupCount = 0;
+        $this->staleGroupRuns($cutoff)->each(function (BackupGroupRun $run) use ($runBackupGroup, $reason, &$groupCount): void {
+            if ($runBackupGroup->markFailed($run, new RuntimeException($reason))) {
+                $groupCount++;
+            }
+        });
+
         // Runs the sweep just failed (or runs whose worker died during restart)
         // may still have application containers stopped. Restart them now.
         $restartedCount = 0;
@@ -94,9 +107,52 @@ class ReconcileStaleRuns extends Command
             }
         });
 
-        $this->info("Reconciled {$backupCount} stale backup run(s) and {$restoreCount} stale restore run(s); restarted containers for {$restartedCount} interrupted run(s).");
+        $this->info("Reconciled {$backupCount} stale backup run(s), {$restoreCount} stale restore run(s) and {$groupCount} stale backup group run(s); restarted containers for {$restartedCount} interrupted run(s).");
 
         return self::SUCCESS;
+    }
+
+    /** @return Collection<int, BackupGroupRun> */
+    private function staleGroupRuns(CarbonInterface $cutoff): Collection
+    {
+        return BackupGroupRun::query()
+            ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
+            ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, BackupGroupRun::STATUS_RUNNING))
+            ->get()
+            ->filter(fn (BackupGroupRun $run) => $this->groupRunIsStale($run, $cutoff)
+                && ! $this->groupRunHasActiveMemberRun($run));
+    }
+
+    /**
+     * A group run drives its members sequentially and updates last_heartbeat_at
+     * after each one, so a running group with a stale heartbeat and no in-flight
+     * member is a crashed worker. A queued group past the age gate was never
+     * picked up. It has no Docker container of its own — its liveness is the
+     * member runs, checked separately.
+     */
+    private function groupRunIsStale(BackupGroupRun $run, CarbonInterface $cutoff): bool
+    {
+        if ($run->status === BackupGroupRun::STATUS_RUNNING) {
+            $progressedAt = $run->last_heartbeat_at ?? $run->started_at ?? $run->created_at;
+
+            return $progressedAt !== null && $progressedAt->lessThan($cutoff);
+        }
+
+        return $run->created_at !== null && $run->created_at->lessThan($cutoff);
+    }
+
+    /**
+     * Whether a member run of this group is still queued or running. A live member
+     * is reconciled on its own container liveness first; the group is only closed
+     * once every member has reached a terminal state, so its aggregated outcome is
+     * not declared while a member is still working.
+     */
+    private function groupRunHasActiveMemberRun(BackupGroupRun $run): bool
+    {
+        return BackupRun::query()
+            ->where('backup_group_run_id', $run->id)
+            ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
+            ->exists();
     }
 
     /** @return Collection<int, BackupRun> */

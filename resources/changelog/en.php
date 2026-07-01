@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Grouped backup jobs',
+        'description' => 'Back up several volumes as a single scheduled operation: a backup group owns the schedule and notifications, and jobs are attached to it from the backup job form. The group sends one start notification and one success/fail notification for all its volumes — ideal for a single dead man\'s switch monitor — and you can choose whether a failing volume stops the run or the group continues and still reports the failure. Backup groups are also available through the API.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker volume destinations',
         'description' => 'A new "Docker volume" destination backs up to a named Docker volume — any driver, including NFS or other network shares. Declare the volume in your Compose file and VolumeVault mounts it by name into the temporary backup container, so backups, restores, listing and storage usage all work without sharing a host path with VolumeVault. If the volume no longer exists, the destination fails with a clear error instead of silently writing to an empty, freshly created volume.',

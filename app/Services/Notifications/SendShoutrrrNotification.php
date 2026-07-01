@@ -8,6 +8,7 @@ use App\Enums\NotificationEvent;
 use App\Models\Alert;
 use App\Models\AlertEvent;
 use App\Models\BackupDestination;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\NotificationChannel;
@@ -60,6 +61,54 @@ class SendShoutrrrNotification
             $title = $this->backupRunTitle($run, $channel);
             $message = $this->backupRunMessage($run, $channel);
             $this->send($channel, $title, $message, NotificationEvent::Start);
+        }
+    }
+
+    /**
+     * Notify a backup group's channels that a group run has started. Info-level
+     * only and webhook channels ping their start URL — the single Healthchecks
+     * ping that opens the window for the whole set of member volumes.
+     */
+    public function sendGroupRunStarted(BackupGroupRun $run): void
+    {
+        $run->loadMissing('group', 'initiatedBy');
+
+        if ($run->group === null) {
+            return;
+        }
+
+        foreach ($this->resolveNotificationChannels->forGroup($run->group) as $channel) {
+            if ($channel->notification_level !== NotificationChannel::LEVEL_INFO) {
+                continue;
+            }
+
+            $this->send($channel, $this->groupRunTitle($run), $this->groupRunMessage($run), NotificationEvent::Start);
+        }
+    }
+
+    /**
+     * Notify a backup group's channels that a group run has finished. Success
+     * (all members succeeded) is info-level; a failure (any member failed, or the
+     * stop-on-first-failure policy tripped) reaches every channel. This is the
+     * single success/fail ping the whole group resolves to.
+     */
+    public function sendGroupRunFinished(BackupGroupRun $run): void
+    {
+        $run->loadMissing('group', 'initiatedBy');
+
+        if ($run->group === null) {
+            return;
+        }
+
+        $failed = $run->status === BackupGroupRun::STATUS_FAILED;
+        $event = $failed ? NotificationEvent::Fail : NotificationEvent::Success;
+
+        foreach ($this->resolveNotificationChannels->forGroup($run->group) as $channel) {
+            if (! $failed && $channel->notification_level !== NotificationChannel::LEVEL_INFO) {
+                continue;
+            }
+
+            $this->send($channel, $this->groupRunTitle($run), $this->groupRunMessage($run), $event);
         }
     }
 
@@ -172,7 +221,23 @@ class SendShoutrrrNotification
     private function alertChannels(Alert $alert): Collection
     {
         if ($alert->subject instanceof BackupJob) {
-            return $this->resolveNotificationChannels->forJobAlerts($alert->subject);
+            $job = $alert->subject;
+
+            // A group member has no channels of its own; deliver its alert through
+            // the group's channels, still honouring the member's alert toggle.
+            if ($job->isGroupMember()) {
+                if (! $job->alert_notifications_enabled) {
+                    return new Collection;
+                }
+
+                $job->loadMissing('group');
+
+                return $job->group
+                    ? $this->resolveNotificationChannels->forGroupAlerts($job->group)
+                    : new Collection;
+            }
+
+            return $this->resolveNotificationChannels->forJobAlerts($job);
         }
 
         if ($alert->subject instanceof BackupDestination) {
@@ -278,6 +343,38 @@ class SendShoutrrrNotification
         };
 
         return $this->renderTemplate($channel->title_template, $run) ?: $default;
+    }
+
+    private function groupRunTitle(BackupGroupRun $run): string
+    {
+        return match ($run->status) {
+            BackupGroupRun::STATUS_FAILED => 'VolumeVault group backup failed',
+            BackupGroupRun::STATUS_SUCCESS => 'VolumeVault group backup succeeded',
+            default => 'VolumeVault group backup started',
+        };
+    }
+
+    private function groupRunMessage(BackupGroupRun $run): string
+    {
+        $lines = [
+            'Group: '.($run->group?->name ?? 'Unknown'),
+            'Volumes: '.$run->total_members,
+            'Succeeded: '.$run->succeeded_members,
+            'Failed: '.$run->failed_members,
+            'Status: '.$run->status,
+            'Trigger: '.$run->trigger,
+            'Initiated by: '.($run->initiatedBy?->name ?? 'Unknown'),
+        ];
+
+        if ($run->duration_seconds !== null) {
+            $lines[] = 'Duration: '.$run->duration_seconds.'s';
+        }
+
+        if ($run->error_message) {
+            $lines[] = 'Error: '.$run->error_message;
+        }
+
+        return implode("\n", $lines);
     }
 
     private function restoreRunTitle(RestoreRun $run, NotificationChannel $channel): string

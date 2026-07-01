@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Gegroepeerde back-uptaken',
+        'description' => 'Maak een back-up van meerdere volumes als één geplande bewerking: een back-upgroep bezit het schema en de meldingen, en taken worden eraan gekoppeld via het back-uptaakformulier. De groep verstuurt één startmelding en één succes-/foutmelding voor al zijn volumes — ideaal voor één dead man\'s switch-monitor — en je kunt kiezen of een mislukt volume de uitvoering stopt of dat de groep doorgaat en de fout alsnog meldt. Back-upgroepen zijn ook beschikbaar via de API.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-volumebestemmingen',
         'description' => 'Een nieuwe bestemming ‘Docker-volume’ maakt back-ups naar een benoemd Docker-volume — elke driver, inclusief NFS of andere netwerkshares. Declareer het volume in je Compose-bestand en VolumeVault koppelt het op naam aan de tijdelijke back-upcontainer, zodat back-ups, herstelacties, lijstweergave en opslaggebruik werken zonder een hostpad met VolumeVault te delen. Als het volume niet meer bestaat, mislukt de bestemming met een duidelijke fout in plaats van stilletjes naar een leeg, nieuw aangemaakt volume te schrijven.',

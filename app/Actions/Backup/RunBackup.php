@@ -82,7 +82,9 @@ class RunBackup
 
         // A pre-restore safety backup stays invisible to the job lifecycle, so it
         // must not emit a start notification either (see the job-state guard above).
-        if (! $this->isPreRestore($run)) {
+        // A member run of a group defers to its group run, which emits a single
+        // aggregated start notification for the whole set — stay silent here too.
+        if (! $this->isPreRestore($run) && ! $run->belongsToGroupRun()) {
             $this->sendStartNotification($run);
         }
 
@@ -157,7 +159,12 @@ class RunBackup
             }
 
             $this->recordBackupArchiveMetadata($run->fresh(['job.destination']));
-            $this->sendNotifications($run->fresh(['job.destination']));
+
+            // Member runs stay silent: the group run aggregates all members and
+            // emits the single success/fail notification for the whole set.
+            if (! $run->belongsToGroupRun()) {
+                $this->sendNotifications($run->fresh(['job.destination']));
+            }
         } catch (Throwable $exception) {
             $this->markFailed($run, $exception);
         } finally {
@@ -314,24 +321,35 @@ class RunBackup
         // surfaced through its own RestoreRun. Leaving the job (incl. a paused one)
         // untouched keeps its lifecycle intact.
         if ($job && ! $this->isPreRestore($run)) {
-            $job->forceFill([
+            $attributes = [
                 'status' => BackupJob::STATUS_ERROR,
                 'last_error' => $message,
                 'last_error_at' => $finishedAt,
-                'next_run_at' => $this->scheduleCalculator->nextRunAt(
+            ];
+
+            // A group member delegates scheduling to its group — never advance its
+            // own next_run_at (which stays null); the group owns the next slot.
+            if (! $job->isGroupMember()) {
+                $attributes['next_run_at'] = $this->scheduleCalculator->nextRunAt(
                     $job->schedule_type,
                     $job->schedule_config ?? [],
                     $job->next_run_at && $job->next_run_at->isPast() ? $job->next_run_at : null,
                     $job->timezone,
-                ),
-            ])->save();
+                );
+            }
+
+            $job->forceFill($attributes)->save();
         }
 
         ActivityLog::record('backup_run_failed', 'Backup run failed.', $run, [
             'backup_job_id' => $job?->id,
         ]);
 
-        $this->sendNotifications($run->fresh(['job.destination']));
+        // Member runs stay silent: the group run aggregates the outcome and emits
+        // the single success/fail notification for the whole set.
+        if (! $run->belongsToGroupRun()) {
+            $this->sendNotifications($run->fresh(['job.destination']));
+        }
 
         return true;
     }

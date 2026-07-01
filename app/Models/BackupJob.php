@@ -35,6 +35,7 @@ class BackupJob extends Model
 
     protected $fillable = [
         'name',
+        'backup_job_group_id',
         'source_type',
         'volume_name',
         'host_path',
@@ -92,6 +93,20 @@ class BackupJob extends Model
     public function destination(): BelongsTo
     {
         return $this->belongsTo(BackupDestination::class, 'backup_destination_id');
+    }
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(BackupJobGroup::class, 'backup_job_group_id');
+    }
+
+    /**
+     * A group member delegates its schedule and notifications to its group: it is
+     * never dispatched on its own and its runs stay silent (the group notifies).
+     */
+    public function isGroupMember(): bool
+    {
+        return $this->backup_job_group_id !== null;
     }
 
     public function sourceType(): string

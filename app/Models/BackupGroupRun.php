@@ -5,8 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class BackupRun extends Model
+/**
+ * One aggregated execution of a {@see BackupJobGroup}. It fans out to one child
+ * {@see BackupRun} per member job, then rolls their outcomes up into a single
+ * status and a single finish notification.
+ */
+class BackupGroupRun extends Model
 {
     use HasFactory;
 
@@ -24,23 +30,20 @@ class BackupRun extends Model
 
     public const TRIGGER_MANUAL = 'manual';
 
-    public const TRIGGER_PRE_RESTORE = 'pre_restore';
-
     protected $fillable = [
-        'backup_job_id',
-        'backup_group_run_id',
+        'backup_job_group_id',
         'initiated_by_user_id',
         'status',
         'trigger',
         'started_at',
         'finished_at',
         'duration_seconds',
-        'logs',
+        'total_members',
+        'succeeded_members',
+        'failed_members',
         'error_message',
-        'docker_container_id',
-        'stopped_container_ids',
-        'backup_key',
-        'backup_size_bytes',
+        'logs',
+        'last_heartbeat_at',
     ];
 
     protected function casts(): array
@@ -48,30 +51,22 @@ class BackupRun extends Model
         return [
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'last_heartbeat_at' => 'datetime',
             'duration_seconds' => 'integer',
-            'stopped_container_ids' => 'array',
-            'backup_size_bytes' => 'integer',
+            'total_members' => 'integer',
+            'succeeded_members' => 'integer',
+            'failed_members' => 'integer',
         ];
     }
 
-    public function job(): BelongsTo
+    public function group(): BelongsTo
     {
-        return $this->belongsTo(BackupJob::class, 'backup_job_id');
+        return $this->belongsTo(BackupJobGroup::class, 'backup_job_group_id');
     }
 
-    public function groupRun(): BelongsTo
+    public function memberRuns(): HasMany
     {
-        return $this->belongsTo(BackupGroupRun::class, 'backup_group_run_id');
-    }
-
-    /**
-     * Whether this run is a member run driven by a group run. Such runs stay
-     * silent (the group emits one aggregated notification for the whole set) and
-     * never reschedule their job (the group owns the schedule).
-     */
-    public function belongsToGroupRun(): bool
-    {
-        return $this->backup_group_run_id !== null;
+        return $this->hasMany(BackupRun::class, 'backup_group_run_id');
     }
 
     public function initiatedBy(): BelongsTo
