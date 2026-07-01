@@ -2,9 +2,12 @@
 
 namespace App\Actions\Backup;
 
+use App\Jobs\RunBackupGroupJob;
 use App\Jobs\RunBackupJob;
 use App\Models\ActivityLog;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
@@ -20,6 +23,7 @@ class BackupStack
     public function __construct(
         private readonly BackupScheduleCalculator $scheduleCalculator,
         private readonly CreateBackupRun $createBackupRun,
+        private readonly CreateBackupGroupRun $createBackupGroupRun,
         private readonly VolumeBackupSummaries $summaries,
     ) {}
 
@@ -146,11 +150,34 @@ class BackupStack
 
         $queued = 0;
         $skipped = 0;
+        $groupIds = [];
 
         foreach ($jobs as $job) {
+            // A grouped volume is backed up through its group (which owns its
+            // schedule and notifications), never as an individual run. Collect the
+            // distinct groups and trigger them once below.
+            if ($job->isGroupMember()) {
+                $groupIds[(int) $job->backup_job_group_id] = true;
+
+                continue;
+            }
+
             try {
                 $run = $this->createBackupRun->handle($job, BackupRun::TRIGGER_MANUAL, $initiatedBy);
                 RunBackupJob::dispatch($run->id);
+                $queued++;
+            } catch (ValidationException) {
+                $skipped++;
+            }
+        }
+
+        // Run each group represented in the stack once, so grouped volumes are
+        // actually backed up instead of silently skipped. A group already running
+        // (or with no runnable member) is counted as skipped.
+        foreach (BackupJobGroup::whereIn('id', array_keys($groupIds))->get() as $group) {
+            try {
+                $groupRun = $this->createBackupGroupRun->handle($group, BackupGroupRun::TRIGGER_MANUAL, $initiatedBy);
+                RunBackupGroupJob::dispatch($groupRun->id);
                 $queued++;
             } catch (ValidationException) {
                 $skipped++;

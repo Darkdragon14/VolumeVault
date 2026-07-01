@@ -33,6 +33,8 @@ class GroupedBackupDashboardTest extends TestCase
                 ->where('stats.total_groups', 1)
                 ->where('stats.error_groups', 1)
                 ->where('stats.active_groups', 0)
+                // Reflects the standalone success, not the failed member run.
+                ->where('stats.last_backup_run_status', 'success')
                 // Only the standalone run; the member run is excluded.
                 ->has('recentBackupRuns', 1)
                 ->has('recentGroupRuns', 1)
@@ -52,6 +54,7 @@ class GroupedBackupDashboardTest extends TestCase
             ->assertJsonPath('data.stats.total_jobs', 1)
             ->assertJsonPath('data.stats.total_groups', 1)
             ->assertJsonPath('data.stats.error_groups', 1)
+            ->assertJsonPath('data.stats.last_backup_run_status', 'success')
             ->assertJsonCount(1, 'data.recent_backup_runs')
             ->assertJsonCount(1, 'data.recent_group_runs')
             ->assertJsonCount(1, 'data.groups_with_errors');

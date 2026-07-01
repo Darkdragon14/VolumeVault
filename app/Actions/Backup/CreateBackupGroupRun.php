@@ -7,6 +7,8 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJobGroup;
 use App\Models\User;
 use App\Services\Scheduling\BackupScheduleCalculator;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -35,17 +37,34 @@ class CreateBackupGroupRun
             ]);
         }
 
-        $alreadyRunning = BackupGroupRun::query()
-            ->where('backup_job_group_id', $group->id)
-            ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
-            ->exists();
+        // Serialize creation per group so two concurrent requests (e.g. the
+        // scheduler racing a manual "run now") cannot both pass the
+        // already-running check and create duplicate group runs that would then
+        // run one after the other with doubled backups and notifications.
+        try {
+            return Cache::lock('backup-group-create-'.$group->id, 10)->block(5, function () use ($group, $trigger, $initiatedBy): BackupGroupRun {
+                $alreadyRunning = BackupGroupRun::query()
+                    ->where('backup_job_group_id', $group->id)
+                    ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
+                    ->exists();
 
-        if ($alreadyRunning) {
+                if ($alreadyRunning) {
+                    throw ValidationException::withMessages([
+                        'group' => 'A run is already queued or running for this backup group.',
+                    ]);
+                }
+
+                return $this->createRun($group, $trigger, $initiatedBy);
+            });
+        } catch (LockTimeoutException) {
             throw ValidationException::withMessages([
                 'group' => 'A run is already queued or running for this backup group.',
             ]);
         }
+    }
 
+    private function createRun(BackupJobGroup $group, string $trigger, ?User $initiatedBy): BackupGroupRun
+    {
         return DB::transaction(function () use ($group, $trigger, $initiatedBy): BackupGroupRun {
             $run = BackupGroupRun::create([
                 'backup_job_group_id' => $group->id,

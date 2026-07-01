@@ -18,9 +18,12 @@ use App\Models\NotificationChannel;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Services\Notifications\SendShoutrrrNotification;
+use App\Support\VolumeJobLock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\ValidationException;
 use Mockery;
 use Tests\TestCase;
 
@@ -223,6 +226,71 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(1, collect($urls)->filter(fn (string $u): bool => $u === 'START_URL')->count(), 'exactly one start ping');
         $this->assertSame(1, collect($urls)->filter(fn (string $u): bool => $u === 'SUCCESS_URL')->count(), 'exactly one success ping');
         $this->assertSame(0, collect($urls)->filter(fn (string $u): bool => $u === 'FAIL_URL')->count(), 'no fail ping on success');
+    }
+
+    public function test_only_one_run_can_be_queued_for_a_group_at_a_time(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+
+        $create = app(CreateBackupGroupRun::class);
+        $create->handle($group, BackupGroupRun::TRIGGER_MANUAL);
+
+        // A second creation while one is queued/running must be rejected (the
+        // creation is serialized so concurrent requests cannot duplicate runs).
+        $this->expectException(ValidationException::class);
+        $create->handle($group, BackupGroupRun::TRIGGER_MANUAL);
+    }
+
+    public function test_a_member_is_skipped_when_its_volume_still_has_stopped_containers(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+
+        // A prior terminal run on the same volume has not restarted its stopped
+        // containers yet: the group must not read the volume (mirrors the
+        // standalone volumeBusy guard).
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'stopped_container_ids' => ['deadbeef'],
+        ]);
+
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        app(RunBackupGroup::class)->handle($run);
+
+        $memberRun = BackupRun::where('backup_group_run_id', $run->id)->firstOrFail();
+        $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->status);
+        $this->assertStringContainsString('not ready', (string) $memberRun->error_message);
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
+    }
+
+    public function test_reconciliation_releases_an_orphaned_group_lock(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+
+        // Simulate a crashed RUNNING group run: stale heartbeat, no member run in
+        // flight, and its shared group lock still held.
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHour(),
+            'last_heartbeat_at' => now()->subHour(),
+        ]);
+
+        $lockKey = VolumeJobLock::cacheKeyFor('backup-group-'.$group->id);
+        $this->assertTrue(Cache::lock($lockKey, 86400)->get());
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
+        // The orphaned lock is force-released, so a fresh acquire succeeds.
+        $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the group lock should be released');
     }
 
     private function group(string $failurePolicy = BackupJobGroup::FAILURE_POLICY_CONTINUE): BackupJobGroup

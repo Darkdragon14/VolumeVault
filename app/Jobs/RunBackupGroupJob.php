@@ -40,7 +40,10 @@ class RunBackupGroupJob implements ShouldQueue
         $run = BackupGroupRun::find($this->backupGroupRunId);
         $key = 'backup-group-'.($run?->backup_job_group_id ?? $this->backupGroupRunId);
 
-        return [(new WithoutOverlapping($key))->expireAfter(86400)];
+        // shared() so the cache key is exactly the prefixed key (no job-class
+        // segment), which lets stale-run reconciliation force-release an orphaned
+        // group lock via VolumeJobLock::cacheKeyFor() after a worker crash.
+        return [(new WithoutOverlapping($key))->shared()->expireAfter(86400)];
     }
 
     public function handle(RunBackupGroup $runBackupGroup): void

@@ -7,6 +7,7 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\RestoreRun;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\VolumeJobLock;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -208,7 +209,16 @@ class RunBackupGroup
         try {
             if (filled($volume)) {
                 Cache::lock(VolumeJobLock::cacheKey($volume), 86400)
-                    ->block(self::VOLUME_LOCK_WAIT_SECONDS, function () use ($memberRun): void {
+                    ->block(self::VOLUME_LOCK_WAIT_SECONDS, function () use ($memberRun, $volume): void {
+                        // Holding the shared volume lock already excludes a running
+                        // backup/restore; this also mirrors RunBackupJob's volumeBusy
+                        // guard for a terminal run that still has containers stopped
+                        // (pending restart/reconcile), so we never read a volume whose
+                        // apps are still down. The member is retried next group run.
+                        if ($this->volumeBusy($volume, $memberRun->id)) {
+                            throw new RuntimeException('Volume "'.$volume.'" is not ready (a previous run still has containers stopped); skipped in this group run.');
+                        }
+
                         $this->runBackup->handle($memberRun);
                     });
             } else {
@@ -227,6 +237,35 @@ class RunBackupGroup
         }
 
         return $memberRun;
+    }
+
+    /**
+     * Whether another backup or restore still holds the volume: one that is
+     * running, or one that reached a terminal state but still has containers it
+     * stopped awaiting restart. Mirrors RunBackupJob::volumeBusy so an in-process
+     * member run applies the same guard queued standalone jobs do.
+     */
+    private function volumeBusy(string $volume, int $exceptBackupRunId): bool
+    {
+        $backupBusy = BackupRun::query()
+            ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
+            ->whereKeyNot($exceptBackupRunId)
+            ->where(fn ($query) => $this->stillWorking($query))
+            ->exists();
+
+        $restoreBusy = RestoreRun::query()
+            ->where('target_volume_name', $volume)
+            ->where(fn ($query) => $this->stillWorking($query))
+            ->exists();
+
+        return $backupBusy || $restoreBusy;
+    }
+
+    private function stillWorking($query): void
+    {
+        $query
+            ->where('status', BackupRun::STATUS_RUNNING)
+            ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
     }
 
     private function sendStartNotification(BackupGroupRun $groupRun): void

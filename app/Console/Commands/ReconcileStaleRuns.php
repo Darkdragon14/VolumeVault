@@ -81,7 +81,16 @@ class ReconcileStaleRuns extends Command
         // aggregated failure notification for the whole group.
         $groupCount = 0;
         $this->staleGroupRuns($cutoff)->each(function (BackupGroupRun $run) use ($runBackupGroup, $reason, &$groupCount): void {
+            // A crashed RUNNING group run left its shared WithoutOverlapping lock
+            // (24h TTL) behind; force-release it so the group is not blocked for a
+            // day. A queued run never held the lock, and a no-op markFailed means
+            // the run finished first and the lock may belong to the next job.
+            $wasRunning = $run->status === BackupGroupRun::STATUS_RUNNING;
+
             if ($runBackupGroup->markFailed($run, new RuntimeException($reason))) {
+                if ($wasRunning) {
+                    $this->releaseLock('backup-group-'.$run->backup_job_group_id);
+                }
                 $groupCount++;
             }
         });

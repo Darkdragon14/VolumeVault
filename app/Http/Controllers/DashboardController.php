@@ -22,8 +22,11 @@ class DashboardController extends Controller
 
         $volumeSummaries = $volumeBackupSummaries->forVolumes(DockerVolume::query()->get());
         $coverageStats = $volumeBackupSummaries->coverageStats($volumeSummaries);
-        $lastBackupRun = BackupRun::with('job')->latest()->first();
+        // Standalone runs only: a group's outcome is shown by the group widgets,
+        // and a member run can be success while its group run aggregated to failed.
+        $lastBackupRun = BackupRun::with('job')->whereNull('backup_group_run_id')->latest()->first();
         $lastSuccessfulBackupRun = BackupRun::query()
+            ->whereNull('backup_group_run_id')
             ->where('status', BackupRun::STATUS_SUCCESS)
             ->orderByDesc('finished_at')
             ->orderByDesc('created_at')

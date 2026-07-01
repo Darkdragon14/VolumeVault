@@ -2,9 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\BackupStack;
+use App\Jobs\RunBackupGroupJob;
 use App\Jobs\RunBackupJob;
 use App\Models\BackupDestination;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\User;
@@ -199,6 +203,42 @@ class StackBulkBackupTest extends TestCase
         $this->withToken($token)
             ->postJson('/api/v1/stacks/backup', ['stack' => 'app'])
             ->assertForbidden();
+    }
+
+    public function test_stack_backup_triggers_the_group_for_grouped_volumes(): void
+    {
+        Queue::fake();
+
+        $this->volume('grouped_vol', 'mystack');
+
+        $group = BackupJobGroup::create([
+            'name' => 'Group',
+            'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJobGroup::STATUS_ACTIVE,
+            'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+            'next_run_at' => now()->addDay(),
+        ]);
+        BackupJob::create([
+            'name' => 'Member',
+            'backup_job_group_id' => $group->id,
+            'volume_name' => 'grouped_vol',
+            'backup_destination_id' => $this->destination()->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+            'next_run_at' => null,
+        ]);
+
+        // The stack's only volume is grouped: it must be backed up through its
+        // group run, not silently skipped or run standalone.
+        app(BackupStack::class)->handle('mystack', []);
+
+        Queue::assertPushed(RunBackupGroupJob::class);
+        Queue::assertNotPushed(RunBackupJob::class);
+        $this->assertSame(1, BackupGroupRun::where('backup_job_group_id', $group->id)->count());
     }
 
     private function destination(string $name = 'S3', bool $active = true): BackupDestination
