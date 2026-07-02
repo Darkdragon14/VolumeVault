@@ -162,7 +162,11 @@ class BackupJobController extends Controller
             'pause_reason' => null,
             'last_error' => null,
             'last_error_at' => null,
-            'next_run_at' => $this->scheduleCalculator->nextRunAt($backupJob->schedule_type, $backupJob->schedule_config ?? [], null, $backupJob->timezone),
+            // A group member is scheduled by its group, never dispatched standalone,
+            // so it must keep next_run_at null (resuming re-enables it in the group).
+            'next_run_at' => $backupJob->isGroupMember()
+                ? null
+                : $this->scheduleCalculator->nextRunAt($backupJob->schedule_type, $backupJob->schedule_config ?? [], null, $backupJob->timezone),
         ])->save();
 
         return back()->with('success', 'Backup job resumed.');

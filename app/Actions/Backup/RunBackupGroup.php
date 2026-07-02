@@ -127,11 +127,22 @@ class RunBackupGroup
                 $failed++;
             }
 
+            // Only touches the counters + heartbeat (never status), so it cannot
+            // clobber a status a concurrent reconciliation may have set.
             $groupRun->forceFill([
                 'succeeded_members' => $succeeded,
                 'failed_members' => $failed,
                 'last_heartbeat_at' => now(),
             ])->save();
+
+            // If reconciliation closed this run as stale while a slow member was
+            // finishing (its post-backup phase leaves no queued/running member),
+            // stop: that owner set the outcome and sent the notification. Creating
+            // more member runs or finalizing would double-notify and race the
+            // released group lock.
+            if ($groupRun->fresh()->status !== BackupGroupRun::STATUS_RUNNING) {
+                return;
+            }
 
             // stop-on-first-failure: leave the remaining members un-run.
             if ($failed > 0 && $group->stopsOnFirstFailure()) {
@@ -142,13 +153,26 @@ class RunBackupGroup
         $finishedAt = now();
         $status = $failed > 0 ? BackupGroupRun::STATUS_FAILED : BackupGroupRun::STATUS_SUCCESS;
 
-        $groupRun->forceFill([
-            'status' => $status,
-            'finished_at' => $finishedAt,
-            'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
-            'succeeded_members' => $succeeded,
-            'failed_members' => $failed,
-        ])->save();
+        // Atomic finalization: only if we still own the run. A conditional UPDATE
+        // (running → terminal) loses the race to a reconciliation that already
+        // failed it, rather than overwriting that outcome and firing a second,
+        // contradictory notification.
+        $finalized = BackupGroupRun::query()
+            ->whereKey($groupRun->getKey())
+            ->where('status', BackupGroupRun::STATUS_RUNNING)
+            ->update([
+                'status' => $status,
+                'finished_at' => $finishedAt,
+                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
+                'succeeded_members' => $succeeded,
+                'failed_members' => $failed,
+            ]);
+
+        if ($finalized === 0) {
+            return;
+        }
+
+        $groupRun->refresh();
 
         if ($status === BackupGroupRun::STATUS_SUCCESS) {
             $group->forceFill([

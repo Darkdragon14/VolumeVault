@@ -138,7 +138,7 @@ class ReconcileStaleRuns extends Command
             ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, BackupGroupRun::STATUS_RUNNING))
             ->get()
             ->filter(fn (BackupGroupRun $run) => $this->groupRunIsStale($run, $cutoff)
-                && ! $this->groupRunHasActiveMemberRun($run));
+                && ! $this->groupRunHasActiveMemberRun($run, $cutoff));
     }
 
     /**
@@ -165,11 +165,21 @@ class ReconcileStaleRuns extends Command
      * once every member has reached a terminal state, so its aggregated outcome is
      * not declared while a member is still working.
      */
-    private function groupRunHasActiveMemberRun(BackupGroupRun $run): bool
+    private function groupRunHasActiveMemberRun(BackupGroupRun $run, CarbonInterface $cutoff): bool
     {
         return BackupRun::query()
             ->where('backup_group_run_id', $run->id)
-            ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
+            ->where(function ($query) use ($cutoff): void {
+                $query
+                    ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
+                    // A member that finished after the cutoff means the group
+                    // worker was active recently: it runs members synchronously and
+                    // only refreshes the group heartbeat between them, so it may be
+                    // finalizing that member (e.g. recording archive metadata) with
+                    // a lagging heartbeat. Treat the group as still progressing so a
+                    // long member does not get its live group run reconciled.
+                    ->orWhere(fn ($q) => $q->whereNotNull('finished_at')->where('finished_at', '>=', $cutoff));
+            })
             ->exists();
     }
 

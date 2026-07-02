@@ -59,7 +59,7 @@ const editGroup = (id: number) => router.visit(`/backup-groups/${id}/edit`);
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-white/10">
-                            <tr v-for="group in groups.data" :key="group.id" class="cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="editGroup(group.id)">
+                            <tr v-for="group in groups.data" :key="group.id" :class="can.runDockerActions ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03]' : ''" :role="can.runDockerActions ? 'link' : undefined" :tabindex="can.runDockerActions ? 0 : undefined" @click="can.runDockerActions && editGroup(group.id)">
                                 <td class="px-4 py-3 font-medium text-white">{{ group.name }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ group.members_count }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ group.schedule_summary }}</td>

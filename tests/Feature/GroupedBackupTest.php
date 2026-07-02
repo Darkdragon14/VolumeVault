@@ -15,6 +15,7 @@ use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\NotificationChannel;
+use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Services\Notifications\SendShoutrrrNotification;
@@ -364,6 +365,65 @@ class GroupedBackupTest extends TestCase
 
         $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->fresh()->status);
         $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the member volume lock should be released');
+    }
+
+    public function test_reconciliation_does_not_close_a_group_run_with_a_recently_finished_member(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+
+        // Running group run with a stale heartbeat (a long member kept the worker
+        // busy) but a member that finished just now — the worker is alive,
+        // finalizing that member. It must not be reconciled as stale.
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHour(),
+            'last_heartbeat_at' => now()->subHour(),
+        ]);
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $run->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'finished_at' => now(),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupGroupRun::STATUS_RUNNING, $run->fresh()->status);
+    }
+
+    public function test_a_member_restore_notification_is_delivered_through_the_group_channels(): void
+    {
+        $docker = $this->recordingDocker();
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $channel = NotificationChannel::create([
+            'name' => 'Group restore',
+            'service' => NotificationChannel::SERVICE_NTFY,
+            'url' => 'RESTORE_URL',
+            'notification_level' => NotificationChannel::LEVEL_ERROR,
+            'is_active' => true,
+        ]);
+        $group = $this->group();
+        $group->notificationChannels()->attach($channel->id);
+        $member = $this->member($group, 'vol_a');
+
+        $restore = RestoreRun::create([
+            'backup_job_id' => $member->id,
+            'backup_destination_id' => $member->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'vol_a',
+            'target_volume_name' => 'vol_a',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_FAILED,
+        ]);
+
+        app(SendShoutrrrNotification::class)->sendRestoreRun($restore);
+
+        $this->assertContains('RESTORE_URL', $docker->shoutrrrUrls, 'the member restore should notify the group channel');
     }
 
     public function test_reconciliation_releases_the_lock_of_a_stale_queued_group_run(): void

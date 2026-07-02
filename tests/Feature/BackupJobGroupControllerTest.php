@@ -200,6 +200,30 @@ class BackupJobGroupControllerTest extends TestCase
             ->assertSessionHasErrors('schedule_type');
     }
 
+    public function test_resuming_a_grouped_member_keeps_next_run_at_null(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        $member->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+
+        $this->actingAs($this->admin())
+            ->post(route('backup-jobs.resume', $member))
+            ->assertRedirect();
+
+        $member->refresh();
+        $this->assertSame(BackupJob::STATUS_ACTIVE, $member->status);
+        $this->assertNull($member->next_run_at, 'a group member must not get a standalone next_run_at');
+    }
+
+    public function test_group_edit_requires_admin(): void
+    {
+        $group = $this->group();
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('backup-groups.edit', $group))
+            ->assertForbidden();
+    }
+
     private function admin(): User
     {
         return User::factory()->admin()->create();

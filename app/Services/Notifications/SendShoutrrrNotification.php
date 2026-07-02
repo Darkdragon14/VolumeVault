@@ -133,7 +133,14 @@ class SendShoutrrrNotification
             default => NotificationEvent::Start,
         };
 
-        foreach ($this->resolveNotificationChannels->forJob($run->job) as $channel) {
+        // A grouped member job has notifications disabled and no channels of its
+        // own — its group owns them. Deliver the restore notification through the
+        // group's channels so a member restore is not silent.
+        $channels = $run->job->isGroupMember() && $run->job->group
+            ? $this->resolveNotificationChannels->forGroup($run->job->group)
+            : $this->resolveNotificationChannels->forJob($run->job);
+
+        foreach ($channels as $channel) {
             if (! $failed && $channel->notification_level !== NotificationChannel::LEVEL_INFO) {
                 continue;
             }
