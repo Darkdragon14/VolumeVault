@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Actions\Backup\BackupStack;
-use App\Jobs\RunBackupGroupJob;
 use App\Jobs\RunBackupJob;
 use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
@@ -205,7 +204,7 @@ class StackBulkBackupTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_stack_backup_triggers_the_group_for_grouped_volumes(): void
+    public function test_stack_backup_reports_grouped_volumes_without_running_them(): void
     {
         Queue::fake();
 
@@ -232,13 +231,15 @@ class StackBulkBackupTest extends TestCase
             'next_run_at' => null,
         ]);
 
-        // The stack's only volume is grouped: it must be backed up through its
-        // group run, not silently skipped or run standalone.
-        app(BackupStack::class)->handle('mystack', []);
+        // A grouped volume is reported as grouped, not run: the stack backup must
+        // not run it standalone nor trigger the whole group (which may span other
+        // stacks). It backs up on the group's own schedule.
+        $summary = app(BackupStack::class)->handle('mystack', []);
 
-        Queue::assertPushed(RunBackupGroupJob::class);
-        Queue::assertNotPushed(RunBackupJob::class);
-        $this->assertSame(1, BackupGroupRun::where('backup_job_group_id', $group->id)->count());
+        $this->assertSame(1, $summary['grouped']);
+        $this->assertSame(0, $summary['queued']);
+        Queue::assertNothingPushed();
+        $this->assertSame(0, BackupGroupRun::where('backup_job_group_id', $group->id)->count());
     }
 
     private function destination(string $name = 'S3', bool $active = true): BackupDestination

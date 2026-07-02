@@ -293,6 +293,30 @@ class GroupedBackupTest extends TestCase
         $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the group lock should be released');
     }
 
+    public function test_reconciliation_releases_the_lock_of_a_stale_queued_group_run(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+
+        // The worker acquired the group lock (middleware) then crashed before
+        // RunBackupGroup flipped the run to running — the run is still queued but
+        // the lock is held.
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_QUEUED,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+        ]);
+        BackupGroupRun::whereKey($run->id)->update(['created_at' => now()->subHour()]);
+
+        $lockKey = VolumeJobLock::cacheKeyFor('backup-group-'.$group->id);
+        $this->assertTrue(Cache::lock($lockKey, 86400)->get());
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
+        $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the queued group run lock should be released');
+    }
+
     private function group(string $failurePolicy = BackupJobGroup::FAILURE_POLICY_CONTINUE): BackupJobGroup
     {
         return BackupJobGroup::create([

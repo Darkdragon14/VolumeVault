@@ -2,12 +2,9 @@
 
 namespace App\Actions\Backup;
 
-use App\Jobs\RunBackupGroupJob;
 use App\Jobs\RunBackupJob;
 use App\Models\ActivityLog;
-use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
-use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
@@ -23,7 +20,6 @@ class BackupStack
     public function __construct(
         private readonly BackupScheduleCalculator $scheduleCalculator,
         private readonly CreateBackupRun $createBackupRun,
-        private readonly CreateBackupGroupRun $createBackupGroupRun,
         private readonly VolumeBackupSummaries $summaries,
     ) {}
 
@@ -40,7 +36,7 @@ class BackupStack
      *
      * @param  array<string, mixed>  $input  Validated input: backup_destination_id, schedule_type, schedule_config, timezone.
      * @param  User|null  $initiatedBy  The user who triggered the stack backup, recorded on every queued run.
-     * @return array{created: int, queued: int, skipped: int}
+     * @return array{created: int, queued: int, skipped: int, grouped: int}
      *
      * @throws ValidationException When the stack has no volumes, or a job must
      *                             be created but the destination/schedule is
@@ -67,6 +63,7 @@ class BackupStack
             'created' => $created,
             'queued' => $result['queued'],
             'skipped' => $result['skipped'],
+            'grouped' => $result['grouped'],
         ];
     }
 
@@ -139,7 +136,7 @@ class BackupStack
      * skipped individually so one bad job never aborts the batch.
      *
      * @param  Collection<int, string>  $volumeNames
-     * @return array{queued: int, skipped: int}
+     * @return array{queued: int, skipped: int, grouped: int}
      */
     private function queueRuns(Collection $volumeNames, ?User $initiatedBy): array
     {
@@ -150,14 +147,16 @@ class BackupStack
 
         $queued = 0;
         $skipped = 0;
-        $groupIds = [];
+        $grouped = 0;
 
         foreach ($jobs as $job) {
-            // A grouped volume is backed up through its group (which owns its
-            // schedule and notifications), never as an individual run. Collect the
-            // distinct groups and trigger them once below.
+            // A grouped volume is owned by its group (its own schedule and
+            // aggregated notifications). A stack backup only queues runs for the
+            // selected stack, so it must not run the member individually nor
+            // trigger the whole group (which may span other stacks). Report it as
+            // grouped — covered elsewhere, not a failed/unavailable skip.
             if ($job->isGroupMember()) {
-                $groupIds[(int) $job->backup_job_group_id] = true;
+                $grouped++;
 
                 continue;
             }
@@ -171,19 +170,6 @@ class BackupStack
             }
         }
 
-        // Run each group represented in the stack once, so grouped volumes are
-        // actually backed up instead of silently skipped. A group already running
-        // (or with no runnable member) is counted as skipped.
-        foreach (BackupJobGroup::whereIn('id', array_keys($groupIds))->get() as $group) {
-            try {
-                $groupRun = $this->createBackupGroupRun->handle($group, BackupGroupRun::TRIGGER_MANUAL, $initiatedBy);
-                RunBackupGroupJob::dispatch($groupRun->id);
-                $queued++;
-            } catch (ValidationException) {
-                $skipped++;
-            }
-        }
-
-        return ['queued' => $queued, 'skipped' => $skipped];
+        return ['queued' => $queued, 'skipped' => $skipped, 'grouped' => $grouped];
     }
 }
