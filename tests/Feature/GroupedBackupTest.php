@@ -6,6 +6,7 @@ use App\Actions\Backup\CreateBackupGroupRun;
 use App\Actions\Backup\CreateBackupRun;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
+use App\Actions\Docker\StartDockerContainers;
 use App\Jobs\DispatchDueBackupGroupsJob;
 use App\Jobs\DispatchDueBackupJobsJob;
 use App\Jobs\RecordArchiveMetadataJob;
@@ -481,6 +482,54 @@ class GroupedBackupTest extends TestCase
 
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
         $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the queued group run lock should be released');
+    }
+
+    public function test_starting_containers_refreshes_the_heartbeat_after_each_one(): void
+    {
+        // Per-container callback keeps a group run's heartbeat fresh through a slow
+        // sequential restart (docker start is 120s each).
+        $docker = new class extends DockerProcess
+        {
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                return new DockerProcessResult($command, 0, '', '');
+            }
+        };
+
+        $calls = 0;
+        (new StartDockerContainers($docker))->handle(['a', 'b', 'c'], function () use (&$calls): void {
+            $calls++;
+        });
+
+        $this->assertSame(3, $calls);
+    }
+
+    public function test_reconciliation_does_not_restart_containers_for_a_live_group_member(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+        $memberRun = BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'finished_at' => now(),
+            'stopped_container_ids' => ['abc123'],
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // The group worker is alive (fresh heartbeat) and owns the restart, so
+        // reconciliation must not race it: the ids stay set and the run untouched.
+        $this->assertNotNull($memberRun->fresh()->stopped_container_ids);
+        $this->assertSame(BackupGroupRun::STATUS_RUNNING, $groupRun->fresh()->status);
     }
 
     public function test_an_active_group_with_no_runnable_members_advances_its_schedule_instead_of_churning(): void

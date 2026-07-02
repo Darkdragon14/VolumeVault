@@ -107,7 +107,7 @@ class ReconcileStaleRuns extends Command
         // Runs the sweep just failed (or runs whose worker died during restart)
         // may still have application containers stopped. Restart them now.
         $restartedCount = 0;
-        $this->backupRunsWithStoppedContainers()->each(function (BackupRun $run) use ($runBackup, &$restartedCount): void {
+        $this->backupRunsWithStoppedContainers($cutoff)->each(function (BackupRun $run) use ($runBackup, &$restartedCount): void {
             try {
                 $runBackup->restartStoppedContainers($run);
                 $restartedCount++;
@@ -310,12 +310,20 @@ class ReconcileStaleRuns extends Command
      *
      * @return Collection<int, BackupRun>
      */
-    private function backupRunsWithStoppedContainers(): Collection
+    private function backupRunsWithStoppedContainers(CarbonInterface $cutoff): Collection
     {
         return BackupRun::query()
             ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
             ->whereNotNull('stopped_container_ids')
             ->where('stopped_container_ids', '!=', '[]')
+            // Don't race a live group worker's finally: skip a member run whose
+            // group run is still RUNNING with a fresh heartbeat — that worker is
+            // mid-restart (it refreshes the heartbeat per container) and will clear
+            // the ids itself. A crashed group's heartbeat goes stale, so its
+            // members' containers are still recovered here.
+            ->whereDoesntHave('groupRun', fn ($query) => $query
+                ->where('status', BackupGroupRun::STATUS_RUNNING)
+                ->where('last_heartbeat_at', '>=', $cutoff))
             ->get();
     }
 

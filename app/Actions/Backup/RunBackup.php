@@ -10,6 +10,7 @@ use App\Actions\Docker\StartDockerContainers;
 use App\Actions\Docker\StopDockerContainers;
 use App\Jobs\RecordArchiveMetadataJob;
 use App\Models\ActivityLog;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
@@ -176,7 +177,14 @@ class RunBackup
         } finally {
             if ($stoppedContainers) {
                 try {
-                    $this->startDockerContainers->handle($stoppedContainers);
+                    // Restarting containers happens after the run is already
+                    // terminal, so a member run no longer shields its group run from
+                    // stale reconciliation. docker start is 120s each and sequential,
+                    // so refresh the group heartbeat up front and after each
+                    // container to keep a live group run from being falsely closed
+                    // during a slow multi-container restart.
+                    $this->touchGroupRunHeartbeat($run);
+                    $this->startDockerContainers->handle($stoppedContainers, fn () => $this->touchGroupRunHeartbeat($run));
                     $run->forceFill(['stopped_container_ids' => null])->save();
                     $this->appendRunLog->handle($run->fresh(), 'Restarted containers: '.implode(', ', $stoppedContainers));
                 } catch (Throwable $exception) {
@@ -410,6 +418,23 @@ class RunBackup
         if ($run !== null) {
             $this->recordBackupArchiveMetadata($run);
         }
+    }
+
+    /**
+     * Refresh the parent group run's heartbeat from inside a member run. Used
+     * during the post-backup container restart (which the group worker cannot
+     * heartbeat around otherwise) so a live group run is not reconciled as stale.
+     * No-op for a standalone run.
+     */
+    private function touchGroupRunHeartbeat(BackupRun $run): void
+    {
+        if ($run->backup_group_run_id === null) {
+            return;
+        }
+
+        BackupGroupRun::query()
+            ->whereKey($run->backup_group_run_id)
+            ->update(['last_heartbeat_at' => now()]);
     }
 
     private function sendNotifications(BackupRun $run): void
