@@ -43,7 +43,14 @@ class RunBackupGroupJob implements ShouldQueue
         // shared() so the cache key is exactly the prefixed key (no job-class
         // segment), which lets stale-run reconciliation force-release an orphaned
         // group lock via VolumeJobLock::cacheKeyFor() after a worker crash.
-        return [(new WithoutOverlapping($key))->shared()->expireAfter(86400)];
+        //
+        // releaseAfter(60): a group backup can run longer than the queue's
+        // retry_after, so the job may be redelivered while the first worker is
+        // still running it. Without releaseAfter the redelivered copy that loses
+        // the lock is dropped (or churns); instead it is released back with a delay
+        // and keeps retrying (under retryUntil) until the lock frees — at which
+        // point RunBackupGroup's atomic claim finds the run terminal and no-ops.
+        return [(new WithoutOverlapping($key))->shared()->releaseAfter(60)->expireAfter(86400)];
     }
 
     public function handle(RunBackupGroup $runBackupGroup): void

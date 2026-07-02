@@ -20,6 +20,7 @@ use App\Services\Docker\DockerProcessResult;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\VolumeJobLock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -291,6 +292,25 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
         // The orphaned lock is force-released, so a fresh acquire succeeds.
         $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the group lock should be released');
+    }
+
+    public function test_the_group_run_job_releases_lock_losers_and_retries_until_a_deadline(): void
+    {
+        $group = $this->group();
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_SCHEDULED]);
+
+        $job = new RunBackupGroupJob($run->id);
+        $middleware = collect($job->middleware())->first(fn ($m) => $m instanceof WithoutOverlapping);
+
+        $this->assertInstanceOf(WithoutOverlapping::class, $middleware);
+        // A long group backup can be redelivered mid-run: a lock loser must be
+        // released back to the queue with a delay (not dropped) and keep retrying
+        // under a deadline rather than a single attempt.
+        $this->assertNotNull($middleware->releaseAfter);
+        $this->assertGreaterThan(0, $middleware->releaseAfter);
+        $this->assertTrue($middleware->shareKey);
+        $this->assertFalse(property_exists($job, 'tries'));
+        $this->assertInstanceOf(\DateTimeInterface::class, $job->retryUntil());
     }
 
     public function test_a_group_run_with_no_runnable_members_fails_instead_of_reporting_success(): void
