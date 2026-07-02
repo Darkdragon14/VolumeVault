@@ -561,19 +561,66 @@ class GroupedBackupTest extends TestCase
             'finished_at' => now(),
             'stopped_container_ids' => ['a1'],
         ]);
-        // ...and the worker has already moved on to a later member (B).
+        // ...and the worker has already moved on to a later member (B), which is
+        // backing up its own, unrelated container.
         BackupRun::create([
             'backup_job_id' => $memberB->id,
             'backup_group_run_id' => $groupRun->id,
-            'status' => BackupRun::STATUS_QUEUED,
+            'status' => BackupRun::STATUS_RUNNING,
             'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'stopped_container_ids' => ['b1'],
         ]);
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        // A's containers are recovered now, not left down until the group ends.
+        // A's container is unrelated to B's, so it is recovered now — not left down
+        // until the group ends.
         $this->assertContains('docker start a1', $docker->commands);
         $this->assertNull($runA->fresh()->stopped_container_ids);
+    }
+
+    public function test_reconciliation_does_not_restart_a_container_a_running_member_shares(): void
+    {
+        $docker = $this->recordingCommandDocker();
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $group = $this->group();
+        $memberA = $this->member($group, 'vol_a');
+        $memberB = $this->member($group, 'vol_b');
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+        // Member A backed up vol_a, failed to restart the shared "app" container.
+        $runA = BackupRun::create([
+            'backup_job_id' => $memberA->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'finished_at' => now(),
+            'stopped_container_ids' => ['app'],
+        ]);
+        // Member B is now backing up vol_b and has deliberately stopped the same
+        // "app" container for its own consistent archive.
+        BackupRun::create([
+            'backup_job_id' => $memberB->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'stopped_container_ids' => ['app'],
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // Restarting "app" now would corrupt B's in-flight archive, so it must be
+        // left stopped and kept on A for a later sweep.
+        $this->assertEmpty(array_filter($docker->commands, fn (string $c): bool => str_contains($c, 'start app')));
+        $this->assertSame(['app'], $runA->fresh()->stopped_container_ids);
     }
 
     public function test_an_active_group_with_no_runnable_members_advances_its_schedule_instead_of_churning(): void

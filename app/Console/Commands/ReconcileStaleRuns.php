@@ -109,8 +109,14 @@ class ReconcileStaleRuns extends Command
         $restartedCount = 0;
         $this->backupRunsWithStoppedContainers($cutoff)->each(function (BackupRun $run) use ($runBackup, &$restartedCount): void {
             try {
-                $runBackup->restartStoppedContainers($run);
-                $restartedCount++;
+                // Never restart a container that an active sibling member of the
+                // same live group run has deliberately stopped for its own backup:
+                // that would bring the application up mid-archive and corrupt it.
+                // Only the containers no active member still needs stopped are
+                // recovered here.
+                if ($runBackup->restartStoppedContainers($run, $this->containersHeldByActiveGroupMembers($run))) {
+                    $restartedCount++;
+                }
             } catch (Throwable $exception) {
                 $this->warn("Failed to restart containers for backup run {$run->id}: {$exception->getMessage()}");
             }
@@ -338,6 +344,34 @@ class ReconcileStaleRuns extends Command
                         ->whereColumn('later_member.id', '>', 'backup_runs.id'));
             })
             ->get();
+    }
+
+    /**
+     * Container ids that a still-running sibling member of this run's group run
+     * has deliberately stopped for its own in-flight backup. These must not be
+     * restarted while recovering this run's leftover containers — doing so would
+     * bring the application up in the middle of the sibling's archive. Empty for a
+     * standalone run or one whose group run is no longer running.
+     *
+     * @return array<int, string>
+     */
+    private function containersHeldByActiveGroupMembers(BackupRun $run): array
+    {
+        if ($run->backup_group_run_id === null) {
+            return [];
+        }
+
+        return BackupRun::query()
+            ->where('backup_group_run_id', $run->backup_group_run_id)
+            ->whereKeyNot($run->id)
+            ->where('status', BackupRun::STATUS_RUNNING)
+            ->whereNotNull('stopped_container_ids')
+            ->pluck('stopped_container_ids')
+            ->flatMap(fn ($ids) => is_array($ids) ? $ids : [])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

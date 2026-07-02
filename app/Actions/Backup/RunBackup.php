@@ -203,24 +203,45 @@ class RunBackup
      * `docker start` on an already-running container succeeds, and the IDs are
      * only cleared once every container is back up.
      */
-    public function restartStoppedContainers(BackupRun $run): void
+    /**
+     * Restart the containers a run left stopped. $exclude lists containers that an
+     * active sibling group member still needs stopped for its own backup; those are
+     * left stopped (kept on the run for a later sweep) so we never bring the
+     * application up in the middle of the sibling's archive. Returns whether any
+     * container was actually restarted.
+     *
+     * @param  array<int, string>  $exclude
+     */
+    public function restartStoppedContainers(BackupRun $run, array $exclude = []): bool
     {
         $containerIds = $run->stopped_container_ids ?? [];
 
         if (! $containerIds) {
-            return;
+            return false;
         }
 
-        $this->startDockerContainers->handle($containerIds);
+        $toRestart = array_values(array_diff($containerIds, $exclude));
 
-        $run->forceFill(['stopped_container_ids' => null])->save();
+        if (! $toRestart) {
+            // Every leftover container is still needed stopped by an active
+            // sibling; leave them for a later sweep once the sibling finishes.
+            return false;
+        }
 
-        $message = 'Restarted containers left stopped after an interrupted run: '.implode(', ', $containerIds);
+        $this->startDockerContainers->handle($toRestart);
+
+        // Keep any containers still held by an active sibling; clear the rest.
+        $remaining = array_values(array_intersect($containerIds, $exclude));
+        $run->forceFill(['stopped_container_ids' => $remaining ?: null])->save();
+
+        $message = 'Restarted containers left stopped after an interrupted run: '.implode(', ', $toRestart);
         $this->appendRunLog->handle($run, $message);
 
         ActivityLog::record('backup_run_containers_reconciled', $message, $run, [
             'backup_job_id' => $run->backup_job_id,
         ]);
+
+        return true;
     }
 
     /**
