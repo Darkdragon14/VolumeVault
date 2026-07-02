@@ -8,8 +8,8 @@ use App\Actions\Docker\ListDockerContainers;
 use App\Actions\Docker\RunBackupContainer;
 use App\Actions\Docker\StartDockerContainers;
 use App\Actions\Docker\StopDockerContainers;
+use App\Jobs\RecordArchiveMetadataJob;
 use App\Models\ActivityLog;
-use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
@@ -159,18 +159,16 @@ class RunBackup
                 ])->save();
             }
 
-            // For a group member, refresh the group run heartbeat before the
-            // (bounded, but possibly slow) archive-metadata listing. The member run
-            // just went terminal, so it no longer protects the group run from
-            // stale-run reconciliation; a fresh heartbeat keeps the live group run
-            // from being falsely closed while this post-backup phase runs.
-            $this->touchGroupRunHeartbeat($run);
-
-            $this->recordBackupArchiveMetadata($run->fresh(['job.destination']));
-
-            // Member runs stay silent: the group run aggregates all members and
-            // emits the single success/fail notification for the whole set.
-            if (! $run->belongsToGroupRun()) {
+            if ($run->belongsToGroupRun()) {
+                // Record archive metadata off the group's critical path. The
+                // destination listing can be slow (WebDAV Depth: infinity, recursive
+                // SFTP, slow NFS); doing it inline here would block the group worker
+                // — the member run is already terminal, so it no longer shields the
+                // live group run from stale-run reconciliation. A member run also
+                // stays silent: the group emits the single aggregated notification.
+                RecordArchiveMetadataJob::dispatch($run->id);
+            } else {
+                $this->recordBackupArchiveMetadata($run->fresh(['job.destination']));
                 $this->sendNotifications($run->fresh(['job.destination']));
             }
         } catch (Throwable $exception) {
@@ -401,20 +399,17 @@ class RunBackup
     }
 
     /**
-     * Keep the parent group run's heartbeat fresh from inside a member run. The
-     * group worker only bumps the heartbeat between members, so a member's own
-     * post-backup work (metadata listing) would otherwise let the heartbeat lag
-     * and a live group run be reconciled as stale. No-op for standalone runs.
+     * Record a completed run's archive metadata (backup key + size) by id. Runs
+     * the potentially-slow destination listing; dispatched as a job for group
+     * members so it never blocks the group run's critical path.
      */
-    private function touchGroupRunHeartbeat(BackupRun $run): void
+    public function recordArchiveMetadata(int $backupRunId): void
     {
-        if ($run->backup_group_run_id === null) {
-            return;
-        }
+        $run = BackupRun::with('job.destination')->find($backupRunId);
 
-        BackupGroupRun::query()
-            ->whereKey($run->backup_group_run_id)
-            ->update(['last_heartbeat_at' => now()]);
+        if ($run !== null) {
+            $this->recordBackupArchiveMetadata($run);
+        }
     }
 
     private function sendNotifications(BackupRun $run): void

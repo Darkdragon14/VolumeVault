@@ -43,9 +43,14 @@ class RunBackupGroup
 
         // Atomically claim the run (non-terminal → running) so a redelivery or a
         // reconciliation race cannot execute it twice. Mirrors RunBackup.
+        // Claim only a queued run. A run already RUNNING is owned by a worker
+        // (its timeout is 0, so a long sequential group is legitimate); a copy
+        // redelivered after the 24h lock TTL must not re-run it and overlap. A
+        // crashed RUNNING run is not resumed here — reconciliation closes it and
+        // the next scheduled run starts fresh.
         $claimed = BackupGroupRun::query()
             ->whereKey($groupRun->getKey())
-            ->whereNotIn('status', [BackupGroupRun::STATUS_SUCCESS, BackupGroupRun::STATUS_FAILED, BackupGroupRun::STATUS_CANCELLED])
+            ->where('status', BackupGroupRun::STATUS_QUEUED)
             ->update([
                 'status' => BackupGroupRun::STATUS_RUNNING,
                 'started_at' => $startedAt,

@@ -5,6 +5,7 @@ namespace App\Actions\Backup;
 use App\Jobs\RunBackupJob;
 use App\Models\ActivityLog;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
@@ -143,6 +144,7 @@ class BackupStack
         $jobs = BackupJob::query()
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
             ->whereIn('volume_name', $volumeNames->all())
+            ->with('group')
             ->get();
 
         $queued = 0;
@@ -152,11 +154,18 @@ class BackupStack
         foreach ($jobs as $job) {
             // A grouped volume is owned by its group (its own schedule and
             // aggregated notifications). A stack backup only queues runs for the
-            // selected stack, so it must not run the member individually nor
-            // trigger the whole group (which may span other stacks). Report it as
-            // grouped — covered elsewhere, not a failed/unavailable skip.
+            // selected stack, so it never runs the member individually nor triggers
+            // the whole group (which may span other stacks).
             if ($job->isGroupMember()) {
-                $grouped++;
+                // Only report it as grouped — i.e. it will back up on the group's
+                // schedule — when that is actually true: a paused member is excluded
+                // from group runs and an inactive group is never dispatched, so
+                // those count as skipped rather than a false "handled by group".
+                if ($job->status !== BackupJob::STATUS_PAUSED && $job->group?->status === BackupJobGroup::STATUS_ACTIVE) {
+                    $grouped++;
+                } else {
+                    $skipped++;
+                }
 
                 continue;
             }

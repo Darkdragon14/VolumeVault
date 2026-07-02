@@ -8,6 +8,7 @@ use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
 use App\Jobs\DispatchDueBackupGroupsJob;
 use App\Jobs\DispatchDueBackupJobsJob;
+use App\Jobs\RecordArchiveMetadataJob;
 use App\Jobs\RunBackupGroupJob;
 use App\Jobs\RunBackupJob;
 use App\Models\BackupDestination;
@@ -26,6 +27,7 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Mockery;
 use Tests\TestCase;
@@ -194,8 +196,8 @@ class GroupedBackupTest extends TestCase
         // A member is due on its own columns but must never be dispatched standalone.
         $member->forceFill(['next_run_at' => now()->subMinute()])->save();
 
-        app(DispatchDueBackupGroupsJob::class)->handle(app(CreateBackupGroupRun::class));
-        app(DispatchDueBackupJobsJob::class)->handle(app(CreateBackupRun::class));
+        app()->call([app(DispatchDueBackupGroupsJob::class), 'handle']);
+        app()->call([app(DispatchDueBackupJobsJob::class), 'handle']);
 
         Bus::assertDispatched(RunBackupGroupJob::class);
         Bus::assertNotDispatched(RunBackupJob::class);
@@ -396,8 +398,9 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupGroupRun::STATUS_RUNNING, $run->fresh()->status);
     }
 
-    public function test_a_member_run_refreshes_its_group_run_heartbeat(): void
+    public function test_a_member_run_defers_archive_metadata_to_a_job(): void
     {
+        Queue::fake([RecordArchiveMetadataJob::class]);
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
 
         $group = $this->group();
@@ -406,8 +409,8 @@ class GroupedBackupTest extends TestCase
             'backup_job_group_id' => $group->id,
             'status' => BackupGroupRun::STATUS_RUNNING,
             'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
-            'started_at' => now()->subHour(),
-            'last_heartbeat_at' => now()->subHour(),
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
         ]);
         $memberRun = BackupRun::create([
             'backup_job_id' => $member->id,
@@ -418,9 +421,11 @@ class GroupedBackupTest extends TestCase
 
         app(RunBackup::class)->handle($memberRun);
 
-        // The member run bumps the group heartbeat around its post-backup phase so
-        // a live group run is not reconciled as stale during metadata listing.
-        $this->assertTrue($groupRun->fresh()->last_heartbeat_at->greaterThan(now()->subMinutes(5)));
+        // The potentially-slow archive-metadata listing is deferred to a job so it
+        // never blocks the group worker (which would let a live group run be
+        // reconciled as stale).
+        $this->assertSame(BackupRun::STATUS_SUCCESS, $memberRun->fresh()->status);
+        Queue::assertPushed(RecordArchiveMetadataJob::class, fn (RecordArchiveMetadataJob $job): bool => $job->backupRunId === $memberRun->id);
     }
 
     public function test_a_member_restore_notification_is_delivered_through_the_group_channels(): void
@@ -476,6 +481,58 @@ class GroupedBackupTest extends TestCase
 
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
         $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the queued group run lock should be released');
+    }
+
+    public function test_an_active_group_with_no_runnable_members_advances_its_schedule_instead_of_churning(): void
+    {
+        $group = $this->group();
+        $group->forceFill(['next_run_at' => now()->subMinute()])->save();
+        $member = $this->member($group, 'vol_a');
+        $member->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+
+        app()->call([app(DispatchDueBackupGroupsJob::class), 'handle']);
+
+        $group->refresh();
+        $this->assertTrue($group->next_run_at->isFuture(), 'schedule advanced so it stops firing every minute');
+        $this->assertNotNull($group->last_error);
+        $this->assertSame(0, BackupGroupRun::where('backup_job_group_id', $group->id)->count());
+    }
+
+    public function test_a_running_group_run_is_not_re_executed_on_redelivery(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+        // Already RUNNING (owned by a live worker); a redelivered copy after the
+        // lock TTL must not re-claim and overlap.
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+
+        app(RunBackupGroup::class)->handle($run);
+
+        $this->assertSame(BackupGroupRun::STATUS_RUNNING, $run->fresh()->status);
+        $this->assertSame(0, BackupRun::where('backup_group_run_id', $run->id)->count());
+    }
+
+    public function test_the_failed_hook_does_not_fail_a_running_group_run(): void
+    {
+        $group = $this->group();
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+
+        // A copy redelivered until retryUntil must not fail a run a live worker owns.
+        (new RunBackupGroupJob($run->id))->failed(new \RuntimeException('retry deadline reached'));
+
+        $this->assertSame(BackupGroupRun::STATUS_RUNNING, $run->fresh()->status);
     }
 
     private function group(string $failurePolicy = BackupJobGroup::FAILURE_POLICY_CONTINUE): BackupJobGroup
