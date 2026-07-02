@@ -316,14 +316,27 @@ class ReconcileStaleRuns extends Command
             ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
             ->whereNotNull('stopped_container_ids')
             ->where('stopped_container_ids', '!=', '[]')
-            // Don't race a live group worker's finally: skip a member run whose
-            // group run is still RUNNING with a fresh heartbeat — that worker is
-            // mid-restart (it refreshes the heartbeat per container) and will clear
-            // the ids itself. A crashed group's heartbeat goes stale, so its
-            // members' containers are still recovered here.
-            ->whereDoesntHave('groupRun', fn ($query) => $query
-                ->where('status', BackupGroupRun::STATUS_RUNNING)
-                ->where('last_heartbeat_at', '>=', $cutoff))
+            ->where(function ($query) use ($cutoff): void {
+                // Recover the containers unless we would be racing the group worker
+                // that is *currently* restarting this member's containers in its
+                // finally (docker start is idempotent, but a transient failure
+                // there could clash with the live restart).
+                $query
+                    // Not the current member of a live group run: either it has no
+                    // live group run at all...
+                    ->whereDoesntHave('groupRun', fn ($group) => $group
+                        ->where('status', BackupGroupRun::STATUS_RUNNING)
+                        ->where('last_heartbeat_at', '>=', $cutoff))
+                    // ...or the worker has already moved on to a later member (a
+                    // higher-id member run exists), so this member's restart has
+                    // finished or failed and must be recovered now — not left down
+                    // until the whole group ends.
+                    ->orWhereExists(fn ($exists) => $exists
+                        ->selectRaw('1')
+                        ->from('backup_runs as later_member')
+                        ->whereColumn('later_member.backup_group_run_id', 'backup_runs.backup_group_run_id')
+                        ->whereColumn('later_member.id', '>', 'backup_runs.id'));
+            })
             ->get();
     }
 

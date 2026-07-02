@@ -504,8 +504,11 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(3, $calls);
     }
 
-    public function test_reconciliation_does_not_restart_containers_for_a_live_group_member(): void
+    public function test_reconciliation_does_not_restart_the_current_group_members_containers(): void
     {
+        $docker = $this->recordingCommandDocker();
+        $this->app->instance(DockerProcess::class, $docker);
+
         $group = $this->group();
         $member = $this->member($group, 'vol_a');
         $groupRun = BackupGroupRun::create([
@@ -515,6 +518,8 @@ class GroupedBackupTest extends TestCase
             'started_at' => now(),
             'last_heartbeat_at' => now(),
         ]);
+        // The latest member run of a live group run: the worker is currently
+        // restarting its containers in its own finally.
         $memberRun = BackupRun::create([
             'backup_job_id' => $member->id,
             'backup_group_run_id' => $groupRun->id,
@@ -526,10 +531,49 @@ class GroupedBackupTest extends TestCase
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        // The group worker is alive (fresh heartbeat) and owns the restart, so
-        // reconciliation must not race it: the ids stay set and the run untouched.
+        // Reconciliation must not attempt a restart (no docker start) and must
+        // leave the ids for the live worker to clear.
+        $this->assertEmpty(array_filter($docker->commands, fn (string $c): bool => str_contains($c, 'start abc123')));
         $this->assertNotNull($memberRun->fresh()->stopped_container_ids);
-        $this->assertSame(BackupGroupRun::STATUS_RUNNING, $groupRun->fresh()->status);
+    }
+
+    public function test_reconciliation_recovers_an_abandoned_member_restart_while_the_group_continues(): void
+    {
+        $docker = $this->recordingCommandDocker();
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $group = $this->group();
+        $memberA = $this->member($group, 'vol_a');
+        $memberB = $this->member($group, 'vol_b');
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+        // Member A finished with a failed restart (ids kept)...
+        $runA = BackupRun::create([
+            'backup_job_id' => $memberA->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'finished_at' => now(),
+            'stopped_container_ids' => ['a1'],
+        ]);
+        // ...and the worker has already moved on to a later member (B).
+        BackupRun::create([
+            'backup_job_id' => $memberB->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // A's containers are recovered now, not left down until the group ends.
+        $this->assertContains('docker start a1', $docker->commands);
+        $this->assertNull($runA->fresh()->stopped_container_ids);
     }
 
     public function test_an_active_group_with_no_runnable_members_advances_its_schedule_instead_of_churning(): void
@@ -667,6 +711,28 @@ class GroupedBackupTest extends TestCase
     }
 
     /** A Docker fake that records the SHOUTRRR_URL of every notification send. */
+    /** A Docker fake that records every command it is asked to run. */
+    private function recordingCommandDocker(): DockerProcess
+    {
+        return new class extends DockerProcess
+        {
+            /** @var array<int, string> */
+            public array $commands = [];
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                $this->commands[] = implode(' ', $command);
+
+                return new DockerProcessResult($command, 0, '', '');
+            }
+
+            public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                return new DockerProcessResult($command, 0, 'ok', '');
+            }
+        };
+    }
+
     private function recordingDocker(): DockerProcess
     {
         return new class extends DockerProcess
