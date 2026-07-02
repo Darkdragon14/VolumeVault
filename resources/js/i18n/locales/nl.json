@@ -750,5 +750,6 @@
   "View groups": "Groepen bekijken",
   "No group runs yet.": "Nog geen groepsuitvoeringen.",
   "No groups are currently in error.": "Er zijn momenteel geen groepen met fouten.",
-  "Group run #{id}": "Groepsuitvoering #{id}"
+  "Group run #{id}": "Groepsuitvoering #{id}",
+  "Managed by group": "Beheerd door groep"
 }

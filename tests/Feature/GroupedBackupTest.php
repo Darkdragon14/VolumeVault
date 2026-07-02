@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\Backup\CreateBackupGroupRun;
 use App\Actions\Backup\CreateBackupRun;
+use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
 use App\Jobs\DispatchDueBackupGroupsJob;
 use App\Jobs\DispatchDueBackupJobsJob;
@@ -393,6 +394,33 @@ class GroupedBackupTest extends TestCase
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(BackupGroupRun::STATUS_RUNNING, $run->fresh()->status);
+    }
+
+    public function test_a_member_run_refreshes_its_group_run_heartbeat(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHour(),
+            'last_heartbeat_at' => now()->subHour(),
+        ]);
+        $memberRun = BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        app(RunBackup::class)->handle($memberRun);
+
+        // The member run bumps the group heartbeat around its post-backup phase so
+        // a live group run is not reconciled as stale during metadata listing.
+        $this->assertTrue($groupRun->fresh()->last_heartbeat_at->greaterThan(now()->subMinutes(5)));
     }
 
     public function test_a_member_restore_notification_is_delivered_through_the_group_channels(): void

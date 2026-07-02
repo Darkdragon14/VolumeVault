@@ -750,5 +750,6 @@
   "View groups": "Csoportok megtekintése",
   "No group runs yet.": "Még nincsenek csoportfuttatások.",
   "No groups are currently in error.": "Jelenleg egyetlen csoport sincs hibás állapotban.",
-  "Group run #{id}": "Csoportfuttatás #{id}"
+  "Group run #{id}": "Csoportfuttatás #{id}",
+  "Managed by group": "Csoport által kezelve"
 }

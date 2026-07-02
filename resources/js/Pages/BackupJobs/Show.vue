@@ -37,7 +37,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
     <AppLayout :title="job.name" :subtitle="t('Review schedule, destination, run history, and recovery actions for this job.')">
         <template #actions>
             <div class="flex flex-wrap gap-2">
-                <button v-if="can.runDockerActions" class="btn-primary" :disabled="job.status !== 'active'" @click="runNow(job.id)">{{ t('Run now') }}</button>
+                <button v-if="can.runDockerActions && !job.backup_job_group_id" class="btn-primary" :disabled="job.status !== 'active'" @click="runNow(job.id)">{{ t('Run now') }}</button>
                 <button v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" class="btn-secondary" @click="resume(job.id)">{{ t('Resume') }}</button>
                 <button v-else-if="can.runDockerActions" class="btn-secondary" :disabled="job.status === 'running'" @click="pause(job.id)">{{ t('Pause') }}</button>
                 <Link v-if="can.runDockerActions" :href="`/backup-jobs/${job.id}/restore`" class="btn-secondary">{{ t('Restore') }}</Link>
@@ -57,7 +57,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                     <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Schedule') }}</dt><dd class="mt-1 break-words text-white">{{ job.schedule_summary }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Excluded files') }}</dt><dd class="mt-1 break-all font-mono text-sm text-white">{{ job.backup_exclude_regexp || t('None') }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Last run') }}</dt><dd class="mt-1 text-white">{{ formatDate(job.last_run_at) }}</dd></div>
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Next run') }}</dt><dd class="mt-1 text-white">{{ formatDate(job.next_run_at) }}</dd></div>
+                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Next run') }}</dt><dd class="mt-1 text-white">{{ job.backup_job_group_id ? t('Managed by group') : formatDate(job.next_run_at) }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Last backup size') }}</dt><dd class="mt-1 text-white">{{ formatBytes(lastSuccessfulBackup?.backup_size_bytes, t('Unknown')) }}</dd></div>
                 </dl>
             </section>

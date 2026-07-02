@@ -750,5 +750,6 @@
   "View groups": "Просмотреть группы",
   "No group runs yet.": "Пока нет запусков групп.",
   "No groups are currently in error.": "Сейчас нет групп с ошибкой.",
-  "Group run #{id}": "Запуск группы №{id}"
+  "Group run #{id}": "Запуск группы №{id}",
+  "Managed by group": "Управляется группой"
 }

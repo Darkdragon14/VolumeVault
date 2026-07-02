@@ -9,6 +9,7 @@ use App\Actions\Docker\RunBackupContainer;
 use App\Actions\Docker\StartDockerContainers;
 use App\Actions\Docker\StopDockerContainers;
 use App\Models\ActivityLog;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
@@ -157,6 +158,13 @@ class RunBackup
                     'pause_reason' => null,
                 ])->save();
             }
+
+            // For a group member, refresh the group run heartbeat before the
+            // (bounded, but possibly slow) archive-metadata listing. The member run
+            // just went terminal, so it no longer protects the group run from
+            // stale-run reconciliation; a fresh heartbeat keeps the live group run
+            // from being falsely closed while this post-backup phase runs.
+            $this->touchGroupRunHeartbeat($run);
 
             $this->recordBackupArchiveMetadata($run->fresh(['job.destination']));
 
@@ -390,6 +398,23 @@ class RunBackup
         }
 
         return false;
+    }
+
+    /**
+     * Keep the parent group run's heartbeat fresh from inside a member run. The
+     * group worker only bumps the heartbeat between members, so a member's own
+     * post-backup work (metadata listing) would otherwise let the heartbeat lag
+     * and a live group run be reconciled as stale. No-op for standalone runs.
+     */
+    private function touchGroupRunHeartbeat(BackupRun $run): void
+    {
+        if ($run->backup_group_run_id === null) {
+            return;
+        }
+
+        BackupGroupRun::query()
+            ->whereKey($run->backup_group_run_id)
+            ->update(['last_heartbeat_at' => now()]);
     }
 
     private function sendNotifications(BackupRun $run): void

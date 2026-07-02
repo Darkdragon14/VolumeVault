@@ -750,5 +750,6 @@
   "View groups": "Zobrazit skupiny",
   "No group runs yet.": "Zatím žádné běhy skupin.",
   "No groups are currently in error.": "Aktuálně nejsou žádné skupiny v chybě.",
-  "Group run #{id}": "Běh skupiny č. {id}"
+  "Group run #{id}": "Běh skupiny č. {id}",
+  "Managed by group": "Spravováno skupinou"
 }

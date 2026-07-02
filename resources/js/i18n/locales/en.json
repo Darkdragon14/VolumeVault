@@ -750,5 +750,6 @@
   "View groups": "View groups",
   "No group runs yet.": "No group runs yet.",
   "No groups are currently in error.": "No groups are currently in error.",
-  "Group run #{id}": "Group run #{id}"
+  "Group run #{id}": "Group run #{id}",
+  "Managed by group": "Managed by group"
 }

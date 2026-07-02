@@ -750,5 +750,6 @@
   "View groups": "Voir les groupes",
   "No group runs yet.": "Aucune exécution de groupe pour l'instant.",
   "No groups are currently in error.": "Aucun groupe n'est actuellement en erreur.",
-  "Group run #{id}": "Exécution de groupe n°{id}"
+  "Group run #{id}": "Exécution de groupe n°{id}",
+  "Managed by group": "Géré par le groupe"
 }
