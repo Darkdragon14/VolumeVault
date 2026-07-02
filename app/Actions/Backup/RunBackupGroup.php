@@ -67,6 +67,38 @@ class RunBackupGroup
         /** @var \Illuminate\Database\Eloquent\Collection<int, BackupJob> $members */
         $members = $group->runnableMembers()->orderBy('id')->get();
 
+        // The run was created with runnable members, but they were all paused,
+        // detached or removed before the worker started. Fail the run instead of
+        // reporting a false success that would back up nothing yet turn a
+        // dead-man's-switch monitor green. No start notification is sent — the run
+        // never begins — only the aggregated failure.
+        if ($members->isEmpty()) {
+            $finishedAt = now();
+
+            $groupRun->forceFill([
+                'status' => BackupGroupRun::STATUS_FAILED,
+                'finished_at' => $finishedAt,
+                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
+                'total_members' => 0,
+                'error_message' => 'No runnable member volumes at run time (all were paused, detached or removed).',
+            ])->save();
+
+            $group->forceFill([
+                'status' => BackupJobGroup::STATUS_ERROR,
+                'last_run_at' => $startedAt,
+                'last_error' => 'Group run found no runnable member volumes.',
+                'last_error_at' => $finishedAt,
+            ])->save();
+
+            ActivityLog::record('backup_group_run_failed', 'Backup group run had no runnable members.', $groupRun, [
+                'backup_job_group_id' => $group->id,
+            ]);
+
+            $this->sendFinishNotification($groupRun->fresh('group'));
+
+            return;
+        }
+
         $group->forceFill([
             'status' => BackupJobGroup::STATUS_RUNNING,
             'last_run_at' => $startedAt,

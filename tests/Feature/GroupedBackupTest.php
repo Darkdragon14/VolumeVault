@@ -293,6 +293,59 @@ class GroupedBackupTest extends TestCase
         $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the group lock should be released');
     }
 
+    public function test_a_group_run_with_no_runnable_members_fails_instead_of_reporting_success(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+
+        // Queued with a runnable member, then the member is paused before the
+        // worker starts: the run must not report a false success.
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        $member->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+
+        app(RunBackupGroup::class)->handle($run);
+
+        $run->refresh();
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->status);
+        $this->assertSame(0, $run->total_members);
+        $this->assertSame(BackupJobGroup::STATUS_ERROR, $group->fresh()->status);
+        $this->assertSame(0, BackupRun::where('backup_group_run_id', $run->id)->count());
+    }
+
+    public function test_reconciliation_releases_the_volume_lock_of_a_stale_queued_member_run(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+
+        // A member run stuck queued: the group worker crashed after acquiring the
+        // volume lock in-process but before RunBackup flipped it to running.
+        $memberRun = BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        BackupRun::whereKey($memberRun->id)->update(['created_at' => now()->subHour()]);
+
+        $lockKey = VolumeJobLock::cacheKey('vol_a');
+        $this->assertTrue(Cache::lock($lockKey, 86400)->get());
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->fresh()->status);
+        $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the member volume lock should be released');
+    }
+
     public function test_reconciliation_releases_the_lock_of_a_stale_queued_group_run(): void
     {
         $group = $this->group();

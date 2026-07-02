@@ -53,13 +53,23 @@ class ReconcileStaleRuns extends Command
         $backupCount = 0;
         $this->staleBackupRuns($cutoff)->each(function (BackupRun $run) use ($runBackup, $reason, &$backupCount): void {
             $wasRunning = $run->status === BackupRun::STATUS_RUNNING;
-            $lockKey = VolumeJobLock::key($run->job?->volume_name, 'backup-job-'.$run->backup_job_id);
+            $volume = $run->job?->volume_name;
+            $lockKey = VolumeJobLock::key($volume, 'backup-job-'.$run->backup_job_id);
 
-            // Only release the lock when we actually failed a run that was running:
-            // a no-op markFailed (the run finished first) means the lock may now be
-            // held by the next job — releasing it would break serialization.
-            if ($runBackup->markFailed($run, new RuntimeException($reason)) && $wasRunning) {
-                $this->releaseLock($lockKey);
+            if ($runBackup->markFailed($run, new RuntimeException($reason))) {
+                // A running holder definitely held the lock. A group member run
+                // acquires its volume lock in-process (before RunBackup flips it to
+                // running), so it can orphan the lock while still "queued"; release
+                // that too — but only when no other run/restore currently holds the
+                // volume, so we never steal a live holder's lock. For standalone
+                // runs the lock loser may be a mere waiter, so keep the running-only
+                // rule there to avoid breaking serialization.
+                $release = $wasRunning
+                    || ($run->belongsToGroupRun() && filled($volume) && ! $this->volumeHeldByAnotherActiveRun($volume, backupRunId: $run->id));
+
+                if ($release) {
+                    $this->releaseLock($lockKey);
+                }
             }
             $backupCount++;
         });
