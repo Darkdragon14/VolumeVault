@@ -249,9 +249,12 @@ class RunBackupGroup
     /**
      * Create and run one member backup through the unchanged pipeline. The member
      * run carries backup_group_run_id, so RunBackup keeps it silent and never
-     * reschedules the member job. Docker-volume members serialize on the shared
-     * volume lock so a group backup cannot overlap a standalone backup/restore of
-     * the same volume; a volume held too long marks just that member failed.
+     * reschedules the member job. Every member serializes on the same overlap key
+     * its standalone queue job would use — the shared volume lock for a Docker
+     * volume, the per-job lock for a host-path job — so a group backup can never
+     * overlap a standalone backup/restore of the same source (e.g. a run already
+     * queued when the job was attached to the group). A lock held too long marks
+     * just that member failed.
      */
     private function runMember(BackupGroupRun $groupRun, BackupJob $member): BackupRun
     {
@@ -267,28 +270,34 @@ class RunBackupGroup
 
         $volume = $member->isDockerVolumeSource() ? $member->volume_name : null;
 
-        try {
-            if (filled($volume)) {
-                Cache::lock(VolumeJobLock::cacheKey($volume), 86400)
-                    ->block(self::VOLUME_LOCK_WAIT_SECONDS, function () use ($memberRun, $volume): void {
-                        // Holding the shared volume lock already excludes a running
-                        // backup/restore; this also mirrors RunBackupJob's volumeBusy
-                        // guard for a terminal run that still has containers stopped
-                        // (pending restart/reconcile), so we never read a volume whose
-                        // apps are still down. The member is retried next group run.
-                        if ($this->volumeBusy($volume, $memberRun->id)) {
-                            throw new RuntimeException('Volume "'.$volume.'" is not ready (a previous run still has containers stopped); skipped in this group run.');
-                        }
+        // The exact cache key RunBackupJob's WithoutOverlapping middleware uses, so
+        // an in-process group member contends with a standalone queue job: the
+        // volume lock for a Docker volume, else the per-job lock a host-path run
+        // falls back to.
+        $lockKey = filled($volume)
+            ? VolumeJobLock::cacheKey($volume)
+            : VolumeJobLock::cacheKeyFor('backup-job-'.$member->id);
 
-                        $this->runBackup->handle($memberRun);
-                    });
-            } else {
-                $this->runBackup->handle($memberRun);
-            }
+        try {
+            Cache::lock($lockKey, 86400)
+                ->block(self::VOLUME_LOCK_WAIT_SECONDS, function () use ($memberRun, $volume): void {
+                    // Holding the shared volume lock already excludes a running
+                    // backup/restore; this also mirrors RunBackupJob's volumeBusy
+                    // guard for a terminal run that still has containers stopped
+                    // (pending restart/reconcile), so we never read a volume whose
+                    // apps are still down. The member is retried next group run.
+                    if (filled($volume) && $this->volumeBusy($volume, $memberRun->id)) {
+                        throw new RuntimeException('Volume "'.$volume.'" is not ready (a previous run still has containers stopped); skipped in this group run.');
+                    }
+
+                    $this->runBackup->handle($memberRun);
+                });
         } catch (LockTimeoutException) {
             $this->runBackup->markFailed(
                 $memberRun,
-                new RuntimeException('Volume "'.$volume.'" was busy; skipped in this group run.'),
+                new RuntimeException(filled($volume)
+                    ? 'Volume "'.$volume.'" was busy; skipped in this group run.'
+                    : 'A concurrent run of this job was in progress; skipped in this group run.'),
             );
         } catch (Throwable $exception) {
             // RunBackup normally swallows backup failures and marks the run itself;

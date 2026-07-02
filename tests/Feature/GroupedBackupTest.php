@@ -21,6 +21,7 @@ use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Services\Docker\SelfContainerResolver;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\VolumeJobLock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -673,6 +674,147 @@ class GroupedBackupTest extends TestCase
         (new RunBackupGroupJob($run->id))->failed(new \RuntimeException('retry deadline reached'));
 
         $this->assertSame(BackupGroupRun::STATUS_RUNNING, $run->fresh()->status);
+    }
+
+    public function test_a_host_path_member_serialises_on_its_per_job_lock(): void
+    {
+        $group = $this->group();
+        $member = $this->hostMember($group);
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunStarted')->once();
+        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $lockHeldDuringHandle = false;
+        $runBackup = Mockery::mock(RunBackup::class);
+        $runBackup->shouldReceive('markFailed');
+        $runBackup->shouldReceive('handle')->once()->andReturnUsing(function (BackupRun $memberRun) use ($member, &$lockHeldDuringHandle): void {
+            // A standalone RunBackupJob for a host-path job locks on backup-job-{id}.
+            // If the group member holds that same lock while running, this get()
+            // fails — proving the two cannot overlap.
+            $lock = Cache::lock(VolumeJobLock::cacheKeyFor('backup-job-'.$member->id));
+            $acquired = $lock->get();
+            $lockHeldDuringHandle = ! $acquired;
+            if ($acquired) {
+                $lock->release();
+            }
+            $memberRun->forceFill(['status' => BackupRun::STATUS_SUCCESS, 'finished_at' => now()])->save();
+        });
+        $this->app->instance(RunBackup::class, $runBackup);
+
+        app(RunBackupGroup::class)->handle($run);
+
+        $this->assertTrue($lockHeldDuringHandle, 'a host-path member must hold its per-job overlap lock while running');
+    }
+
+    public function test_a_host_path_member_adopts_a_container_a_sibling_left_stopped(): void
+    {
+        $docker = new class extends DockerProcess
+        {
+            /** @var list<array{0:string,1:string}> */
+            public array $lifecycleCalls = [];
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                [$bin, $verb] = [$command[0] ?? null, $command[1] ?? null];
+
+                if ($bin === 'docker' && $verb === 'ps') {
+                    // The shared "app" container is currently stopped.
+                    return new DockerProcessResult($command, 0, json_encode(['ID' => 'bbbbbbbbbbbb', 'Names' => 'app', 'Image' => 'app:latest', 'State' => 'exited', 'Status' => 'Exited (0)']), '');
+                }
+
+                if ($bin === 'docker' && $verb === 'stop') {
+                    $this->lifecycleCalls[] = ['stop', $command[2] ?? ''];
+
+                    return new DockerProcessResult($command, 0, '', '');
+                }
+
+                if ($bin === 'docker' && $verb === 'start') {
+                    $this->lifecycleCalls[] = ['start', $command[2] ?? ''];
+
+                    // Restart fails, so the adopted id must stay recorded for a sweep.
+                    return new DockerProcessResult($command, 1, '', 'cannot start');
+                }
+
+                if ($bin === 'docker' && $verb === 'run') {
+                    if (isset($environment['BACKUP_ARCHIVE'], $environment['BACKUP_FILENAME'])) {
+                        File::put($environment['BACKUP_ARCHIVE'].'/'.$environment['BACKUP_FILENAME'], str_repeat('x', 1536));
+                    }
+
+                    return new DockerProcessResult($command, 0, 'backup complete', '');
+                }
+
+                return new DockerProcessResult($command, 0, '', '');
+            }
+        };
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(SelfContainerResolver::class, new class extends SelfContainerResolver
+        {
+            public function identifiers(): array
+            {
+                return [];
+            }
+        });
+
+        $group = $this->group();
+        $volumeMember = $this->member($group, 'vol_a');
+        $hostMember = $this->hostMember($group, ['app']);
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+        // A sibling member already ran and left the shared "app" container stopped
+        // after a failed restart (host-path selection can't record it on its own).
+        BackupRun::create([
+            'backup_job_id' => $volumeMember->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'finished_at' => now(),
+            'stopped_container_ids' => ['bbbbbbbbbbbb'],
+        ]);
+        $hostRun = BackupRun::create([
+            'backup_job_id' => $hostMember->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        app(RunBackup::class)->handle($hostRun);
+        $hostRun->refresh();
+
+        // The member adopted the sibling-stopped container: it recorded it (so
+        // reconciliation sees it needed-stopped during the archive) and owns its
+        // restart. The restart failed here, so the id is kept — proving it was
+        // recorded rather than silently skipped as an already-stopped container.
+        $this->assertSame(BackupRun::STATUS_SUCCESS, $hostRun->status);
+        $this->assertSame(['bbbbbbbbbbbb'], $hostRun->stopped_container_ids);
+        $this->assertContains(['stop', 'bbbbbbbbbbbb'], $docker->lifecycleCalls);
+        $this->assertStringContainsString('was left stopped by another group member', $hostRun->logs);
+    }
+
+    private function hostMember(BackupJobGroup $group, array $stopContainerNames = []): BackupJob
+    {
+        return BackupJob::create([
+            'name' => 'Host member',
+            'backup_job_group_id' => $group->id,
+            'source_type' => BackupJob::SOURCE_TYPE_HOST_PATH,
+            'host_path' => $this->storagePath,
+            'backup_destination_id' => $this->destination()->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+            'notifications_enabled' => false,
+            'next_run_at' => null,
+            'stop_containers_before_backup' => $stopContainerNames !== [],
+            'stop_container_names' => $stopContainerNames,
+        ]);
     }
 
     private function group(string $failurePolicy = BackupJobGroup::FAILURE_POLICY_CONTINUE): BackupJobGroup

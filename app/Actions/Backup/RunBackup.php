@@ -108,7 +108,7 @@ class RunBackup
                 // them by name and we resolve those to running containers here.
                 $containers = $job->isDockerVolumeSource()
                     ? $this->findContainersUsingVolume->handle($job->volume_name)
-                    : $this->selectContainersByName($run, $job->stop_container_names ?? []);
+                    : $this->selectContainersByName($run, $job->stop_container_names ?? [], $this->siblingStoppedContainerIds($run));
 
                 // Never stop VolumeVault's own container: if it happens to mount
                 // the targeted volume, stopping it would kill this very backup
@@ -253,8 +253,18 @@ class RunBackup
      * skipped — a missing or removed container must never fail the backup.
      * Only running containers are returned: we must not "restart" a container
      * the user had deliberately stopped, so it never enters stopped_container_ids.
+     *
+     * Exception for a group member: a selected container that is already stopped
+     * *because a sibling member left it stopped* (its id is in $adoptStoppedIds) is
+     * adopted — recorded so this run restarts it, and so reconciliation sees it as
+     * needed-stopped while this run's archive is in flight. Without this a shared
+     * container a sibling failed to restart would be silently restarted by
+     * reconciliation mid-archive. A container stopped by the user (not a sibling)
+     * is still left untouched.
+     *
+     * @param  array<int, string>  $adoptStoppedIds
      */
-    private function selectContainersByName(BackupRun $run, array $names): array
+    private function selectContainersByName(BackupRun $run, array $names, array $adoptStoppedIds = []): array
     {
         $wanted = collect($names)
             ->map(fn ($name) => strtolower(trim((string) $name, " \t\n\r\0\x0B/")))
@@ -284,6 +294,15 @@ class RunBackup
             $seen->push($hit);
 
             if (strtolower((string) ($container['state'] ?? '')) !== 'running') {
+                if (filled($container['id'] ?? null) && in_array($container['id'], $adoptStoppedIds, true)) {
+                    // Left stopped by a sibling member of this group run: adopt it so
+                    // this run keeps it stopped for its archive and restarts it after.
+                    $this->appendRunLog->handle($run, "Selected container \"{$hit}\" was left stopped by another group member; keeping it stopped for this backup.");
+                    $matched[] = $container;
+
+                    continue;
+                }
+
                 $this->appendRunLog->handle($run, "Selected container \"{$hit}\" is not running, skipping.");
 
                 continue;
@@ -456,6 +475,31 @@ class RunBackup
         BackupGroupRun::query()
             ->whereKey($run->backup_group_run_id)
             ->update(['last_heartbeat_at' => now()]);
+    }
+
+    /**
+     * Container ids that sibling members of this run's group run currently have
+     * stopped. A host-path member uses these to adopt a container a sibling left
+     * stopped (see {@see selectContainersByName()}). Empty for a standalone run.
+     *
+     * @return array<int, string>
+     */
+    private function siblingStoppedContainerIds(BackupRun $run): array
+    {
+        if ($run->backup_group_run_id === null) {
+            return [];
+        }
+
+        return BackupRun::query()
+            ->where('backup_group_run_id', $run->backup_group_run_id)
+            ->whereKeyNot($run->id)
+            ->whereNotNull('stopped_container_ids')
+            ->pluck('stopped_container_ids')
+            ->flatMap(fn ($ids) => is_array($ids) ? $ids : [])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function sendNotifications(BackupRun $run): void
