@@ -109,7 +109,16 @@ class BackupJobGroupController extends Controller
 
     public function runNow(Request $request, BackupJobGroup $backupGroup, CreateBackupGroupRun $createBackupGroupRun)
     {
-        $run = $createBackupGroupRun->handle($backupGroup, BackupGroupRun::TRIGGER_MANUAL, $request->user());
+        // Flash the reason (no runnable members, group not active, …) rather than
+        // letting a validation error propagate: the groups index has no form to
+        // bind it to, so the run-now action would otherwise appear to do nothing.
+        try {
+            $run = $createBackupGroupRun->handle($backupGroup, BackupGroupRun::TRIGGER_MANUAL, $request->user());
+        } catch (ValidationException $exception) {
+            return redirect()->route('backup-groups.index')
+                ->with('error', $exception->validator->errors()->first() ?: 'This backup group cannot run right now.');
+        }
+
         RunBackupGroupJob::dispatch($run->id);
 
         return redirect()->route('backup-group-runs.show', $run)->with('success', 'Backup group run queued.');

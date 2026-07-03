@@ -69,6 +69,23 @@ class RunBackupGroup
             return;
         }
 
+        // The group may have been paused after this run was queued. Don't execute
+        // it — and don't un-pause the group in the success branch below. Cancel the
+        // run so it is not retried, leaving the pause (and its reason) intact.
+        if ($group->status === BackupJobGroup::STATUS_PAUSED) {
+            $groupRun->forceFill([
+                'status' => BackupGroupRun::STATUS_CANCELLED,
+                'finished_at' => now(),
+                'error_message' => 'Group was paused before this run started.',
+            ])->save();
+
+            ActivityLog::record('backup_group_run_cancelled', 'Backup group run cancelled: the group was paused before it started.', $groupRun, [
+                'backup_job_group_id' => $group->id,
+            ]);
+
+            return;
+        }
+
         /** @var \Illuminate\Database\Eloquent\Collection<int, BackupJob> $members */
         $members = $group->runnableMembers()->orderBy('id')->get();
 
@@ -276,9 +293,7 @@ class RunBackupGroup
         // loop counts it as failed, so the run does not report a false success).
         $member = BackupJob::find($member->id);
 
-        if ($member === null
-            || $member->backup_job_group_id !== $groupRun->backup_job_group_id
-            || $member->status === BackupJob::STATUS_PAUSED) {
+        if (! $this->memberIsRunnable($member, $groupRun)) {
             ActivityLog::record('backup_group_member_skipped', 'Skipped a group member no longer runnable at its turn (deleted, paused or detached).', $groupRun, [
                 'backup_job_group_id' => $groupRun->backup_job_group_id,
                 'backup_job_id' => $member?->id,
@@ -312,30 +327,39 @@ class RunBackupGroup
         }
 
         $volume = $member->isDockerVolumeSource() ? $member->volume_name : null;
-
         // The exact cache key RunBackupJob's WithoutOverlapping middleware uses, so
         // an in-process group member contends with a standalone queue job: the
         // volume lock for a Docker volume, else the per-job lock a host-path run
         // falls back to.
-        $lockKey = filled($volume)
-            ? VolumeJobLock::cacheKey($volume)
-            : VolumeJobLock::cacheKeyFor('backup-job-'.$member->id);
+        $lockKey = $this->lockKeyFor($member);
 
         try {
             Cache::lock($lockKey, 86400)
-                ->block(self::VOLUME_LOCK_WAIT_SECONDS, function () use ($memberRun, $member, $volume): void {
+                ->block(self::VOLUME_LOCK_WAIT_SECONDS, function () use ($memberRun, $member, $groupRun, $lockKey): void {
+                    // Re-read after acquiring the lock: the member's source can change
+                    // during the (up to 60s) wait, and RunBackup reloads the job. If
+                    // it no longer maps to the lock we actually hold — or the member
+                    // is no longer runnable — running would back up an unlocked
+                    // volume, so skip it and retry next group run.
+                    $current = BackupJob::find($member->id);
+
+                    if (! $this->memberIsRunnable($current, $groupRun) || $this->lockKeyFor($current) !== $lockKey) {
+                        throw new RuntimeException('Member "'.$member->name.'" changed while waiting for its lock; skipped in this group run.');
+                    }
+
                     // Holding the lock already excludes a running backup/restore;
                     // this also mirrors RunBackupJob's volumeBusy guard for a
                     // terminal run that still has containers stopped (pending
                     // restart/reconcile) or a run that outlived the 24h lock TTL, so
-                    // we never overlap it. Keyed on the volume for a Docker-volume
-                    // member, on the job for a host-path member. Retried next run.
+                    // we never overlap it.
+                    $volume = $current->isDockerVolumeSource() ? $current->volume_name : null;
+
                     if (filled($volume)) {
                         if ($this->volumeBusy($volume, $memberRun->id)) {
                             throw new RuntimeException('Volume "'.$volume.'" is not ready (a previous run still has containers stopped); skipped in this group run.');
                         }
-                    } elseif ($this->jobBusy($member->id, $memberRun->id)) {
-                        throw new RuntimeException('Job "'.$member->name.'" is not ready (a previous run of it is still in progress); skipped in this group run.');
+                    } elseif ($this->jobBusy($current->id, $memberRun->id)) {
+                        throw new RuntimeException('Job "'.$current->name.'" is not ready (a previous run of it is still in progress); skipped in this group run.');
                     }
 
                     $this->runBackup->handle($memberRun);
@@ -399,6 +423,32 @@ class RunBackupGroup
         $query
             ->where('status', BackupRun::STATUS_RUNNING)
             ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
+    }
+
+    /**
+     * The WithoutOverlapping cache key a member serializes on — the shared volume
+     * lock for a Docker-volume source, the per-job lock for a host-path source.
+     * Derived from the passed job's current source so it can be recomputed after a
+     * lock wait to detect a source change.
+     */
+    private function lockKeyFor(BackupJob $member): string
+    {
+        return $member->isDockerVolumeSource()
+            ? VolumeJobLock::cacheKey($member->volume_name)
+            : VolumeJobLock::cacheKeyFor('backup-job-'.$member->id);
+    }
+
+    /**
+     * Whether a job is still a runnable member of this group run: it exists, still
+     * belongs to this group, and is not paused. Re-checked at the member's turn and
+     * again after its lock is acquired, since a member snapshotted at run start can
+     * be deleted, paused or detached before it runs.
+     */
+    private function memberIsRunnable(?BackupJob $member, BackupGroupRun $groupRun): bool
+    {
+        return $member !== null
+            && $member->backup_job_group_id === $groupRun->backup_job_group_id
+            && $member->status !== BackupJob::STATUS_PAUSED;
     }
 
     private function sendStartNotification(BackupGroupRun $groupRun): void

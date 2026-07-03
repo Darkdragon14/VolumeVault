@@ -69,6 +69,29 @@ class GroupedBackupApiTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_an_invalid_planning_mode_is_rejected_not_coerced_to_standalone(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-write', ['read', 'write'])->plainTextToken;
+        $destination = $this->destination();
+
+        // A typo must fail the enum, not silently create a standalone job.
+        $this->withToken($token)
+            ->postJson('/api/v1/backup-jobs', [
+                'name' => 'Typo mode',
+                'source_type' => 'docker_volume',
+                'volume_name' => 'api_vol',
+                'backup_destination_id' => $destination->id,
+                'planning_mode' => 'gruop',
+                'schedule_type' => 'daily',
+                'schedule_config' => ['time' => '02:00'],
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('planning_mode');
+
+        $this->assertNull(BackupJob::firstWhere('name', 'Typo mode'));
+    }
+
     public function test_a_job_can_be_attached_to_a_group_via_the_api(): void
     {
         $admin = User::factory()->admin()->create();

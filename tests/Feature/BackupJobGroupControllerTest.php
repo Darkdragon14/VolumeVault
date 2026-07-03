@@ -125,6 +125,21 @@ class BackupJobGroupControllerTest extends TestCase
         $this->assertDatabaseHas('backup_job_groups', ['id' => $group->id]);
     }
 
+    public function test_running_a_group_with_no_runnable_members_flashes_an_error(): void
+    {
+        $group = $this->group(); // active, no members
+
+        // CreateBackupGroupRun rejects it; the index has no form to bind the
+        // validation error to, so runNow must flash it to be visible.
+        $this->actingAs($this->admin())
+            ->from(route('backup-groups.index'))
+            ->post(route('backup-groups.run', $group))
+            ->assertRedirect(route('backup-groups.index'))
+            ->assertSessionHas('error');
+
+        $this->assertSame(0, $group->groupRuns()->count());
+    }
+
     public function test_deleting_a_group_is_blocked_while_a_run_is_in_flight(): void
     {
         $group = $this->group(); // no members

@@ -37,9 +37,11 @@ class BackupJobRequest extends FormRequest
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
             'alert_configs' => $alertConfigs,
-            // Absent planning_mode = a standalone job (the historical behaviour), so
-            // existing clients and API callers keep working unchanged.
-            'planning_mode' => $this->input('planning_mode') === 'group' ? 'group' : 'standalone',
+            // Absent/blank planning_mode = a standalone job (the historical
+            // behaviour), so existing clients keep working. A *present* value is
+            // passed through unchanged so an invalid one (e.g. a typo) is rejected by
+            // the enum rule rather than silently coerced to standalone.
+            'planning_mode' => $this->filled('planning_mode') ? $this->input('planning_mode') : 'standalone',
         ]);
     }
 

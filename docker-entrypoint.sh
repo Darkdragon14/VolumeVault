@@ -1,6 +1,25 @@
 #!/bin/sh
 set -eu
 
+# Grant www-data access to the Docker socket for EVERY invocation — before the
+# direct-command early return below — so split-deployment worker containers that
+# run an artisan command directly (queue:work, schedule:work) can still reach
+# Docker. Backups, restores and shoutrrr notifications all shell out to `docker`,
+# and would otherwise fail silently in those containers.
+if [ -S /var/run/docker.sock ]; then
+    docker_gid="$(stat -c '%g' /var/run/docker.sock)"
+
+    if ! getent group "$docker_gid" >/dev/null 2>&1; then
+        addgroup -g "$docker_gid" docker-socket >/dev/null 2>&1 || true
+    fi
+
+    docker_group="$(getent group "$docker_gid" | cut -d: -f1 || true)"
+
+    if [ -n "$docker_group" ]; then
+        addgroup www-data "$docker_group" >/dev/null 2>&1 || true
+    fi
+fi
+
 if [ "${1:-/init}" != "/init" ]; then
     exec "$@"
 fi
@@ -21,20 +40,6 @@ mkdir -p \
 
 touch /app/storage/database/database.sqlite
 chown -R www-data:www-data /app/storage /app/bootstrap/cache
-
-if [ -S /var/run/docker.sock ]; then
-    docker_gid="$(stat -c '%g' /var/run/docker.sock)"
-
-    if ! getent group "$docker_gid" >/dev/null 2>&1; then
-        addgroup -g "$docker_gid" docker-socket >/dev/null 2>&1 || true
-    fi
-
-    docker_group="$(getent group "$docker_gid" | cut -d: -f1 || true)"
-
-    if [ -n "$docker_group" ]; then
-        addgroup www-data "$docker_group" >/dev/null 2>&1 || true
-    fi
-fi
 
 export SERVERSIDEUP_DEFAULT_COMMAND=true
 export S6_INITIALIZED=true

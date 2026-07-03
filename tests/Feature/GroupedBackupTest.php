@@ -962,6 +962,66 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(1, $run->failed_members);
     }
 
+    public function test_a_member_whose_volume_changes_during_the_lock_wait_is_skipped(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunStarted')->once();
+        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+
+        // Change the member's source after the lock key is computed (vol_a) but
+        // before the in-lock re-check: the run holds the vol_a lock, so it must not
+        // back up vol_b under it — it skips instead.
+        $original = BackupRun::getEventDispatcher();
+        $dispatcher = clone $original;
+        $dispatcher->listen('eloquent.created: '.BackupRun::class, function (BackupRun $r) use ($member): void {
+            if ((int) $r->backup_job_id === $member->id) {
+                BackupJob::whereKey($member->id)->update(['volume_name' => 'vol_b']);
+            }
+        });
+        BackupRun::setEventDispatcher($dispatcher);
+
+        try {
+            app(RunBackupGroup::class)->handle($run);
+        } finally {
+            BackupRun::setEventDispatcher($original);
+        }
+
+        $run->refresh();
+        // Skipped (counted failed) rather than backed up on the wrong lock.
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->status);
+        $this->assertSame(BackupRun::STATUS_FAILED, BackupRun::where('backup_group_run_id', $run->id)->firstOrFail()->status);
+    }
+
+    public function test_a_queued_group_run_is_cancelled_if_the_group_is_paused_before_it_starts(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldNotReceive('sendGroupRunStarted');
+        $notifier->shouldNotReceive('sendGroupRunFinished');
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+        // Paused after the run was queued.
+        $group->forceFill(['status' => BackupJobGroup::STATUS_PAUSED, 'pause_reason' => 'maintenance'])->save();
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+
+        app(RunBackupGroup::class)->handle($run);
+
+        $run->refresh();
+        // The run is cancelled without executing; the pause (and reason) survive.
+        $this->assertSame(BackupGroupRun::STATUS_CANCELLED, $run->status);
+        $this->assertSame(BackupJobGroup::STATUS_PAUSED, $group->fresh()->status);
+        $this->assertSame('maintenance', $group->fresh()->pause_reason);
+        $this->assertSame(0, BackupRun::where('backup_group_run_id', $run->id)->count());
+    }
+
     public function test_a_member_detached_mid_run_is_not_backed_up_by_the_group(): void
     {
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
