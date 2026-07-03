@@ -148,6 +148,15 @@ services:
     <<: *volumevault-runtime-service
     command: ["/command/s6-setuidgid", "www-data", "php", "artisan", "queue:work", "--tries=1", "--timeout=0"]
 
+  # Dedicated worker for the "metadata" queue. Completed backups defer their
+  # archive-metadata listing (and, for standalone backups, their finish
+  # notification) to this queue so a slow destination listing never blocks the
+  # main worker. It MUST be running, or those metadata and notifications never
+  # send. The packaged all-in-one image runs this automatically.
+  queue-metadata:
+    <<: *volumevault-runtime-service
+    command: ["/command/s6-setuidgid", "www-data", "php", "artisan", "queue:work", "--queue=metadata", "--tries=1", "--timeout=0"]
+
   scheduler:
     <<: *volumevault-runtime-service
     command: ["/command/s6-setuidgid", "www-data", "php", "artisan", "schedule:work"]

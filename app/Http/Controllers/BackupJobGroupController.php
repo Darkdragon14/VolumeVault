@@ -94,6 +94,14 @@ class BackupJobGroupController extends Controller
                 ->with('error', 'Remove or reassign this group\'s jobs before deleting it.');
         }
 
+        // Refuse to delete while a run is in flight: the cascade would drop the
+        // backup_group_run a worker may still be executing, losing its finalization,
+        // notification and history. Wait for it to finish (or be reconciled).
+        if ($backupGroup->groupRuns()->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])->exists()) {
+            return redirect()->route('backup-groups.index')
+                ->with('error', 'This group has a backup run in progress. Wait for it to finish before deleting it.');
+        }
+
         $backupGroup->delete();
 
         return redirect()->route('backup-groups.index')->with('success', 'Backup group deleted.');

@@ -6,7 +6,10 @@ if [ "${VOLUMEVAULT_QUEUE_ENABLED:-true}" != "true" ]; then
 fi
 
 cd /app
-# Main worker: backup/restore/group jobs on the default queue. Archive-metadata
-# listing runs on its own "metadata" queue + worker (volumevault-queue-metadata)
-# so a slow destination listing never blocks these and starves a same-volume run.
-exec /command/s6-setuidgid www-data php artisan queue:work --queue=default --tries=1 --timeout=0
+# Main worker: backup/restore/group jobs. No --queue, so it follows the queue
+# connection's configured default (DB_QUEUE etc.) rather than a hardcoded name —
+# a custom DB_QUEUE would otherwise leave those jobs unprocessed. The archive-
+# metadata listing runs on its own "metadata" queue + worker
+# (volumevault-queue-metadata) so a slow listing never blocks these and starves a
+# same-volume run.
+exec /command/s6-setuidgid www-data php artisan queue:work --tries=1 --timeout=0

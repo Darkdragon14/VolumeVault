@@ -267,6 +267,26 @@ class RunBackupGroup
      */
     private function runMember(BackupGroupRun $groupRun, BackupJob $member): ?BackupRun
     {
+        // Re-read the member: it was snapshotted when the group run started and may
+        // have changed source, been paused, or been detached before its turn. The
+        // lock below — and RunBackup, which reloads the job from the DB — must act on
+        // the *current* source, or the group could lock vol_a while backing up vol_b
+        // and overlap a concurrent vol_b backup/restore. A member that is gone,
+        // paused, or no longer part of this group is not in this run: skip it (the
+        // loop counts it as failed, so the run does not report a false success).
+        $member = BackupJob::find($member->id);
+
+        if ($member === null
+            || $member->backup_job_group_id !== $groupRun->backup_job_group_id
+            || $member->status === BackupJob::STATUS_PAUSED) {
+            ActivityLog::record('backup_group_member_skipped', 'Skipped a group member no longer runnable at its turn (deleted, paused or detached).', $groupRun, [
+                'backup_job_group_id' => $groupRun->backup_job_group_id,
+                'backup_job_id' => $member?->id,
+            ]);
+
+            return null;
+        }
+
         try {
             $memberRun = BackupRun::create([
                 'backup_job_id' => $member->id,
@@ -278,13 +298,11 @@ class RunBackupGroup
                     : BackupRun::TRIGGER_SCHEDULED,
             ]);
         } catch (Throwable $exception) {
-            // The member was hard-deleted after the run's member snapshot (pause and
-            // detach are already filtered out by runnableMembers). Creating its run
-            // hits a foreign-key violation; thrown here — before the guarded block
-            // below — it would abort the whole loop, and the group run is already
-            // RUNNING so RunBackupGroupJob::failed() would not close it, leaving it
-            // stuck until reconciliation. Return null so the loop counts it as a
-            // failed member instead of aborting the whole group.
+            // The member was hard-deleted in the small window between the re-read
+            // above and here. Creating its run hits a foreign-key violation; thrown
+            // before the guarded block it would abort the whole loop, and the group
+            // run is already RUNNING so RunBackupGroupJob::failed() would not close
+            // it. Return null so the loop counts it as a failed member instead.
             ActivityLog::record('backup_group_member_skipped', 'Skipped a group member that no longer exists.', $groupRun, [
                 'backup_job_group_id' => $groupRun->backup_job_group_id,
                 'backup_job_id' => $member->id,

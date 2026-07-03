@@ -63,6 +63,15 @@ class BackupJobGroupController extends Controller
             ]);
         }
 
+        // Refuse to delete while a run is in flight: the cascade would drop the
+        // backup_group_run a worker may still be executing, losing its finalization,
+        // notification and history.
+        if ($backupGroup->groupRuns()->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])->exists()) {
+            throw ValidationException::withMessages([
+                'group' => 'This group has a backup run in progress. Wait for it to finish before deleting it.',
+            ]);
+        }
+
         $backupGroup->delete();
 
         return response()->json(status: 204);

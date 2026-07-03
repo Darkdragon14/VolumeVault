@@ -962,6 +962,46 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(1, $run->failed_members);
     }
 
+    public function test_a_member_detached_mid_run_is_not_backed_up_by_the_group(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunStarted')->once();
+        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $first = $this->member($group, 'vol_a'); // lower id → runs first
+        $second = $this->member($group, 'vol_b');
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+
+        // While the first member runs, an admin detaches the second from the group.
+        // Its turn must re-read the current job and skip it — never lock/back it up
+        // off the stale snapshot.
+        $original = BackupRun::getEventDispatcher();
+        $dispatcher = clone $original;
+        $dispatcher->listen('eloquent.created: '.BackupRun::class, function (BackupRun $r) use ($first, $second): void {
+            if ((int) $r->backup_job_id === $first->id) {
+                BackupJob::whereKey($second->id)->update(['backup_job_group_id' => null]);
+            }
+        });
+        BackupRun::setEventDispatcher($dispatcher);
+
+        try {
+            app(RunBackupGroup::class)->handle($run);
+        } finally {
+            BackupRun::setEventDispatcher($original);
+        }
+
+        $run->refresh();
+        // Only the first member ran; the detached one was skipped (counted failed).
+        $this->assertSame(1, BackupRun::where('backup_group_run_id', $run->id)->count());
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->status);
+        $this->assertSame(1, $run->succeeded_members);
+        $this->assertSame(1, $run->failed_members);
+        $this->assertNull($second->fresh()->backup_job_group_id);
+    }
+
     public function test_a_standalone_run_defers_metadata_and_notification_to_a_job(): void
     {
         Queue::fake([RecordArchiveMetadataJob::class]);

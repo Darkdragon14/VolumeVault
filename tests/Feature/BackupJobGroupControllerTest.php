@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\RunBackupGroupJob;
 use App\Models\BackupDestination;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\User;
@@ -115,6 +116,25 @@ class BackupJobGroupControllerTest extends TestCase
 
         // Flashes an error the groups index shows via the layout banner (it has no
         // form to bind field validation errors to), rather than a silent 422.
+        $this->actingAs($this->admin())
+            ->from(route('backup-groups.index'))
+            ->delete(route('backup-groups.destroy', $group))
+            ->assertRedirect(route('backup-groups.index'))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('backup_job_groups', ['id' => $group->id]);
+    }
+
+    public function test_deleting_a_group_is_blocked_while_a_run_is_in_flight(): void
+    {
+        $group = $this->group(); // no members
+        BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'started_at' => now(),
+        ]);
+
         $this->actingAs($this->admin())
             ->from(route('backup-groups.index'))
             ->delete(route('backup-groups.destroy', $group))

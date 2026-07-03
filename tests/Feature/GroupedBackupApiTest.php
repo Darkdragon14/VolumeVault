@@ -124,6 +124,26 @@ class GroupedBackupApiTest extends TestCase
         $this->assertDatabaseHas('backup_job_groups', ['id' => $group->id]);
     }
 
+    public function test_deleting_a_group_with_an_active_run_is_rejected(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-write', ['read', 'write'])->plainTextToken;
+        $group = $this->group(); // no members
+        BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'started_at' => now(),
+        ]);
+
+        // A run in flight would be cascade-deleted, losing its finalization/history.
+        $this->withToken($token)
+            ->deleteJson("/api/v1/backup-groups/{$group->id}")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('backup_job_groups', ['id' => $group->id]);
+    }
+
     public function test_toggling_notifications_requires_the_flag(): void
     {
         $admin = User::factory()->admin()->create();
