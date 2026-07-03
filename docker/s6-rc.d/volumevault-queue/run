@@ -6,4 +6,7 @@ if [ "${VOLUMEVAULT_QUEUE_ENABLED:-true}" != "true" ]; then
 fi
 
 cd /app
-exec /command/s6-setuidgid www-data php artisan queue:work --tries=1 --timeout=0
+# Main worker: backup/restore/group jobs on the default queue. Archive-metadata
+# listing runs on its own "metadata" queue + worker (volumevault-queue-metadata)
+# so a slow destination listing never blocks these and starves a same-volume run.
+exec /command/s6-setuidgid www-data php artisan queue:work --queue=default --tries=1 --timeout=0

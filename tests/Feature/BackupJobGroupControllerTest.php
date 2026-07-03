@@ -113,9 +113,13 @@ class BackupJobGroupControllerTest extends TestCase
         $group = $this->group();
         $this->member($group);
 
+        // Flashes an error the groups index shows via the layout banner (it has no
+        // form to bind field validation errors to), rather than a silent 422.
         $this->actingAs($this->admin())
+            ->from(route('backup-groups.index'))
             ->delete(route('backup-groups.destroy', $group))
-            ->assertSessionHasErrors('group');
+            ->assertRedirect(route('backup-groups.index'))
+            ->assertSessionHas('error');
 
         $this->assertDatabaseHas('backup_job_groups', ['id' => $group->id]);
     }

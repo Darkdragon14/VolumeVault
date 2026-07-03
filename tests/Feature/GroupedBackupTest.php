@@ -884,7 +884,7 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->status);
     }
 
-    public function test_a_member_deleted_after_the_snapshot_does_not_block_the_group_run(): void
+    public function test_a_member_deleted_before_its_create_fails_the_group_but_does_not_block_it(): void
     {
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
@@ -916,12 +916,50 @@ class GroupedBackupTest extends TestCase
         }
 
         $run->refresh();
-        // The vanished member is skipped, not fatal: the group still runs the
-        // survivor and finalizes instead of staying stuck RUNNING.
-        $this->assertSame(BackupGroupRun::STATUS_SUCCESS, $run->status);
+        // The vanished member does not abort the group (it still runs the survivor
+        // and finalizes) but it counts as a failure — the run backed up less than
+        // configured, so it must not report a green run a monitor would trust.
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->status);
         $this->assertSame(1, $run->succeeded_members);
-        $this->assertSame(0, $run->failed_members);
+        $this->assertSame(1, $run->failed_members);
         $this->assertSame(1, BackupRun::where('backup_group_run_id', $run->id)->count());
+    }
+
+    public function test_a_member_run_cascade_deleted_mid_flight_does_not_crash_the_group(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunStarted')->once();
+        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $doomed = $this->member($group, 'vol_doomed'); // lower id → processed first
+        $this->member($group, 'vol_a');
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+
+        // Simulate the member job being removed mid-run: its just-created run row is
+        // cascade-deleted, so $memberRun->fresh() returns null. The loop must not
+        // dereference null; it counts the vanished member as failed.
+        $original = BackupRun::getEventDispatcher();
+        $dispatcher = clone $original;
+        $dispatcher->listen('eloquent.created: '.BackupRun::class, function (BackupRun $r) use ($doomed): void {
+            if ((int) $r->backup_job_id === $doomed->id) {
+                BackupRun::whereKey($r->getKey())->delete();
+            }
+        });
+        BackupRun::setEventDispatcher($dispatcher);
+
+        try {
+            app(RunBackupGroup::class)->handle($run);
+        } finally {
+            BackupRun::setEventDispatcher($original);
+        }
+
+        $run->refresh();
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->status);
+        $this->assertSame(1, $run->succeeded_members);
+        $this->assertSame(1, $run->failed_members);
     }
 
     public function test_a_standalone_run_defers_metadata_and_notification_to_a_job(): void
@@ -943,6 +981,9 @@ class GroupedBackupTest extends TestCase
 
         $this->assertSame(BackupRun::STATUS_SUCCESS, $run->fresh()->status);
         Queue::assertPushed(RecordArchiveMetadataJob::class, fn (RecordArchiveMetadataJob $j): bool => $j->backupRunId === $run->id);
+        // On its own queue so a dedicated worker runs it — a slow listing never
+        // blocks the main worker and starves a same-volume waiter.
+        Queue::assertPushedOn('metadata', RecordArchiveMetadataJob::class);
     }
 
     public function test_the_metadata_job_sends_the_finished_notification_for_a_standalone_run(): void

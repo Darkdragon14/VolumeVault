@@ -105,8 +105,14 @@ class BackupJobGroupController extends Controller
 
     public function toggleNotifications(Request $request, BackupJobGroup $backupGroup): JsonResponse
     {
+        // Require the flag explicitly: Request::boolean() defaults a missing key to
+        // false, so an empty or mistyped payload would silently disable monitoring.
+        $validated = $request->validate([
+            'notifications_enabled' => ['required', 'boolean'],
+        ]);
+
         $backupGroup->forceFill([
-            'notifications_enabled' => $request->boolean('notifications_enabled'),
+            'notifications_enabled' => (bool) $validated['notifications_enabled'],
         ])->save();
 
         return response()->json(['data' => $this->serializeGroup($backupGroup->fresh()->loadCount('members')->load('notificationChannels'))]);
@@ -176,6 +182,20 @@ class BackupJobGroupController extends Controller
                 'status' => $member->status,
                 'last_success_at' => $member->last_success_at,
                 'last_error' => $member->last_error,
+            ])->values()->all();
+
+            // The show endpoint documents "member jobs and recent group runs"; include
+            // the latter so the response matches the OpenAPI contract.
+            $data['recent_group_runs'] = $group->groupRuns()->latest()->limit(10)->get()->map(fn (BackupGroupRun $run): array => [
+                'id' => $run->id,
+                'status' => $run->status,
+                'trigger' => $run->trigger,
+                'total_members' => $run->total_members,
+                'succeeded_members' => $run->succeeded_members,
+                'failed_members' => $run->failed_members,
+                'started_at' => $run->started_at,
+                'finished_at' => $run->finished_at,
+                'duration_seconds' => $run->duration_seconds,
             ])->values()->all();
         }
 

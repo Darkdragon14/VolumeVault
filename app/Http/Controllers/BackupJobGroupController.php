@@ -86,11 +86,12 @@ class BackupJobGroupController extends Controller
     {
         // Refuse to orphan members: a detached member keeps no schedule and would
         // silently stop backing up. The user must first move its jobs back to
-        // standalone (or to another group) from the backup job form.
+        // standalone (or to another group) from the backup job form. Flash an error
+        // (rather than a validation error) so the groups index — which has no form
+        // to bind field errors to — shows it via the layout's flash banner.
         if ($backupGroup->members()->exists()) {
-            throw ValidationException::withMessages([
-                'group' => 'Remove or reassign this group\'s jobs before deleting it.',
-            ]);
+            return redirect()->route('backup-groups.index')
+                ->with('error', 'Remove or reassign this group\'s jobs before deleting it.');
         }
 
         $backupGroup->delete();

@@ -200,8 +200,9 @@ class OpenApiController extends Controller
             ],
             'ToggleNotificationsRequest' => [
                 'type' => 'object',
+                'required' => ['notifications_enabled'],
                 'properties' => [
-                    'notifications_enabled' => ['type' => 'boolean'],
+                    'notifications_enabled' => ['type' => 'boolean', 'description' => 'Required. Omitting it is rejected rather than silently disabling notifications.'],
                 ],
             ],
             'BackupJobRequest' => [

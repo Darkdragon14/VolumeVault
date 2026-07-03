@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\RunBackupGroupJob;
 use App\Models\BackupDestination;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\User;
@@ -121,6 +122,57 @@ class GroupedBackupApiTest extends TestCase
             ->assertStatus(422);
 
         $this->assertDatabaseHas('backup_job_groups', ['id' => $group->id]);
+    }
+
+    public function test_toggling_notifications_requires_the_flag(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-write', ['read', 'write'])->plainTextToken;
+        $group = $this->group();
+
+        // An empty/typo'd payload must be rejected, not silently disable monitoring.
+        $this->withToken($token)
+            ->patchJson("/api/v1/backup-groups/{$group->id}/notifications", [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('notifications_enabled');
+
+        $this->assertTrue($group->fresh()->notifications_enabled);
+    }
+
+    public function test_toggling_notifications_applies_the_flag(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-write', ['read', 'write'])->plainTextToken;
+        $group = $this->group();
+
+        $this->withToken($token)
+            ->patchJson("/api/v1/backup-groups/{$group->id}/notifications", ['notifications_enabled' => false])
+            ->assertOk();
+
+        $this->assertFalse($group->fresh()->notifications_enabled);
+    }
+
+    public function test_showing_a_group_includes_members_and_recent_group_runs(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-read', ['read'])->plainTextToken;
+        $group = $this->group();
+        $this->member($group);
+        BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_SUCCESS,
+            'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'started_at' => now()->subMinutes(5),
+            'finished_at' => now(),
+            'total_members' => 1,
+            'succeeded_members' => 1,
+        ]);
+
+        $this->withToken($token)
+            ->getJson("/api/v1/backup-groups/{$group->id}")
+            ->assertOk()
+            ->assertJsonStructure(['data' => ['members', 'recent_group_runs']])
+            ->assertJsonCount(1, 'data.recent_group_runs');
     }
 
     private function destination(): BackupDestination

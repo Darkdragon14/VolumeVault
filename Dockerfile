@@ -47,14 +47,17 @@ COPY --from=vendor --chown=www-data:www-data /app /app
 COPY --from=assets --chown=www-data:www-data /app/public/build /app/public/build
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 COPY --chmod=755 docker/s6-rc.d/volumevault-queue/run /etc/s6-overlay/s6-rc.d/volumevault-queue/run
+COPY --chmod=755 docker/s6-rc.d/volumevault-queue-metadata/run /etc/s6-overlay/s6-rc.d/volumevault-queue-metadata/run
 COPY --chmod=755 docker/s6-rc.d/volumevault-scheduler/run /etc/s6-overlay/s6-rc.d/volumevault-scheduler/run
 
 RUN mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs /app/bootstrap/cache \
     && touch /app/storage/database/database.sqlite \
     && chown -R www-data:www-data /app/storage /app/bootstrap/cache \
     && printf 'longrun\n' > /etc/s6-overlay/s6-rc.d/volumevault-queue/type \
+    && printf 'longrun\n' > /etc/s6-overlay/s6-rc.d/volumevault-queue-metadata/type \
     && printf 'longrun\n' > /etc/s6-overlay/s6-rc.d/volumevault-scheduler/type \
     && touch /etc/s6-overlay/s6-rc.d/user/contents.d/volumevault-queue \
+    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/volumevault-queue-metadata \
     && touch /etc/s6-overlay/s6-rc.d/user/contents.d/volumevault-scheduler
 
 EXPOSE 8080

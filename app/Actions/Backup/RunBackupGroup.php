@@ -126,14 +126,19 @@ class RunBackupGroup
         foreach ($members as $member) {
             $memberRun = $this->runMember($groupRun, $member);
 
-            // A member deleted after the snapshot returns null (logged in runMember):
-            // it never ran, so it neither succeeds nor fails the group.
-            if ($memberRun !== null) {
-                if ($memberRun->fresh()->status === BackupRun::STATUS_SUCCESS) {
-                    $succeeded++;
-                } else {
-                    $failed++;
-                }
+            // Re-read from the DB: the run row can be cascade-deleted mid-flight if
+            // an admin removes the member job (backup_runs.backup_job_id cascades),
+            // so fresh() may be null even though create() succeeded.
+            $fresh = $memberRun?->fresh();
+
+            // A member (and its run) that vanished mid-flight — create() failed, or
+            // the run was cascade-deleted with its job — counts as a failure, not a
+            // skip: the group did not back up everything it was configured to, so it
+            // must not report a green run a dead-man's-switch would trust.
+            if ($fresh !== null && $fresh->status === BackupRun::STATUS_SUCCESS) {
+                $succeeded++;
+            } else {
+                $failed++;
             }
 
             // Only touches the counters + heartbeat (never status), so it cannot
@@ -278,7 +283,8 @@ class RunBackupGroup
             // hits a foreign-key violation; thrown here — before the guarded block
             // below — it would abort the whole loop, and the group run is already
             // RUNNING so RunBackupGroupJob::failed() would not close it, leaving it
-            // stuck until reconciliation. Skip the vanished member instead.
+            // stuck until reconciliation. Return null so the loop counts it as a
+            // failed member instead of aborting the whole group.
             ActivityLog::record('backup_group_member_skipped', 'Skipped a group member that no longer exists.', $groupRun, [
                 'backup_job_group_id' => $groupRun->backup_job_group_id,
                 'backup_job_id' => $member->id,
