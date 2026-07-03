@@ -87,14 +87,19 @@ class BackupJobGroupController extends Controller
 
     public function pause(Request $request, BackupJobGroup $backupGroup): JsonResponse
     {
-        if ($backupGroup->status === BackupJobGroup::STATUS_RUNNING) {
+        // Conditional update so it serializes with RunBackupGroup's ACTIVE→RUNNING
+        // flip (see the web controller), preventing a pause-race un-pause.
+        $paused = BackupJobGroup::query()
+            ->whereKey($backupGroup->id)
+            ->where('status', '!=', BackupJobGroup::STATUS_RUNNING)
+            ->update([
+                'status' => BackupJobGroup::STATUS_PAUSED,
+                'pause_reason' => $request->input('pause_reason', 'Paused manually via API.'),
+            ]);
+
+        if ($paused === 0) {
             throw ValidationException::withMessages(['group' => 'A running group cannot be paused.']);
         }
-
-        $backupGroup->forceFill([
-            'status' => BackupJobGroup::STATUS_PAUSED,
-            'pause_reason' => $request->input('pause_reason', 'Paused manually via API.'),
-        ])->save();
 
         return response()->json(['data' => $this->serializeGroup($backupGroup->fresh()->loadCount('members')->load('notificationChannels'))]);
     }

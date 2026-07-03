@@ -61,6 +61,12 @@ class BackupJobController extends Controller
 
     public function update(BackupJobRequest $request, BackupJob $backupJob): JsonResponse
     {
+        if ($this->changesSource($request, $backupJob) && $backupJob->hasRunInProgress()) {
+            throw ValidationException::withMessages([
+                'source_type' => 'This job has a backup run in progress; wait for it to finish before changing its source.',
+            ]);
+        }
+
         $group = $this->resolveGroup($request);
         $backupJob->update($this->payload($request, $backupJob->status, $backupJob, $group));
 
@@ -73,6 +79,12 @@ class BackupJobController extends Controller
 
     public function destroy(BackupJob $backupJob): JsonResponse
     {
+        if ($backupJob->hasRunInProgress()) {
+            throw ValidationException::withMessages([
+                'job' => 'This job has a backup run in progress. Wait for it to finish before deleting it.',
+            ]);
+        }
+
         $backupJob->delete();
 
         return response()->json(status: 204);
@@ -130,6 +142,17 @@ class BackupJobController extends Controller
      * group, or one created inline (planning_mode=group). Mirrors the web flow so
      * the API can attach jobs to groups too.
      */
+    /**
+     * Whether the request changes the job's backup source (type, volume or host
+     * path). Refused while a run is in flight — see the web controller for why.
+     */
+    private function changesSource(BackupJobRequest $request, BackupJob $job): bool
+    {
+        return (string) $request->input('source_type') !== (string) $job->source_type
+            || (string) $request->input('volume_name') !== (string) $job->volume_name
+            || (string) $request->input('host_path') !== (string) $job->host_path;
+    }
+
     private function resolveGroup(BackupJobRequest $request): ?BackupJobGroup
     {
         if (! $request->isGroupMode()) {

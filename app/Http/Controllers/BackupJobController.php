@@ -114,6 +114,10 @@ class BackupJobController extends Controller
 
     public function update(BackupJobRequest $request, BackupJob $backupJob)
     {
+        if ($this->changesSource($request, $backupJob) && $backupJob->hasRunInProgress()) {
+            return back()->withErrors(['source_type' => 'This job has a backup run in progress; wait for it to finish before changing its source.']);
+        }
+
         $group = $this->resolveGroup($request);
         $backupJob->update($this->payload($request, $backupJob->status, $backupJob, $group));
 
@@ -128,6 +132,10 @@ class BackupJobController extends Controller
 
     public function destroy(BackupJob $backupJob)
     {
+        if ($backupJob->hasRunInProgress()) {
+            return back()->with('error', 'This job has a backup run in progress. Wait for it to finish before deleting it.');
+        }
+
         $backupJob->delete();
 
         return redirect()->route('backup-jobs.index')->with('success', 'Backup job deleted.');
@@ -211,6 +219,19 @@ class BackupJobController extends Controller
      * Resolve the group a job form submission targets: none (standalone job), an
      * existing group, or a freshly created one for the inline "create group" flow.
      */
+    /**
+     * Whether the request changes the job's backup source (type, volume or host
+     * path). A source change is refused while a run is in flight, since RunBackup
+     * reloads the job before mounting and would otherwise back up the new source
+     * under the lock held for the old one.
+     */
+    private function changesSource(BackupJobRequest $request, BackupJob $job): bool
+    {
+        return (string) $request->input('source_type') !== (string) $job->source_type
+            || (string) $request->input('volume_name') !== (string) $job->volume_name
+            || (string) $request->input('host_path') !== (string) $job->host_path;
+    }
+
     private function resolveGroup(BackupJobRequest $request): ?BackupJobGroup
     {
         if (! $request->isGroupMode()) {

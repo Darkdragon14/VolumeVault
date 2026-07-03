@@ -141,6 +141,20 @@ class BackupJob extends Model
         return $this->hasMany(BackupRun::class)->latest();
     }
 
+    /**
+     * Whether a backup run of this job is still queued or running. Used to refuse
+     * changing the source or deleting the job while a run is in flight: RunBackup
+     * reloads the job before mounting the source, so a source change mid-run could
+     * back up the wrong volume, and deleting the job cascade-drops a run whose
+     * containers may still be stopped.
+     */
+    public function hasRunInProgress(): bool
+    {
+        return $this->runs()
+            ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
+            ->exists();
+    }
+
     public function restoreRuns(): HasMany
     {
         return $this->hasMany(RestoreRun::class)->latest();

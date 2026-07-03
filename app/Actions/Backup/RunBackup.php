@@ -175,8 +175,12 @@ class RunBackup
             // legitimately-waiting same-volume run past reconciliation's grace and
             // could get its lock force-released. A group member's metadata is
             // deferred the same way; its group emits the single aggregated
-            // notification, so the member stays silent.
-            RecordArchiveMetadataJob::dispatch($run->id);
+            // notification, so the member stays silent. Whether to notify is decided
+            // here (a standalone run does; a member does not) and passed to the job,
+            // not re-derived from backup_group_run_id when it runs — deleting a
+            // finished group nulls that column, which would otherwise make a member's
+            // pending metadata job send an unexpected standalone notification.
+            RecordArchiveMetadataJob::dispatch($run->id, ! $run->belongsToGroupRun());
         } catch (Throwable $exception) {
             $this->markFailed($run, $exception);
         } finally {
@@ -456,7 +460,7 @@ class RunBackup
      * the potentially-slow destination listing; dispatched as a job for group
      * members so it never blocks the group run's critical path.
      */
-    public function recordArchiveMetadata(int $backupRunId): void
+    public function recordArchiveMetadata(int $backupRunId, bool $sendFinishedNotification = false): void
     {
         $run = BackupRun::with('job.destination')->find($backupRunId);
 
@@ -466,12 +470,14 @@ class RunBackup
 
         $this->recordBackupArchiveMetadata($run);
 
-        // A standalone run's finished notification is deferred here too, so the
-        // queue job that held the volume lock returns right after marking the run
-        // terminal instead of blocking a waiting same-volume run through the slow
-        // listing above. A group member stays silent — its group emits the single
-        // aggregated notification once, not one per member.
-        if (! $run->belongsToGroupRun()) {
+        // Whether to send the finished notification was decided at dispatch (true for
+        // a standalone run, false for a group member) and passed in — not re-derived
+        // from belongsToGroupRun() here, since a group deleted between dispatch and
+        // now nulls backup_group_run_id and would turn a member into a false
+        // standalone notification. Deferred so the queue job that held the volume
+        // lock returns right after marking the run terminal instead of blocking a
+        // waiting same-volume run through the slow listing above.
+        if ($sendFinishedNotification) {
             $this->sendNotifications($run->fresh(['job.destination']));
         }
     }

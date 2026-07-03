@@ -993,9 +993,47 @@ class GroupedBackupTest extends TestCase
         }
 
         $run->refresh();
-        // Skipped (counted failed) rather than backed up on the wrong lock.
+        // Skipped rather than backed up on the wrong lock: the member run is
+        // cancelled (counted as a group failure), never executed against vol_b.
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->status);
-        $this->assertSame(BackupRun::STATUS_FAILED, BackupRun::where('backup_group_run_id', $run->id)->firstOrFail()->status);
+        $this->assertSame(BackupRun::STATUS_CANCELLED, BackupRun::where('backup_group_run_id', $run->id)->firstOrFail()->status);
+    }
+
+    public function test_a_member_paused_during_the_lock_wait_stays_paused_not_errored(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunStarted')->once();
+        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+
+        // Pause the member right after its run is created — i.e. as the in-lock
+        // recheck runs. It must be cancelled without markFailed(), so the job keeps
+        // its PAUSED status (markFailed would flip it to ERROR, making
+        // runnableMembers() pick it up again next run).
+        $original = BackupRun::getEventDispatcher();
+        $dispatcher = clone $original;
+        $dispatcher->listen('eloquent.created: '.BackupRun::class, function (BackupRun $r) use ($member): void {
+            if ((int) $r->backup_job_id === $member->id) {
+                BackupJob::whereKey($member->id)->update(['status' => BackupJob::STATUS_PAUSED]);
+            }
+        });
+        BackupRun::setEventDispatcher($dispatcher);
+
+        try {
+            app(RunBackupGroup::class)->handle($run);
+        } finally {
+            BackupRun::setEventDispatcher($original);
+        }
+
+        $memberRun = BackupRun::where('backup_group_run_id', $run->id)->firstOrFail();
+        $this->assertSame(BackupRun::STATUS_CANCELLED, $memberRun->status);
+        // The job stays PAUSED — not flipped to ERROR.
+        $this->assertSame(BackupJob::STATUS_PAUSED, $member->fresh()->status);
     }
 
     public function test_a_queued_group_run_is_cancelled_if_the_group_is_paused_before_it_starts(): void
@@ -1096,11 +1134,12 @@ class GroupedBackupTest extends TestCase
         $job = $this->standaloneJob();
         $run = BackupRun::create(['backup_job_id' => $job->id, 'status' => BackupRun::STATUS_SUCCESS, 'trigger' => BackupRun::TRIGGER_SCHEDULED, 'finished_at' => now()]);
 
-        // The deferred job records metadata then sends the finished notification.
-        app(RunBackup::class)->recordArchiveMetadata($run->id);
+        // The deferred job records metadata then sends the finished notification
+        // (the flag is captured at dispatch — true for a standalone run).
+        app(RunBackup::class)->recordArchiveMetadata($run->id, sendFinishedNotification: true);
     }
 
-    public function test_the_metadata_job_stays_silent_for_a_group_member(): void
+    public function test_the_metadata_job_stays_silent_for_a_group_member_even_if_the_group_was_deleted(): void
     {
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
@@ -1112,8 +1151,12 @@ class GroupedBackupTest extends TestCase
         $groupRun = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_RUNNING, 'trigger' => BackupGroupRun::TRIGGER_SCHEDULED, 'started_at' => now(), 'last_heartbeat_at' => now()]);
         $memberRun = BackupRun::create(['backup_job_id' => $member->id, 'backup_group_run_id' => $groupRun->id, 'status' => BackupRun::STATUS_SUCCESS, 'trigger' => BackupRun::TRIGGER_SCHEDULED, 'finished_at' => now()]);
 
-        // A member's metadata job must not notify — the group emits the single one.
-        app(RunBackup::class)->recordArchiveMetadata($memberRun->id);
+        // Simulate the group being deleted after dispatch: backup_group_run_id is
+        // nulled, so belongsToGroupRun() is now false. The captured flag (false for
+        // a member) must still keep it silent — no unexpected standalone notification.
+        $memberRun->forceFill(['backup_group_run_id' => null])->save();
+
+        app(RunBackup::class)->recordArchiveMetadata($memberRun->id, sendFinishedNotification: false);
 
         $this->assertSame(BackupRun::STATUS_SUCCESS, $memberRun->fresh()->status);
     }

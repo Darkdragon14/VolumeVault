@@ -126,14 +126,21 @@ class BackupJobGroupController extends Controller
 
     public function pause(Request $request, BackupJobGroup $backupGroup)
     {
-        if ($backupGroup->status === BackupJobGroup::STATUS_RUNNING) {
+        // Conditional update, not a read-then-write: RunBackupGroup flips the group
+        // ACTIVE→RUNNING with a matching `where status = active` guard when it starts
+        // a run, so pausing atomically only from a non-running state prevents the
+        // worker from later un-pausing a group paused in that race window.
+        $paused = BackupJobGroup::query()
+            ->whereKey($backupGroup->id)
+            ->where('status', '!=', BackupJobGroup::STATUS_RUNNING)
+            ->update([
+                'status' => BackupJobGroup::STATUS_PAUSED,
+                'pause_reason' => $request->input('pause_reason', 'Paused manually.'),
+            ]);
+
+        if ($paused === 0) {
             throw ValidationException::withMessages(['group' => 'A running group cannot be paused.']);
         }
-
-        $backupGroup->forceFill([
-            'status' => BackupJobGroup::STATUS_PAUSED,
-            'pause_reason' => $request->input('pause_reason', 'Paused manually.'),
-        ])->save();
 
         return back()->with('success', 'Backup group paused.');
     }

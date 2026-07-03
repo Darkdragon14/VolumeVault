@@ -34,19 +34,27 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('components.securitySchemes.bearerAuth.scheme', 'bearer');
     }
 
-    public function test_openapi_marks_schedule_type_required_only_for_standalone_jobs(): void
+    public function test_openapi_models_conditional_requirements_for_backup_jobs(): void
     {
         $schema = $this->getJson('/api/v1/openapi.json')
             ->assertOk()
             ->json('components.schemas.BackupJobRequest');
 
-        // Not unconditionally required (a grouped job delegates its schedule)...
+        // schedule_type is not unconditionally required (a grouped job delegates it).
         $this->assertNotContains('schedule_type', $schema['required']);
-        // ...but required (and non-null) unless planning_mode=group, so a generated
-        // client does not send a schema-valid standalone request the API rejects.
-        $this->assertContains('schedule_type', $schema['else']['required']);
-        $this->assertSame('string', $schema['else']['properties']['schedule_type']['type']);
-        $this->assertSame('group', $schema['if']['properties']['planning_mode']['const']);
+
+        // The conditional rules live in allOf so a generated client cannot send a
+        // schema-valid request the API then rejects with 422.
+        $branches = collect($schema['allOf']);
+
+        // Standalone requires schedule_type.
+        $this->assertTrue($branches->contains(fn (array $b): bool => in_array('schedule_type', $b['else']['required'] ?? [], true)));
+        // Existing-group mode requires backup_job_group_id.
+        $this->assertTrue($branches->contains(fn (array $b): bool => in_array('backup_job_group_id', $b['then']['required'] ?? [], true)));
+        // New-group mode requires new_group (with its own required fields).
+        $newGroup = $branches->first(fn (array $b): bool => in_array('new_group', $b['then']['required'] ?? [], true));
+        $this->assertNotNull($newGroup);
+        $this->assertSame(['name', 'schedule_type', 'failure_policy'], $newGroup['then']['properties']['new_group']['required']);
     }
 
     public function test_api_requires_a_bearer_token(): void

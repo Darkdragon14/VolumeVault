@@ -121,10 +121,35 @@ class RunBackupGroup
             return;
         }
 
-        $group->forceFill([
-            'status' => BackupJobGroup::STATUS_RUNNING,
-            'last_run_at' => $startedAt,
-        ])->save();
+        // Flip the group to RUNNING atomically from any non-paused, non-running
+        // state (active, or error after a prior failed run — both legitimately
+        // runnable). pause() flips →PAUSED with a matching `whereNot(status,
+        // running)` guard, so the two conditional updates serialize on the row:
+        // whichever lands first wins. If a pause won (0 rows here), honour it —
+        // cancel this run without clobbering the pause or its reason.
+        $flipped = BackupJobGroup::query()
+            ->whereKey($group->id)
+            ->whereNotIn('status', [BackupJobGroup::STATUS_PAUSED, BackupJobGroup::STATUS_RUNNING])
+            ->update([
+                'status' => BackupJobGroup::STATUS_RUNNING,
+                'last_run_at' => $startedAt,
+            ]);
+
+        if ($flipped === 0) {
+            $groupRun->forceFill([
+                'status' => BackupGroupRun::STATUS_CANCELLED,
+                'finished_at' => now(),
+                'error_message' => 'Group was paused before this run started.',
+            ])->save();
+
+            ActivityLog::record('backup_group_run_cancelled', 'Backup group run cancelled: the group was paused before it started.', $groupRun, [
+                'backup_job_group_id' => $group->id,
+            ]);
+
+            return;
+        }
+
+        $group->refresh();
 
         $groupRun->forceFill([
             'total_members' => $members->count(),
@@ -344,7 +369,15 @@ class RunBackupGroup
                     $current = BackupJob::find($member->id);
 
                     if (! $this->memberIsRunnable($current, $groupRun) || $this->lockKeyFor($current) !== $lockKey) {
-                        throw new RuntimeException('Member "'.$member->name.'" changed while waiting for its lock; skipped in this group run.');
+                        // The member was paused, detached, deleted or had its source
+                        // changed while we waited for the lock. Cancel this run
+                        // WITHOUT markFailed(): markFailed flips the job to ERROR,
+                        // which for a paused member would replace its PAUSED status
+                        // and let runnableMembers() pick it up again next run. The
+                        // group loop counts a cancelled run as a failure regardless.
+                        $this->cancelMemberRun($memberRun, 'Member "'.$member->name.'" was paused, detached or changed while waiting for its lock; skipped in this group run.');
+
+                        return;
                     }
 
                     // Holding the lock already excludes a running backup/restore;
@@ -423,6 +456,27 @@ class RunBackupGroup
         $query
             ->where('status', BackupRun::STATUS_RUNNING)
             ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
+    }
+
+    /**
+     * Cancel a member run without touching its job. Used when a member becomes
+     * unrunnable (paused/detached/deleted/source-changed) between the snapshot and
+     * its turn: unlike RunBackup::markFailed this leaves the job's status alone, so
+     * a paused member is not flipped to ERROR and silently made runnable again. The
+     * group loop still counts a cancelled run as a failure.
+     */
+    private function cancelMemberRun(BackupRun $run, string $reason): void
+    {
+        $run->forceFill([
+            'status' => BackupRun::STATUS_CANCELLED,
+            'finished_at' => now(),
+            'error_message' => $reason,
+        ])->save();
+
+        ActivityLog::record('backup_group_member_skipped', $reason, $run, [
+            'backup_job_id' => $run->backup_job_id,
+            'backup_group_run_id' => $run->backup_group_run_id,
+        ]);
     }
 
     /**

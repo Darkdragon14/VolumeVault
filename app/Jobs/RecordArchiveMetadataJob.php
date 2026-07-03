@@ -25,13 +25,15 @@ class RecordArchiveMetadataJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public function __construct(public readonly int $backupRunId)
-    {
+    public function __construct(
+        public readonly int $backupRunId,
+        public readonly bool $sendFinishedNotification = false,
+    ) {
         $this->onQueue('metadata');
     }
 
     public function handle(RunBackup $runBackup): void
     {
-        $runBackup->recordArchiveMetadata($this->backupRunId);
+        $runBackup->recordArchiveMetadata($this->backupRunId, $this->sendFinishedNotification);
     }
 }

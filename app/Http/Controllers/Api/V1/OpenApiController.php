@@ -237,18 +237,67 @@ class OpenApiController extends Controller
                         'description' => 'Names of the containers to stop before backup. Only honoured when source_type is host_path and stop_containers_before_backup is true; ignored for docker_volume sources, which discover containers automatically.',
                     ],
                 ],
-                // A standalone job (planning_mode omitted or "standalone") requires a
-                // non-null schedule_type; a grouped job delegates the schedule to its
-                // group, so it is optional there. Expressed conditionally so a
-                // generated client cannot send a schema-valid standalone request that
-                // the API then rejects with 422.
-                'if' => [
-                    'properties' => ['planning_mode' => ['const' => 'group']],
-                    'required' => ['planning_mode'],
-                ],
-                'else' => [
-                    'required' => ['schedule_type'],
-                    'properties' => ['schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']]],
+                // Conditional requirements a generated client must honour, so it
+                // cannot send a schema-valid request the API then rejects with 422.
+                // Each independent rule is its own if/then/else in allOf.
+                'allOf' => [
+                    // Standalone (planning_mode omitted/"standalone") requires a
+                    // non-null schedule_type; a grouped job delegates it to the group.
+                    [
+                        'if' => [
+                            'properties' => ['planning_mode' => ['const' => 'group']],
+                            'required' => ['planning_mode'],
+                        ],
+                        'else' => [
+                            'required' => ['schedule_type'],
+                            'properties' => ['schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']]],
+                        ],
+                    ],
+                    // Attaching to an existing group (planning_mode=group and
+                    // group_selection is "existing" or omitted) requires
+                    // backup_job_group_id.
+                    [
+                        'if' => [
+                            'properties' => [
+                                'planning_mode' => ['const' => 'group'],
+                                'group_selection' => ['not' => ['const' => 'new']],
+                            ],
+                            'required' => ['planning_mode'],
+                        ],
+                        'then' => [
+                            'required' => ['backup_job_group_id'],
+                            'properties' => ['backup_job_group_id' => ['type' => 'integer']],
+                        ],
+                    ],
+                    // Creating a group inline (planning_mode=group, group_selection=new)
+                    // requires new_group with its name, schedule_type and failure_policy.
+                    [
+                        'if' => [
+                            'properties' => [
+                                'planning_mode' => ['const' => 'group'],
+                                'group_selection' => ['const' => 'new'],
+                            ],
+                            'required' => ['planning_mode', 'group_selection'],
+                        ],
+                        'then' => [
+                            'required' => ['new_group'],
+                            'properties' => [
+                                'new_group' => [
+                                    'type' => 'object',
+                                    'required' => ['name', 'schedule_type', 'failure_policy'],
+                                    'properties' => [
+                                        'name' => ['type' => 'string'],
+                                        'schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']],
+                                        'schedule_config' => ['type' => 'object'],
+                                        'timezone' => ['type' => ['string', 'null']],
+                                        'failure_policy' => ['type' => 'string', 'enum' => ['continue', 'stop']],
+                                        'notifications_enabled' => ['type' => 'boolean'],
+                                        'notification_channel_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
                 ],
             ],
             'StackBackupRequest' => [
