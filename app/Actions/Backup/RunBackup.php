@@ -44,17 +44,19 @@ class RunBackup
     {
         $startedAt = now();
 
-        // Atomically claim the run: flip a non-terminal row → RUNNING in one
-        // conditional UPDATE. A lock loser requeued by WithoutOverlapping may be
-        // delivered after stale-run reconciliation marked the row failed; checking
-        // the in-memory status then saving would race that and re-run it. If the
-        // row is already terminal the update matches zero rows and we bail.
+        // Atomically claim the run: flip a QUEUED row → RUNNING in one conditional
+        // UPDATE. Claiming only a QUEUED row (not any non-terminal one) means a
+        // redelivered copy — the queue can deliver a job twice under retryUntil —
+        // finds the row already RUNNING and bails instead of re-executing the same
+        // backup. A row reconciliation already marked terminal also matches zero
+        // rows. Mirrors RunBackupGroup.
         $claimed = BackupRun::query()
             ->whereKey($run->getKey())
-            ->whereNotIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
+            ->where('status', BackupRun::STATUS_QUEUED)
             ->update([
                 'status' => BackupRun::STATUS_RUNNING,
                 'started_at' => $startedAt,
+                'last_heartbeat_at' => $startedAt,
             ]);
 
         if ($claimed === 0) {
@@ -127,7 +129,12 @@ class RunBackup
                     // can be reconciled later (the finally block clears them).
                     $run->forceFill(['stopped_container_ids' => $stoppedContainers])->save();
                     $this->appendRunLog->handle($run, 'Stopping containers before backup: '.implode(', ', $stoppedContainers));
-                    $this->stopDockerContainers->handle($stoppedContainers);
+                    // No Docker backup container exists yet, so reconciliation falls
+                    // back to the heartbeat to judge liveness. docker stop is 120s
+                    // each and sequential, so refresh per container to keep a slow
+                    // multi-container stop from being reconciled as a dead worker.
+                    $this->heartbeat($run);
+                    $this->stopDockerContainers->handle($stoppedContainers, fn () => $this->heartbeat($run));
                 }
             }
 
@@ -169,8 +176,16 @@ class RunBackup
                 // stays silent: the group emits the single aggregated notification.
                 RecordArchiveMetadataJob::dispatch($run->id);
             } else {
+                // The run is already terminal, but this standalone job keeps holding
+                // its overlap lock through the archive-metadata listing (which can be
+                // slow) and notifications. Refresh the heartbeat around each so a
+                // legitimately-waiting run of the same volume/job is not reconciled
+                // as stale while this holder is still finalizing.
+                $this->heartbeat($run);
                 $this->recordBackupArchiveMetadata($run->fresh(['job.destination']));
+                $this->heartbeat($run);
                 $this->sendNotifications($run->fresh(['job.destination']));
+                $this->heartbeat($run);
             }
         } catch (Throwable $exception) {
             $this->markFailed($run, $exception);
@@ -178,13 +193,13 @@ class RunBackup
             if ($stoppedContainers) {
                 try {
                     // Restarting containers happens after the run is already
-                    // terminal, so a member run no longer shields its group run from
-                    // stale reconciliation. docker start is 120s each and sequential,
-                    // so refresh the group heartbeat up front and after each
-                    // container to keep a live group run from being falsely closed
-                    // during a slow multi-container restart.
-                    $this->touchGroupRunHeartbeat($run);
-                    $this->startDockerContainers->handle($stoppedContainers, fn () => $this->touchGroupRunHeartbeat($run));
+                    // terminal, but this job still holds its overlap lock and a
+                    // member run must keep its group run alive. docker start is 120s
+                    // each and sequential, so refresh the heartbeat up front and
+                    // after each container to keep a live run/group from being
+                    // falsely closed during a slow multi-container restart.
+                    $this->heartbeat($run);
+                    $this->startDockerContainers->handle($stoppedContainers, fn () => $this->heartbeat($run));
                     $run->forceFill(['stopped_container_ids' => null])->save();
                     $this->appendRunLog->handle($run->fresh(), 'Restarted containers: '.implode(', ', $stoppedContainers));
                 } catch (Throwable $exception) {
@@ -475,6 +490,22 @@ class RunBackup
         BackupGroupRun::query()
             ->whereKey($run->backup_group_run_id)
             ->update(['last_heartbeat_at' => now()]);
+    }
+
+    /**
+     * Refresh the run's liveness marker (and, for a member run, its group run's).
+     * Used whenever the worker is doing bounded work with no Docker backup
+     * container to prove liveness — the pre-backup container stop, the post-backup
+     * restart, and the post-success metadata/notification finalization — so
+     * stale-run reconciliation does not mistake a slow-but-healthy run for a crash.
+     */
+    private function heartbeat(BackupRun $run): void
+    {
+        BackupRun::query()
+            ->whereKey($run->getKey())
+            ->update(['last_heartbeat_at' => now()]);
+
+        $this->touchGroupRunHeartbeat($run);
     }
 
     /**

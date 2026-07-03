@@ -33,6 +33,7 @@ class BackupRun extends Model
         'status',
         'trigger',
         'started_at',
+        'last_heartbeat_at',
         'finished_at',
         'duration_seconds',
         'logs',
@@ -47,6 +48,7 @@ class BackupRun extends Model
     {
         return [
             'started_at' => 'datetime',
+            'last_heartbeat_at' => 'datetime',
             'finished_at' => 'datetime',
             'duration_seconds' => 'integer',
             'stopped_container_ids' => 'array',

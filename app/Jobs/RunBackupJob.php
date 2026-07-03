@@ -128,7 +128,12 @@ class RunBackupJob implements ShouldQueue
     {
         $run = BackupRun::find($this->backupRunId);
 
-        if ($run) {
+        // Only fail a run the queue never actually started. A RUNNING run is owned
+        // by its worker (timeout 0, so a long backup is legitimate); a copy
+        // redelivered until retryUntil must not fail it — nor let its container
+        // restart race the live worker — out from under it. A genuinely dead
+        // RUNNING run is closed by stale-run reconciliation. Mirrors RunBackupGroupJob.
+        if ($run && $run->status === BackupRun::STATUS_QUEUED) {
             app(RunBackup::class)->markFailed($run, $exception);
         }
     }

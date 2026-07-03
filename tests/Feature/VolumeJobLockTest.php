@@ -252,6 +252,58 @@ class VolumeJobLockTest extends TestCase
         ]);
     }
 
+    public function test_run_backup_does_not_re_execute_an_already_running_run(): void
+    {
+        $job = $this->backupJob();
+        $startedAt = now()->subMinutes(3);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => $startedAt,
+        ]);
+
+        // A redelivered copy calling handle() claims only a QUEUED row, so it must
+        // not re-claim (and re-run) a row a live worker already flipped to running.
+        app(RunBackup::class)->handle($run);
+
+        $fresh = $run->fresh();
+        $this->assertSame(BackupRun::STATUS_RUNNING, $fresh->status);
+        // started_at untouched proves the claim matched zero rows (no re-run).
+        $this->assertSame($startedAt->timestamp, $fresh->started_at->timestamp);
+    }
+
+    public function test_failed_hook_does_not_fail_a_running_standalone_run(): void
+    {
+        $job = $this->backupJob();
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+        ]);
+
+        // An expired/duplicate copy's failed() must not fail a run a live worker owns.
+        (new RunBackupJob($run->id))->failed(new \RuntimeException('boom'));
+
+        $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
+    }
+
+    public function test_failed_hook_fails_a_queued_standalone_run(): void
+    {
+        $job = $this->backupJob();
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        // A run the queue never started is safe to fail from the hook.
+        (new RunBackupJob($run->id))->failed(new \RuntimeException('boom'));
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
+    }
+
     private function hostPathJob(): BackupJob
     {
         $destination = BackupDestination::create([

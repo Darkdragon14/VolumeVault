@@ -57,17 +57,18 @@ class ReconcileStaleRuns extends Command
             $lockKey = VolumeJobLock::key($volume, 'backup-job-'.$run->backup_job_id);
 
             if ($runBackup->markFailed($run, new RuntimeException($reason))) {
-                // A running holder definitely held the lock. A group member run
-                // acquires its lock in-process (before RunBackup flips it to
-                // running), so it can orphan the lock while still "queued"; release
-                // that too — but only when no other run currently holds the same
-                // lock, so we never steal a live holder's. The lock is keyed on the
-                // volume for a Docker-volume job and on the job for a host-path job,
-                // so the "held by another" check must match the run's source. For
-                // standalone runs the lock loser may be a mere waiter, so keep the
-                // running-only rule there to avoid breaking serialization.
+                // A running holder definitely held the lock. But WithoutOverlapping
+                // acquires the lock *before* RunBackup flips the row to running, so a
+                // worker that crashed in that window (or a group member, which takes
+                // the lock in-process) leaves a "queued" row holding the lock for the
+                // full 24h TTL. Release that too — but only when no other run
+                // currently holds the same lock, so we never steal a live holder's
+                // (a genuine queued waiter is a live holder's lock loser, and it was
+                // already excluded from this sweep by backupIsWaitingForVolumeLock).
+                // The lock is keyed on the volume for a Docker-volume job and on the
+                // job for a host-path job, so the check must match the run's source.
                 $release = $wasRunning
-                    || ($run->belongsToGroupRun() && ! $this->lockHeldByAnotherActiveBackup($run, $volume));
+                    || ! $this->lockHeldByAnotherActiveBackup($run, $volume);
 
                 if ($release) {
                     $this->releaseLock($lockKey);
@@ -318,10 +319,16 @@ class ReconcileStaleRuns extends Command
 
     /**
      * Constrain to runs that still hold the volume: running, terminal but only
-     * just released (within the requeue window), or terminal but still owning
-     * stopped containers their finally has not restarted yet. The last case keeps
-     * this consistent with the jobs' volumeBusy guard, so a queued waiter is not
-     * swept while a terminal run is still mid-restart/reconcile of its containers.
+     * just released (within the requeue window), terminal but still finalizing with
+     * a fresh heartbeat, or terminal but still owning stopped containers their
+     * finally has not restarted yet.
+     *
+     * The heartbeat case matters because the WithoutOverlapping lock is held for the
+     * whole job — the run flips terminal before archive-metadata listing and
+     * notifications, which can outlast the fixed requeue window. The holder refreshes
+     * its heartbeat across that finalization, so it keeps counting as a holder and a
+     * legitimately-waiting run is not swept. The stopped-containers case keeps this
+     * consistent with the jobs' volumeBusy guard.
      *
      * STATUS_* values are identical across BackupRun and RestoreRun, so the same
      * constants apply to either query.
@@ -332,7 +339,9 @@ class ReconcileStaleRuns extends Command
             ->where('status', BackupRun::STATUS_RUNNING)
             ->orWhere(fn ($q) => $q
                 ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
-                ->where('finished_at', '>=', $recentlyReleased))
+                ->where(fn ($inner) => $inner
+                    ->where('finished_at', '>=', $recentlyReleased)
+                    ->orWhere('last_heartbeat_at', '>=', $recentlyReleased)))
             ->orWhere(fn ($q) => $q
                 ->whereNotNull('stopped_container_ids')
                 ->where('stopped_container_ids', '!=', '[]'));
