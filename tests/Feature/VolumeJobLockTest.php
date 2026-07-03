@@ -252,6 +252,67 @@ class VolumeJobLockTest extends TestCase
         ]);
     }
 
+    public function test_run_restore_does_not_re_execute_an_already_running_run(): void
+    {
+        $job = $this->backupJob();
+        $startedAt = now()->subMinutes(3);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => $startedAt,
+        ]);
+
+        // A redelivered copy must not re-claim (and re-run a destructive restore on)
+        // a row a live worker already flipped to running.
+        app(RunRestore::class)->handle($run);
+
+        $fresh = $run->fresh();
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $fresh->status);
+        $this->assertSame($startedAt->timestamp, $fresh->started_at->timestamp);
+    }
+
+    public function test_restore_failed_hook_does_not_fail_a_running_run(): void
+    {
+        $job = $this->backupJob();
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now(),
+        ]);
+
+        (new RunRestoreJob($run->id))->failed(new \RuntimeException('boom'));
+
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
+    }
+
+    public function test_restore_failed_hook_fails_a_queued_run(): void
+    {
+        $job = $this->backupJob();
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+
+        (new RunRestoreJob($run->id))->failed(new \RuntimeException('boom'));
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+    }
+
     public function test_run_backup_does_not_re_execute_an_already_running_run(): void
     {
         $job = $this->backupJob();

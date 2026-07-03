@@ -236,6 +236,19 @@ class OpenApiController extends Controller
                         'description' => 'Names of the containers to stop before backup. Only honoured when source_type is host_path and stop_containers_before_backup is true; ignored for docker_volume sources, which discover containers automatically.',
                     ],
                 ],
+                // A standalone job (planning_mode omitted or "standalone") requires a
+                // non-null schedule_type; a grouped job delegates the schedule to its
+                // group, so it is optional there. Expressed conditionally so a
+                // generated client cannot send a schema-valid standalone request that
+                // the API then rejects with 422.
+                'if' => [
+                    'properties' => ['planning_mode' => ['const' => 'group']],
+                    'required' => ['planning_mode'],
+                ],
+                'else' => [
+                    'required' => ['schedule_type'],
+                    'properties' => ['schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']]],
+                ],
             ],
             'StackBackupRequest' => [
                 'type' => 'object',

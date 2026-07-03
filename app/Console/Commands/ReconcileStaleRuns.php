@@ -82,8 +82,19 @@ class ReconcileStaleRuns extends Command
             $wasRunning = $run->status === RestoreRun::STATUS_RUNNING;
             $lockKey = VolumeJobLock::key($run->target_volume_name, 'restore-run-'.$run->id);
 
-            if ($runRestore->markFailed($run, new RuntimeException($reason)) && $wasRunning) {
-                $this->releaseLock($lockKey);
+            if ($runRestore->markFailed($run, new RuntimeException($reason))) {
+                // Like backups, WithoutOverlapping acquires the lock before
+                // RunRestore flips the row to running, so a worker that crashed in
+                // that window leaves a "queued" row holding the lock for the 24h
+                // TTL. Release it too, unless another active run still holds the same
+                // volume (a genuine waiter was already excluded from this sweep). The
+                // per-run fallback key is unique, so no other run can hold it.
+                $release = $wasRunning
+                    || ! $this->volumeHeldByAnotherActiveRun($run->target_volume_name, restoreId: $run->id);
+
+                if ($release) {
+                    $this->releaseLock($lockKey);
+                }
             }
             $restoreCount++;
         });

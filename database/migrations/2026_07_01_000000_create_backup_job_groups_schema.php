@@ -33,8 +33,11 @@ return new class extends Migration
 
         Schema::create('backup_job_group_notification_channel', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('backup_job_group_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('notification_channel_id')->constrained()->cascadeOnDelete();
+            // Explicit short constraint names: the auto-generated
+            // "backup_job_group_notification_channel_..._foreign" names exceed the
+            // 64-character identifier limit on MySQL/MariaDB and fail to create.
+            $table->foreignId('backup_job_group_id')->constrained(indexName: 'bjg_notif_group_fk')->cascadeOnDelete();
+            $table->foreignId('notification_channel_id')->constrained(indexName: 'bjg_notif_channel_fk')->cascadeOnDelete();
             $table->timestamps();
 
             $table->unique(['backup_job_group_id', 'notification_channel_id'], 'backup_job_group_notification_unique');

@@ -34,6 +34,21 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('components.securitySchemes.bearerAuth.scheme', 'bearer');
     }
 
+    public function test_openapi_marks_schedule_type_required_only_for_standalone_jobs(): void
+    {
+        $schema = $this->getJson('/api/v1/openapi.json')
+            ->assertOk()
+            ->json('components.schemas.BackupJobRequest');
+
+        // Not unconditionally required (a grouped job delegates its schedule)...
+        $this->assertNotContains('schedule_type', $schema['required']);
+        // ...but required (and non-null) unless planning_mode=group, so a generated
+        // client does not send a schema-valid standalone request the API rejects.
+        $this->assertContains('schedule_type', $schema['else']['required']);
+        $this->assertSame('string', $schema['else']['properties']['schedule_type']['type']);
+        $this->assertSame('group', $schema['if']['properties']['planning_mode']['const']);
+    }
+
     public function test_api_requires_a_bearer_token(): void
     {
         $this->getJson('/api/v1/me')->assertUnauthorized();

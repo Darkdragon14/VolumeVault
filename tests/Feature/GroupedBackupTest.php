@@ -884,6 +884,114 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->status);
     }
 
+    public function test_a_member_deleted_after_the_snapshot_does_not_block_the_group_run(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunStarted')->once();
+        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $doomed = $this->member($group, 'vol_doomed'); // lower id → processed first
+        $this->member($group, 'vol_a');
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+
+        // Simulate the doomed member being hard-deleted after the run's member
+        // snapshot: creating its BackupRun throws, as a foreign-key violation would.
+        // A cloned dispatcher keeps the listener from leaking to other tests.
+        $original = BackupRun::getEventDispatcher();
+        $dispatcher = clone $original;
+        $dispatcher->listen('eloquent.creating: '.BackupRun::class, function (BackupRun $r) use ($doomed): void {
+            if ((int) $r->backup_job_id === $doomed->id) {
+                throw new \RuntimeException('member no longer exists');
+            }
+        });
+        BackupRun::setEventDispatcher($dispatcher);
+
+        try {
+            app(RunBackupGroup::class)->handle($run);
+        } finally {
+            BackupRun::setEventDispatcher($original);
+        }
+
+        $run->refresh();
+        // The vanished member is skipped, not fatal: the group still runs the
+        // survivor and finalizes instead of staying stuck RUNNING.
+        $this->assertSame(BackupGroupRun::STATUS_SUCCESS, $run->status);
+        $this->assertSame(1, $run->succeeded_members);
+        $this->assertSame(0, $run->failed_members);
+        $this->assertSame(1, BackupRun::where('backup_group_run_id', $run->id)->count());
+    }
+
+    public function test_a_standalone_run_defers_metadata_and_notification_to_a_job(): void
+    {
+        Queue::fake([RecordArchiveMetadataJob::class]);
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendBackupRunStarted')->zeroOrMoreTimes();
+        // The finished notification is deferred to the (faked) metadata job so the
+        // queue job's volume lock is released without waiting on a slow listing.
+        $notifier->shouldNotReceive('sendBackupRunFinished');
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $job = $this->standaloneJob();
+        $run = BackupRun::create(['backup_job_id' => $job->id, 'status' => BackupRun::STATUS_QUEUED, 'trigger' => BackupRun::TRIGGER_SCHEDULED]);
+
+        app(RunBackup::class)->handle($run);
+
+        $this->assertSame(BackupRun::STATUS_SUCCESS, $run->fresh()->status);
+        Queue::assertPushed(RecordArchiveMetadataJob::class, fn (RecordArchiveMetadataJob $j): bool => $j->backupRunId === $run->id);
+    }
+
+    public function test_the_metadata_job_sends_the_finished_notification_for_a_standalone_run(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendBackupRunFinished')->once();
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $job = $this->standaloneJob();
+        $run = BackupRun::create(['backup_job_id' => $job->id, 'status' => BackupRun::STATUS_SUCCESS, 'trigger' => BackupRun::TRIGGER_SCHEDULED, 'finished_at' => now()]);
+
+        // The deferred job records metadata then sends the finished notification.
+        app(RunBackup::class)->recordArchiveMetadata($run->id);
+    }
+
+    public function test_the_metadata_job_stays_silent_for_a_group_member(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldNotReceive('sendBackupRunFinished');
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        $groupRun = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_RUNNING, 'trigger' => BackupGroupRun::TRIGGER_SCHEDULED, 'started_at' => now(), 'last_heartbeat_at' => now()]);
+        $memberRun = BackupRun::create(['backup_job_id' => $member->id, 'backup_group_run_id' => $groupRun->id, 'status' => BackupRun::STATUS_SUCCESS, 'trigger' => BackupRun::TRIGGER_SCHEDULED, 'finished_at' => now()]);
+
+        // A member's metadata job must not notify — the group emits the single one.
+        app(RunBackup::class)->recordArchiveMetadata($memberRun->id);
+
+        $this->assertSame(BackupRun::STATUS_SUCCESS, $memberRun->fresh()->status);
+    }
+
+    private function standaloneJob(): BackupJob
+    {
+        return BackupJob::create([
+            'name' => 'Standalone',
+            'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'volume_name' => 'vol_a',
+            'backup_destination_id' => $this->destination()->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+            'notifications_enabled' => true,
+        ]);
+    }
+
     private function hostMember(BackupJobGroup $group, array $stopContainerNames = []): BackupJob
     {
         return BackupJob::create([

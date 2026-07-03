@@ -39,17 +39,16 @@ class RunRestore
     {
         $startedAt = now();
 
-        // Atomically claim the run: flip QUEUED/RUNNING → RUNNING in a single
-        // conditional UPDATE. A lock loser can be requeued by WithoutOverlapping
-        // and, if stale-run reconciliation marked the row failed while it waited,
-        // the queued job may still be delivered later. Checking the in-memory
-        // status then saving would race that reconciliation (load → fail → save
-        // RUNNING resurrects a finalized, possibly destructive restore). The
-        // conditional update closes that window: if the row is already terminal it
-        // matches zero rows and we bail without ever touching the volume.
+        // Atomically claim the run: flip a QUEUED row → RUNNING in a single
+        // conditional UPDATE. Claiming only a QUEUED row (not any non-terminal one)
+        // means a redelivered copy — the queue can deliver a job twice under
+        // retryUntil — finds the row already RUNNING and bails instead of re-running
+        // a (possibly destructive) restore a live worker is mid-way through. A row
+        // reconciliation already marked terminal also matches zero rows, so a
+        // delayed lock loser never resurrects a finalized restore. Mirrors RunBackup.
         $claimed = RestoreRun::query()
             ->whereKey($run->getKey())
-            ->whereNotIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
+            ->where('status', RestoreRun::STATUS_QUEUED)
             ->update([
                 'status' => RestoreRun::STATUS_RUNNING,
                 'started_at' => $startedAt,

@@ -422,6 +422,31 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get(), 'the orphaned lock should be released');
     }
 
+    public function test_failing_a_queued_restore_releases_its_orphaned_volume_lock(): void
+    {
+        $orphaned = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
+        $this->assertTrue($orphaned->get());
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+        $run->forceFill(['created_at' => now()->subHour()])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+        // Like backups, a queued restore that held the lock (crash before running)
+        // has its orphan released rather than blocking same-volume work for 24h.
+        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get(), 'the orphaned restore lock should be released');
+    }
+
     public function test_a_running_backup_with_a_fresh_heartbeat_is_not_reconciled(): void
     {
         $this->app->instance(DockerProcess::class, $this->recordingDockerProcess());

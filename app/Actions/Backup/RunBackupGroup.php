@@ -126,10 +126,14 @@ class RunBackupGroup
         foreach ($members as $member) {
             $memberRun = $this->runMember($groupRun, $member);
 
-            if ($memberRun->fresh()->status === BackupRun::STATUS_SUCCESS) {
-                $succeeded++;
-            } else {
-                $failed++;
+            // A member deleted after the snapshot returns null (logged in runMember):
+            // it never ran, so it neither succeeds nor fails the group.
+            if ($memberRun !== null) {
+                if ($memberRun->fresh()->status === BackupRun::STATUS_SUCCESS) {
+                    $succeeded++;
+                } else {
+                    $failed++;
+                }
             }
 
             // Only touches the counters + heartbeat (never status), so it cannot
@@ -256,17 +260,32 @@ class RunBackupGroup
      * queued when the job was attached to the group). A lock held too long marks
      * just that member failed.
      */
-    private function runMember(BackupGroupRun $groupRun, BackupJob $member): BackupRun
+    private function runMember(BackupGroupRun $groupRun, BackupJob $member): ?BackupRun
     {
-        $memberRun = BackupRun::create([
-            'backup_job_id' => $member->id,
-            'backup_group_run_id' => $groupRun->id,
-            'initiated_by_user_id' => $groupRun->initiated_by_user_id,
-            'status' => BackupRun::STATUS_QUEUED,
-            'trigger' => $groupRun->trigger === BackupGroupRun::TRIGGER_MANUAL
-                ? BackupRun::TRIGGER_MANUAL
-                : BackupRun::TRIGGER_SCHEDULED,
-        ]);
+        try {
+            $memberRun = BackupRun::create([
+                'backup_job_id' => $member->id,
+                'backup_group_run_id' => $groupRun->id,
+                'initiated_by_user_id' => $groupRun->initiated_by_user_id,
+                'status' => BackupRun::STATUS_QUEUED,
+                'trigger' => $groupRun->trigger === BackupGroupRun::TRIGGER_MANUAL
+                    ? BackupRun::TRIGGER_MANUAL
+                    : BackupRun::TRIGGER_SCHEDULED,
+            ]);
+        } catch (Throwable $exception) {
+            // The member was hard-deleted after the run's member snapshot (pause and
+            // detach are already filtered out by runnableMembers). Creating its run
+            // hits a foreign-key violation; thrown here — before the guarded block
+            // below — it would abort the whole loop, and the group run is already
+            // RUNNING so RunBackupGroupJob::failed() would not close it, leaving it
+            // stuck until reconciliation. Skip the vanished member instead.
+            ActivityLog::record('backup_group_member_skipped', 'Skipped a group member that no longer exists.', $groupRun, [
+                'backup_job_group_id' => $groupRun->backup_job_group_id,
+                'backup_job_id' => $member->id,
+            ]);
+
+            return null;
+        }
 
         $volume = $member->isDockerVolumeSource() ? $member->volume_name : null;
 

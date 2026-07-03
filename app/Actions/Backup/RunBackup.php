@@ -167,26 +167,16 @@ class RunBackup
                 ])->save();
             }
 
-            if ($run->belongsToGroupRun()) {
-                // Record archive metadata off the group's critical path. The
-                // destination listing can be slow (WebDAV Depth: infinity, recursive
-                // SFTP, slow NFS); doing it inline here would block the group worker
-                // — the member run is already terminal, so it no longer shields the
-                // live group run from stale-run reconciliation. A member run also
-                // stays silent: the group emits the single aggregated notification.
-                RecordArchiveMetadataJob::dispatch($run->id);
-            } else {
-                // The run is already terminal, but this standalone job keeps holding
-                // its overlap lock through the archive-metadata listing (which can be
-                // slow) and notifications. Refresh the heartbeat around each so a
-                // legitimately-waiting run of the same volume/job is not reconciled
-                // as stale while this holder is still finalizing.
-                $this->heartbeat($run);
-                $this->recordBackupArchiveMetadata($run->fresh(['job.destination']));
-                $this->heartbeat($run);
-                $this->sendNotifications($run->fresh(['job.destination']));
-                $this->heartbeat($run);
-            }
+            // Record archive metadata and, for a standalone run, send the finished
+            // notification off the critical path via a job that holds no volume
+            // lock. The destination listing can be slow (WebDAV Depth: infinity,
+            // recursive SFTP, slow NFS) and this backup's queue job keeps its overlap
+            // lock until it returns — doing the listing inline would block a
+            // legitimately-waiting same-volume run past reconciliation's grace and
+            // could get its lock force-released. A group member's metadata is
+            // deferred the same way; its group emits the single aggregated
+            // notification, so the member stays silent.
+            RecordArchiveMetadataJob::dispatch($run->id);
         } catch (Throwable $exception) {
             $this->markFailed($run, $exception);
         } finally {
@@ -470,8 +460,19 @@ class RunBackup
     {
         $run = BackupRun::with('job.destination')->find($backupRunId);
 
-        if ($run !== null) {
-            $this->recordBackupArchiveMetadata($run);
+        if ($run === null) {
+            return;
+        }
+
+        $this->recordBackupArchiveMetadata($run);
+
+        // A standalone run's finished notification is deferred here too, so the
+        // queue job that held the volume lock returns right after marking the run
+        // terminal instead of blocking a waiting same-volume run through the slow
+        // listing above. A group member stays silent — its group emits the single
+        // aggregated notification once, not one per member.
+        if (! $run->belongsToGroupRun()) {
+            $this->sendNotifications($run->fresh(['job.destination']));
         }
     }
 
