@@ -58,14 +58,16 @@ class ReconcileStaleRuns extends Command
 
             if ($runBackup->markFailed($run, new RuntimeException($reason))) {
                 // A running holder definitely held the lock. A group member run
-                // acquires its volume lock in-process (before RunBackup flips it to
+                // acquires its lock in-process (before RunBackup flips it to
                 // running), so it can orphan the lock while still "queued"; release
-                // that too — but only when no other run/restore currently holds the
-                // volume, so we never steal a live holder's lock. For standalone
-                // runs the lock loser may be a mere waiter, so keep the running-only
-                // rule there to avoid breaking serialization.
+                // that too — but only when no other run currently holds the same
+                // lock, so we never steal a live holder's. The lock is keyed on the
+                // volume for a Docker-volume job and on the job for a host-path job,
+                // so the "held by another" check must match the run's source. For
+                // standalone runs the lock loser may be a mere waiter, so keep the
+                // running-only rule there to avoid breaking serialization.
                 $release = $wasRunning
-                    || ($run->belongsToGroupRun() && filled($volume) && ! $this->volumeHeldByAnotherActiveRun($volume, backupRunId: $run->id));
+                    || ($run->belongsToGroupRun() && ! $this->lockHeldByAnotherActiveBackup($run, $volume));
 
                 if ($release) {
                     $this->releaseLock($lockKey);
@@ -243,7 +245,33 @@ class ReconcileStaleRuns extends Command
             return false;
         }
 
-        return $this->volumeHeldByAnotherActiveRun($run->job?->volume_name, backupRunId: $run->id);
+        // A host-path job has no volume: it serializes on its per-job lock, so a
+        // queued run of the same job legitimately waiting on that lock must be
+        // exempt just like a volume waiter — otherwise WithoutOverlapping requeuing
+        // it (releaseAfter) would look stale and get failed out from under itself.
+        return $this->lockHeldByAnotherActiveBackup($run, $run->job?->volume_name);
+    }
+
+    /**
+     * Whether the lock this backup run serializes on is held — or was only just
+     * released — by another active run: the volume lock for a Docker-volume job,
+     * the per-job lock for a host-path job (which restores never share).
+     */
+    private function lockHeldByAnotherActiveBackup(BackupRun $run, ?string $volume): bool
+    {
+        if (filled($volume)) {
+            return $this->volumeHeldByAnotherActiveRun($volume, backupRunId: $run->id);
+        }
+
+        $recentlyReleased = now()->subSeconds(120);
+
+        return BackupRun::query()
+            ->where('backup_job_id', $run->backup_job_id)
+            ->whereKeyNot($run->id)
+            // A pre-restore safety backup runs inline and never holds this lock.
+            ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE)
+            ->where(fn ($query) => $this->stillHoldsVolume($query, $recentlyReleased))
+            ->exists();
     }
 
     /**

@@ -161,6 +161,32 @@ class VolumeJobLockTest extends TestCase
         $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
     }
 
+    public function test_backup_job_requeues_instead_of_overlapping_a_busy_host_path_job(): void
+    {
+        $job = $this->hostPathJob();
+
+        // Another run of the same host-path job is still running: its per-job lock
+        // would serialize us, but it may have expired after 24h, so the busy guard
+        // must requeue rather than overlap.
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'started_at' => now(),
+        ]);
+
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        (new RunBackupJob($run->id))->handle(app(RunBackup::class));
+
+        // No volume, but the sibling run makes the job busy: requeue, don't overlap.
+        $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
+    }
+
     public function test_restore_job_requeues_while_a_finished_run_is_still_restarting_containers(): void
     {
         $job = $this->backupJob();
@@ -218,6 +244,29 @@ class VolumeJobLockTest extends TestCase
         return BackupJob::create([
             'name' => 'Job',
             'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+    }
+
+    private function hostPathJob(): BackupJob
+    {
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/tmp/vv'],
+        ]);
+
+        return BackupJob::create([
+            'name' => 'Host job',
+            'source_type' => BackupJob::SOURCE_TYPE_HOST_PATH,
+            'host_path' => '/tmp/vv-src',
             'backup_destination_id' => $destination->id,
             'schedule_type' => BackupJob::SCHEDULE_DAILY,
             'schedule_config' => ['time' => '02:00'],

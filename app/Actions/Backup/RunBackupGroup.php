@@ -280,14 +280,19 @@ class RunBackupGroup
 
         try {
             Cache::lock($lockKey, 86400)
-                ->block(self::VOLUME_LOCK_WAIT_SECONDS, function () use ($memberRun, $volume): void {
-                    // Holding the shared volume lock already excludes a running
-                    // backup/restore; this also mirrors RunBackupJob's volumeBusy
-                    // guard for a terminal run that still has containers stopped
-                    // (pending restart/reconcile), so we never read a volume whose
-                    // apps are still down. The member is retried next group run.
-                    if (filled($volume) && $this->volumeBusy($volume, $memberRun->id)) {
-                        throw new RuntimeException('Volume "'.$volume.'" is not ready (a previous run still has containers stopped); skipped in this group run.');
+                ->block(self::VOLUME_LOCK_WAIT_SECONDS, function () use ($memberRun, $member, $volume): void {
+                    // Holding the lock already excludes a running backup/restore;
+                    // this also mirrors RunBackupJob's volumeBusy guard for a
+                    // terminal run that still has containers stopped (pending
+                    // restart/reconcile) or a run that outlived the 24h lock TTL, so
+                    // we never overlap it. Keyed on the volume for a Docker-volume
+                    // member, on the job for a host-path member. Retried next run.
+                    if (filled($volume)) {
+                        if ($this->volumeBusy($volume, $memberRun->id)) {
+                            throw new RuntimeException('Volume "'.$volume.'" is not ready (a previous run still has containers stopped); skipped in this group run.');
+                        }
+                    } elseif ($this->jobBusy($member->id, $memberRun->id)) {
+                        throw new RuntimeException('Job "'.$member->name.'" is not ready (a previous run of it is still in progress); skipped in this group run.');
                     }
 
                     $this->runBackup->handle($memberRun);
@@ -329,6 +334,21 @@ class RunBackupGroup
             ->exists();
 
         return $backupBusy || $restoreBusy;
+    }
+
+    /**
+     * Host-path counterpart of {@see volumeBusy()}: whether another backup run of
+     * the same job is still working (running, or terminal but mid-restart of its
+     * containers). Host-path members serialize on their per-job lock, which
+     * restores never share, so only sibling backup runs count.
+     */
+    private function jobBusy(int $jobId, int $exceptBackupRunId): bool
+    {
+        return BackupRun::query()
+            ->where('backup_job_id', $jobId)
+            ->whereKeyNot($exceptBackupRunId)
+            ->where(fn ($query) => $this->stillWorking($query))
+            ->exists();
     }
 
     private function stillWorking($query): void

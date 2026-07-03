@@ -798,6 +798,92 @@ class GroupedBackupTest extends TestCase
         $this->assertStringContainsString('was left stopped by another group member', $hostRun->logs);
     }
 
+    public function test_reconciliation_releases_the_per_job_lock_of_a_stale_queued_host_path_member(): void
+    {
+        $group = $this->group();
+        $member = $this->hostMember($group);
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+        // A host-path member stuck queued: the group worker crashed after acquiring
+        // the per-job lock in-process but before RunBackup flipped it to running.
+        $memberRun = BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        BackupRun::whereKey($memberRun->id)->update(['created_at' => now()->subHour()]);
+
+        // Host-path members lock on backup-job-{id}, not a volume key.
+        $lockKey = VolumeJobLock::cacheKeyFor('backup-job-'.$member->id);
+        $this->assertTrue(Cache::lock($lockKey, 86400)->get());
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->fresh()->status);
+        $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the member per-job lock should be released');
+    }
+
+    public function test_a_queued_host_path_run_waiting_on_its_job_lock_is_not_reconciled(): void
+    {
+        $group = $this->group();
+        $member = $this->hostMember($group);
+
+        // A run of the same host-path job is still running: it holds the per-job
+        // lock the queued run below is legitimately waiting on.
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'started_at' => now(),
+        ]);
+        $waiter = BackupRun::create([
+            'backup_job_id' => $member->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        BackupRun::whereKey($waiter->id)->update(['created_at' => now()->subHour()]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // The waiter is pending on the job lock, not stale — it must survive.
+        $this->assertSame(BackupRun::STATUS_QUEUED, $waiter->fresh()->status);
+    }
+
+    public function test_a_host_path_member_is_skipped_when_a_sibling_run_is_still_working(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunStarted')->once();
+        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $member = $this->hostMember($group);
+
+        // A sibling run of the same host-path job is still working; the group member
+        // holds the same per-job lock only after the sibling's expired, so the busy
+        // guard must skip it rather than overlap the sibling.
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'started_at' => now(),
+        ]);
+
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        app(RunBackupGroup::class)->handle($run);
+
+        // Skipped, not run: had the guard not fired the fake docker would succeed.
+        $memberRun = BackupRun::where('backup_group_run_id', $run->id)->firstOrFail();
+        $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->status);
+    }
+
     private function hostMember(BackupJobGroup $group, array $stopContainerNames = []): BackupJob
     {
         return BackupJob::create([
