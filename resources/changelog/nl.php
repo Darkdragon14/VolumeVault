@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'user_date_format_preference' => [
+        'title' => 'Datumformaat per gebruiker',
+        'description' => 'Elke gebruiker kan nu in het profiel kiezen welke regionale notatie wordt gebruikt om datums weer te geven. Zo kan de interface Engels blijven terwijl datums overschakelen van de Amerikaanse maand/dag-volgorde naar de Australische of Britse dag/maand-volgorde. De applicatietijdzone bepaalt nog steeds welke lokale tijd wordt getoond.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-volumebestemmingen',
         'description' => 'Een nieuwe bestemming ‘Docker-volume’ maakt back-ups naar een benoemd Docker-volume — elke driver, inclusief NFS of andere netwerkshares. Declareer het volume in je Compose-bestand en VolumeVault koppelt het op naam aan de tijdelijke back-upcontainer, zodat back-ups, herstelacties, lijstweergave en opslaggebruik werken zonder een hostpad met VolumeVault te delen. Als het volume niet meer bestaat, mislukt de bestemming met een duidelijke fout in plaats van stilletjes naar een leeg, nieuw aangemaakt volume te schrijven.',

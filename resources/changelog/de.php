@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'user_date_format_preference' => [
+        'title' => 'Datumsformat pro Benutzer',
+        'description' => 'Jeder Benutzer kann jetzt im Profil das regionale Format fuer angezeigte Daten waehlen. Zum Beispiel kann die Oberflaeche auf Englisch bleiben, waehrend Datumsanzeigen von der US-Reihenfolge Monat/Tag auf die australische oder britische Reihenfolge Tag/Monat wechseln. Die Anwendungs-Zeitzone steuert weiterhin, welche lokale Uhrzeit angezeigt wird.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-Volume-Ziele',
         'description' => 'Ein neues Ziel „Docker-Volume“ sichert in ein benanntes Docker-Volume — jeder Treiber, einschließlich NFS oder anderer Netzwerkfreigaben. Deklarieren Sie das Volume in Ihrer Compose-Datei, und VolumeVault bindet es per Namen in den temporären Backup-Container ein, sodass Backups, Wiederherstellungen, Auflistung und Speichernutzung funktionieren, ohne einen Host-Pfad mit VolumeVault zu teilen. Wenn das Volume nicht mehr existiert, schlägt das Ziel mit einer klaren Fehlermeldung fehl, anstatt unbemerkt in ein leeres, neu erstelltes Volume zu schreiben.',

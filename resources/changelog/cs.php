@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'user_date_format_preference' => [
+        'title' => 'Predvolba formatu data pro uzivatele',
+        'description' => 'Kazdy uzivatel si nyni muze v profilu vybrat regionalni format pro zobrazovani dat. Napriklad rozhrani muze zustat v anglictine, zatimco data prejdou z americkeho poradi mesic/den na australske nebo britske poradi den/mesic. Casove pasmo aplikace nadale urcuje, ktery mistni cas se zobrazi.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Cíle svazku Docker',
         'description' => 'Nový cíl „Svazek Docker“ zálohuje do pojmenovaného svazku Docker — libovolný ovladač, včetně NFS nebo jiných síťových sdílení. Deklarujte svazek ve svém souboru Compose a VolumeVault jej připojí podle názvu do dočasného zálohovacího kontejneru, takže zálohy, obnovy, výpis i využití úložiště fungují, aniž byste s VolumeVault sdíleli cestu hostitele. Pokud svazek již neexistuje, cíl selže s jasnou chybou místo toho, aby nepozorovaně zapisoval do prázdného, nově vytvořeného svazku.',

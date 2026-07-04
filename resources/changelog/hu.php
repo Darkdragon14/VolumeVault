@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'user_date_format_preference' => [
+        'title' => 'Felhasznalonkenti datumformatum',
+        'description' => 'Mostantol minden felhasznalo kivalaszthatja a profiljaban, milyen regionalis formatum jelenjen meg a datumoknal. Peldaul az interfesz maradhat angol, mikozben a datumok az amerikai honap/nap sorrendrol az ausztral vagy brit nap/honap sorrendre valtananak. Az alkalmazas idozonaja tovabbra is azt hatarozza meg, melyik helyi ido jelenik meg.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-kötet célok',
         'description' => 'Egy új „Docker-kötet“ célállomás egy névvel ellátott Docker-kötetre készít biztonsági mentést — bármilyen illesztőprogram, beleértve az NFS-t vagy más hálózati megosztásokat. Deklarálja a kötetet a Compose-fájlban, és a VolumeVault név szerint csatolja az ideiglenes mentési konténerbe, így a mentések, a visszaállítások, a listázás és a tárhelyhasználat anélkül működik, hogy gazdagép-elérési utat kellene megosztani a VolumeVault-tal. Ha a kötet már nem létezik, a célállomás egyértelmű hibával hiúsul meg, ahelyett hogy észrevétlenül egy üres, újonnan létrehozott kötetbe írna.',

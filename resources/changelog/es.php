@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'user_date_format_preference' => [
+        'title' => 'Preferencia de formato de fecha por usuario',
+        'description' => 'Cada usuario puede elegir desde su perfil el formato regional usado para mostrar fechas. Por ejemplo, la interfaz puede seguir en ingles mientras las fechas cambian del orden estadounidense mes/dia al orden australiano o britanico dia/mes. La zona horaria de la aplicacion sigue controlando que hora local se muestra.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Destinos de volumen de Docker',
         'description' => 'Un nuevo destino «Volumen de Docker» realiza copias de seguridad en un volumen de Docker con nombre —cualquier controlador, incluido NFS u otros recursos de red—. Declara el volumen en tu archivo Compose y VolumeVault lo monta por su nombre en el contenedor de copia temporal, de modo que las copias, las restauraciones, el listado y el uso de almacenamiento funcionan sin compartir ninguna ruta del host con VolumeVault. Si el volumen ya no existe, el destino falla con un error claro en lugar de escribir en silencio en un volumen vacío recién creado.',

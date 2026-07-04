@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'user_date_format_preference',
+        ],
+    ],
     'releases' => [
         'v1.16.1' => [
             'date' => '2026-06-30',
