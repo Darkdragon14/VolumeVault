@@ -96,7 +96,7 @@ The host is resolved just before connecting, so a determined attacker controllin
 
 When you serve VolumeVault over HTTPS (directly or behind a TLS-terminating reverse proxy), set `SESSION_SECURE_COOKIE=true` so the session cookie is only sent over HTTPS. **Leave it off for plain-HTTP or LAN-only access** — a `Secure` cookie is never sent over plain HTTP, so enabling it without TLS breaks login. Behind a reverse proxy, this works once `TRUSTED_PROXIES` is set and the proxy forwards `X-Forwarded-Proto: https` (see the docs for the full reverse-proxy setup).
 
-Keep your `APP_KEY` safe: it is required to decrypt destinations, notifications, and installation saves.
+Keep your `APP_KEY` safe: it is required to decrypt destinations, notifications, two-factor secrets, and installation saves.
 
 ## Documentation
 

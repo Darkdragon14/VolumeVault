@@ -52,7 +52,7 @@ Enable it from **Profile → Two-factor authentication**: scan the QR code with 
 
 When you enable it, VolumeVault shows a set of single-use **recovery codes**. Store them somewhere safe — each one logs you in once if you lose access to your authenticator app, and you can regenerate the set at any time from the same screen. Disabling two-factor authentication requires confirming your current password.
 
-On the code screen you can tick **Trust this device for 30 days**. A trusted browser skips the 6-digit code on its next logins — but it never skips the password, which is still required every session — so a stolen device cookie is useless on its own. The cookie stores only a random token whose hash is kept server-side. You can review the list of trusted devices and revoke any of them (or all at once) from **Profile → Two-factor authentication**, and they are also revoked automatically when two-factor authentication is disabled or reset. Regular "remember me" login persistence is intentionally turned off for accounts with two-factor authentication, so the password is always re-entered on a new session.
+On the code screen you can tick **Trust this device for 30 days**. A trusted browser skips the 6-digit code on its next logins — but it never skips the password, which is still required every session — so a stolen device cookie is useless on its own. The cookie stores only a random token whose hash is kept server-side. You can review the list of trusted devices and revoke any of them (or all at once) from **Profile → Two-factor authentication**, and they are also revoked automatically when the password changes or two-factor authentication is disabled or reset. Regular "remember me" login persistence is intentionally turned off for accounts with two-factor authentication, so the password is always re-entered on a new session.
 
 The TOTP secret and recovery codes are encrypted at rest with `APP_KEY`. If a user loses both their authenticator app and their recovery codes, an administrator can clear their second factor from the **Users** page (the reset action appears only for users who have it enabled); the action is recorded in the activity log.
 
@@ -72,7 +72,7 @@ The save intentionally does not include `APP_KEY`. Keep `APP_KEY` outside the fi
 
 Secure saves exclude runtime-only data such as sessions, cache, queued jobs, temporary restore downloads, and logs. They can be downloaded locally or uploaded to an active backup destination under `installation-saves/` when the provider supports paths.
 
-To migrate an installation, start a fresh VolumeVault instance, choose `Import existing installation` during onboarding, upload the `.vvsave`, and provide the previous installation `APP_KEY`. Imported destination and notification secrets are re-encrypted with the new instance key after restore.
+To migrate an installation, start a fresh VolumeVault instance, choose `Import existing installation` during onboarding, upload the `.vvsave`, and provide the previous installation `APP_KEY`. Imported destination, notification, and user two-factor secrets are re-encrypted with the new instance key after restore.
 
 ## Safety Notes
 

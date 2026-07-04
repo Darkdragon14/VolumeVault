@@ -5,6 +5,14 @@ return [
         'title' => 'Datumformaat per gebruiker',
         'description' => 'Elke gebruiker kan nu in het profiel kiezen welke regionale notatie wordt gebruikt om datums weer te geven. Zo kan de interface Engels blijven terwijl datums overschakelen van de Amerikaanse maand/dag-volgorde naar de Australische of Britse dag/maand-volgorde. De applicatietijdzone bepaalt nog steeds welke lokale tijd wordt getoond.',
     ],
+    'trusted_2fa_device_password_revocation' => [
+        'title' => 'Betrouwbare 2FA-apparaten ingetrokken bij wachtwoordwijzigingen',
+        'description' => 'Het wijzigen of resetten van het wachtwoord van een gebruiker trekt nu diens betrouwbare 2FA-apparaten in. Bestaande records van betrouwbare apparaten worden tijdens de update verwijderd, zodat browsers opnieuw de 2FA-uitdaging moeten doorlopen voordat ze opnieuw vertrouwd kunnen worden.',
+    ],
+    'installation_save_two_factor_reencryption' => [
+        'title' => '2FA-geheimen opnieuw versleuteld bij installatie-import',
+        'description' => 'Import van installatiesaves versleutelt nu TOTP-geheimen en herstelcodes van gebruikers opnieuw met de APP_KEY van de nieuwe instantie, net als bestemmingen en meldingen, en voorkomt 2FA-lockouts na migratie.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-volumebestemmingen',
         'description' => 'Een nieuwe bestemming ‘Docker-volume’ maakt back-ups naar een benoemd Docker-volume — elke driver, inclusief NFS of andere netwerkshares. Declareer het volume in je Compose-bestand en VolumeVault koppelt het op naam aan de tijdelijke back-upcontainer, zodat back-ups, herstelacties, lijstweergave en opslaggebruik werken zonder een hostpad met VolumeVault te delen. Als het volume niet meer bestaat, mislukt de bestemming met een duidelijke fout in plaats van stilletjes naar een leeg, nieuw aangemaakt volume te schrijven.',

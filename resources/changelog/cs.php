@@ -5,6 +5,14 @@ return [
         'title' => 'Predvolba formatu data pro uzivatele',
         'description' => 'Kazdy uzivatel si nyni muze v profilu vybrat regionalni format pro zobrazovani dat. Napriklad rozhrani muze zustat v anglictine, zatimco data prejdou z americkeho poradi mesic/den na australske nebo britske poradi den/mesic. Casove pasmo aplikace nadale urcuje, ktery mistni cas se zobrazi.',
     ],
+    'trusted_2fa_device_password_revocation' => [
+        'title' => 'Duveryhodna zarizeni 2FA se rusi pri zmene hesla',
+        'description' => 'Zmena nebo reset hesla uzivatele nyni zrusi jeho duveryhodna zarizeni 2FA. Existujici zaznamy duveryhodnych zarizeni se pri aktualizaci vymazou, takze prohlizece musi znovu projit vyzvou 2FA, nez je bude mozne znovu oznacit jako duveryhodne.',
+    ],
+    'installation_save_two_factor_reencryption' => [
+        'title' => 'Tajemstvi 2FA se pri importu instalace znovu sifruji',
+        'description' => 'Importy instalacnich ulozeni ted znovu zasifruji uzivatelska tajemstvi TOTP a obnovovaci kody pomoci APP_KEY nove instance, stejne jako destinace a oznameni, a zabrani uzamceni 2FA po migraci.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Cíle svazku Docker',
         'description' => 'Nový cíl „Svazek Docker“ zálohuje do pojmenovaného svazku Docker — libovolný ovladač, včetně NFS nebo jiných síťových sdílení. Deklarujte svazek ve svém souboru Compose a VolumeVault jej připojí podle názvu do dočasného zálohovacího kontejneru, takže zálohy, obnovy, výpis i využití úložiště fungují, aniž byste s VolumeVault sdíleli cestu hostitele. Pokud svazek již neexistuje, cíl selže s jasnou chybou místo toho, aby nepozorovaně zapisoval do prázdného, nově vytvořeného svazku.',

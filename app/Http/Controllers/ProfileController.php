@@ -61,7 +61,7 @@ class ProfileController extends Controller
         return Inertia::render('Profile/Edit', $props);
     }
 
-    public function update(Request $request)
+    public function update(Request $request, TrustedDeviceManager $trustedDevices)
     {
         $user = $request->user();
 
@@ -74,11 +74,17 @@ class ProfileController extends Controller
             'password' => ['nullable', 'confirmed', Password::defaults()],
         ]);
 
-        if (! filled($data['password'] ?? null)) {
+        $passwordChanged = filled($data['password'] ?? null);
+
+        if (! $passwordChanged) {
             unset($data['password']);
         }
 
         $user->update($data);
+
+        if ($passwordChanged) {
+            $trustedDevices->forgetCookie();
+        }
 
         return redirect()->route('profile.edit')->with('success', 'Profile updated.');
     }

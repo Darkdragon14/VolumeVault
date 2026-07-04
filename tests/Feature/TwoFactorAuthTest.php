@@ -342,6 +342,54 @@ class TwoFactorAuthTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_profile_password_change_clears_trusted_devices_and_current_cookie(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $user = $this->userWithTwoFactor($secret);
+        $this->seedTrustedDevice($user, 'known-token');
+        $this->assertDatabaseCount('two_factor_trusted_devices', 1);
+
+        $this->actingAs($user)
+            ->withCookie(TrustedDeviceManager::COOKIE, 'known-token')
+            ->put('/profile', [
+                'name' => $user->name,
+                'email' => $user->email,
+                'locale' => $user->locale,
+                'date_locale' => $user->date_locale,
+                'default_per_page' => 10,
+                'password' => 'new-secret-password',
+                'password_confirmation' => 'new-secret-password',
+            ])
+            ->assertRedirect(route('profile.edit'))
+            ->assertCookieExpired(TrustedDeviceManager::COOKIE);
+
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
+        $this->assertTrue(Hash::check('new-secret-password', $user->fresh()->password));
+    }
+
+    public function test_admin_password_change_clears_target_users_trusted_devices(): void
+    {
+        $secret = $this->google2fa()->generateSecretKey();
+        $target = $this->userWithTwoFactor($secret);
+        $admin = User::factory()->admin()->create();
+        $this->seedTrustedDevice($target, 'known-token');
+        $this->assertDatabaseCount('two_factor_trusted_devices', 1);
+
+        $this->actingAs($admin)
+            ->put('/users/'.$target->id, [
+                'name' => $target->name,
+                'email' => $target->email,
+                'role' => $target->role,
+                'locale' => $target->locale,
+                'password' => 'new-target-password',
+                'password_confirmation' => 'new-target-password',
+            ])
+            ->assertRedirect(route('users.index'));
+
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
+        $this->assertTrue(Hash::check('new-target-password', $target->fresh()->password));
+    }
+
     public function test_disabling_two_factor_clears_trusted_devices(): void
     {
         $secret = $this->google2fa()->generateSecretKey();

@@ -81,6 +81,15 @@ class User extends Authenticatable
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::updated(function (User $user): void {
+            if ($user->wasChanged('password')) {
+                $user->twoFactorTrustedDevices()->delete();
+            }
+        });
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === self::ROLE_ADMIN;
