@@ -6,6 +6,14 @@ return [
             'type' => 'feature',
             'key' => 'user_date_format_preference',
         ],
+        [
+            'type' => 'change',
+            'key' => 'trusted_2fa_device_password_revocation',
+        ],
+        [
+            'type' => 'change',
+            'key' => 'installation_save_two_factor_reencryption',
+        ],
     ],
     'releases' => [
         'v1.16.1' => [

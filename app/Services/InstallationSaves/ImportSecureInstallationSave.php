@@ -24,6 +24,7 @@ class ImportSecureInstallationSave
         'job_batches',
         'failed_jobs',
         'password_reset_tokens',
+        'two_factor_trusted_devices',
     ];
 
     public function __construct(private readonly SecureSaveCrypto $crypto) {}
@@ -122,6 +123,8 @@ class ImportSecureInstallationSave
         $this->reencryptColumn($pdo, 'backup_destinations', 'secret_access_key', $oldEncrypter, $currentEncrypter);
         $this->reencryptColumn($pdo, 'backup_destinations', 'secrets', $oldEncrypter, $currentEncrypter);
         $this->reencryptColumn($pdo, 'notification_channels', 'url', $oldEncrypter, $currentEncrypter);
+        $this->reencryptColumn($pdo, 'users', 'two_factor_secret', $oldEncrypter, $currentEncrypter);
+        $this->reencryptColumn($pdo, 'users', 'two_factor_recovery_codes', $oldEncrypter, $currentEncrypter);
     }
 
     private function clearVolatileTables(PDO $pdo): void

@@ -5,6 +5,14 @@ return [
         'title' => 'Per-user date format preference',
         'description' => 'Each user can now choose the regional format used to display dates from their profile. For example, English users can keep the interface in English while switching date displays from US month/day order to Australian or UK day/month order. The application timezone still controls which local time is shown.',
     ],
+    'trusted_2fa_device_password_revocation' => [
+        'title' => 'Trusted 2FA devices revoked on password changes',
+        'description' => 'Changing or resetting a user password now revokes that user\'s trusted 2FA devices. Existing trusted-device records are cleared during the update, so browsers must pass the 2FA challenge again before they can be trusted.',
+    ],
+    'installation_save_two_factor_reencryption' => [
+        'title' => '2FA secrets re-encrypted during installation import',
+        'description' => 'Installation save imports now re-encrypt user TOTP secrets and recovery codes with the new instance APP_KEY, matching destinations and notifications and preventing 2FA lockouts after migration.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker volume destinations',
         'description' => 'A new "Docker volume" destination backs up to a named Docker volume — any driver, including NFS or other network shares. Declare the volume in your Compose file and VolumeVault mounts it by name into the temporary backup container, so backups, restores, listing and storage usage all work without sharing a host path with VolumeVault. If the volume no longer exists, the destination fails with a clear error instead of silently writing to an empty, freshly created volume.',

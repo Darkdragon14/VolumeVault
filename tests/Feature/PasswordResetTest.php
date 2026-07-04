@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\TwoFactor\TrustedDeviceManager;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
@@ -15,6 +16,14 @@ use Tests\TestCase;
 class PasswordResetTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function seedTrustedDevice(User $user, string $token = 'known-trusted-token'): void
+    {
+        $user->twoFactorTrustedDevices()->create([
+            'token' => hash('sha256', $token),
+            'expires_at' => now()->addDays(TrustedDeviceManager::DAYS),
+        ]);
+    }
 
     public function test_password_reset_link_request_sends_notification_without_leaking_missing_users(): void
     {
@@ -67,6 +76,8 @@ class PasswordResetTest extends TestCase
             'payload' => 'payload',
             'last_activity' => now()->timestamp,
         ]);
+        $this->seedTrustedDevice($user);
+        $this->assertDatabaseCount('two_factor_trusted_devices', 1);
 
         $this->post('/reset-password', [
             'token' => $token,
@@ -78,6 +89,7 @@ class PasswordResetTest extends TestCase
         $user->refresh();
         $this->assertTrue(Hash::check('new-secret-password', $user->password));
         $this->assertDatabaseMissing('sessions', ['id' => 'session-to-delete']);
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
     }
 
     public function test_invalid_password_reset_token_is_rejected(): void
@@ -103,6 +115,8 @@ class PasswordResetTest extends TestCase
             'payload' => 'payload',
             'last_activity' => now()->timestamp,
         ]);
+        $this->seedTrustedDevice($user);
+        $this->assertDatabaseCount('two_factor_trusted_devices', 1);
 
         $this->artisan('volumevault:reset-password', ['email' => 'admin@example.com'])
             ->expectsQuestion('New password', 'cli-secret-password')
@@ -113,5 +127,6 @@ class PasswordResetTest extends TestCase
         $user->refresh();
         $this->assertTrue(Hash::check('cli-secret-password', $user->password));
         $this->assertDatabaseMissing('sessions', ['id' => 'cli-session-to-delete']);
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
     }
 }

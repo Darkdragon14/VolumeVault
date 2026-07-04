@@ -7,6 +7,7 @@ use App\Models\NotificationChannel;
 use App\Models\User;
 use App\Services\InstallationSaves\CreateSecureInstallationSave;
 use App\Services\InstallationSaves\ImportSecureInstallationSave;
+use App\Services\TwoFactor\TrustedDeviceManager;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -58,7 +59,17 @@ class InstallationSaveTest extends TestCase
 
     public function test_secure_save_import_restores_storage_and_reencrypts_secrets_with_current_app_key(): void
     {
-        User::factory()->admin()->create(['email' => 'owner@example.com']);
+        $user = User::factory()->admin()->create(['email' => 'owner@example.com']);
+        $user->forceFill([
+            'two_factor_secret' => 'JBSWY3DPEHPK3PXP',
+            'two_factor_recovery_codes' => ['aaaaaaaaaa-bbbbbbbbbb'],
+            'two_factor_confirmed_at' => now(),
+        ])->save();
+        $user->refresh();
+        $user->twoFactorTrustedDevices()->create([
+            'token' => hash('sha256', 'trusted-token'),
+            'expires_at' => now()->addDays(TrustedDeviceManager::DAYS),
+        ]);
         $destination = BackupDestination::create([
             'name' => 'S3',
             'provider' => BackupDestination::PROVIDER_AWS_S3,
@@ -92,6 +103,8 @@ class InstallationSaveTest extends TestCase
         ]);
 
         $previousAppKey = (string) config('app.key');
+        $oldRawTwoFactorSecret = $user->getRawOriginal('two_factor_secret');
+        $oldRawTwoFactorRecoveryCodes = $user->getRawOriginal('two_factor_recovery_codes');
         $oldRawSecret = $destination->getRawOriginal('secret_access_key');
         $oldRawUrl = $channel->getRawOriginal('url');
         $save = app(CreateSecureInstallationSave::class)->handle();
@@ -104,16 +117,22 @@ class InstallationSaveTest extends TestCase
 
         $importedDestination = BackupDestination::firstOrFail();
         $importedChannel = NotificationChannel::firstOrFail();
+        $importedUser = User::firstOrFail();
 
-        $this->assertSame('owner@example.com', User::firstOrFail()->email);
+        $this->assertSame('owner@example.com', $importedUser->email);
+        $this->assertSame('JBSWY3DPEHPK3PXP', $importedUser->two_factor_secret);
+        $this->assertSame(['aaaaaaaaaa-bbbbbbbbbb'], $importedUser->two_factor_recovery_codes);
         $this->assertSame('old-access-key', $importedDestination->access_key_id);
         $this->assertSame('old-secret-key', $importedDestination->secret_access_key);
         $this->assertSame('ntfy://ntfy.sh/volumevault-secret-topic', $importedChannel->url);
+        $this->assertNotSame($oldRawTwoFactorSecret, $importedUser->getRawOriginal('two_factor_secret'));
+        $this->assertNotSame($oldRawTwoFactorRecoveryCodes, $importedUser->getRawOriginal('two_factor_recovery_codes'));
         $this->assertNotSame($oldRawSecret, $importedDestination->getRawOriginal('secret_access_key'));
         $this->assertNotSame($oldRawUrl, $importedChannel->getRawOriginal('url'));
         $this->assertDatabaseCount('sessions', 0);
         $this->assertDatabaseCount('cache', 0);
         $this->assertDatabaseCount('jobs', 0);
+        $this->assertDatabaseCount('two_factor_trusted_devices', 0);
 
         File::delete($externalSavePath);
     }

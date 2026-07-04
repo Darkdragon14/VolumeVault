@@ -5,6 +5,14 @@ return [
         'title' => 'Preference de format de date par utilisateur',
         'description' => 'Chaque utilisateur peut maintenant choisir depuis son profil le format regional utilise pour afficher les dates. Par exemple, l\'interface peut rester en anglais tout en passant les dates de l\'ordre americain mois/jour a l\'ordre australien ou britannique jour/mois. Le fuseau horaire de l\'application controle toujours l\'heure locale affichee.',
     ],
+    'trusted_2fa_device_password_revocation' => [
+        'title' => 'Appareils 2FA fiables revoques lors des changements de mot de passe',
+        'description' => 'Modifier ou reinitialiser le mot de passe d\'un utilisateur revoque maintenant ses appareils 2FA fiables. Les enregistrements existants sont effaces pendant la mise a jour, afin que les navigateurs repassent le challenge 2FA avant de pouvoir etre marques comme fiables.',
+    ],
+    'installation_save_two_factor_reencryption' => [
+        'title' => 'Secrets 2FA rechiffres pendant l\'import d\'installation',
+        'description' => 'Les imports de sauvegarde d\'installation rechiffrent maintenant les secrets TOTP et les codes de recuperation des utilisateurs avec l\'APP_KEY de la nouvelle instance, comme les destinations et notifications, afin d\'eviter les blocages 2FA apres migration.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Destinations volume Docker',
         'description' => 'Une nouvelle destination « Volume Docker » sauvegarde vers un volume Docker nommé — n\'importe quel pilote, y compris NFS ou d\'autres partages réseau. Déclarez le volume dans votre fichier Compose et VolumeVault le monte par son nom dans le conteneur de sauvegarde temporaire : les sauvegardes, les restaurations, le listing et l\'utilisation du stockage fonctionnent sans partager de chemin hôte avec VolumeVault. Si le volume n\'existe plus, la destination échoue avec une erreur claire au lieu d\'écrire silencieusement dans un volume vide recréé automatiquement.',

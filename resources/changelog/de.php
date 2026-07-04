@@ -5,6 +5,14 @@ return [
         'title' => 'Datumsformat pro Benutzer',
         'description' => 'Jeder Benutzer kann jetzt im Profil das regionale Format fuer angezeigte Daten waehlen. Zum Beispiel kann die Oberflaeche auf Englisch bleiben, waehrend Datumsanzeigen von der US-Reihenfolge Monat/Tag auf die australische oder britische Reihenfolge Tag/Monat wechseln. Die Anwendungs-Zeitzone steuert weiterhin, welche lokale Uhrzeit angezeigt wird.',
     ],
+    'trusted_2fa_device_password_revocation' => [
+        'title' => 'Vertrauenswurdige 2FA-Gerate werden bei Passwortanderungen widerrufen',
+        'description' => 'Beim Andern oder Zurucksetzen eines Benutzerpassworts werden jetzt die vertrauenswurdigen 2FA-Gerate dieses Benutzers widerrufen. Bestehende Datensatze vertrauenswurdiger Gerate werden wahrend der Aktualisierung geloscht, sodass Browser die 2FA-Prufung erneut bestehen mussen, bevor sie wieder vertrauenswurdig sind.',
+    ],
+    'installation_save_two_factor_reencryption' => [
+        'title' => '2FA-Geheimnisse werden beim Installationsimport neu verschlusselt',
+        'description' => 'Installationssave-Importe verschlusseln TOTP-Geheimnisse und Wiederherstellungscodes der Benutzer jetzt mit der APP_KEY der neuen Instanz neu, genau wie Ziele und Benachrichtigungen, und verhindern dadurch 2FA-Sperren nach einer Migration.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-Volume-Ziele',
         'description' => 'Ein neues Ziel „Docker-Volume“ sichert in ein benanntes Docker-Volume — jeder Treiber, einschließlich NFS oder anderer Netzwerkfreigaben. Deklarieren Sie das Volume in Ihrer Compose-Datei, und VolumeVault bindet es per Namen in den temporären Backup-Container ein, sodass Backups, Wiederherstellungen, Auflistung und Speichernutzung funktionieren, ohne einen Host-Pfad mit VolumeVault zu teilen. Wenn das Volume nicht mehr existiert, schlägt das Ziel mit einer klaren Fehlermeldung fehl, anstatt unbemerkt in ein leeres, neu erstelltes Volume zu schreiben.',
