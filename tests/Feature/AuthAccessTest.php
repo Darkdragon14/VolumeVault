@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class AuthAccessTest extends TestCase
@@ -46,6 +47,60 @@ class AuthAccessTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->patch('/user/locale', ['locale' => 'cz'])
             ->assertSessionHasErrors('locale');
+    }
+
+    public function test_profile_exposes_date_locale_preference(): void
+    {
+        $user = User::factory()->create(['date_locale' => 'en-AU']);
+
+        $this->actingAs($user)
+            ->get('/profile')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Profile/Edit')
+                ->where('profileUser.date_locale', 'en-AU')
+                ->where('dateLocales.1', 'en-AU'));
+    }
+
+    public function test_authenticated_user_can_update_profile_date_locale(): void
+    {
+        $user = User::factory()->create(['date_locale' => null]);
+
+        $this->actingAs($user)
+            ->put('/profile', [
+                'name' => $user->name,
+                'email' => $user->email,
+                'locale' => 'en',
+                'date_locale' => 'en-AU',
+                'default_per_page' => 10,
+                'password' => '',
+                'password_confirmation' => '',
+            ])
+            ->assertRedirect(route('profile.edit'));
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'date_locale' => 'en-AU',
+        ]);
+    }
+
+    public function test_invalid_profile_date_locale_is_rejected(): void
+    {
+        $user = User::factory()->create(['date_locale' => null]);
+
+        $this->actingAs($user)
+            ->put('/profile', [
+                'name' => $user->name,
+                'email' => $user->email,
+                'locale' => 'en',
+                'date_locale' => 'en-XX',
+                'default_per_page' => 10,
+                'password' => '',
+                'password_confirmation' => '',
+            ])
+            ->assertSessionHasErrors('date_locale');
+
+        $this->assertNull($user->fresh()->date_locale);
     }
 
     public function test_login_authenticates_existing_user(): void

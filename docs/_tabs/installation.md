@@ -173,7 +173,7 @@ When `APP_VERSION` is a tagged release, VolumeVault can also check GitHub for a 
 - `APP_KEY`: required for encrypted destination credentials, notification URLs, and installation saves.
 - `APP_ENV`: defaults to `production`.
 - `APP_DEBUG`: defaults to `false`.
-- `APP_TIMEZONE`: timezone used to interpret backup schedules and display backup job dates, defaults to `UTC`. Use an IANA timezone such as `Europe/Paris`.
+- `APP_TIMEZONE`: timezone used to interpret backup schedules and display date/times, defaults to `UTC`. Use an IANA timezone such as `Europe/Paris`. Each user can choose their regional date format from their profile; this changes the displayed order such as month/day vs day/month without changing the timezone.
 - `APP_URL`: public URL, defaults to `http://localhost:8080`.
 - `TRUSTED_PROXIES`: reverse proxy IP, CIDR, comma-separated list, or `*` when running behind HTTPS termination. Leave empty when exposing VolumeVault directly. If you use `*`, ensure the backend is only reachable through a proxy that overwrites forwarded headers.
 - `VOLUMEVAULT_HOST_PATH_ALLOWLIST`: comma-separated list of Docker host path prefixes allowed for host-path backup sources **and local backup destinations**, for example `/srv,/mnt/data`. Fail-closed: when empty, host-path sources and local destinations are refused. Set the prefixes you intend to back up to/from.

@@ -25,8 +25,9 @@ class ProfileController extends Controller
         $pending = $user->two_factor_secret && ! $user->hasTwoFactorEnabled();
 
         $props = [
-            'profileUser' => $user->only(['id', 'name', 'email', 'locale', 'default_per_page']),
+            'profileUser' => $user->only(['id', 'name', 'email', 'locale', 'date_locale', 'default_per_page']),
             'locales' => User::SUPPORTED_LOCALES,
+            'dateLocales' => User::SUPPORTED_DATE_LOCALES,
             'perPageOptions' => self::VALID_PER_PAGE_VALUES,
             'twoFactorEnabled' => $user->hasTwoFactorEnabled(),
             'twoFactorPending' => $pending,
@@ -68,6 +69,7 @@ class ProfileController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user)],
             'locale' => ['required', 'string', Rule::in(User::SUPPORTED_LOCALES)],
+            'date_locale' => ['nullable', 'string', Rule::in(User::SUPPORTED_DATE_LOCALES)],
             'default_per_page' => ['required', 'integer', Rule::in(self::VALID_PER_PAGE_VALUES)],
             'password' => ['nullable', 'confirmed', Password::defaults()],
         ]);

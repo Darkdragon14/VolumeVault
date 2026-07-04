@@ -3,6 +3,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import PasswordInput from '@/Components/PasswordInput.vue';
 import { languageNames, useI18n } from '@/i18n';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps<{
     profileUser: {
@@ -10,9 +11,11 @@ const props = defineProps<{
         name: string;
         email: string;
         locale: string;
+        date_locale: string | null;
         default_per_page: number;
     };
     locales: string[];
+    dateLocales: string[];
     perPageOptions: number[];
     twoFactorEnabled: boolean;
     twoFactorPending: boolean;
@@ -28,17 +31,44 @@ const props = defineProps<{
     }>;
 }>();
 
-const { t, formatDate } = useI18n();
+const { t, formatDate, timezone } = useI18n();
 const languageName = (locale: string) => languageNames[locale as keyof typeof languageNames] || locale;
+const dateLocaleNames: Record<string, string> = {
+    'en-US': 'English (United States)',
+    'en-AU': 'English (Australia)',
+    'en-GB': 'English (United Kingdom)',
+    'en-CA': 'English (Canada)',
+    'fr-FR': 'French (France)',
+    'de-DE': 'German (Germany)',
+    'es-ES': 'Spanish (Spain)',
+    'it-IT': 'Italian (Italy)',
+    'nl-NL': 'Dutch (Netherlands)',
+    'cs-CZ': 'Czech (Czechia)',
+    'hu-HU': 'Hungarian (Hungary)',
+    'ru-RU': 'Russian (Russia)',
+};
+const dateLocaleName = (dateLocale: string) => t(dateLocaleNames[dateLocale] || dateLocale);
 const perPageLabel = (value: number) => value === 0 ? t('All') : String(value);
 const form = useForm({
     name: props.profileUser.name,
     email: props.profileUser.email,
     locale: props.profileUser.locale,
+    date_locale: props.profileUser.date_locale || '',
     default_per_page: props.profileUser.default_per_page,
     password: '',
     password_confirmation: '',
 });
+const dateLocaleExample = computed(() => new Date('2026-07-04T06:37:15Z').toLocaleString(form.date_locale || form.locale, {
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+    month: '2-digit',
+    second: '2-digit',
+    timeZone: timezone.value,
+    timeZoneName: 'short',
+    year: 'numeric',
+}));
 
 const submit = () => form.put('/profile');
 
@@ -68,11 +98,11 @@ const revokeAllDevices = () => {
 
 <template>
     <Head :title="t('Edit profile')" />
-    <AppLayout :title="t('Edit profile')" :subtitle="t('Update your account information, language, and password.')">
+    <AppLayout :title="t('Edit profile')" :subtitle="t('Update your account information, preferences, and password.')">
         <form class="card max-w-2xl space-y-5 p-4 sm:p-6" @submit.prevent="submit">
             <div>
                 <h2 class="text-lg font-semibold text-white">{{ t('Profile details') }}</h2>
-                <p class="mt-1 text-sm text-slate-400">{{ t('Update your account information and preferred language.') }}</p>
+                <p class="mt-1 text-sm text-slate-400">{{ t('Update your account information and display preferences.') }}</p>
             </div>
 
             <label class="space-y-2">
@@ -95,6 +125,18 @@ const revokeAllDevices = () => {
                     </option>
                 </select>
                 <span v-if="form.errors.locale" class="text-sm text-rose-300">{{ form.errors.locale }}</span>
+            </label>
+
+            <label class="space-y-2">
+                <span class="label">{{ t('Date format') }}</span>
+                <select v-model="form.date_locale" class="input">
+                    <option value="">{{ t('Use language default') }}</option>
+                    <option v-for="dateLocale in dateLocales" :key="dateLocale" :value="dateLocale">
+                        {{ dateLocaleName(dateLocale) }}
+                    </option>
+                </select>
+                <span class="block text-xs text-slate-400">{{ t('Dates use this regional format without changing the interface language.') }} {{ t('Example: {date}', { date: dateLocaleExample }) }}</span>
+                <span v-if="form.errors.date_locale" class="text-sm text-rose-300">{{ form.errors.date_locale }}</span>
             </label>
 
             <label class="space-y-2">
