@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'grouped_backup_jobs',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.17.0' => [
+            'date' => '2026-07-06',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.17.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'grouped_backup_jobs',
+                ],
+            ],
+        ],
         'v1.16.2' => [
             'date' => '2026-07-04',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.16.2',
