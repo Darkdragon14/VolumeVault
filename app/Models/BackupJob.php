@@ -142,17 +142,18 @@ class BackupJob extends Model
     }
 
     /**
-     * Whether a backup run of this job is still queued or running. Used to refuse
-     * changing the source or deleting the job while a run is in flight: RunBackup
-     * reloads the job before mounting the source, so a source change mid-run could
-     * back up the wrong volume, and deleting the job cascade-drops a run whose
-     * containers may still be stopped.
+     * Whether a backup OR restore run of this job still matters for crash recovery:
+     * queued/running, or terminal but still owning containers it stopped and has not
+     * restarted yet (a worker can mark a run SUCCESS then crash in its finally). Used
+     * to refuse changing the source or deleting the job: RunBackup reloads the job
+     * before mounting the source (a mid-run change would back up the wrong volume),
+     * and deleting cascade-drops the run row ReconcileStaleRuns needs to restart the
+     * stopped containers.
      */
     public function hasRunInProgress(): bool
     {
-        return $this->runs()
-            ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
-            ->exists();
+        return $this->runs()->activeOrHoldingContainers()->exists()
+            || $this->restoreRuns()->activeOrHoldingContainers()->exists();
     }
 
     public function restoreRuns(): HasMany

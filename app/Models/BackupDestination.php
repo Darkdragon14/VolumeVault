@@ -204,6 +204,20 @@ class BackupDestination extends Model
         return $this->hasMany(RestoreRun::class);
     }
 
+    /**
+     * Whether deleting this destination would cascade-drop a run still needed for
+     * crash recovery. Deletion cascades its jobs, then their backup/restore runs,
+     * bypassing the per-job delete guard — so a run that is queued/running, or
+     * terminal but still holding stopped containers, must block the delete too.
+     */
+    public function hasRunInProgress(): bool
+    {
+        $ofThisDestination = fn ($query) => $query->where('backup_destination_id', $this->id);
+
+        return BackupRun::whereHas('job', $ofThisDestination)->activeOrHoldingContainers()->exists()
+            || RestoreRun::whereHas('job', $ofThisDestination)->activeOrHoldingContainers()->exists();
+    }
+
     public function alerts(): MorphMany
     {
         return $this->morphMany(Alert::class, 'subject');

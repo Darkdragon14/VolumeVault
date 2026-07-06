@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -75,6 +76,22 @@ class RestoreRun extends Model
     public function initiatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'initiated_by_user_id');
+    }
+
+    /**
+     * A run that still matters for crash recovery: queued/running, or terminal but
+     * still owning containers it stopped for a safe/in-place restore and has not
+     * restarted yet. Deleting the job/destination behind it cascade-drops the row
+     * ReconcileStaleRuns needs to restart those containers. Mirrors BackupRun.
+     */
+    public function scopeActiveOrHoldingContainers(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q): void {
+            $q->whereIn('status', [self::STATUS_QUEUED, self::STATUS_RUNNING])
+                ->orWhere(fn (Builder $inner) => $inner
+                    ->whereNotNull('stopped_container_ids')
+                    ->where('stopped_container_ids', '!=', '[]'));
+        });
     }
 
     /**

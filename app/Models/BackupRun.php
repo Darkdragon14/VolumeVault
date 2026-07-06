@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -79,5 +80,23 @@ class BackupRun extends Model
     public function initiatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'initiated_by_user_id');
+    }
+
+    /**
+     * A run that still matters for crash recovery: queued/running, or terminal but
+     * still owning containers it stopped and has not restarted yet (a worker can
+     * mark a run SUCCESS then crash in its finally before restarting them).
+     * Deleting the job/destination behind such a run cascade-drops the row
+     * ReconcileStaleRuns needs to restart those containers, so deletion is refused
+     * while any exists.
+     */
+    public function scopeActiveOrHoldingContainers(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q): void {
+            $q->whereIn('status', [self::STATUS_QUEUED, self::STATUS_RUNNING])
+                ->orWhere(fn (Builder $inner) => $inner
+                    ->whereNotNull('stopped_container_ids')
+                    ->where('stopped_container_ids', '!=', '[]'));
+        });
     }
 }

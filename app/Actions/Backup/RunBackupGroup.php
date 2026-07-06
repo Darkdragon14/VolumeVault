@@ -398,12 +398,23 @@ class RunBackupGroup
                     $this->runBackup->handle($memberRun);
                 });
         } catch (LockTimeoutException) {
-            $this->runBackup->markFailed(
-                $memberRun,
-                new RuntimeException(filled($volume)
-                    ? 'Volume "'.$volume.'" was busy; skipped in this group run.'
-                    : 'A concurrent run of this job was in progress; skipped in this group run.'),
-            );
+            // If the member became unrunnable (paused, detached, deleted) while we
+            // waited for the lock, cancel without markFailed — markFailed flips the
+            // job to ERROR, and a paused member flipped to ERROR would be picked up
+            // again by runnableMembers on the next run. Otherwise it is a genuine
+            // "volume/job still busy" skip.
+            $current = BackupJob::find($member->id);
+
+            if (! $this->memberIsRunnable($current, $groupRun)) {
+                $this->cancelMemberRun($memberRun, 'Member "'.$member->name.'" was paused, detached or deleted while waiting for its lock; skipped in this group run.');
+            } else {
+                $this->runBackup->markFailed(
+                    $memberRun,
+                    new RuntimeException(filled($volume)
+                        ? 'Volume "'.$volume.'" was busy; skipped in this group run.'
+                        : 'A concurrent run of this job was in progress; skipped in this group run.'),
+                );
+            }
         } catch (Throwable $exception) {
             // RunBackup normally swallows backup failures and marks the run itself;
             // this guards against an unexpected throw so one member cannot abort the

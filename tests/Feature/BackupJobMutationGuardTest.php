@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\RestoreRun;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -66,6 +67,81 @@ class BackupJobMutationGuardTest extends TestCase
             ->assertStatus(422);
 
         $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
+    }
+
+    public function test_deleting_a_job_is_blocked_while_a_terminal_run_still_holds_stopped_containers(): void
+    {
+        $job = $this->job('vol_a');
+        // SUCCESS, but its finally has not yet restarted the containers it stopped.
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subMinute(),
+            'finished_at' => now(),
+            'stopped_container_ids' => ['app-1'],
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('backup-jobs.index'))
+            ->delete(route('backup-jobs.destroy', $job))
+            ->assertRedirect(route('backup-jobs.index'))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
+    }
+
+    public function test_deleting_a_job_is_blocked_while_a_restore_run_holds_stopped_containers(): void
+    {
+        $job = $this->job('vol_a');
+        RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'vol_a',
+            'target_volume_name' => 'vol_a',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_SUCCESS,
+            'finished_at' => now(),
+            'stopped_container_ids' => ['app-1'],
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('backup-jobs.index'))
+            ->delete(route('backup-jobs.destroy', $job))
+            ->assertRedirect(route('backup-jobs.index'))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
+    }
+
+    public function test_deleting_a_destination_is_blocked_while_a_run_using_it_is_in_progress(): void
+    {
+        $job = $this->job('vol_a');
+        $this->runningRun($job);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('destinations.index'))
+            ->delete(route('destinations.destroy', $job->backup_destination_id))
+            ->assertRedirect(route('destinations.index'))
+            ->assertSessionHas('error');
+
+        // Deleting the destination would cascade the job and its in-flight run.
+        $this->assertDatabaseHas('backup_destinations', ['id' => $job->backup_destination_id]);
+        $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
+    }
+
+    public function test_api_deleting_a_destination_with_a_run_in_progress_is_rejected(): void
+    {
+        $job = $this->job('vol_a');
+        $this->runningRun($job);
+        $token = User::factory()->admin()->create()->createToken('vv', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->deleteJson("/api/v1/destinations/{$job->backup_destination_id}")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('backup_destinations', ['id' => $job->backup_destination_id]);
     }
 
     private function job(string $volume): BackupJob

@@ -139,7 +139,10 @@ class BackupJobGroupController extends Controller
             ]);
 
         if ($paused === 0) {
-            throw ValidationException::withMessages(['group' => 'A running group cannot be paused.']);
+            // Flash rather than throw a validation error: the groups index (where a
+            // stale Pause button lives) renders only flash banners, so an error-bag
+            // message would leave the user with no visible explanation.
+            return back()->with('error', 'A running group cannot be paused.');
         }
 
         return back()->with('success', 'Backup group paused.');

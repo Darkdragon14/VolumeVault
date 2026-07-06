@@ -260,11 +260,13 @@ class BackupJobGroupControllerTest extends TestCase
         $group->forceFill(['status' => BackupJobGroup::STATUS_RUNNING])->save();
 
         // The conditional pause update matches 0 rows for a running group, so the
-        // worker (which owns the running state) can never be un-paused from under it.
+        // worker (which owns the running state) can never be un-paused from under
+        // it. The index renders only flash banners, so the reason is flashed.
         $this->actingAs($this->admin())
             ->from(route('backup-groups.index'))
             ->post(route('backup-groups.pause', $group))
-            ->assertSessionHasErrors('group');
+            ->assertRedirect(route('backup-groups.index'))
+            ->assertSessionHas('error');
 
         $this->assertSame(BackupJobGroup::STATUS_RUNNING, $group->fresh()->status);
         $this->assertNull($group->fresh()->pause_reason);

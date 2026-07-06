@@ -81,6 +81,13 @@ class DestinationController extends Controller
 
     public function destroy(BackupDestination $destination)
     {
+        // Deleting a destination cascades its jobs and their runs, bypassing the
+        // per-job delete guard. Refuse while any of those runs is still in flight or
+        // holds stopped containers, so reconciliation keeps the row it needs.
+        if ($destination->hasRunInProgress()) {
+            return back()->with('error', 'A backup or restore using this destination is in progress. Wait for it to finish before deleting it.');
+        }
+
         $destination->delete();
 
         return redirect()->route('destinations.index')->with('success', 'Destination deleted.');
