@@ -106,11 +106,18 @@ class RunBackupGroup
             ])->save();
 
             $group->forceFill([
-                'status' => BackupJobGroup::STATUS_ERROR,
                 'last_run_at' => $startedAt,
                 'last_error' => 'Group run found no runnable member volumes.',
                 'last_error_at' => $finishedAt,
             ])->save();
+
+            // Flip to error only if not currently paused, atomically — an admin can
+            // pause between the pause check above and here, and this write must not
+            // overwrite that deliberate pause.
+            BackupJobGroup::query()
+                ->whereKey($group->id)
+                ->where('status', '!=', BackupJobGroup::STATUS_PAUSED)
+                ->update(['status' => BackupJobGroup::STATUS_ERROR]);
 
             ActivityLog::record('backup_group_run_failed', 'Backup group run had no runnable members.', $groupRun, [
                 'backup_job_group_id' => $group->id,

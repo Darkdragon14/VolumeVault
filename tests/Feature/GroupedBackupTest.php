@@ -1125,6 +1125,76 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupJob::STATUS_PAUSED, $job->fresh()->status);
     }
 
+    public function test_no_runnable_members_branch_does_not_overwrite_a_concurrent_pause(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunFinished');
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        // A paused member → runnableMembers() is empty, so handle() hits the
+        // no-runnable-members branch (the group itself is still active at load time).
+        $this->member($group, 'vol_a')->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+        $groupRun = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_SCHEDULED]);
+
+        // Pause the group in the DB the moment its model is loaded: the in-memory
+        // top-of-handle check still sees it active, but the no-members write races it.
+        $original = BackupJobGroup::getEventDispatcher();
+        $dispatcher = clone $original;
+        $done = false;
+        $dispatcher->listen('eloquent.retrieved: '.BackupJobGroup::class, function (BackupJobGroup $g) use ($group, &$done): void {
+            if ((int) $g->id === $group->id && ! $done) {
+                $done = true;
+                BackupJobGroup::whereKey($group->id)->update(['status' => BackupJobGroup::STATUS_PAUSED, 'pause_reason' => 'maintenance']);
+            }
+        });
+        BackupJobGroup::setEventDispatcher($dispatcher);
+
+        try {
+            app(RunBackupGroup::class)->handle($groupRun);
+        } finally {
+            BackupJobGroup::setEventDispatcher($original);
+        }
+
+        // The no-members branch must not clobber the deliberate pause.
+        $this->assertSame(BackupJobGroup::STATUS_PAUSED, $group->fresh()->status);
+        $this->assertSame('maintenance', $group->fresh()->pause_reason);
+    }
+
+    public function test_a_stale_queued_member_run_is_reconciled_not_treated_as_a_lock_waiter(): void
+    {
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunFinished');
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        // Crashed group worker: group run running with a stale heartbeat...
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHour(),
+            'last_heartbeat_at' => now()->subHour(),
+        ]);
+        // ...leaving a member run stuck queued (no queue job will ever resume it).
+        $memberRun = BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        BackupRun::whereKey($memberRun->id)->update(['created_at' => now()->subHour()]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // The member run is failed (not skipped as a lock waiter). Once its
+        // finished_at ages past the threshold, a later sweep closes the group run
+        // too — it no longer stays queued forever behind a phantom lock wait.
+        $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->fresh()->status);
+    }
+
     public function test_reconciling_a_stale_queued_member_keeps_a_paused_member_job_paused(): void
     {
         $group = $this->group();

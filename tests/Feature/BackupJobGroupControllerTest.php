@@ -324,6 +324,23 @@ class BackupJobGroupControllerTest extends TestCase
         $this->assertSame(BackupJobGroup::STATUS_RUNNING, $group->fresh()->status);
     }
 
+    public function test_pausing_a_running_member_job_flashes_a_visible_error(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        $member->forceFill(['status' => BackupJob::STATUS_RUNNING])->save();
+
+        // The jobs index renders only flash banners, so a stale Pause on a running
+        // job must flash the reason rather than return an invisible validation error.
+        $this->actingAs($this->admin())
+            ->from(route('backup-jobs.index'))
+            ->post(route('backup-jobs.pause', $member))
+            ->assertRedirect(route('backup-jobs.index'))
+            ->assertSessionHas('error');
+
+        $this->assertSame(BackupJob::STATUS_RUNNING, $member->fresh()->status);
+    }
+
     public function test_a_running_member_job_cannot_be_resumed(): void
     {
         $group = $this->group();

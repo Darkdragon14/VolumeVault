@@ -288,6 +288,15 @@ class ReconcileStaleRuns extends Command
             return false;
         }
 
+        // A group member run is executed inline by the group worker, not dispatched
+        // as its own queue job, so it is never a WithoutOverlapping lock waiter that
+        // will be redelivered. A crashed worker can leave it stuck queued; it must be
+        // reconciled (failed), not exempted — otherwise it stays queued forever and
+        // also keeps its group run open (groupRunHasActiveMemberRun sees it).
+        if ($run->belongsToGroupRun()) {
+            return false;
+        }
+
         // A host-path job has no volume: it serializes on its per-job lock, so a
         // queued run of the same job legitimately waiting on that lock must be
         // exempt just like a volume waiter — otherwise WithoutOverlapping requeuing

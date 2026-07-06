@@ -20,7 +20,6 @@ use App\Models\JobAlertConfig;
 use App\Models\NotificationChannel;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -165,7 +164,10 @@ class BackupJobController extends Controller
             ]);
 
         if ($paused === 0) {
-            throw ValidationException::withMessages(['job' => 'A running job cannot be paused.']);
+            // Flash rather than throw a validation error: the jobs index (where a
+            // stale Pause button lives) renders only flash banners, so an error-bag
+            // message would leave the user with no visible explanation.
+            return back()->with('error', 'A running job cannot be paused.');
         }
 
         return back()->with('success', 'Backup job paused.');
@@ -210,17 +212,23 @@ class BackupJobController extends Controller
     {
         $group = $backupJob->isGroupMember() ? $backupJob->group : null;
 
-        if ($group && $group->status === BackupJobGroup::STATUS_ERROR) {
-            $group->forceFill([
+        if ($group === null) {
+            return;
+        }
+
+        // Atomic conditional update: only flip from error, so a pause landing
+        // between reading the status and saving is not overwritten (a direct group
+        // resume is already atomic). Recompute the next slot from now, like a direct
+        // group resume, so an overdue next_run_at does not fire the group at once.
+        BackupJobGroup::query()
+            ->whereKey($group->id)
+            ->where('status', BackupJobGroup::STATUS_ERROR)
+            ->update([
                 'status' => BackupJobGroup::STATUS_ACTIVE,
                 'last_error' => null,
                 'last_error_at' => null,
-                // Recompute the next slot from now, exactly like a direct group
-                // resume, so an overdue next_run_at (left in the past by the failed
-                // run) does not make the scheduler fire the group immediately.
                 'next_run_at' => $this->scheduleCalculator->nextRunAt($group->schedule_type, $group->schedule_config ?? [], null, $group->timezone),
-            ])->save();
-        }
+            ]);
     }
 
     private function formProps(): array

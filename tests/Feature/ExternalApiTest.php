@@ -34,6 +34,19 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('components.securitySchemes.bearerAuth.scheme', 'bearer');
     }
 
+    public function test_openapi_collection_endpoints_have_no_id_param_and_report_correct_status(): void
+    {
+        $paths = $this->getJson('/api/v1/openapi.json')->assertOk()->json('paths');
+
+        // Collection/action endpoints without an {id} segment must not document an
+        // id path parameter.
+        $this->assertArrayNotHasKey('parameters', $paths['/backup-jobs']['post']);
+        $this->assertArrayNotHasKey('parameters', $paths['/volumes/sync']['post']);
+        // Creating a job returns 201, not 200.
+        $this->assertArrayHasKey('201', $paths['/backup-jobs']['post']['responses']);
+        $this->assertArrayNotHasKey('200', $paths['/backup-jobs']['post']['responses']);
+    }
+
     public function test_openapi_models_conditional_requirements_for_backup_jobs(): void
     {
         $schema = $this->getJson('/api/v1/openapi.json')

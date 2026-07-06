@@ -149,13 +149,18 @@ class BackupJobController extends Controller
         // immediately. A paused group is left untouched.
         $group = $backupJob->isGroupMember() ? $backupJob->group : null;
 
-        if ($group && $group->status === BackupJobGroup::STATUS_ERROR) {
-            $group->forceFill([
-                'status' => BackupJobGroup::STATUS_ACTIVE,
-                'last_error' => null,
-                'last_error_at' => null,
-                'next_run_at' => $this->scheduleCalculator->nextRunAt($group->schedule_type, $group->schedule_config ?? [], null, $group->timezone),
-            ])->save();
+        if ($group) {
+            // Atomic: only flip from error so a pause landing between the read and
+            // the save is not overwritten. Recompute next_run_at like a direct resume.
+            BackupJobGroup::query()
+                ->whereKey($group->id)
+                ->where('status', BackupJobGroup::STATUS_ERROR)
+                ->update([
+                    'status' => BackupJobGroup::STATUS_ACTIVE,
+                    'last_error' => null,
+                    'last_error_at' => null,
+                    'next_run_at' => $this->scheduleCalculator->nextRunAt($group->schedule_type, $group->schedule_config ?? [], null, $group->timezone),
+                ]);
         }
 
         return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
