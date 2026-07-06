@@ -125,6 +125,20 @@ class BackupJobController extends Controller
                 : $this->scheduleCalculator->nextRunAt($backupJob->schedule_type, $backupJob->schedule_config ?? [], null, $backupJob->timezone),
         ])->save();
 
+        // A group member is only dispatched while its group is active. If a member
+        // failed and left the group in error, resuming the member alone would leave
+        // the group unscheduled — bring the group back to active too. A paused group
+        // is left untouched (a deliberate group-level action, not a member failure).
+        $group = $backupJob->isGroupMember() ? $backupJob->group : null;
+
+        if ($group && $group->status === BackupJobGroup::STATUS_ERROR) {
+            $group->forceFill([
+                'status' => BackupJobGroup::STATUS_ACTIVE,
+                'last_error' => null,
+                'last_error_at' => null,
+            ])->save();
+        }
+
         return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
     }
 

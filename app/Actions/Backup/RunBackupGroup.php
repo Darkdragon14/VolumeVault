@@ -281,11 +281,19 @@ class RunBackupGroup
         $groupRun->loadMissing('group');
 
         if ($groupRun->group) {
-            $groupRun->group->forceFill([
-                'status' => BackupJobGroup::STATUS_ERROR,
+            $attributes = [
                 'last_error' => $message,
                 'last_error_at' => $finishedAt,
-            ])->save();
+            ];
+
+            // Preserve an admin pause: a queued group run can be paused (the normal
+            // worker path cancels it), but reconciliation reaching here must not
+            // flip paused -> error, which would let the scheduler dispatch it again.
+            if ($groupRun->group->status !== BackupJobGroup::STATUS_PAUSED) {
+                $attributes['status'] = BackupJobGroup::STATUS_ERROR;
+            }
+
+            $groupRun->group->forceFill($attributes)->save();
         }
 
         ActivityLog::record('backup_group_run_failed', 'Backup group run failed.', $groupRun, [

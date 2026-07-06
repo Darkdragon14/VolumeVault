@@ -1036,6 +1036,60 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupJob::STATUS_PAUSED, $member->fresh()->status);
     }
 
+    public function test_reconciling_a_stale_queued_member_keeps_a_paused_member_job_paused(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+        // Worker created the member run, crashed before RunBackup claimed it, then
+        // the admin paused the member.
+        $memberRun = BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        BackupRun::whereKey($memberRun->id)->update(['created_at' => now()->subHour()]);
+        $member->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // The stale run is failed, but the paused member must stay paused — flipping
+        // it to error would make runnableMembers() pick it up again.
+        $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->fresh()->status);
+        $this->assertSame(BackupJob::STATUS_PAUSED, $member->fresh()->status);
+    }
+
+    public function test_reconciling_a_stale_group_run_keeps_a_paused_group_paused(): void
+    {
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunFinished');
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $group->forceFill(['status' => BackupJobGroup::STATUS_PAUSED, 'pause_reason' => 'maintenance'])->save();
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_QUEUED,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+        ]);
+        BackupGroupRun::whereKey($groupRun->id)->update(['created_at' => now()->subHour()]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // The stale group run is failed, but the paused group stays paused (with its
+        // reason) so the scheduler does not dispatch it again.
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $groupRun->fresh()->status);
+        $this->assertSame(BackupJobGroup::STATUS_PAUSED, $group->fresh()->status);
+        $this->assertSame('maintenance', $group->fresh()->pause_reason);
+    }
+
     public function test_a_queued_group_run_is_cancelled_if_the_group_is_paused_before_it_starts(): void
     {
         $this->app->instance(DockerProcess::class, $this->fakeDocker());

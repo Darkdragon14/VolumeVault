@@ -145,7 +145,12 @@ class RunRestore
                 'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
             ])->save();
 
-            $this->notify($run);
+            // The run is terminal but the queue job still holds the overlap lock
+            // through these notifications. Refresh the heartbeat up front and after
+            // each channel (each can take ~60s) so a legitimately-waiting same-volume
+            // run is not reconciled as stale while this holder finishes notifying.
+            $this->heartbeat($run);
+            $this->notify($run, fn () => $this->heartbeat($run));
         } catch (Throwable $exception) {
             if ($prepared) {
                 $handler->cleanupAfterFailure($run);
@@ -212,10 +217,10 @@ class RunRestore
      * Send a restore lifecycle notification without ever letting a notification
      * failure interrupt the restore. Mirrors RunBackup::sendNotifications.
      */
-    private function notify(RestoreRun $run): void
+    private function notify(RestoreRun $run, ?callable $afterEach = null): void
     {
         try {
-            $this->sendShoutrrrNotification->sendRestoreRun($run);
+            $this->sendShoutrrrNotification->sendRestoreRun($run, $afterEach);
         } catch (Throwable $exception) {
             ActivityLog::record('notification_send_failed', 'Restore notification failed.', $run, [
                 'error' => str($exception->getMessage())->limit(1000)->toString(),

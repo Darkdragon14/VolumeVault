@@ -177,7 +177,28 @@ class BackupJobController extends Controller
                 : $this->scheduleCalculator->nextRunAt($backupJob->schedule_type, $backupJob->schedule_config ?? [], null, $backupJob->timezone),
         ])->save();
 
+        $this->resumeErroredGroup($backupJob);
+
         return back()->with('success', 'Backup job resumed.');
+    }
+
+    /**
+     * A group member is only dispatched while its group is active. If a member
+     * failed and left the group in error, resuming the member alone would leave the
+     * group unscheduled — bring the group back to active too. A paused group is left
+     * untouched (that is a deliberate group-level action, not a member failure).
+     */
+    private function resumeErroredGroup(BackupJob $backupJob): void
+    {
+        $group = $backupJob->isGroupMember() ? $backupJob->group : null;
+
+        if ($group && $group->status === BackupJobGroup::STATUS_ERROR) {
+            $group->forceFill([
+                'status' => BackupJobGroup::STATUS_ACTIVE,
+                'last_error' => null,
+                'last_error_at' => null,
+            ])->save();
+        }
     }
 
     private function formProps(): array

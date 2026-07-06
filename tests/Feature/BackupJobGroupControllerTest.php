@@ -254,6 +254,42 @@ class BackupJobGroupControllerTest extends TestCase
         $this->assertNull($member->next_run_at, 'a group member must not get a standalone next_run_at');
     }
 
+    public function test_resuming_an_errored_member_resumes_its_errored_group(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        // A group failure left both the group and the member in error.
+        $group->forceFill(['status' => BackupJobGroup::STATUS_ERROR, 'last_error' => 'boom', 'last_error_at' => now()])->save();
+        $member->forceFill(['status' => BackupJob::STATUS_ERROR, 'last_error' => 'boom'])->save();
+
+        $this->actingAs($this->admin())
+            ->post(route('backup-jobs.resume', $member))
+            ->assertRedirect();
+
+        // Resuming the member alone would leave the group in error and unscheduled;
+        // it must bring the group back to active too.
+        $this->assertSame(BackupJob::STATUS_ACTIVE, $member->fresh()->status);
+        $this->assertSame(BackupJobGroup::STATUS_ACTIVE, $group->fresh()->status);
+        $this->assertNull($group->fresh()->last_error);
+    }
+
+    public function test_resuming_a_member_does_not_unpause_a_paused_group(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        $group->forceFill(['status' => BackupJobGroup::STATUS_PAUSED, 'pause_reason' => 'maintenance'])->save();
+        $member->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+
+        $this->actingAs($this->admin())
+            ->post(route('backup-jobs.resume', $member))
+            ->assertRedirect();
+
+        // A paused group is a deliberate group-level action — resuming one member
+        // must not un-pause the whole group.
+        $this->assertSame(BackupJob::STATUS_ACTIVE, $member->fresh()->status);
+        $this->assertSame(BackupJobGroup::STATUS_PAUSED, $group->fresh()->status);
+    }
+
     public function test_a_running_group_cannot_be_paused(): void
     {
         $group = $this->group();

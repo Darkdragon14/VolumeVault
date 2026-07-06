@@ -118,7 +118,7 @@ class SendShoutrrrNotification
      * notifications_enabled toggle. Started and succeeded are info-level
      * events (info channels only); a failure reaches every channel.
      */
-    public function sendRestoreRun(RestoreRun $run): void
+    public function sendRestoreRun(RestoreRun $run, ?callable $afterEach = null): void
     {
         $run->loadMissing('job.destination', 'initiatedBy');
         $failed = $run->status === RestoreRun::STATUS_FAILED;
@@ -146,6 +146,14 @@ class SendShoutrrrNotification
             }
 
             $this->send($channel, $this->restoreRunTitle($run, $channel), $this->restoreRunMessage($run, $channel), $event);
+
+            // Each shoutrrr send can take up to a minute; let the caller refresh the
+            // run's heartbeat between channels so a terminal restore still holding
+            // the overlap lock through slow notifications is not reconciled as stale
+            // (which would fail a legitimate same-volume waiter).
+            if ($afterEach !== null) {
+                $afterEach();
+            }
         }
     }
 

@@ -385,10 +385,18 @@ class RunBackup
         // untouched keeps its lifecycle intact.
         if ($job && ! $this->isPreRestore($run)) {
             $attributes = [
-                'status' => BackupJob::STATUS_ERROR,
                 'last_error' => $message,
                 'last_error_at' => $finishedAt,
             ];
+
+            // Don't resurrect a job an admin paused: a queued run can be created, its
+            // worker crash before claiming it, the admin pause the (member) job, then
+            // reconciliation fail the stale run here. Flipping paused -> error would
+            // make grouped runnableMembers() (which excludes only paused) include it
+            // again. Keep a paused job paused.
+            if ($job->status !== BackupJob::STATUS_PAUSED) {
+                $attributes['status'] = BackupJob::STATUS_ERROR;
+            }
 
             // A group member delegates scheduling to its group — never advance its
             // own next_run_at (which stays null); the group owns the next slot.

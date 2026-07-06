@@ -6,6 +6,7 @@ use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\NotificationChannel;
+use App\Models\RestoreRun;
 use App\Models\User;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
@@ -131,6 +132,45 @@ class NotificationChannelTest extends TestCase
         $this->app->instance(DockerProcess::class, $dockerProcess);
 
         app(SendShoutrrrNotification::class)->sendBackupRunFinished($run);
+    }
+
+    public function test_restore_notifications_refresh_the_heartbeat_between_channels(): void
+    {
+        [$job] = $this->createJobs();
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_SUCCESS,
+            'finished_at' => now(),
+            'duration_seconds' => 3,
+        ]);
+
+        foreach (['a', 'b'] as $name) {
+            $job->notificationChannels()->attach(NotificationChannel::create([
+                'name' => $name,
+                'service' => NotificationChannel::SERVICE_ADVANCED,
+                'url' => 'ntfy://ntfy.sh/'.$name,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+            ]));
+        }
+
+        $dockerProcess = Mockery::mock(DockerProcess::class);
+        $dockerProcess->shouldReceive('run')->twice()->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $this->app->instance(DockerProcess::class, $dockerProcess);
+
+        $beats = 0;
+        app(SendShoutrrrNotification::class)->sendRestoreRun($run, function () use (&$beats): void {
+            $beats++;
+        });
+
+        // One heartbeat refresh per delivered channel, so a terminal restore still
+        // holding the overlap lock through slow notifications is not reconciled as
+        // stale (which would fail a legitimate same-volume waiter).
+        $this->assertSame(2, $beats);
     }
 
     public function test_failed_notifications_send_to_error_and_info_channels(): void
