@@ -5,6 +5,18 @@ return [
         'title' => 'Csoportosított biztonsági mentési feladatok',
         'description' => 'Több kötetet menthet egyetlen ütemezett műveletként: egy biztonsági mentési csoport birtokolja az ütemezést és az értesítéseket, a feladatokat pedig a biztonsági mentési feladat űrlapjáról csatolja hozzá. A csoport egyetlen indítási és egyetlen sikeres/hibás értesítést küld az összes kötetéről — ideális egyetlen dead man\'s switch típusú figyelőhöz —, és megválaszthatja, hogy egy hibás kötet leállítja-e a futást, vagy a csoport folytatja és mégis jelzi a hibát. A biztonsági mentési csoportok API-n keresztül is elérhetők.',
     ],
+    'user_date_format_preference' => [
+        'title' => 'Felhasznalonkenti datumformatum',
+        'description' => 'Mostantol minden felhasznalo kivalaszthatja a profiljaban, milyen regionalis formatum jelenjen meg a datumoknal. Peldaul az interfesz maradhat angol, mikozben a datumok az amerikai honap/nap sorrendrol az ausztral vagy brit nap/honap sorrendre valtananak. Az alkalmazas idozonaja tovabbra is azt hatarozza meg, melyik helyi ido jelenik meg.',
+    ],
+    'trusted_2fa_device_password_revocation' => [
+        'title' => 'Megbizhato 2FA-eszkozok visszavonasa jelszovaltozaskor',
+        'description' => 'Egy felhasznalo jelszavanak modositasa vagy visszaallitasa most visszavonja a felhasznalo megbizhato 2FA-eszkozeit. A meglevo megbizhatoeszkoz-rekordok a frissites soran torlodnek, igy a bongeszoknek ujra teljesiteniuk kell a 2FA-kihivast, mielott ismet megbizhatova valhatnak.',
+    ],
+    'installation_save_two_factor_reencryption' => [
+        'title' => '2FA-titkok ujratitkositasa telepitesimportkor',
+        'description' => 'A telepitesi mentesek importja mostantol az uj peldany APP_KEY ertekevel ujratitkositja a felhasznaloi TOTP-titkokat es helyreallitokodokat, a celokhoz es ertesitesekhez hasonloan, igy migracio utan elkerulhetok a 2FA-zarolasok.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Docker-kötet célok',
         'description' => 'Egy új „Docker-kötet“ célállomás egy névvel ellátott Docker-kötetre készít biztonsági mentést — bármilyen illesztőprogram, beleértve az NFS-t vagy más hálózati megosztásokat. Deklarálja a kötetet a Compose-fájlban, és a VolumeVault név szerint csatolja az ideiglenes mentési konténerbe, így a mentések, a visszaállítások, a listázás és a tárhelyhasználat anélkül működik, hogy gazdagép-elérési utat kellene megosztani a VolumeVault-tal. Ha a kötet már nem létezik, a célállomás egyértelmű hibával hiúsul meg, ahelyett hogy észrevétlenül egy üres, újonnan létrehozott kötetbe írna.',

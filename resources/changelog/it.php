@@ -5,6 +5,18 @@ return [
         'title' => 'Job di backup raggruppati',
         'description' => 'Esegui il backup di più volumi come un\'unica operazione pianificata: un gruppo di backup possiede la pianificazione e le notifiche e i job vengono collegati ad esso dal modulo del job di backup. Il gruppo invia un\'unica notifica di avvio e una di successo/errore per tutti i suoi volumi — ideale per un unico monitor di tipo dead man\'s switch — e puoi scegliere se un volume fallito interrompe l\'esecuzione o se il gruppo continua segnalando comunque l\'errore. I gruppi di backup sono disponibili anche tramite l\'API.',
     ],
+    'user_date_format_preference' => [
+        'title' => 'Preferenza formato data per utente',
+        'description' => 'Ogni utente puo ora scegliere dal proprio profilo il formato regionale usato per visualizzare le date. Per esempio, l\'interfaccia puo restare in inglese mentre le date passano dall\'ordine statunitense mese/giorno all\'ordine australiano o britannico giorno/mese. Il fuso orario dell\'applicazione continua a controllare l\'ora locale mostrata.',
+    ],
+    'trusted_2fa_device_password_revocation' => [
+        'title' => 'Dispositivi 2FA attendibili revocati alle modifiche della password',
+        'description' => 'La modifica o il ripristino della password di un utente ora revoca i suoi dispositivi 2FA attendibili. I record dei dispositivi attendibili esistenti vengono eliminati durante l\'aggiornamento, cosi i browser devono superare di nuovo la verifica 2FA prima di poter essere considerati attendibili.',
+    ],
+    'installation_save_two_factor_reencryption' => [
+        'title' => 'Segreti 2FA ricifrati durante l\'importazione dell\'installazione',
+        'description' => 'Le importazioni dei salvataggi di installazione ora ricifrano i segreti TOTP e i codici di recupero degli utenti con l\'APP_KEY della nuova istanza, come destinazioni e notifiche, prevenendo blocchi 2FA dopo la migrazione.',
+    ],
     'docker_volume_destinations' => [
         'title' => 'Destinazioni volume Docker',
         'description' => 'Una nuova destinazione «Volume Docker» esegue il backup su un volume Docker con nome — qualsiasi driver, incluso NFS o altre condivisioni di rete. Dichiara il volume nel tuo file Compose e VolumeVault lo monta per nome nel container di backup temporaneo, così backup, ripristini, elenco e utilizzo dello spazio funzionano senza condividere alcun percorso host con VolumeVault. Se il volume non esiste più, la destinazione fallisce con un errore chiaro invece di scrivere silenziosamente in un volume vuoto appena creato.',

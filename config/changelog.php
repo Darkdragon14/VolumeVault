@@ -8,6 +8,24 @@ return [
         ],
     ],
     'releases' => [
+        'v1.16.2' => [
+            'date' => '2026-07-04',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.16.2',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'user_date_format_preference',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'trusted_2fa_device_password_revocation',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'installation_save_two_factor_reencryption',
+                ],
+            ],
+        ],
         'v1.16.1' => [
             'date' => '2026-06-30',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.16.1',

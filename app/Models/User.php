@@ -25,6 +25,8 @@ class User extends Authenticatable
 
     public const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'it', 'de', 'cs', 'nl', 'hu', 'ru'];
 
+    public const SUPPORTED_DATE_LOCALES = ['en-US', 'en-AU', 'en-GB', 'en-CA', 'fr-FR', 'de-DE', 'es-ES', 'it-IT', 'nl-NL', 'cs-CZ', 'hu-HU', 'ru-RU'];
+
     public const DEFAULT_THEME = 'dark';
 
     public const SUPPORTED_THEMES = ['light', 'dark'];
@@ -40,6 +42,7 @@ class User extends Authenticatable
         'password',
         'role',
         'locale',
+        'date_locale',
         'theme',
         'default_per_page',
         'dashboard_preferences',
@@ -76,6 +79,15 @@ class User extends Authenticatable
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::updated(function (User $user): void {
+            if ($user->wasChanged('password')) {
+                $user->twoFactorTrustedDevices()->delete();
+            }
+        });
     }
 
     public function isAdmin(): bool
