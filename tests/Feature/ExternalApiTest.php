@@ -34,6 +34,24 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('components.securitySchemes.bearerAuth.scheme', 'bearer');
     }
 
+    public function test_openapi_marks_the_schema_endpoint_public_and_pause_bodies_optional(): void
+    {
+        $paths = $this->getJson('/api/v1/openapi.json')->assertOk()->json('paths');
+
+        // The schema document itself is public: no bearer requirement, no 401.
+        $schemaOp = $paths['/openapi.json']['get'];
+        $this->assertSame([], $schemaOp['security']);
+        $this->assertArrayNotHasKey('401', $schemaOp['responses']);
+
+        // A secured endpoint still inherits the global bearer auth (no override).
+        $this->assertArrayNotHasKey('security', $paths['/me']['get']);
+        $this->assertArrayHasKey('401', $paths['/me']['get']['responses']);
+
+        // Pause bodies are optional — controllers default the reason.
+        $this->assertFalse($paths['/backup-jobs/{id}/pause']['post']['requestBody']['required']);
+        $this->assertFalse($paths['/backup-groups/{id}/pause']['post']['requestBody']['required']);
+    }
+
     public function test_openapi_collection_endpoints_have_no_id_param_and_report_correct_status(): void
     {
         $paths = $this->getJson('/api/v1/openapi.json')->assertOk()->json('paths');

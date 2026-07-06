@@ -40,7 +40,7 @@ class OpenApiController extends Controller
     {
         return [
             '/openapi.json' => [
-                'get' => $this->operation('Read the OpenAPI document.', [], null, false),
+                'get' => $this->operation('Read the OpenAPI document.', [], public: true),
             ],
             '/me' => ['get' => $this->operation('Inspect current authenticated user and token.', ['read'])],
             '/dashboard' => ['get' => $this->operation('Read dashboard stats and recent activity.', ['read'])],
@@ -58,7 +58,7 @@ class OpenApiController extends Controller
                 'delete' => $this->operation('Delete a backup job.', ['write'], null, true, true, 204),
             ],
             '/backup-jobs/{id}/run' => ['post' => $this->operation('Queue a manual backup run.', ['write'], null, true, true, 202)],
-            '/backup-jobs/{id}/pause' => ['post' => $this->operation('Pause a backup job.', ['write'], ['$ref' => '#/components/schemas/PauseRequest'], true, true)],
+            '/backup-jobs/{id}/pause' => ['post' => $this->operation('Pause a backup job.', ['write'], ['$ref' => '#/components/schemas/PauseRequest'], true, true, bodyRequired: false)],
             '/backup-jobs/{id}/resume' => ['post' => $this->operation('Resume a backup job.', ['write'], null, true, true)],
             '/backup-jobs/{id}/backups' => ['get' => $this->operation('List backup objects available for restore.', ['read'], null, true, true)],
             '/backup-jobs/{id}/restore' => ['post' => $this->operation('Queue a restore run.', ['write'], ['$ref' => '#/components/schemas/RestoreRequest'], true, true, 202)],
@@ -72,7 +72,7 @@ class OpenApiController extends Controller
                 'delete' => $this->operation('Delete a backup group. Fails while it still has member jobs; move them back to standalone first.', ['write'], null, true, true, 204),
             ],
             '/backup-groups/{id}/run' => ['post' => $this->operation('Queue a manual group run: every active member volume is backed up and the group emits a single start and success/fail notification.', ['write'], null, true, true, 202)],
-            '/backup-groups/{id}/pause' => ['post' => $this->operation('Pause a backup group.', ['write'], ['$ref' => '#/components/schemas/PauseRequest'], true, true)],
+            '/backup-groups/{id}/pause' => ['post' => $this->operation('Pause a backup group.', ['write'], ['$ref' => '#/components/schemas/PauseRequest'], true, true, bodyRequired: false)],
             '/backup-groups/{id}/resume' => ['post' => $this->operation('Resume a backup group.', ['write'], null, true, true)],
             '/backup-groups/{id}/notifications' => ['patch' => $this->operation('Enable or disable a backup group\'s notifications.', ['write'], ['$ref' => '#/components/schemas/ToggleNotificationsRequest'], true, true)],
             '/backup-group-runs' => ['get' => $this->operation('List recent backup group runs.', ['read'])],
@@ -101,18 +101,29 @@ class OpenApiController extends Controller
         ];
     }
 
-    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200): array
+    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true): array
     {
         $operation = [
             'summary' => $summary,
-            'description' => trim(($abilities ? 'Requires token abilities: '.implode(', ', $abilities).'. ' : '').($admin ? 'Requires an admin user token.' : '')),
+            'description' => $public
+                ? 'Public endpoint; no authentication required.'
+                : trim(($abilities ? 'Requires token abilities: '.implode(', ', $abilities).'. ' : '').($admin ? 'Requires an admin user token.' : '')),
             'responses' => [
                 (string) $status => ['description' => 'Successful response.'],
+            ],
+        ];
+
+        if ($public) {
+            // Override the global bearerAuth requirement so generated clients don't
+            // think fetching the schema itself needs a token.
+            $operation['security'] = [];
+        } else {
+            $operation['responses'] += [
                 '401' => ['description' => 'Missing or invalid Bearer token.'],
                 '403' => ['description' => 'Missing ability or admin role.'],
                 '422' => ['description' => 'Validation or operation error.'],
-            ],
-        ];
+            ];
+        }
 
         if ($id) {
             $operation['parameters'] = [[
@@ -125,7 +136,7 @@ class OpenApiController extends Controller
 
         if ($body) {
             $operation['requestBody'] = [
-                'required' => true,
+                'required' => $bodyRequired,
                 'content' => [
                     'application/json' => ['schema' => $body],
                 ],
