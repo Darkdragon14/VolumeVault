@@ -165,6 +165,14 @@ class BackupJobController extends Controller
 
     public function resume(BackupJob $backupJob)
     {
+        // A running job is owned by its worker; resuming it would flip running ->
+        // active, after which a stale Pause could slip in mid-run and be overwritten
+        // when the worker finishes. Refuse (the UI hides the button, but a stale POST
+        // could still arrive).
+        if ($backupJob->status === BackupJob::STATUS_RUNNING) {
+            return back()->with('error', 'This job is currently running. Wait for the run to finish before resuming it.');
+        }
+
         $backupJob->forceFill([
             'status' => BackupJob::STATUS_ACTIVE,
             'pause_reason' => null,

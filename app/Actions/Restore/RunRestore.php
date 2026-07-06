@@ -207,8 +207,11 @@ class RunRestore
         // Central failure notification: markFailed is reached from the in-process
         // catch block, the queue job's failed() hook and stale-run reconciliation,
         // so every failure path notifies. The conditional transition above keeps it
-        // to a single send.
-        $this->notify($run);
+        // to a single send. Refresh the heartbeat up front and after each channel
+        // (each ~60s) so a terminal restore still holding the overlap lock through
+        // slow notifications is not reconciled as stale.
+        $this->heartbeat($run);
+        $this->notify($run, fn () => $this->heartbeat($run));
 
         return true;
     }

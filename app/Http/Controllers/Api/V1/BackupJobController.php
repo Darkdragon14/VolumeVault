@@ -114,10 +114,19 @@ class BackupJobController extends Controller
 
     public function resume(BackupJob $backupJob): JsonResponse
     {
+        // A running job is owned by its worker; resuming it (running -> active) would
+        // let a stale Pause slip in mid-run and be overwritten at the end. Refuse.
+        if ($backupJob->status === BackupJob::STATUS_RUNNING) {
+            throw ValidationException::withMessages([
+                'job' => 'This job is currently running. Wait for the run to finish before resuming it.',
+            ]);
+        }
+
         $backupJob->forceFill([
             'status' => BackupJob::STATUS_ACTIVE,
             'pause_reason' => null,
             'last_error' => null,
+            'last_error_at' => null,
             // A group member is scheduled by its group, never dispatched standalone,
             // so it must keep next_run_at null (resuming re-enables it in the group).
             'next_run_at' => $backupJob->isGroupMember()

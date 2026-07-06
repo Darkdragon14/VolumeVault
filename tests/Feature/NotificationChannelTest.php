@@ -173,6 +173,39 @@ class NotificationChannelTest extends TestCase
         $this->assertSame(2, $beats);
     }
 
+    public function test_failed_backup_notifications_refresh_the_heartbeat_between_channels(): void
+    {
+        [$job] = $this->createJobs();
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'error_message' => 'Boom',
+        ]);
+
+        foreach (['a', 'b'] as $name) {
+            $job->notificationChannels()->attach(NotificationChannel::create([
+                'name' => $name,
+                'service' => NotificationChannel::SERVICE_ADVANCED,
+                'url' => 'ntfy://ntfy.sh/'.$name,
+                'notification_level' => NotificationChannel::LEVEL_ERROR,
+            ]));
+        }
+
+        $dockerProcess = Mockery::mock(DockerProcess::class);
+        $dockerProcess->shouldReceive('run')->twice()->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $this->app->instance(DockerProcess::class, $dockerProcess);
+
+        $beats = 0;
+        app(SendShoutrrrNotification::class)->sendBackupRunFinished($run, function () use (&$beats): void {
+            $beats++;
+        });
+
+        // One heartbeat refresh per channel, so a terminal failed backup holding the
+        // overlap lock through slow failure notifications is not reconciled as stale.
+        $this->assertSame(2, $beats);
+    }
+
     public function test_failed_notifications_send_to_error_and_info_channels(): void
     {
         [$job] = $this->createJobs();

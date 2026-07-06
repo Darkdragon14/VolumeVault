@@ -165,7 +165,7 @@ const submit = () => {
                         </div>
                         <div class="flex items-center gap-2">
                             <StatusBadge :status="member.status" />
-                            <ActionIcon v-if="member.status === 'paused'" :label="t('Enable')" icon="play" @click="resumeMember(member.id)" />
+                            <ActionIcon v-if="member.status === 'paused' || member.status === 'error'" :label="t('Enable')" icon="play" @click="resumeMember(member.id)" />
                             <ActionIcon v-else :label="t('Disable')" icon="pause" :disabled="member.status === 'running'" @click="pauseMember(member.id)" />
                             <ActionIcon :label="t('Edit')" icon="edit" :href="`/backup-jobs/${member.id}/edit`" />
                         </div>

@@ -147,6 +147,34 @@ class GroupedBackupApiTest extends TestCase
         $this->assertDatabaseHas('backup_job_groups', ['id' => $group->id]);
     }
 
+    public function test_resuming_a_job_via_the_api_clears_the_error_timestamp(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('job-write', ['read', 'write'])->plainTextToken;
+        $job = BackupJob::create([
+            'name' => 'Errored',
+            'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'volume_name' => 'vol_a',
+            'backup_destination_id' => $this->destination()->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ERROR,
+            'last_error' => 'boom',
+            'last_error_at' => now()->subHour(),
+        ]);
+
+        $this->withToken($token)
+            ->postJson("/api/v1/backup-jobs/{$job->id}/resume")
+            ->assertOk();
+
+        $fresh = $job->fresh();
+        $this->assertSame(BackupJob::STATUS_ACTIVE, $fresh->status);
+        // Both the message and its timestamp must be cleared, not just the message.
+        $this->assertNull($fresh->last_error);
+        $this->assertNull($fresh->last_error_at);
+    }
+
     public function test_deleting_a_group_with_an_active_run_is_rejected(): void
     {
         $admin = User::factory()->admin()->create();

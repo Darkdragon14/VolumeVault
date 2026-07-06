@@ -290,6 +290,37 @@ class BackupJobGroupControllerTest extends TestCase
         $this->assertSame(BackupJobGroup::STATUS_PAUSED, $group->fresh()->status);
     }
 
+    public function test_a_running_group_cannot_be_resumed(): void
+    {
+        $group = $this->group();
+        $group->forceFill(['status' => BackupJobGroup::STATUS_RUNNING])->save();
+
+        // A stale Resume POST must not flip running -> active (which would then let a
+        // pause slip in mid-run and be overwritten by the worker at the end).
+        $this->actingAs($this->admin())
+            ->from(route('backup-groups.index'))
+            ->post(route('backup-groups.resume', $group))
+            ->assertRedirect(route('backup-groups.index'))
+            ->assertSessionHas('error');
+
+        $this->assertSame(BackupJobGroup::STATUS_RUNNING, $group->fresh()->status);
+    }
+
+    public function test_a_running_member_job_cannot_be_resumed(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        $member->forceFill(['status' => BackupJob::STATUS_RUNNING])->save();
+
+        $this->actingAs($this->admin())
+            ->from(route('backup-jobs.index'))
+            ->post(route('backup-jobs.resume', $member))
+            ->assertRedirect(route('backup-jobs.index'))
+            ->assertSessionHas('error');
+
+        $this->assertSame(BackupJob::STATUS_RUNNING, $member->fresh()->status);
+    }
+
     public function test_a_running_group_cannot_be_paused(): void
     {
         $group = $this->group();

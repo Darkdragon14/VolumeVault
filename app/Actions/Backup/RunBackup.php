@@ -389,15 +389,6 @@ class RunBackup
                 'last_error_at' => $finishedAt,
             ];
 
-            // Don't resurrect a job an admin paused: a queued run can be created, its
-            // worker crash before claiming it, the admin pause the (member) job, then
-            // reconciliation fail the stale run here. Flipping paused -> error would
-            // make grouped runnableMembers() (which excludes only paused) include it
-            // again. Keep a paused job paused.
-            if ($job->status !== BackupJob::STATUS_PAUSED) {
-                $attributes['status'] = BackupJob::STATUS_ERROR;
-            }
-
             // A group member delegates scheduling to its group — never advance its
             // own next_run_at (which stays null); the group owns the next slot.
             if (! $job->isGroupMember()) {
@@ -410,6 +401,16 @@ class RunBackup
             }
 
             $job->forceFill($attributes)->save();
+
+            // Flip to error only if the job is not currently paused, atomically —
+            // an admin can pause between reconciliation's stale selection and here,
+            // and $job is a possibly-stale snapshot. A conditional UPDATE loses that
+            // race instead of resurrecting a paused (member) job that grouped
+            // runnableMembers() (which excludes only paused) would then pick up again.
+            BackupJob::query()
+                ->whereKey($job->id)
+                ->where('status', '!=', BackupJob::STATUS_PAUSED)
+                ->update(['status' => BackupJob::STATUS_ERROR]);
         }
 
         ActivityLog::record('backup_run_failed', 'Backup run failed.', $run, [
@@ -417,9 +418,13 @@ class RunBackup
         ]);
 
         // Member runs stay silent: the group run aggregates the outcome and emits
-        // the single success/fail notification for the whole set.
+        // the single success/fail notification for the whole set. A standalone run
+        // notifies inline while still holding the overlap lock, so refresh the
+        // heartbeat up front and after each channel (each ~60s) to keep a waiting
+        // same-volume run from being reconciled as stale.
         if (! $run->belongsToGroupRun()) {
-            $this->sendNotifications($run->fresh(['job.destination']));
+            $this->heartbeat($run);
+            $this->sendNotifications($run->fresh(['job.destination']), fn () => $this->heartbeat($run));
         }
 
         return true;
@@ -548,10 +553,10 @@ class RunBackup
             ->all();
     }
 
-    private function sendNotifications(BackupRun $run): void
+    private function sendNotifications(BackupRun $run, ?callable $afterEach = null): void
     {
         try {
-            $this->sendShoutrrrNotification->sendBackupRunFinished($run);
+            $this->sendShoutrrrNotification->sendBackupRunFinished($run, $afterEach);
         } catch (Throwable $exception) {
             ActivityLog::record('notification_send_failed', 'Backup notification failed.', $run, [
                 'error' => str($exception->getMessage())->limit(1000)->toString(),

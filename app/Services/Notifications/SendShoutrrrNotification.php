@@ -27,7 +27,7 @@ class SendShoutrrrNotification
         private readonly ResolveNotificationChannels $resolveNotificationChannels,
     ) {}
 
-    public function sendBackupRunFinished(BackupRun $run): void
+    public function sendBackupRunFinished(BackupRun $run, ?callable $afterEach = null): void
     {
         $run->loadMissing('job.destination', 'initiatedBy');
         $failed = $run->status === BackupRun::STATUS_FAILED;
@@ -41,6 +41,13 @@ class SendShoutrrrNotification
             $title = $this->backupRunTitle($run, $channel);
             $message = $this->backupRunMessage($run, $channel);
             $this->send($channel, $title, $message, $event);
+
+            // Each shoutrrr send can take ~60s; let the caller refresh the run's
+            // heartbeat between channels so a terminal run still holding the overlap
+            // lock through slow notifications is not reconciled as stale.
+            if ($afterEach !== null) {
+                $afterEach();
+            }
         }
     }
 

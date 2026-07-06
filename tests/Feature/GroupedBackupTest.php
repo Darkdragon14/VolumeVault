@@ -1036,6 +1036,26 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupJob::STATUS_PAUSED, $member->fresh()->status);
     }
 
+    public function test_marking_failed_does_not_overwrite_a_pause_applied_after_the_model_was_loaded(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+
+        $job = $this->standaloneJob();
+        $run = BackupRun::create(['backup_job_id' => $job->id, 'status' => BackupRun::STATUS_RUNNING, 'trigger' => BackupRun::TRIGGER_SCHEDULED, 'started_at' => now()]);
+
+        // A stale snapshot (as reconciliation holds): the run's job is loaded active.
+        $loaded = BackupRun::with('job')->find($run->id);
+        // The admin pauses the job in the DB after that load.
+        BackupJob::whereKey($job->id)->update(['status' => BackupJob::STATUS_PAUSED]);
+
+        app(RunBackup::class)->markFailed($loaded, new \RuntimeException('boom'));
+
+        // The run fails, but the atomic (where status != paused) flip must not
+        // resurrect the pause the admin just applied.
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->fresh()->status);
+        $this->assertSame(BackupJob::STATUS_PAUSED, $job->fresh()->status);
+    }
+
     public function test_reconciling_a_stale_queued_member_keeps_a_paused_member_job_paused(): void
     {
         $group = $this->group();

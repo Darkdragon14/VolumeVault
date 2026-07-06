@@ -150,6 +150,12 @@ class BackupJobGroupController extends Controller
 
     public function resume(BackupJobGroup $backupGroup)
     {
+        // A running group is owned by its worker; resuming it (running -> active)
+        // would let a stale Pause slip in mid-run and be overwritten at the end.
+        if ($backupGroup->status === BackupJobGroup::STATUS_RUNNING) {
+            return back()->with('error', 'This group is currently running. Wait for the run to finish before resuming it.');
+        }
+
         $backupGroup->forceFill([
             'status' => BackupJobGroup::STATUS_ACTIVE,
             'pause_reason' => null,
