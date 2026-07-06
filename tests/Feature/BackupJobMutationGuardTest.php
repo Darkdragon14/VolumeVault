@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\BackupDestination;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
 use App\Models\User;
@@ -129,6 +131,86 @@ class BackupJobMutationGuardTest extends TestCase
         // Deleting the destination would cascade the job and its in-flight run.
         $this->assertDatabaseHas('backup_destinations', ['id' => $job->backup_destination_id]);
         $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
+    }
+
+    public function test_deleting_a_destination_is_blocked_by_a_restore_reading_from_it_after_the_job_moved(): void
+    {
+        $destA = $this->destination();
+        $destB = $this->destination();
+        // The job now points at B, but an in-flight restore still reads from A.
+        $job = BackupJob::create([
+            'name' => 'Job',
+            'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'volume_name' => 'vol_a',
+            'backup_destination_id' => $destB->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+        RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $destA->id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'vol_a',
+            'target_volume_name' => 'vol_a',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now(),
+        ]);
+
+        // No job points at A anymore, but the restore reads from it: block the delete
+        // (deleting A nulls the restore's destination and its download would fail).
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('destinations.index'))
+            ->delete(route('destinations.destroy', $destA->id))
+            ->assertRedirect(route('destinations.index'))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('backup_destinations', ['id' => $destA->id]);
+    }
+
+    public function test_deleting_a_destination_is_blocked_while_a_group_run_uses_a_member_on_it(): void
+    {
+        $dest = $this->destination();
+        $group = BackupJobGroup::create([
+            'name' => 'Group',
+            'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJobGroup::STATUS_RUNNING,
+            'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+            'notifications_enabled' => true,
+        ]);
+        $member = BackupJob::create([
+            'name' => 'Member',
+            'backup_job_group_id' => $group->id,
+            'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'volume_name' => 'vol_a',
+            'backup_destination_id' => $dest->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+            'next_run_at' => null,
+        ]);
+        // A group run is already running (no member BackupRun created yet).
+        BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+        ]);
+
+        // Deleting the destination would cascade-delete the member job mid-run.
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('destinations.index'))
+            ->delete(route('destinations.destroy', $dest->id))
+            ->assertRedirect(route('destinations.index'))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('backup_destinations', ['id' => $dest->id]);
+        $this->assertDatabaseHas('backup_jobs', ['id' => $member->id]);
     }
 
     public function test_api_deleting_a_destination_with_a_run_in_progress_is_rejected(): void

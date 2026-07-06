@@ -205,17 +205,28 @@ class BackupDestination extends Model
     }
 
     /**
-     * Whether deleting this destination would cascade-drop a run still needed for
-     * crash recovery. Deletion cascades its jobs, then their backup/restore runs,
-     * bypassing the per-job delete guard — so a run that is queued/running, or
-     * terminal but still holding stopped containers, must block the delete too.
+     * Whether deleting this destination would break work still in flight. Deleting
+     * it cascades its jobs (and their runs) and nulls restore_runs that read from
+     * it, bypassing the per-job delete guard — so any of the following blocks it:
+     *  - a backup run whose job is on this destination, in progress or still
+     *    holding stopped containers;
+     *  - a restore that reads from this destination, matched both by the run's own
+     *    backup_destination_id (a restore whose job later moved elsewhere still
+     *    references it) and by the job's current destination;
+     *  - a queued/running group run with a member job on this destination, whose
+     *    member jobs the cascade would delete mid-run.
      */
     public function hasRunInProgress(): bool
     {
         $ofThisDestination = fn ($query) => $query->where('backup_destination_id', $this->id);
 
         return BackupRun::whereHas('job', $ofThisDestination)->activeOrHoldingContainers()->exists()
-            || RestoreRun::whereHas('job', $ofThisDestination)->activeOrHoldingContainers()->exists();
+            || $this->restoreRuns()->activeOrHoldingContainers()->exists()
+            || RestoreRun::whereHas('job', $ofThisDestination)->activeOrHoldingContainers()->exists()
+            || BackupGroupRun::query()
+                ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
+                ->whereHas('group.members', $ofThisDestination)
+                ->exists();
     }
 
     public function alerts(): MorphMany
