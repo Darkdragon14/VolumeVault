@@ -100,44 +100,53 @@ class BackupJobController extends Controller
 
     public function pause(Request $request, BackupJob $backupJob): JsonResponse
     {
-        if ($backupJob->status === BackupJob::STATUS_RUNNING) {
+        // Conditional update so it serializes with RunBackup's non-paused -> running
+        // flip (see the web controller): a pause applied while a run is queued is no
+        // longer clobbered when the worker starts.
+        $paused = BackupJob::query()
+            ->whereKey($backupJob->id)
+            ->where('status', '!=', BackupJob::STATUS_RUNNING)
+            ->update([
+                'status' => BackupJob::STATUS_PAUSED,
+                'pause_reason' => $request->input('pause_reason', 'Paused manually via API.'),
+            ]);
+
+        if ($paused === 0) {
             throw ValidationException::withMessages(['job' => 'A running job cannot be paused.']);
         }
-
-        $backupJob->forceFill([
-            'status' => BackupJob::STATUS_PAUSED,
-            'pause_reason' => $request->input('pause_reason', 'Paused manually via API.'),
-        ])->save();
 
         return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
     }
 
     public function resume(BackupJob $backupJob): JsonResponse
     {
-        // A running job is owned by its worker; resuming it (running -> active) would
-        // let a stale Pause slip in mid-run and be overwritten at the end. Refuse.
-        if ($backupJob->status === BackupJob::STATUS_RUNNING) {
+        // Atomic conditional update so a worker flipping the job to running between
+        // a stale read and the save cannot be overwritten with active (which would
+        // then let a pause slip in mid-run). A group member keeps next_run_at null.
+        $resumed = BackupJob::query()
+            ->whereKey($backupJob->id)
+            ->where('status', '!=', BackupJob::STATUS_RUNNING)
+            ->update([
+                'status' => BackupJob::STATUS_ACTIVE,
+                'pause_reason' => null,
+                'last_error' => null,
+                'last_error_at' => null,
+                'next_run_at' => $backupJob->isGroupMember()
+                    ? null
+                    : $this->scheduleCalculator->nextRunAt($backupJob->schedule_type, $backupJob->schedule_config ?? [], null, $backupJob->timezone),
+            ]);
+
+        if ($resumed === 0) {
             throw ValidationException::withMessages([
                 'job' => 'This job is currently running. Wait for the run to finish before resuming it.',
             ]);
         }
 
-        $backupJob->forceFill([
-            'status' => BackupJob::STATUS_ACTIVE,
-            'pause_reason' => null,
-            'last_error' => null,
-            'last_error_at' => null,
-            // A group member is scheduled by its group, never dispatched standalone,
-            // so it must keep next_run_at null (resuming re-enables it in the group).
-            'next_run_at' => $backupJob->isGroupMember()
-                ? null
-                : $this->scheduleCalculator->nextRunAt($backupJob->schedule_type, $backupJob->schedule_config ?? [], null, $backupJob->timezone),
-        ])->save();
-
         // A group member is only dispatched while its group is active. If a member
         // failed and left the group in error, resuming the member alone would leave
-        // the group unscheduled — bring the group back to active too. A paused group
-        // is left untouched (a deliberate group-level action, not a member failure).
+        // the group unscheduled — bring the group back to active too, recomputing
+        // next_run_at (like a direct group resume) so an overdue slot does not fire
+        // immediately. A paused group is left untouched.
         $group = $backupJob->isGroupMember() ? $backupJob->group : null;
 
         if ($group && $group->status === BackupJobGroup::STATUS_ERROR) {
@@ -145,6 +154,7 @@ class BackupJobController extends Controller
                 'status' => BackupJobGroup::STATUS_ACTIVE,
                 'last_error' => null,
                 'last_error_at' => null,
+                'next_run_at' => $this->scheduleCalculator->nextRunAt($group->schedule_type, $group->schedule_config ?? [], null, $group->timezone),
             ])->save();
         }
 

@@ -173,6 +173,40 @@ class NotificationChannelTest extends TestCase
         $this->assertSame(2, $beats);
     }
 
+    public function test_backup_start_notifications_refresh_the_heartbeat_between_channels(): void
+    {
+        [$job] = $this->createJobs();
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'started_at' => now(),
+        ]);
+
+        foreach (['a', 'b'] as $name) {
+            $job->notificationChannels()->attach(NotificationChannel::create([
+                'name' => $name,
+                'service' => NotificationChannel::SERVICE_ADVANCED,
+                'url' => 'ntfy://ntfy.sh/'.$name,
+                'notification_level' => NotificationChannel::LEVEL_INFO,
+            ]));
+        }
+
+        $dockerProcess = Mockery::mock(DockerProcess::class);
+        $dockerProcess->shouldReceive('run')->twice()->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $this->app->instance(DockerProcess::class, $dockerProcess);
+
+        $beats = 0;
+        app(SendShoutrrrNotification::class)->sendBackupRunStarted($run, function () use (&$beats): void {
+            $beats++;
+        });
+
+        // Start runs before any container exists, so the heartbeat is the only
+        // liveness signal — refresh it per channel so slow start notifications don't
+        // get a live run reconciled and its lock released.
+        $this->assertSame(2, $beats);
+    }
+
     public function test_failed_backup_notifications_refresh_the_heartbeat_between_channels(): void
     {
         [$job] = $this->createJobs();

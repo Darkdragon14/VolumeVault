@@ -74,10 +74,34 @@ class RunBackup
         // a manually paused job, flip it to running/active and clear pause_reason,
         // silently unpausing it. Only real scheduled/manual runs drive job state.
         if (! $this->isPreRestore($run)) {
-            $job->forceFill([
-                'status' => BackupJob::STATUS_RUNNING,
-                'last_run_at' => $startedAt,
-            ])->save();
+            // Flip the job to RUNNING atomically, only from a non-paused state. An
+            // admin can pause the job while this run sits queued (job pause uses a
+            // matching `where status != running` guard), so the two conditional
+            // updates serialize: if the pause won (0 rows here), honour it — cancel
+            // this run without unpausing the job.
+            $flipped = BackupJob::query()
+                ->whereKey($job->id)
+                ->where('status', '!=', BackupJob::STATUS_PAUSED)
+                ->update([
+                    'status' => BackupJob::STATUS_RUNNING,
+                    'last_run_at' => $startedAt,
+                ]);
+
+            if ($flipped === 0) {
+                $run->forceFill([
+                    'status' => BackupRun::STATUS_CANCELLED,
+                    'finished_at' => now(),
+                    'error_message' => 'Job was paused before this run started.',
+                ])->save();
+
+                ActivityLog::record('backup_run_cancelled', 'Backup run cancelled: the job was paused before it started.', $run, [
+                    'backup_job_id' => $job->id,
+                ]);
+
+                return;
+            }
+
+            $job->refresh();
         }
 
         ActivityLog::record('backup_run_started', 'Backup run started.', $run, [
@@ -567,7 +591,10 @@ class RunBackup
     private function sendStartNotification(BackupRun $run): void
     {
         try {
-            $this->sendShoutrrrNotification->sendBackupRunStarted($run);
+            // No Docker container exists yet at start, so the heartbeat is the only
+            // liveness signal; refresh it per channel so slow start notifications
+            // don't let reconciliation fail this live run and release its lock.
+            $this->sendShoutrrrNotification->sendBackupRunStarted($run, fn () => $this->heartbeat($run));
         } catch (Throwable $exception) {
             ActivityLog::record('notification_send_failed', 'Backup start notification failed.', $run, [
                 'error' => str($exception->getMessage())->limit(1000)->toString(),

@@ -65,7 +65,10 @@ class RunRestore
         $handler = $this->handlerFor($run->mode);
         $prepared = false;
 
-        $this->notify($run);
+        // No Docker container exists yet, so the heartbeat is the only liveness
+        // signal; refresh it per channel so slow start notifications don't get this
+        // live restore reconciled as stale (which would release its lock).
+        $this->notify($run, fn () => $this->heartbeat($run));
 
         try {
             // Read-only precondition check first, so an invalid target (missing

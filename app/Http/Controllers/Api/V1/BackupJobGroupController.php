@@ -106,21 +106,24 @@ class BackupJobGroupController extends Controller
 
     public function resume(BackupJobGroup $backupGroup): JsonResponse
     {
-        // A running group is owned by its worker; resuming it (running -> active)
-        // would let a stale Pause slip in mid-run and be overwritten at the end.
-        if ($backupGroup->status === BackupJobGroup::STATUS_RUNNING) {
+        // Atomic conditional update so a worker flipping the group to running
+        // between a stale read and the save cannot be overwritten with active.
+        $resumed = BackupJobGroup::query()
+            ->whereKey($backupGroup->id)
+            ->where('status', '!=', BackupJobGroup::STATUS_RUNNING)
+            ->update([
+                'status' => BackupJobGroup::STATUS_ACTIVE,
+                'pause_reason' => null,
+                'last_error' => null,
+                'last_error_at' => null,
+                'next_run_at' => $this->scheduleCalculator->nextRunAt($backupGroup->schedule_type, $backupGroup->schedule_config ?? [], null, $backupGroup->timezone),
+            ]);
+
+        if ($resumed === 0) {
             throw ValidationException::withMessages([
                 'group' => 'This group is currently running. Wait for the run to finish before resuming it.',
             ]);
         }
-
-        $backupGroup->forceFill([
-            'status' => BackupJobGroup::STATUS_ACTIVE,
-            'pause_reason' => null,
-            'last_error' => null,
-            'last_error_at' => null,
-            'next_run_at' => $this->scheduleCalculator->nextRunAt($backupGroup->schedule_type, $backupGroup->schedule_config ?? [], null, $backupGroup->timezone),
-        ])->save();
 
         return response()->json(['data' => $this->serializeGroup($backupGroup->fresh()->loadCount('members')->load('notificationChannels'))]);
     }

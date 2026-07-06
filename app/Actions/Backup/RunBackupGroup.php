@@ -281,19 +281,20 @@ class RunBackupGroup
         $groupRun->loadMissing('group');
 
         if ($groupRun->group) {
-            $attributes = [
+            $groupRun->group->forceFill([
                 'last_error' => $message,
                 'last_error_at' => $finishedAt,
-            ];
+            ])->save();
 
-            // Preserve an admin pause: a queued group run can be paused (the normal
-            // worker path cancels it), but reconciliation reaching here must not
-            // flip paused -> error, which would let the scheduler dispatch it again.
-            if ($groupRun->group->status !== BackupJobGroup::STATUS_PAUSED) {
-                $attributes['status'] = BackupJobGroup::STATUS_ERROR;
-            }
-
-            $groupRun->group->forceFill($attributes)->save();
+            // Flip to error only if not currently paused, atomically — an admin can
+            // pause between reconciliation's stale snapshot and here, and
+            // $groupRun->group is that snapshot. A conditional UPDATE loses the race
+            // instead of overwriting the pause (which would let the scheduler
+            // dispatch the group again).
+            BackupJobGroup::query()
+                ->whereKey($groupRun->group->getKey())
+                ->where('status', '!=', BackupJobGroup::STATUS_PAUSED)
+                ->update(['status' => BackupJobGroup::STATUS_ERROR]);
         }
 
         ActivityLog::record('backup_group_run_failed', 'Backup group run failed.', $groupRun, [
@@ -527,7 +528,10 @@ class RunBackupGroup
     private function sendStartNotification(BackupGroupRun $groupRun): void
     {
         try {
-            $this->sendShoutrrrNotification->sendGroupRunStarted($groupRun);
+            // No member container exists yet at group start; refresh the group run's
+            // heartbeat per channel so slow start notifications don't get the live
+            // group run reconciled as stale.
+            $this->sendShoutrrrNotification->sendGroupRunStarted($groupRun, fn () => $this->touchHeartbeat($groupRun));
         } catch (Throwable $exception) {
             ActivityLog::record('notification_send_failed', 'Backup group start notification failed.', $groupRun, [
                 'error' => str($exception->getMessage())->limit(1000)->toString(),
@@ -538,11 +542,22 @@ class RunBackupGroup
     private function sendFinishNotification(BackupGroupRun $groupRun): void
     {
         try {
-            $this->sendShoutrrrNotification->sendGroupRunFinished($groupRun);
+            // The terminal group run still holds the backup-group lock through these
+            // sends; refresh its heartbeat per channel so a next queued run of the
+            // same group waiting on that lock is not reconciled as stale.
+            $this->sendShoutrrrNotification->sendGroupRunFinished($groupRun, fn () => $this->touchHeartbeat($groupRun));
         } catch (Throwable $exception) {
             ActivityLog::record('notification_send_failed', 'Backup group notification failed.', $groupRun, [
                 'error' => str($exception->getMessage())->limit(1000)->toString(),
             ]);
         }
+    }
+
+    /** Refresh the group run's liveness marker (used around slow notifications). */
+    private function touchHeartbeat(BackupGroupRun $groupRun): void
+    {
+        BackupGroupRun::query()
+            ->whereKey($groupRun->getKey())
+            ->update(['last_heartbeat_at' => now()]);
     }
 }

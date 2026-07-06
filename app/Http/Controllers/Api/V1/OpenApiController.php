@@ -241,6 +241,22 @@ class OpenApiController extends Controller
                 // cannot send a schema-valid request the API then rejects with 422.
                 // Each independent rule is its own if/then/else in allOf.
                 'allOf' => [
+                    // A Docker-volume source requires volume_name.
+                    [
+                        'if' => ['properties' => ['source_type' => ['const' => 'docker_volume']]],
+                        'then' => [
+                            'required' => ['volume_name'],
+                            'properties' => ['volume_name' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9_.-]+$', 'maxLength' => 255]],
+                        ],
+                    ],
+                    // A host-path source requires host_path.
+                    [
+                        'if' => ['properties' => ['source_type' => ['const' => 'host_path']], 'required' => ['source_type']],
+                        'then' => [
+                            'required' => ['host_path'],
+                            'properties' => ['host_path' => ['type' => 'string']],
+                        ],
+                    ],
                     // Standalone (planning_mode omitted/"standalone") requires a
                     // non-null schedule_type; a grouped job delegates it to the group.
                     [

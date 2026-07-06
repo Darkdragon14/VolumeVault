@@ -158,7 +158,38 @@ class ReconcileStaleRuns extends Command
             ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, BackupGroupRun::STATUS_RUNNING))
             ->get()
             ->filter(fn (BackupGroupRun $run) => $this->groupRunIsStale($run, $cutoff)
-                && ! $this->groupRunHasActiveMemberRun($run, $cutoff));
+                && ! $this->groupRunHasActiveMemberRun($run, $cutoff)
+                && ! $this->groupRunIsWaitingForGroupLock($run));
+    }
+
+    /**
+     * Whether a queued group run is legitimately waiting on the backup-group lock
+     * held by another run of the same group — one that is running, or terminal but
+     * still finishing (recently finished, or refreshing its heartbeat through slow
+     * notifications). Such a waiter is not stale; failing it would drop the next
+     * scheduled run of the group while the previous one is merely notifying.
+     */
+    private function groupRunIsWaitingForGroupLock(BackupGroupRun $run): bool
+    {
+        if ($run->status !== BackupGroupRun::STATUS_QUEUED) {
+            return false;
+        }
+
+        $recentlyActive = now()->subSeconds(120);
+
+        return BackupGroupRun::query()
+            ->where('backup_job_group_id', $run->backup_job_group_id)
+            ->whereKeyNot($run->getKey())
+            ->where(function ($query) use ($recentlyActive): void {
+                $query
+                    ->where('status', BackupGroupRun::STATUS_RUNNING)
+                    ->orWhere(fn ($q) => $q
+                        ->whereIn('status', [BackupGroupRun::STATUS_SUCCESS, BackupGroupRun::STATUS_FAILED, BackupGroupRun::STATUS_CANCELLED])
+                        ->where(fn ($inner) => $inner
+                            ->where('finished_at', '>=', $recentlyActive)
+                            ->orWhere('last_heartbeat_at', '>=', $recentlyActive)));
+            })
+            ->exists();
     }
 
     /**

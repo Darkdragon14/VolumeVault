@@ -56,7 +56,7 @@ class SendShoutrrrNotification
      * (a start is not a failure), mirroring restore start. Webhook channels ping
      * their start URL — the piece Healthchecks needs to measure run duration.
      */
-    public function sendBackupRunStarted(BackupRun $run): void
+    public function sendBackupRunStarted(BackupRun $run, ?callable $afterEach = null): void
     {
         $run->loadMissing('job.destination', 'initiatedBy');
 
@@ -68,6 +68,13 @@ class SendShoutrrrNotification
             $title = $this->backupRunTitle($run, $channel);
             $message = $this->backupRunMessage($run, $channel);
             $this->send($channel, $title, $message, NotificationEvent::Start);
+
+            // The start notification runs before any Docker container exists, so the
+            // heartbeat is the only liveness signal; refresh it between channels
+            // (each ~60s) so slow start notifications don't get a live run reconciled.
+            if ($afterEach !== null) {
+                $afterEach();
+            }
         }
     }
 
@@ -76,7 +83,7 @@ class SendShoutrrrNotification
      * only and webhook channels ping their start URL — the single Healthchecks
      * ping that opens the window for the whole set of member volumes.
      */
-    public function sendGroupRunStarted(BackupGroupRun $run): void
+    public function sendGroupRunStarted(BackupGroupRun $run, ?callable $afterEach = null): void
     {
         $run->loadMissing('group', 'initiatedBy');
 
@@ -90,6 +97,10 @@ class SendShoutrrrNotification
             }
 
             $this->send($channel, $this->groupRunTitle($run), $this->groupRunMessage($run), NotificationEvent::Start);
+
+            if ($afterEach !== null) {
+                $afterEach();
+            }
         }
     }
 
@@ -99,7 +110,7 @@ class SendShoutrrrNotification
      * stop-on-first-failure policy tripped) reaches every channel. This is the
      * single success/fail ping the whole group resolves to.
      */
-    public function sendGroupRunFinished(BackupGroupRun $run): void
+    public function sendGroupRunFinished(BackupGroupRun $run, ?callable $afterEach = null): void
     {
         $run->loadMissing('group', 'initiatedBy');
 
@@ -116,6 +127,13 @@ class SendShoutrrrNotification
             }
 
             $this->send($channel, $this->groupRunTitle($run), $this->groupRunMessage($run), $event);
+
+            // The terminal group run still holds the backup-group lock through these
+            // sends; refresh its heartbeat between channels so a next queued run of
+            // the same group waiting on that lock is not reconciled as stale.
+            if ($afterEach !== null) {
+                $afterEach();
+            }
         }
     }
 

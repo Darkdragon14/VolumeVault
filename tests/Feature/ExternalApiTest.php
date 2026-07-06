@@ -55,6 +55,13 @@ class ExternalApiTest extends TestCase
         $newGroup = $branches->first(fn (array $b): bool => in_array('new_group', $b['then']['required'] ?? [], true));
         $this->assertNotNull($newGroup);
         $this->assertSame(['name', 'schedule_type', 'failure_policy'], $newGroup['then']['properties']['new_group']['required']);
+
+        // Source is conditionally required by source_type: docker_volume -> volume_name,
+        // host_path -> host_path.
+        $this->assertTrue($branches->contains(fn (array $b): bool => ($b['if']['properties']['source_type']['const'] ?? null) === 'docker_volume'
+            && in_array('volume_name', $b['then']['required'] ?? [], true)));
+        $this->assertTrue($branches->contains(fn (array $b): bool => ($b['if']['properties']['source_type']['const'] ?? null) === 'host_path'
+            && in_array('host_path', $b['then']['required'] ?? [], true)));
     }
 
     public function test_api_requires_a_bearer_token(): void

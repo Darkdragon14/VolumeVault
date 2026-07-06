@@ -1036,6 +1036,75 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupJob::STATUS_PAUSED, $member->fresh()->status);
     }
 
+    public function test_a_standalone_run_is_cancelled_if_its_job_was_paused_while_queued(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+
+        $job = $this->standaloneJob();
+        $run = BackupRun::create(['backup_job_id' => $job->id, 'status' => BackupRun::STATUS_QUEUED, 'trigger' => BackupRun::TRIGGER_SCHEDULED]);
+        // Admin paused the job after the run was queued.
+        $job->forceFill(['status' => BackupJob::STATUS_PAUSED, 'pause_reason' => 'maintenance'])->save();
+
+        app(RunBackup::class)->handle($run);
+
+        // The worker honours the pause: the run is cancelled without executing, and
+        // the job stays paused (not flipped to running/active).
+        $this->assertSame(BackupRun::STATUS_CANCELLED, $run->fresh()->status);
+        $this->assertSame(BackupJob::STATUS_PAUSED, $job->fresh()->status);
+        $this->assertSame('maintenance', $job->fresh()->pause_reason);
+    }
+
+    public function test_a_queued_group_run_waiting_on_the_group_lock_is_not_reconciled(): void
+    {
+        $group = $this->group();
+        // The previous run just finished and is still notifying (fresh heartbeat).
+        BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_SUCCESS,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subMinutes(10),
+            'finished_at' => now()->subMinutes(9),
+            'last_heartbeat_at' => now(),
+        ]);
+        // The next run is queued, waiting on the backup-group lock, and looks old.
+        $waiter = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_QUEUED,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+        ]);
+        BackupGroupRun::whereKey($waiter->id)->update(['created_at' => now()->subHour()]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // A previous run of the same group is still finishing (fresh heartbeat), so
+        // the waiter is legitimately pending — not stale.
+        $this->assertSame(BackupGroupRun::STATUS_QUEUED, $waiter->fresh()->status);
+    }
+
+    public function test_group_mark_failed_does_not_overwrite_a_pause_applied_after_the_snapshot(): void
+    {
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendGroupRunFinished');
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        $group = $this->group();
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_QUEUED,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+        ]);
+        // A stale snapshot: group loaded active.
+        $loaded = BackupGroupRun::with('group')->find($groupRun->id);
+        // Admin pauses the group in the DB after the load.
+        BackupJobGroup::whereKey($group->id)->update(['status' => BackupJobGroup::STATUS_PAUSED, 'pause_reason' => 'maintenance']);
+
+        app(RunBackupGroup::class)->markFailed($loaded, new \RuntimeException('boom'));
+
+        // The atomic (where status != paused) flip must not resurrect the pause.
+        $this->assertSame(BackupJobGroup::STATUS_PAUSED, $group->fresh()->status);
+        $this->assertSame('maintenance', $group->fresh()->pause_reason);
+    }
+
     public function test_marking_failed_does_not_overwrite_a_pause_applied_after_the_model_was_loaded(): void
     {
         $this->app->instance(DockerProcess::class, $this->fakeDocker());

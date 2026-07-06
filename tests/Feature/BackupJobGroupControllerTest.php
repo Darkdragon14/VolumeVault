@@ -273,6 +273,24 @@ class BackupJobGroupControllerTest extends TestCase
         $this->assertNull($group->fresh()->last_error);
     }
 
+    public function test_resuming_an_errored_member_recomputes_the_group_next_run(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        // The group failed and its next_run_at is overdue (left in the past).
+        $group->forceFill(['status' => BackupJobGroup::STATUS_ERROR, 'next_run_at' => now()->subHour()])->save();
+        $member->forceFill(['status' => BackupJob::STATUS_ERROR])->save();
+
+        $this->actingAs($this->admin())
+            ->post(route('backup-jobs.resume', $member))
+            ->assertRedirect();
+
+        $fresh = $group->fresh();
+        $this->assertSame(BackupJobGroup::STATUS_ACTIVE, $fresh->status);
+        // Recomputed to the future so the scheduler does not fire it immediately.
+        $this->assertTrue($fresh->next_run_at->isFuture());
+    }
+
     public function test_resuming_a_member_does_not_unpause_a_paused_group(): void
     {
         $group = $this->group();
