@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Job di backup raggruppati',
+        'description' => 'Esegui il backup di più volumi come un\'unica operazione pianificata: un gruppo di backup possiede la pianificazione e le notifiche e i job vengono collegati ad esso dal modulo del job di backup. Il gruppo invia un\'unica notifica di avvio e una di successo/errore per tutti i suoi volumi — ideale per un unico monitor di tipo dead man\'s switch — e puoi scegliere se un volume fallito interrompe l\'esecuzione o se il gruppo continua segnalando comunque l\'errore. I gruppi di backup sono disponibili anche tramite l\'API.',
+    ],
     'user_date_format_preference' => [
         'title' => 'Preferenza formato data per utente',
         'description' => 'Ogni utente puo ora scegliere dal proprio profilo il formato regionale usato per visualizzare le date. Per esempio, l\'interfaccia puo restare in inglese mentre le date passano dall\'ordine statunitense mese/giorno all\'ordine australiano o britannico giorno/mese. Il fuso orario dell\'applicazione continua a controllare l\'ora locale mostrata.',

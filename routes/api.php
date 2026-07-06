@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\V1\BackupGroupRunController;
 use App\Http\Controllers\Api\V1\BackupJobController;
+use App\Http\Controllers\Api\V1\BackupJobGroupController;
 use App\Http\Controllers\Api\V1\BackupRunController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DestinationController;
@@ -24,6 +26,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/backup-jobs', [BackupJobController::class, 'index']);
         Route::get('/backup-jobs/{backupJob}', [BackupJobController::class, 'show']);
         Route::get('/backup-jobs/{backupJob}/backups', [BackupJobController::class, 'backups'])->middleware('admin');
+        Route::get('/backup-groups', [BackupJobGroupController::class, 'index']);
+        Route::get('/backup-groups/{backupGroup}', [BackupJobGroupController::class, 'show']);
+        Route::get('/backup-group-runs', [BackupGroupRunController::class, 'index']);
+        Route::get('/backup-group-runs/{backupGroupRun}', [BackupGroupRunController::class, 'show']);
         Route::get('/backup-runs', [BackupRunController::class, 'index']);
         Route::get('/backup-runs/{backupRun}', [BackupRunController::class, 'show']);
         Route::get('/restore-runs', [RestoreRunController::class, 'index']);
@@ -45,6 +51,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/backup-jobs/{backupJob}/pause', [BackupJobController::class, 'pause']);
         Route::post('/backup-jobs/{backupJob}/resume', [BackupJobController::class, 'resume']);
         Route::post('/backup-jobs/{backupJob}/restore', [RestoreController::class, 'store']);
+        Route::post('/backup-groups', [BackupJobGroupController::class, 'store']);
+        Route::put('/backup-groups/{backupGroup}', [BackupJobGroupController::class, 'update']);
+        Route::delete('/backup-groups/{backupGroup}', [BackupJobGroupController::class, 'destroy']);
+        Route::post('/backup-groups/{backupGroup}/run', [BackupJobGroupController::class, 'runNow']);
+        Route::post('/backup-groups/{backupGroup}/pause', [BackupJobGroupController::class, 'pause']);
+        Route::post('/backup-groups/{backupGroup}/resume', [BackupJobGroupController::class, 'resume']);
+        Route::patch('/backup-groups/{backupGroup}/notifications', [BackupJobGroupController::class, 'toggleNotifications']);
         Route::post('/destinations', [DestinationController::class, 'store']);
         Route::post('/destinations/host-key', [DestinationController::class, 'hostKey']);
         Route::put('/destinations/{destination}', [DestinationController::class, 'update']);

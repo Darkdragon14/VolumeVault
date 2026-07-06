@@ -12,7 +12,7 @@
 
 VolumeVault is a self-hosted Laravel application for managing Docker volume and host path backups with safe restores through [`offen/docker-volume-backup`](https://github.com/offen/docker-volume-backup).
 
-It provides a clear web UI for scheduled backups, stack-level volume coverage, restore runs, encrypted destinations, notifications, proactive alerts, run history, onboarding, and API-driven automation.
+It provides a clear web UI for scheduled backups, grouped backups with a single aggregated notification, stack-level volume coverage, restore runs, encrypted destinations, notifications, proactive alerts, run history, onboarding, and API-driven automation.
 
 <table>
   <tr>

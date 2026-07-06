@@ -27,6 +27,7 @@ It provides a guided web UI around scheduled backups, encrypted destinations, no
 - Configure AWS S3, Cloudflare R2, custom S3-compatible storage, WebDAV, SSH/SFTP, Azure Blob Storage, Dropbox, Google Drive, and local filesystem destinations.
 - Store destination credentials and notification URLs encrypted at rest with Laravel `Crypt`.
 - Create hourly, daily, weekly, or cron-based backup schedules.
+- Group several volumes into one scheduled backup that reports a single start and success/failure notification, ideal for a single dead man's switch monitor.
 - Run manual backups, pause or resume jobs, inspect logs, and view backup and restore history.
 - Restore selected archives into new Docker volumes by default.
 - Configure Shoutrrr notification channels per backup job, with a default channel for new jobs and backup size available in messages when it is known.

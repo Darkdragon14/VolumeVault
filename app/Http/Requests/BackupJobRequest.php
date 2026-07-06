@@ -6,6 +6,7 @@ use App\Actions\Backup\RenderBackupFilename;
 use App\Actions\Docker\ValidateHostPathMount;
 use App\Http\Requests\Concerns\ValidatesBackupSizeRange;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -36,6 +37,11 @@ class BackupJobRequest extends FormRequest
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
             'alert_configs' => $alertConfigs,
+            // Absent/blank planning_mode = a standalone job (the historical
+            // behaviour), so existing clients keep working. A *present* value is
+            // passed through unchanged so an invalid one (e.g. a typo) is rejected by
+            // the enum rule rather than silently coerced to standalone.
+            'planning_mode' => $this->filled('planning_mode') ? $this->input('planning_mode') : 'standalone',
         ]);
     }
 
@@ -50,7 +56,30 @@ class BackupJobRequest extends FormRequest
             'volume_name' => ['required_if:source_type,'.BackupJob::SOURCE_TYPE_DOCKER_VOLUME, 'nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/'],
             'host_path' => ['required_if:source_type,'.BackupJob::SOURCE_TYPE_HOST_PATH, 'nullable', 'string', 'max:255'],
             'backup_destination_id' => ['required', 'integer', 'exists:backup_destinations,id'],
-            'schedule_type' => ['required', 'string', Rule::in([
+            // Planning mode: a standalone job keeps its own schedule (below); a
+            // grouped job delegates the schedule and notifications to its group.
+            'planning_mode' => ['nullable', Rule::in(['standalone', 'group'])],
+            'group_selection' => ['nullable', Rule::in(['existing', 'new'])],
+            'backup_job_group_id' => [Rule::requiredIf(fn (): bool => $this->isExistingGroupMode()), 'nullable', 'integer', 'exists:backup_job_groups,id'],
+            'new_group' => ['nullable', 'array'],
+            'new_group.name' => [Rule::requiredIf(fn (): bool => $this->isNewGroupMode()), 'nullable', 'string', 'max:255'],
+            'new_group.schedule_type' => [Rule::requiredIf(fn (): bool => $this->isNewGroupMode()), 'nullable', 'string', Rule::in([
+                BackupJobGroup::SCHEDULE_HOURLY,
+                BackupJobGroup::SCHEDULE_DAILY,
+                BackupJobGroup::SCHEDULE_WEEKLY,
+                BackupJobGroup::SCHEDULE_CRON,
+            ])],
+            'new_group.schedule_config' => ['nullable', 'array'],
+            'new_group.timezone' => ['nullable', 'string', Rule::in(\DateTimeZone::listIdentifiers())],
+            'new_group.failure_policy' => [Rule::requiredIf(fn (): bool => $this->isNewGroupMode()), 'nullable', Rule::in([
+                BackupJobGroup::FAILURE_POLICY_CONTINUE,
+                BackupJobGroup::FAILURE_POLICY_STOP,
+            ])],
+            'new_group.notifications_enabled' => ['nullable', 'boolean'],
+            'new_group.notification_channel_ids' => ['nullable', 'array'],
+            'new_group.notification_channel_ids.*' => ['integer', 'distinct', 'exists:notification_channels,id'],
+            // Required for a standalone job; ignored (delegated to the group) when grouped.
+            'schedule_type' => [Rule::requiredIf(fn (): bool => ! $this->isGroupMode()), 'nullable', 'string', Rule::in([
                 BackupJob::SCHEDULE_HOURLY,
                 BackupJob::SCHEDULE_DAILY,
                 BackupJob::SCHEDULE_WEEKLY,
@@ -87,10 +116,21 @@ class BackupJobRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            try {
-                app(BackupScheduleCalculator::class)->normalize($this->input('schedule_type'), $this->input('schedule_config', []));
-            } catch (InvalidArgumentException $exception) {
-                $validator->errors()->add('schedule_config', $exception->getMessage());
+            // A grouped job has no schedule of its own — the group owns it.
+            if (! $this->isGroupMode()) {
+                try {
+                    app(BackupScheduleCalculator::class)->normalize((string) $this->input('schedule_type'), (array) $this->input('schedule_config'));
+                } catch (InvalidArgumentException $exception) {
+                    $validator->errors()->add('schedule_config', $exception->getMessage());
+                }
+            }
+
+            if ($this->isNewGroupMode()) {
+                try {
+                    app(BackupScheduleCalculator::class)->normalize((string) $this->input('new_group.schedule_type'), (array) $this->input('new_group.schedule_config'));
+                } catch (InvalidArgumentException $exception) {
+                    $validator->errors()->add('new_group.schedule_config', $exception->getMessage());
+                }
             }
 
             $this->validateHostPathSource($validator);
@@ -99,9 +139,24 @@ class BackupJobRequest extends FormRequest
         });
     }
 
+    public function isGroupMode(): bool
+    {
+        return $this->input('planning_mode') === 'group';
+    }
+
+    public function isNewGroupMode(): bool
+    {
+        return $this->isGroupMode() && $this->input('group_selection') === 'new';
+    }
+
+    public function isExistingGroupMode(): bool
+    {
+        return $this->isGroupMode() && $this->input('group_selection') !== 'new';
+    }
+
     public function normalizedScheduleConfig(): array
     {
-        return app(BackupScheduleCalculator::class)->normalize($this->input('schedule_type'), $this->input('schedule_config', []));
+        return app(BackupScheduleCalculator::class)->normalize((string) $this->input('schedule_type'), (array) $this->input('schedule_config'));
     }
 
     private function validateHostPathSource(Validator $validator): void

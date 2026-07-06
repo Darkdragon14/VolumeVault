@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Jobs de sauvegarde groupés',
+        'description' => 'Sauvegardez plusieurs volumes en une seule opération planifiée : un groupe de sauvegarde possède le planning et les notifications, et les jobs y sont rattachés depuis le formulaire de job de sauvegarde. Le groupe envoie une seule notification de début et une seule notification de succès/échec pour tous ses volumes — idéal pour un unique moniteur de type dead man\'s switch — et vous pouvez choisir si un volume en échec arrête l\'exécution ou si le groupe continue en signalant tout de même l\'échec. Les groupes de sauvegarde sont aussi disponibles via l\'API.',
+    ],
     'user_date_format_preference' => [
         'title' => 'Preference de format de date par utilisateur',
         'description' => 'Chaque utilisateur peut maintenant choisir depuis son profil le format regional utilise pour afficher les dates. Par exemple, l\'interface peut rester en anglais tout en passant les dates de l\'ordre americain mois/jour a l\'ordre australien ou britannique jour/mois. Le fuseau horaire de l\'application controle toujours l\'heure locale affichee.',

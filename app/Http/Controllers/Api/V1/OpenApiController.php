@@ -40,17 +40,17 @@ class OpenApiController extends Controller
     {
         return [
             '/openapi.json' => [
-                'get' => $this->operation('Read the OpenAPI document.', [], null, false),
+                'get' => $this->operation('Read the OpenAPI document.', [], public: true),
             ],
             '/me' => ['get' => $this->operation('Inspect current authenticated user and token.', ['read'])],
             '/dashboard' => ['get' => $this->operation('Read dashboard stats and recent activity.', ['read'])],
             '/volumes' => ['get' => $this->operation('List Docker volumes.', ['read'])],
             '/host-path-allowlist' => ['get' => $this->operation('Read the configured host-path allowlist (prefixes that host-path backup sources and local destinations may use). Empty/not configured means host paths are refused (fail-closed).', ['read'], null, false, true)],
-            '/volumes/sync' => ['post' => $this->operation('Synchronize Docker volumes from the host.', ['write'], null, true, true)],
-            '/stacks/backup' => ['post' => $this->operation('Back up a whole stack at once. For every Docker volume in the stack that has no backup job yet, a job is created using the given destination and schedule; then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, omit destination/schedule to just queue a run for every job.', ['write'], ['$ref' => '#/components/schemas/StackBackupRequest'], false, true, 202)],
+            '/volumes/sync' => ['post' => $this->operation('Synchronize Docker volumes from the host.', ['write'], null, false, true)],
+            '/stacks/backup' => ['post' => $this->operation('Back up a whole stack at once. For every Docker volume in the stack that has no backup job yet, a job is created using the given destination and schedule; then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, omit destination/schedule to just queue a run for every job. Volumes whose job belongs to a backup group are reported under "grouped" and are not run here — they back up on their group\'s own schedule. The 202 response is { data: { created, queued, skipped, grouped } }.', ['write'], ['$ref' => '#/components/schemas/StackBackupRequest'], false, true, 202)],
             '/backup-jobs' => [
                 'get' => $this->operation('List backup jobs.', ['read']),
-                'post' => $this->operation('Create a backup job.', ['write'], ['$ref' => '#/components/schemas/BackupJobRequest'], true, true),
+                'post' => $this->operation('Create a backup job.', ['write'], ['$ref' => '#/components/schemas/BackupJobRequest'], false, true, 201),
             ],
             '/backup-jobs/{id}' => [
                 'get' => $this->operation('Read a backup job and recent runs.', ['read'], null, true),
@@ -58,10 +58,25 @@ class OpenApiController extends Controller
                 'delete' => $this->operation('Delete a backup job.', ['write'], null, true, true, 204),
             ],
             '/backup-jobs/{id}/run' => ['post' => $this->operation('Queue a manual backup run.', ['write'], null, true, true, 202)],
-            '/backup-jobs/{id}/pause' => ['post' => $this->operation('Pause a backup job.', ['write'], ['$ref' => '#/components/schemas/PauseRequest'], true, true)],
+            '/backup-jobs/{id}/pause' => ['post' => $this->operation('Pause a backup job.', ['write'], ['$ref' => '#/components/schemas/PauseRequest'], true, true, bodyRequired: false)],
             '/backup-jobs/{id}/resume' => ['post' => $this->operation('Resume a backup job.', ['write'], null, true, true)],
             '/backup-jobs/{id}/backups' => ['get' => $this->operation('List backup objects available for restore.', ['read'], null, true, true)],
             '/backup-jobs/{id}/restore' => ['post' => $this->operation('Queue a restore run.', ['write'], ['$ref' => '#/components/schemas/RestoreRequest'], true, true, 202)],
+            '/backup-groups' => [
+                'get' => $this->operation('List backup groups.', ['read']),
+                'post' => $this->operation('Create a backup group. The group owns the schedule, notifications and failure policy for its member jobs; attach jobs to it by creating or updating a backup job with planning_mode=group.', ['write'], ['$ref' => '#/components/schemas/BackupJobGroupRequest'], false, true, 201),
+            ],
+            '/backup-groups/{id}' => [
+                'get' => $this->operation('Read a backup group with its member jobs and recent group runs.', ['read'], null, true),
+                'put' => $this->operation('Update a backup group. Member jobs inherit the updated schedule.', ['write'], ['$ref' => '#/components/schemas/BackupJobGroupRequest'], true, true),
+                'delete' => $this->operation('Delete a backup group. Fails while it still has member jobs; move them back to standalone first.', ['write'], null, true, true, 204),
+            ],
+            '/backup-groups/{id}/run' => ['post' => $this->operation('Queue a manual group run: every active member volume is backed up and the group emits a single start and success/fail notification.', ['write'], null, true, true, 202)],
+            '/backup-groups/{id}/pause' => ['post' => $this->operation('Pause a backup group.', ['write'], ['$ref' => '#/components/schemas/PauseRequest'], true, true, bodyRequired: false)],
+            '/backup-groups/{id}/resume' => ['post' => $this->operation('Resume a backup group.', ['write'], null, true, true)],
+            '/backup-groups/{id}/notifications' => ['patch' => $this->operation('Enable or disable a backup group\'s notifications.', ['write'], ['$ref' => '#/components/schemas/ToggleNotificationsRequest'], true, true)],
+            '/backup-group-runs' => ['get' => $this->operation('List recent backup group runs.', ['read'])],
+            '/backup-group-runs/{id}' => ['get' => $this->operation('Read a backup group run with its per-volume member runs.', ['read'], null, true)],
             '/backup-runs' => ['get' => $this->operation('List recent backup runs.', ['read'])],
             '/backup-runs/{id}' => ['get' => $this->operation('Read backup run details and logs.', ['read'], null, true)],
             '/restore-runs' => ['get' => $this->operation('List recent restore runs.', ['read'])],
@@ -86,18 +101,29 @@ class OpenApiController extends Controller
         ];
     }
 
-    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200): array
+    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true): array
     {
         $operation = [
             'summary' => $summary,
-            'description' => trim(($abilities ? 'Requires token abilities: '.implode(', ', $abilities).'. ' : '').($admin ? 'Requires an admin user token.' : '')),
+            'description' => $public
+                ? 'Public endpoint; no authentication required.'
+                : trim(($abilities ? 'Requires token abilities: '.implode(', ', $abilities).'. ' : '').($admin ? 'Requires an admin user token.' : '')),
             'responses' => [
                 (string) $status => ['description' => 'Successful response.'],
+            ],
+        ];
+
+        if ($public) {
+            // Override the global bearerAuth requirement so generated clients don't
+            // think fetching the schema itself needs a token.
+            $operation['security'] = [];
+        } else {
+            $operation['responses'] += [
                 '401' => ['description' => 'Missing or invalid Bearer token.'],
                 '403' => ['description' => 'Missing ability or admin role.'],
                 '422' => ['description' => 'Validation or operation error.'],
-            ],
-        ];
+            ];
+        }
 
         if ($id) {
             $operation['parameters'] = [[
@@ -110,7 +136,7 @@ class OpenApiController extends Controller
 
         if ($body) {
             $operation['requestBody'] = [
-                'required' => true,
+                'required' => $bodyRequired,
                 'content' => [
                     'application/json' => ['schema' => $body],
                 ],
@@ -154,16 +180,56 @@ class OpenApiController extends Controller
                     'backup_size_bytes' => ['type' => ['integer', 'null']],
                 ],
             ],
+            'BackupGroupRun' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer'],
+                    'backup_job_group_id' => ['type' => 'integer'],
+                    'status' => ['type' => 'string', 'enum' => ['queued', 'running', 'success', 'failed', 'cancelled']],
+                    'trigger' => ['type' => 'string', 'enum' => ['scheduled', 'manual']],
+                    'started_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                    'finished_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                    'duration_seconds' => ['type' => ['integer', 'null']],
+                    'total_members' => ['type' => 'integer'],
+                    'succeeded_members' => ['type' => 'integer'],
+                    'failed_members' => ['type' => 'integer'],
+                    'error_message' => ['type' => ['string', 'null']],
+                ],
+            ],
+            'BackupJobGroupRequest' => [
+                'type' => 'object',
+                'required' => ['name', 'schedule_type', 'failure_policy'],
+                'properties' => [
+                    'name' => ['type' => 'string', 'maxLength' => 255],
+                    'schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']],
+                    'schedule_config' => ['type' => 'object', 'description' => 'Schedule details: {everyHours} for hourly, {time} for daily, {dayOfWeek,time} for weekly, {expression} for cron.'],
+                    'timezone' => ['type' => ['string', 'null'], 'description' => 'IANA timezone the group schedule is evaluated in. Defaults to the application timezone.'],
+                    'failure_policy' => ['type' => 'string', 'enum' => ['continue', 'stop'], 'description' => 'continue backs up every member volume and reports failure if any fails; stop halts the run at the first failed volume. Either way the group reports failure when any volume fails.'],
+                    'notifications_enabled' => ['type' => 'boolean', 'default' => true, 'description' => 'When enabled the group emits one start notification and one success/fail notification for the whole set of member volumes.'],
+                    'notification_channel_ids' => ['type' => 'array', 'items' => ['type' => 'integer'], 'description' => 'Notification channel IDs used for the group\'s aggregated notifications.'],
+                ],
+            ],
+            'ToggleNotificationsRequest' => [
+                'type' => 'object',
+                'required' => ['notifications_enabled'],
+                'properties' => [
+                    'notifications_enabled' => ['type' => 'boolean', 'description' => 'Required. Omitting it is rejected rather than silently disabling notifications.'],
+                ],
+            ],
             'BackupJobRequest' => [
                 'type' => 'object',
-                'required' => ['name', 'backup_destination_id', 'schedule_type'],
+                'required' => ['name', 'backup_destination_id'],
                 'properties' => [
                     'name' => ['type' => 'string'],
+                    'planning_mode' => ['type' => ['string', 'null'], 'enum' => ['standalone', 'group', null], 'default' => 'standalone', 'description' => 'standalone (default) keeps the job\'s own schedule and notifications. group attaches the job to a backup group that owns the schedule and notifications; the job\'s own schedule_type and notification_channel_ids are then ignored and its next run is driven by the group.'],
+                    'group_selection' => ['type' => ['string', 'null'], 'enum' => ['existing', 'new', null], 'description' => 'When planning_mode=group: "existing" attaches to backup_job_group_id; "new" creates the group described by new_group.'],
+                    'backup_job_group_id' => ['type' => ['integer', 'null'], 'description' => 'Existing backup group to attach this job to. Required when planning_mode=group and group_selection is "existing" (or omitted).'],
+                    'new_group' => ['type' => ['object', 'null'], 'description' => 'Group to create inline when planning_mode=group and group_selection=new. Same fields as BackupJobGroupRequest (name, schedule_type, schedule_config, timezone, failure_policy, notifications_enabled, notification_channel_ids).'],
                     'source_type' => ['type' => 'string', 'enum' => ['docker_volume', 'host_path'], 'default' => 'docker_volume'],
                     'volume_name' => ['type' => ['string', 'null'], 'pattern' => '^[A-Za-z0-9_.-]+$', 'maxLength' => 255, 'description' => 'Required when source_type is docker_volume. Must match the Docker volume name pattern ^[A-Za-z0-9_.-]+$.'],
                     'host_path' => ['type' => ['string', 'null'], 'description' => 'Required when source_type is host_path. Must be an absolute directory path on the Docker host and match VOLUMEVAULT_HOST_PATH_ALLOWLIST when configured.'],
                     'backup_destination_id' => ['type' => 'integer'],
-                    'schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']],
+                    'schedule_type' => ['type' => ['string', 'null'], 'enum' => ['hourly', 'daily', 'weekly', 'cron', null], 'description' => 'Required for a standalone job (planning_mode omitted or standalone). Ignored when planning_mode=group, where the group owns the schedule.'],
                     'schedule_config' => ['type' => 'object'],
                     'retention_days' => ['type' => ['integer', 'null'], 'minimum' => 1],
                     'retention_count' => ['type' => ['integer', 'null'], 'minimum' => 1],
@@ -180,6 +246,84 @@ class OpenApiController extends Controller
                         'type' => ['array', 'null'],
                         'items' => ['type' => 'string', 'maxLength' => 255],
                         'description' => 'Names of the containers to stop before backup. Only honoured when source_type is host_path and stop_containers_before_backup is true; ignored for docker_volume sources, which discover containers automatically.',
+                    ],
+                ],
+                // Conditional requirements a generated client must honour, so it
+                // cannot send a schema-valid request the API then rejects with 422.
+                // Each independent rule is its own if/then/else in allOf.
+                'allOf' => [
+                    // A Docker-volume source requires volume_name.
+                    [
+                        'if' => ['properties' => ['source_type' => ['const' => 'docker_volume']]],
+                        'then' => [
+                            'required' => ['volume_name'],
+                            'properties' => ['volume_name' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9_.-]+$', 'maxLength' => 255]],
+                        ],
+                    ],
+                    // A host-path source requires host_path.
+                    [
+                        'if' => ['properties' => ['source_type' => ['const' => 'host_path']], 'required' => ['source_type']],
+                        'then' => [
+                            'required' => ['host_path'],
+                            'properties' => ['host_path' => ['type' => 'string']],
+                        ],
+                    ],
+                    // Standalone (planning_mode omitted/"standalone") requires a
+                    // non-null schedule_type; a grouped job delegates it to the group.
+                    [
+                        'if' => [
+                            'properties' => ['planning_mode' => ['const' => 'group']],
+                            'required' => ['planning_mode'],
+                        ],
+                        'else' => [
+                            'required' => ['schedule_type'],
+                            'properties' => ['schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']]],
+                        ],
+                    ],
+                    // Attaching to an existing group (planning_mode=group and
+                    // group_selection is "existing" or omitted) requires
+                    // backup_job_group_id.
+                    [
+                        'if' => [
+                            'properties' => [
+                                'planning_mode' => ['const' => 'group'],
+                                'group_selection' => ['not' => ['const' => 'new']],
+                            ],
+                            'required' => ['planning_mode'],
+                        ],
+                        'then' => [
+                            'required' => ['backup_job_group_id'],
+                            'properties' => ['backup_job_group_id' => ['type' => 'integer']],
+                        ],
+                    ],
+                    // Creating a group inline (planning_mode=group, group_selection=new)
+                    // requires new_group with its name, schedule_type and failure_policy.
+                    [
+                        'if' => [
+                            'properties' => [
+                                'planning_mode' => ['const' => 'group'],
+                                'group_selection' => ['const' => 'new'],
+                            ],
+                            'required' => ['planning_mode', 'group_selection'],
+                        ],
+                        'then' => [
+                            'required' => ['new_group'],
+                            'properties' => [
+                                'new_group' => [
+                                    'type' => 'object',
+                                    'required' => ['name', 'schedule_type', 'failure_policy'],
+                                    'properties' => [
+                                        'name' => ['type' => 'string'],
+                                        'schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']],
+                                        'schedule_config' => ['type' => 'object'],
+                                        'timezone' => ['type' => ['string', 'null']],
+                                        'failure_policy' => ['type' => 'string', 'enum' => ['continue', 'stop']],
+                                        'notifications_enabled' => ['type' => 'boolean'],
+                                        'notification_channel_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                                    ],
+                                ],
+                            ],
+                        ],
                     ],
                 ],
             ],

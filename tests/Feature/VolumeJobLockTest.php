@@ -161,6 +161,32 @@ class VolumeJobLockTest extends TestCase
         $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
     }
 
+    public function test_backup_job_requeues_instead_of_overlapping_a_busy_host_path_job(): void
+    {
+        $job = $this->hostPathJob();
+
+        // Another run of the same host-path job is still running: its per-job lock
+        // would serialize us, but it may have expired after 24h, so the busy guard
+        // must requeue rather than overlap.
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'started_at' => now(),
+        ]);
+
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        (new RunBackupJob($run->id))->handle(app(RunBackup::class));
+
+        // No volume, but the sibling run makes the job busy: requeue, don't overlap.
+        $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
+    }
+
     public function test_restore_job_requeues_while_a_finished_run_is_still_restarting_containers(): void
     {
         $job = $this->backupJob();
@@ -218,6 +244,142 @@ class VolumeJobLockTest extends TestCase
         return BackupJob::create([
             'name' => 'Job',
             'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+    }
+
+    public function test_run_restore_does_not_re_execute_an_already_running_run(): void
+    {
+        $job = $this->backupJob();
+        $startedAt = now()->subMinutes(3);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => $startedAt,
+        ]);
+
+        // A redelivered copy must not re-claim (and re-run a destructive restore on)
+        // a row a live worker already flipped to running.
+        app(RunRestore::class)->handle($run);
+
+        $fresh = $run->fresh();
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $fresh->status);
+        $this->assertSame($startedAt->timestamp, $fresh->started_at->timestamp);
+    }
+
+    public function test_restore_failed_hook_does_not_fail_a_running_run(): void
+    {
+        $job = $this->backupJob();
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now(),
+        ]);
+
+        (new RunRestoreJob($run->id))->failed(new \RuntimeException('boom'));
+
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
+    }
+
+    public function test_restore_failed_hook_fails_a_queued_run(): void
+    {
+        $job = $this->backupJob();
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+
+        (new RunRestoreJob($run->id))->failed(new \RuntimeException('boom'));
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+    }
+
+    public function test_run_backup_does_not_re_execute_an_already_running_run(): void
+    {
+        $job = $this->backupJob();
+        $startedAt = now()->subMinutes(3);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => $startedAt,
+        ]);
+
+        // A redelivered copy calling handle() claims only a QUEUED row, so it must
+        // not re-claim (and re-run) a row a live worker already flipped to running.
+        app(RunBackup::class)->handle($run);
+
+        $fresh = $run->fresh();
+        $this->assertSame(BackupRun::STATUS_RUNNING, $fresh->status);
+        // started_at untouched proves the claim matched zero rows (no re-run).
+        $this->assertSame($startedAt->timestamp, $fresh->started_at->timestamp);
+    }
+
+    public function test_failed_hook_does_not_fail_a_running_standalone_run(): void
+    {
+        $job = $this->backupJob();
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now(),
+        ]);
+
+        // An expired/duplicate copy's failed() must not fail a run a live worker owns.
+        (new RunBackupJob($run->id))->failed(new \RuntimeException('boom'));
+
+        $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
+    }
+
+    public function test_failed_hook_fails_a_queued_standalone_run(): void
+    {
+        $job = $this->backupJob();
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        // A run the queue never started is safe to fail from the hook.
+        (new RunBackupJob($run->id))->failed(new \RuntimeException('boom'));
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
+    }
+
+    private function hostPathJob(): BackupJob
+    {
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/tmp/vv'],
+        ]);
+
+        return BackupJob::create([
+            'name' => 'Host job',
+            'source_type' => BackupJob::SOURCE_TYPE_HOST_PATH,
+            'host_path' => '/tmp/vv-src',
             'backup_destination_id' => $destination->id,
             'schedule_type' => BackupJob::SCHEDULE_DAILY,
             'schedule_config' => ['time' => '02:00'],

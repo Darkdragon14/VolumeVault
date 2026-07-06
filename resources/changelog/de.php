@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Gruppierte Backup-Jobs',
+        'description' => 'Sichern Sie mehrere Volumes als einen einzigen geplanten Vorgang: Eine Backup-Gruppe besitzt den Zeitplan und die Benachrichtigungen, und Jobs werden ihr über das Backup-Job-Formular hinzugefügt. Die Gruppe sendet eine Start- und eine Erfolgs-/Fehlerbenachrichtigung für alle ihre Volumes — ideal für einen einzelnen Dead-Man\'s-Switch-Monitor — und Sie können wählen, ob ein fehlgeschlagenes Volume den Lauf stoppt oder die Gruppe fortfährt und den Fehler dennoch meldet. Backup-Gruppen sind auch über die API verfügbar.',
+    ],
     'user_date_format_preference' => [
         'title' => 'Datumsformat pro Benutzer',
         'description' => 'Jeder Benutzer kann jetzt im Profil das regionale Format fuer angezeigte Daten waehlen. Zum Beispiel kann die Oberflaeche auf Englisch bleiben, waehrend Datumsanzeigen von der US-Reihenfolge Monat/Tag auf die australische oder britische Reihenfolge Tag/Monat wechseln. Die Anwendungs-Zeitzone steuert weiterhin, welche lokale Uhrzeit angezeigt wird.',

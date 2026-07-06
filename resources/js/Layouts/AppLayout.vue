@@ -94,6 +94,7 @@ const primaryNav = computed(() => [
     { label: t('Volumes'), href: '/volumes', shortcutKey: 'v' },
     { label: t('Stacks'), href: '/stacks', shortcutKey: 's' },
     { label: t('Backup jobs'), href: '/backup-jobs', shortcutKey: 'j' },
+    { label: t('Backup groups'), href: '/backup-groups', shortcutKey: 'k' },
     { label: t('Alerts'), href: '/alerts', shortcutKey: 'a', badge: activeAlertCount.value },
 ]);
 

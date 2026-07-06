@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Csoportosított biztonsági mentési feladatok',
+        'description' => 'Több kötetet menthet egyetlen ütemezett műveletként: egy biztonsági mentési csoport birtokolja az ütemezést és az értesítéseket, a feladatokat pedig a biztonsági mentési feladat űrlapjáról csatolja hozzá. A csoport egyetlen indítási és egyetlen sikeres/hibás értesítést küld az összes kötetéről — ideális egyetlen dead man\'s switch típusú figyelőhöz —, és megválaszthatja, hogy egy hibás kötet leállítja-e a futást, vagy a csoport folytatja és mégis jelzi a hibát. A biztonsági mentési csoportok API-n keresztül is elérhetők.',
+    ],
     'user_date_format_preference' => [
         'title' => 'Felhasznalonkenti datumformatum',
         'description' => 'Mostantol minden felhasznalo kivalaszthatja a profiljaban, milyen regionalis formatum jelenjen meg a datumoknal. Peldaul az interfesz maradhat angol, mikozben a datumok az amerikai honap/nap sorrendrol az ausztral vagy brit nap/honap sorrendre valtananak. Az alkalmazas idozonaja tovabbra is azt hatarozza meg, melyik helyi ido jelenik meg.',

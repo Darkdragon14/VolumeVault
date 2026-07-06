@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\BackupStack;
 use App\Jobs\RunBackupJob;
 use App\Models\BackupDestination;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\User;
@@ -199,6 +202,79 @@ class StackBulkBackupTest extends TestCase
         $this->withToken($token)
             ->postJson('/api/v1/stacks/backup', ['stack' => 'app'])
             ->assertForbidden();
+    }
+
+    public function test_stack_backup_reports_grouped_volumes_without_running_them(): void
+    {
+        Queue::fake();
+
+        $this->volume('grouped_vol', 'mystack');
+
+        $group = BackupJobGroup::create([
+            'name' => 'Group',
+            'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJobGroup::STATUS_ACTIVE,
+            'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+            'next_run_at' => now()->addDay(),
+        ]);
+        BackupJob::create([
+            'name' => 'Member',
+            'backup_job_group_id' => $group->id,
+            'volume_name' => 'grouped_vol',
+            'backup_destination_id' => $this->destination()->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+            'next_run_at' => null,
+        ]);
+
+        // A grouped volume is reported as grouped, not run: the stack backup must
+        // not run it standalone nor trigger the whole group (which may span other
+        // stacks). It backs up on the group's own schedule.
+        $summary = app(BackupStack::class)->handle('mystack', []);
+
+        $this->assertSame(1, $summary['grouped']);
+        $this->assertSame(0, $summary['queued']);
+        Queue::assertNothingPushed();
+        $this->assertSame(0, BackupGroupRun::where('backup_job_group_id', $group->id)->count());
+    }
+
+    public function test_stack_backup_counts_a_paused_grouped_member_as_skipped_not_grouped(): void
+    {
+        Queue::fake();
+
+        $this->volume('grouped_vol', 'mystack');
+        $group = BackupJobGroup::create([
+            'name' => 'Group',
+            'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJobGroup::STATUS_ACTIVE,
+            'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+            'next_run_at' => now()->addDay(),
+        ]);
+        BackupJob::create([
+            'name' => 'Member',
+            'backup_job_group_id' => $group->id,
+            'volume_name' => 'grouped_vol',
+            'backup_destination_id' => $this->destination()->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_PAUSED,
+            'next_run_at' => null,
+        ]);
+
+        // A paused member is excluded from group runs, so it must not be reported
+        // as "handled by the group" — it counts as skipped.
+        $summary = app(BackupStack::class)->handle('mystack', []);
+
+        $this->assertSame(0, $summary['grouped']);
+        $this->assertSame(1, $summary['skipped']);
+        Queue::assertNothingPushed();
     }
 
     private function destination(string $name = 'S3', bool $active = true): BackupDestination

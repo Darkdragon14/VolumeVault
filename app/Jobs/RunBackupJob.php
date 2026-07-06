@@ -76,8 +76,7 @@ class RunBackupJob implements ShouldQueue
      * status before its finally block restarts the containers it stopped, so a run
      * that still has stopped_container_ids is counted too — otherwise a waiter that
      * started after the 24h lock expired could read/clear the volume while the
-     * previous run is mid-restart of containers mounting it. Host-path jobs have no
-     * volume and are serialized by their per-job lock key instead.
+     * previous run is mid-restart of containers mounting it.
      */
     private function volumeBusy(BackupRun $run): bool
     {
@@ -85,7 +84,15 @@ class RunBackupJob implements ShouldQueue
         $volume = $run->job?->volume_name;
 
         if (! filled($volume)) {
-            return false;
+            // Host-path jobs have no volume and serialize on their per-job lock; if
+            // that lock expired (24h TTL), another still-working run of the same job
+            // means we must requeue rather than overlap it. Restores never share
+            // this lock, so only sibling backup runs count.
+            return BackupRun::query()
+                ->where('backup_job_id', $run->backup_job_id)
+                ->whereKeyNot($run->getKey())
+                ->where(fn ($query) => $this->stillWorking($query))
+                ->exists();
         }
 
         $backupActive = BackupRun::query()
@@ -121,7 +128,12 @@ class RunBackupJob implements ShouldQueue
     {
         $run = BackupRun::find($this->backupRunId);
 
-        if ($run) {
+        // Only fail a run the queue never actually started. A RUNNING run is owned
+        // by its worker (timeout 0, so a long backup is legitimate); a copy
+        // redelivered until retryUntil must not fail it — nor let its container
+        // restart race the live worker — out from under it. A genuinely dead
+        // RUNNING run is closed by stale-run reconciliation. Mirrors RunBackupGroupJob.
+        if ($run && $run->status === BackupRun::STATUS_QUEUED) {
             app(RunBackup::class)->markFailed($run, $exception);
         }
     }

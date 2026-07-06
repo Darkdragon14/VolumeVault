@@ -31,6 +31,8 @@ class DispatchDueBackupJobsJob implements ShouldQueue
     {
         BackupJob::query()
             ->where('status', BackupJob::STATUS_ACTIVE)
+            // Group members are scheduled by their group, never on their own.
+            ->whereNull('backup_job_group_id')
             ->whereNotNull('next_run_at')
             ->where('next_run_at', '<=', now())
             ->orderBy('next_run_at')

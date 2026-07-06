@@ -39,17 +39,16 @@ class RunRestore
     {
         $startedAt = now();
 
-        // Atomically claim the run: flip QUEUED/RUNNING → RUNNING in a single
-        // conditional UPDATE. A lock loser can be requeued by WithoutOverlapping
-        // and, if stale-run reconciliation marked the row failed while it waited,
-        // the queued job may still be delivered later. Checking the in-memory
-        // status then saving would race that reconciliation (load → fail → save
-        // RUNNING resurrects a finalized, possibly destructive restore). The
-        // conditional update closes that window: if the row is already terminal it
-        // matches zero rows and we bail without ever touching the volume.
+        // Atomically claim the run: flip a QUEUED row → RUNNING in a single
+        // conditional UPDATE. Claiming only a QUEUED row (not any non-terminal one)
+        // means a redelivered copy — the queue can deliver a job twice under
+        // retryUntil — finds the row already RUNNING and bails instead of re-running
+        // a (possibly destructive) restore a live worker is mid-way through. A row
+        // reconciliation already marked terminal also matches zero rows, so a
+        // delayed lock loser never resurrects a finalized restore. Mirrors RunBackup.
         $claimed = RestoreRun::query()
             ->whereKey($run->getKey())
-            ->whereNotIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
+            ->where('status', RestoreRun::STATUS_QUEUED)
             ->update([
                 'status' => RestoreRun::STATUS_RUNNING,
                 'started_at' => $startedAt,
@@ -66,7 +65,10 @@ class RunRestore
         $handler = $this->handlerFor($run->mode);
         $prepared = false;
 
-        $this->notify($run);
+        // No Docker container exists yet, so the heartbeat is the only liveness
+        // signal; refresh it per channel so slow start notifications don't get this
+        // live restore reconciled as stale (which would release its lock).
+        $this->notify($run, fn () => $this->heartbeat($run));
 
         try {
             // Read-only precondition check first, so an invalid target (missing
@@ -146,7 +148,12 @@ class RunRestore
                 'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
             ])->save();
 
-            $this->notify($run);
+            // The run is terminal but the queue job still holds the overlap lock
+            // through these notifications. Refresh the heartbeat up front and after
+            // each channel (each can take ~60s) so a legitimately-waiting same-volume
+            // run is not reconciled as stale while this holder finishes notifying.
+            $this->heartbeat($run);
+            $this->notify($run, fn () => $this->heartbeat($run));
         } catch (Throwable $exception) {
             if ($prepared) {
                 $handler->cleanupAfterFailure($run);
@@ -203,8 +210,11 @@ class RunRestore
         // Central failure notification: markFailed is reached from the in-process
         // catch block, the queue job's failed() hook and stale-run reconciliation,
         // so every failure path notifies. The conditional transition above keeps it
-        // to a single send.
-        $this->notify($run);
+        // to a single send. Refresh the heartbeat up front and after each channel
+        // (each ~60s) so a terminal restore still holding the overlap lock through
+        // slow notifications is not reconciled as stale.
+        $this->heartbeat($run);
+        $this->notify($run, fn () => $this->heartbeat($run));
 
         return true;
     }
@@ -213,10 +223,10 @@ class RunRestore
      * Send a restore lifecycle notification without ever letting a notification
      * failure interrupt the restore. Mirrors RunBackup::sendNotifications.
      */
-    private function notify(RestoreRun $run): void
+    private function notify(RestoreRun $run, ?callable $afterEach = null): void
     {
         try {
-            $this->sendShoutrrrNotification->sendRestoreRun($run);
+            $this->sendShoutrrrNotification->sendRestoreRun($run, $afterEach);
         } catch (Throwable $exception) {
             ActivityLog::record('notification_send_failed', 'Restore notification failed.', $run, [
                 'error' => str($exception->getMessage())->limit(1000)->toString(),

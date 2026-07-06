@@ -12,6 +12,7 @@ use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\BackupDestinations\TestBackupDestination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class DestinationController extends Controller
 {
@@ -59,6 +60,15 @@ class DestinationController extends Controller
 
     public function destroy(BackupDestination $destination): JsonResponse
     {
+        // Deleting a destination cascades its jobs and their runs, bypassing the
+        // per-job delete guard — refuse while any is in flight or holds stopped
+        // containers so reconciliation keeps the row it needs.
+        if ($destination->hasRunInProgress()) {
+            throw ValidationException::withMessages([
+                'destination' => 'A backup or restore using this destination is in progress. Wait for it to finish before deleting it.',
+            ]);
+        }
+
         $destination->delete();
 
         return response()->json(status: 204);

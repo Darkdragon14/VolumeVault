@@ -14,8 +14,10 @@ type WidgetPref = { key: string; visible: boolean };
 const props = defineProps<{
     stats: Record<string, any>;
     recentBackupRuns: any[];
+    recentGroupRuns: any[];
     recentRestoreRuns: any[];
     jobsWithErrors: any[];
+    groupsWithErrors: any[];
     dashboardPreferences: { stats: WidgetPref[]; sections: WidgetPref[] };
 }>();
 
@@ -25,10 +27,11 @@ const { t, formatDate } = useI18n();
 const DEFAULT_STAT_KEYS = [
     'total_volumes', 'existing_volumes', 'missing_volumes', 'backed_up_volumes',
     'configured_volumes', 'unprotected_volumes', 'total_jobs', 'active_jobs',
-    'paused_jobs', 'error_jobs', 'last_backup_run_status', 'last_successful_backup_size',
+    'paused_jobs', 'error_jobs', 'total_groups', 'active_groups', 'paused_groups',
+    'error_groups', 'last_backup_run_status', 'last_successful_backup_size',
     'next_scheduled_backup',
 ];
-const DEFAULT_SECTION_KEYS = ['recent_backups', 'recent_restores', 'jobs_with_errors'];
+const DEFAULT_SECTION_KEYS = ['recent_backups', 'recent_group_runs', 'recent_restores', 'jobs_with_errors', 'groups_with_errors'];
 const HIDDEN_BY_DEFAULT = ['last_successful_backup_size'];
 
 const statLabels: Record<string, string> = {
@@ -42,6 +45,10 @@ const statLabels: Record<string, string> = {
     active_jobs: 'Active jobs',
     paused_jobs: 'Paused jobs',
     error_jobs: 'Error jobs',
+    total_groups: 'Total groups',
+    active_groups: 'Active groups',
+    paused_groups: 'Paused groups',
+    error_groups: 'Error groups',
     last_backup_run_status: 'Last backup run status',
     last_successful_backup_size: 'Last successful backup size',
     next_scheduled_backup: 'Next scheduled backup',
@@ -49,8 +56,10 @@ const statLabels: Record<string, string> = {
 
 const sectionLabels: Record<string, string> = {
     recent_backups: 'Recent backup runs',
+    recent_group_runs: 'Recent group runs',
     recent_restores: 'Recent restore runs',
     jobs_with_errors: 'Jobs with errors',
+    groups_with_errors: 'Groups with errors',
 };
 
 const statLabel = (key: string) => t(statLabels[key] || key.replaceAll('_', ' '));
@@ -133,8 +142,10 @@ const save = () => {
                     <DashboardSection
                         :section-key="w.key"
                         :recent-backup-runs="recentBackupRuns"
+                        :recent-group-runs="recentGroupRuns"
                         :recent-restore-runs="recentRestoreRuns"
                         :jobs-with-errors="jobsWithErrors"
+                        :groups-with-errors="groupsWithErrors"
                     />
                 </div>
             </div>

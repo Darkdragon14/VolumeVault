@@ -123,7 +123,12 @@ class RunRestoreJob implements ShouldQueue
     {
         $run = RestoreRun::find($this->restoreRunId);
 
-        if ($run) {
+        // Only fail a run the queue never actually started. A RUNNING restore is
+        // owned by its worker; a copy redelivered until retryUntil must not fail it
+        // — and emit a contradictory notification — out from under a live worker
+        // mid-restore. A genuinely dead RUNNING run is closed by stale-run
+        // reconciliation. Mirrors RunBackupJob.
+        if ($run && $run->status === RestoreRun::STATUS_QUEUED) {
             app(RunRestore::class)->markFailed($run, $exception);
         }
     }

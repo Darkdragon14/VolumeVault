@@ -399,6 +399,105 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertTrue(Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400)->get());
     }
 
+    public function test_failing_a_queued_standalone_backup_releases_its_orphaned_volume_lock(): void
+    {
+        // WithoutOverlapping acquires the lock before RunBackup flips the run to
+        // running; simulate a worker that crashed in that window.
+        $orphaned = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
+        $this->assertTrue($orphaned->get());
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        $run->forceFill(['created_at' => now()->subHour()])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
+        // No other run holds the lock, so the orphan is released rather than left
+        // to block same-volume work for the 24h TTL.
+        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get(), 'the orphaned lock should be released');
+    }
+
+    public function test_failing_a_queued_restore_releases_its_orphaned_volume_lock(): void
+    {
+        $orphaned = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
+        $this->assertTrue($orphaned->get());
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+        $run->forceFill(['created_at' => now()->subHour()])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+        // Like backups, a queued restore that held the lock (crash before running)
+        // has its orphan released rather than blocking same-volume work for 24h.
+        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get(), 'the orphaned restore lock should be released');
+    }
+
+    public function test_a_running_backup_with_a_fresh_heartbeat_is_not_reconciled(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->recordingDockerProcess());
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        // Mid a long sequential container stop: running, no backup container yet,
+        // started long ago — but the worker keeps refreshing the heartbeat.
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHour(),
+        ]);
+        $run->forceFill(['last_heartbeat_at' => now()])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
+    }
+
+    public function test_a_queued_waiter_survives_while_a_terminal_holder_is_still_finalizing(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->recordingDockerProcess());
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        // Holder finished past the 120s requeue window, but its job still holds the
+        // overlap lock while listing archive metadata + sending notifications, and
+        // keeps its heartbeat fresh across that finalization.
+        $holder = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subMinutes(10),
+            'finished_at' => now()->subMinutes(5),
+        ]);
+        $holder->forceFill(['last_heartbeat_at' => now()])->save();
+
+        $waiter = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        $waiter->forceFill(['created_at' => now()->subHour()])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        // The holder is still finalizing (fresh heartbeat), so the waiter is
+        // legitimately pending and must not be failed.
+        $this->assertSame(BackupRun::STATUS_QUEUED, $waiter->refresh()->status);
+    }
+
     public function test_queued_run_is_not_swept_while_a_terminal_run_still_restarts_containers(): void
     {
         $this->app->instance(DockerProcess::class, $this->recordingDockerProcess());

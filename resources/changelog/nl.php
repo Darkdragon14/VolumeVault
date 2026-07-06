@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Gegroepeerde back-uptaken',
+        'description' => 'Maak een back-up van meerdere volumes als één geplande bewerking: een back-upgroep bezit het schema en de meldingen, en taken worden eraan gekoppeld via het back-uptaakformulier. De groep verstuurt één startmelding en één succes-/foutmelding voor al zijn volumes — ideaal voor één dead man\'s switch-monitor — en je kunt kiezen of een mislukt volume de uitvoering stopt of dat de groep doorgaat en de fout alsnog meldt. Back-upgroepen zijn ook beschikbaar via de API.',
+    ],
     'user_date_format_preference' => [
         'title' => 'Datumformaat per gebruiker',
         'description' => 'Elke gebruiker kan nu in het profiel kiezen welke regionale notatie wordt gebruikt om datums weer te geven. Zo kan de interface Engels blijven terwijl datums overschakelen van de Amerikaanse maand/dag-volgorde naar de Australische of Britse dag/maand-volgorde. De applicatietijdzone bepaalt nog steeds welke lokale tijd wordt getoond.',

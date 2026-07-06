@@ -39,12 +39,16 @@ class StackController extends Controller
     }
 
     /**
-     * @param  array{created: int, queued: int, skipped: int}  $summary
+     * @param  array{created: int, queued: int, skipped: int, grouped: int}  $summary
      */
     private function summaryMessage(?string $stackName, array $summary): string
     {
         $label = $stackName ?? 'volumes without a stack';
         $message = "Stack backup started for {$label}: created {$summary['created']} backup job(s), queued {$summary['queued']} run(s).";
+
+        if (($summary['grouped'] ?? 0) > 0) {
+            $message .= " {$summary['grouped']} volume(s) are handled by a backup group and run on the group's schedule.";
+        }
 
         if ($summary['skipped'] > 0) {
             $message .= " {$summary['skipped']} job(s) skipped (inactive, already running, or unavailable).";

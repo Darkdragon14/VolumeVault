@@ -5,7 +5,9 @@ use App\Http\Controllers\AlertRuleController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AvailableUpdateController;
+use App\Http\Controllers\BackupGroupRunController;
 use App\Http\Controllers\BackupJobController;
+use App\Http\Controllers\BackupJobGroupController;
 use App\Http\Controllers\BackupRunController;
 use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\DashboardController;
@@ -70,6 +72,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/alerts', [AlertController::class, 'index'])->name('alerts.index');
 
     Route::resource('backup-jobs', BackupJobController::class)->only(['index']);
+    Route::resource('backup-groups', BackupJobGroupController::class)->only(['index']);
     Route::middleware('admin')->group(function () {
         Route::get('/alerts/settings', [AlertRuleController::class, 'edit'])->name('alerts.settings.edit');
         Route::put('/alerts/settings', [AlertRuleController::class, 'update'])->name('alerts.settings.update');
@@ -80,6 +83,12 @@ Route::middleware('auth')->group(function () {
         Route::post('/backup-jobs/{backupJob}/run', [BackupJobController::class, 'runNow'])->name('backup-jobs.run');
         Route::post('/backup-jobs/{backupJob}/pause', [BackupJobController::class, 'pause'])->name('backup-jobs.pause');
         Route::post('/backup-jobs/{backupJob}/resume', [BackupJobController::class, 'resume'])->name('backup-jobs.resume');
+
+        Route::resource('backup-groups', BackupJobGroupController::class)->except(['index', 'show']);
+        Route::post('/backup-groups/{backupGroup}/run', [BackupJobGroupController::class, 'runNow'])->name('backup-groups.run');
+        Route::post('/backup-groups/{backupGroup}/pause', [BackupJobGroupController::class, 'pause'])->name('backup-groups.pause');
+        Route::post('/backup-groups/{backupGroup}/resume', [BackupJobGroupController::class, 'resume'])->name('backup-groups.resume');
+        Route::patch('/backup-groups/{backupGroup}/notifications', [BackupJobGroupController::class, 'toggleNotifications'])->name('backup-groups.notifications');
 
         Route::resource('destinations', DestinationController::class)->except(['show']);
         Route::post('/destinations/host-key', [DestinationController::class, 'hostKey'])->name('destinations.host-key');
@@ -108,6 +117,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('backup-jobs', BackupJobController::class)->only(['show']);
 
     Route::get('/backup-runs/{backupRun}', [BackupRunController::class, 'show'])->name('backup-runs.show');
+
+    Route::get('/backup-group-runs/{backupGroupRun}', [BackupGroupRunController::class, 'show'])->name('backup-group-runs.show');
 
     Route::get('/restore-runs/{restoreRun}', [RestoreRunController::class, 'show'])->name('restore-runs.show');
 });

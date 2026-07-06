@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'grouped_backup_jobs' => [
+        'title' => 'Grouped backup jobs',
+        'description' => 'Back up several volumes as a single scheduled operation: a backup group owns the schedule and notifications, and jobs are attached to it from the backup job form. The group sends one start notification and one success/fail notification for all its volumes — ideal for a single dead man\'s switch monitor — and you can choose whether a failing volume stops the run or the group continues and still reports the failure. Backup groups are also available through the API.',
+    ],
     'user_date_format_preference' => [
         'title' => 'Per-user date format preference',
         'description' => 'Each user can now choose the regional format used to display dates from their profile. For example, English users can keep the interface in English while switching date displays from US month/day order to Australian or UK day/month order. The application timezone still controls which local time is shown.',

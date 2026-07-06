@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Actions\Backup\RunBackup;
+use App\Actions\Backup\RunBackupGroup;
 use App\Actions\Docker\ContainerIsAlive;
 use App\Actions\Restore\RunRestore;
+use App\Models\BackupGroupRun;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
 use App\Support\VolumeJobLock;
@@ -37,7 +39,7 @@ class ReconcileStaleRuns extends Command
         parent::__construct();
     }
 
-    public function handle(RunBackup $runBackup, RunRestore $runRestore): int
+    public function handle(RunBackup $runBackup, RunRestore $runRestore, RunBackupGroup $runBackupGroup): int
     {
         $minutes = (int) ($this->option('minutes') ?: self::DEFAULT_THRESHOLD_MINUTES);
 
@@ -51,13 +53,26 @@ class ReconcileStaleRuns extends Command
         $backupCount = 0;
         $this->staleBackupRuns($cutoff)->each(function (BackupRun $run) use ($runBackup, $reason, &$backupCount): void {
             $wasRunning = $run->status === BackupRun::STATUS_RUNNING;
-            $lockKey = VolumeJobLock::key($run->job?->volume_name, 'backup-job-'.$run->backup_job_id);
+            $volume = $run->job?->volume_name;
+            $lockKey = VolumeJobLock::key($volume, 'backup-job-'.$run->backup_job_id);
 
-            // Only release the lock when we actually failed a run that was running:
-            // a no-op markFailed (the run finished first) means the lock may now be
-            // held by the next job — releasing it would break serialization.
-            if ($runBackup->markFailed($run, new RuntimeException($reason)) && $wasRunning) {
-                $this->releaseLock($lockKey);
+            if ($runBackup->markFailed($run, new RuntimeException($reason))) {
+                // A running holder definitely held the lock. But WithoutOverlapping
+                // acquires the lock *before* RunBackup flips the row to running, so a
+                // worker that crashed in that window (or a group member, which takes
+                // the lock in-process) leaves a "queued" row holding the lock for the
+                // full 24h TTL. Release that too — but only when no other run
+                // currently holds the same lock, so we never steal a live holder's
+                // (a genuine queued waiter is a live holder's lock loser, and it was
+                // already excluded from this sweep by backupIsWaitingForVolumeLock).
+                // The lock is keyed on the volume for a Docker-volume job and on the
+                // job for a host-path job, so the check must match the run's source.
+                $release = $wasRunning
+                    || ! $this->lockHeldByAnotherActiveBackup($run, $volume);
+
+                if ($release) {
+                    $this->releaseLock($lockKey);
+                }
             }
             $backupCount++;
         });
@@ -67,19 +82,55 @@ class ReconcileStaleRuns extends Command
             $wasRunning = $run->status === RestoreRun::STATUS_RUNNING;
             $lockKey = VolumeJobLock::key($run->target_volume_name, 'restore-run-'.$run->id);
 
-            if ($runRestore->markFailed($run, new RuntimeException($reason)) && $wasRunning) {
-                $this->releaseLock($lockKey);
+            if ($runRestore->markFailed($run, new RuntimeException($reason))) {
+                // Like backups, WithoutOverlapping acquires the lock before
+                // RunRestore flips the row to running, so a worker that crashed in
+                // that window leaves a "queued" row holding the lock for the 24h
+                // TTL. Release it too, unless another active run still holds the same
+                // volume (a genuine waiter was already excluded from this sweep). The
+                // per-run fallback key is unique, so no other run can hold it.
+                $release = $wasRunning
+                    || ! $this->volumeHeldByAnotherActiveRun($run->target_volume_name, restoreId: $run->id);
+
+                if ($release) {
+                    $this->releaseLock($lockKey);
+                }
             }
             $restoreCount++;
+        });
+
+        // Close backup group runs whose worker crashed. Only once no member run is
+        // still active (a live member is reconciled on its own liveness first, and
+        // the group is closed on a later sweep). markFailed emits the single
+        // aggregated failure notification for the whole group.
+        $groupCount = 0;
+        $this->staleGroupRuns($cutoff)->each(function (BackupGroupRun $run) use ($runBackupGroup, $reason, &$groupCount): void {
+            // A crashed group run can leave its shared WithoutOverlapping lock
+            // (24h TTL) behind — including a still-"queued" run, because the job
+            // acquires the group lock before RunBackupGroup flips the run to
+            // running. Force-release it whenever we actually close a stale run so
+            // the group is not blocked for a day; force-release is a harmless no-op
+            // when no lock is held (a queued run the worker never picked up), and
+            // group-run creation is serialized so no other run holds this lock.
+            if ($runBackupGroup->markFailed($run, new RuntimeException($reason))) {
+                $this->releaseLock('backup-group-'.$run->backup_job_group_id);
+                $groupCount++;
+            }
         });
 
         // Runs the sweep just failed (or runs whose worker died during restart)
         // may still have application containers stopped. Restart them now.
         $restartedCount = 0;
-        $this->backupRunsWithStoppedContainers()->each(function (BackupRun $run) use ($runBackup, &$restartedCount): void {
+        $this->backupRunsWithStoppedContainers($cutoff)->each(function (BackupRun $run) use ($runBackup, &$restartedCount): void {
             try {
-                $runBackup->restartStoppedContainers($run);
-                $restartedCount++;
+                // Never restart a container that an active sibling member of the
+                // same live group run has deliberately stopped for its own backup:
+                // that would bring the application up mid-archive and corrupt it.
+                // Only the containers no active member still needs stopped are
+                // recovered here.
+                if ($runBackup->restartStoppedContainers($run, $this->containersHeldByActiveGroupMembers($run))) {
+                    $restartedCount++;
+                }
             } catch (Throwable $exception) {
                 $this->warn("Failed to restart containers for backup run {$run->id}: {$exception->getMessage()}");
             }
@@ -94,9 +145,93 @@ class ReconcileStaleRuns extends Command
             }
         });
 
-        $this->info("Reconciled {$backupCount} stale backup run(s) and {$restoreCount} stale restore run(s); restarted containers for {$restartedCount} interrupted run(s).");
+        $this->info("Reconciled {$backupCount} stale backup run(s), {$restoreCount} stale restore run(s) and {$groupCount} stale backup group run(s); restarted containers for {$restartedCount} interrupted run(s).");
 
         return self::SUCCESS;
+    }
+
+    /** @return Collection<int, BackupGroupRun> */
+    private function staleGroupRuns(CarbonInterface $cutoff): Collection
+    {
+        return BackupGroupRun::query()
+            ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
+            ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, BackupGroupRun::STATUS_RUNNING))
+            ->get()
+            ->filter(fn (BackupGroupRun $run) => $this->groupRunIsStale($run, $cutoff)
+                && ! $this->groupRunHasActiveMemberRun($run, $cutoff)
+                && ! $this->groupRunIsWaitingForGroupLock($run));
+    }
+
+    /**
+     * Whether a queued group run is legitimately waiting on the backup-group lock
+     * held by another run of the same group — one that is running, or terminal but
+     * still finishing (recently finished, or refreshing its heartbeat through slow
+     * notifications). Such a waiter is not stale; failing it would drop the next
+     * scheduled run of the group while the previous one is merely notifying.
+     */
+    private function groupRunIsWaitingForGroupLock(BackupGroupRun $run): bool
+    {
+        if ($run->status !== BackupGroupRun::STATUS_QUEUED) {
+            return false;
+        }
+
+        $recentlyActive = now()->subSeconds(120);
+
+        return BackupGroupRun::query()
+            ->where('backup_job_group_id', $run->backup_job_group_id)
+            ->whereKeyNot($run->getKey())
+            ->where(function ($query) use ($recentlyActive): void {
+                $query
+                    ->where('status', BackupGroupRun::STATUS_RUNNING)
+                    ->orWhere(fn ($q) => $q
+                        ->whereIn('status', [BackupGroupRun::STATUS_SUCCESS, BackupGroupRun::STATUS_FAILED, BackupGroupRun::STATUS_CANCELLED])
+                        ->where(fn ($inner) => $inner
+                            ->where('finished_at', '>=', $recentlyActive)
+                            ->orWhere('last_heartbeat_at', '>=', $recentlyActive)));
+            })
+            ->exists();
+    }
+
+    /**
+     * A group run drives its members sequentially and updates last_heartbeat_at
+     * after each one, so a running group with a stale heartbeat and no in-flight
+     * member is a crashed worker. A queued group past the age gate was never
+     * picked up. It has no Docker container of its own — its liveness is the
+     * member runs, checked separately.
+     */
+    private function groupRunIsStale(BackupGroupRun $run, CarbonInterface $cutoff): bool
+    {
+        if ($run->status === BackupGroupRun::STATUS_RUNNING) {
+            $progressedAt = $run->last_heartbeat_at ?? $run->started_at ?? $run->created_at;
+
+            return $progressedAt !== null && $progressedAt->lessThan($cutoff);
+        }
+
+        return $run->created_at !== null && $run->created_at->lessThan($cutoff);
+    }
+
+    /**
+     * Whether a member run of this group is still queued or running. A live member
+     * is reconciled on its own container liveness first; the group is only closed
+     * once every member has reached a terminal state, so its aggregated outcome is
+     * not declared while a member is still working.
+     */
+    private function groupRunHasActiveMemberRun(BackupGroupRun $run, CarbonInterface $cutoff): bool
+    {
+        return BackupRun::query()
+            ->where('backup_group_run_id', $run->id)
+            ->where(function ($query) use ($cutoff): void {
+                $query
+                    ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
+                    // A member that finished after the cutoff means the group
+                    // worker was active recently: it runs members synchronously and
+                    // only refreshes the group heartbeat between them, so it may be
+                    // finalizing that member (e.g. recording archive metadata) with
+                    // a lagging heartbeat. Treat the group as still progressing so a
+                    // long member does not get its live group run reconciled.
+                    ->orWhere(fn ($q) => $q->whereNotNull('finished_at')->where('finished_at', '>=', $cutoff));
+            })
+            ->exists();
     }
 
     /** @return Collection<int, BackupRun> */
@@ -153,7 +288,42 @@ class ReconcileStaleRuns extends Command
             return false;
         }
 
-        return $this->volumeHeldByAnotherActiveRun($run->job?->volume_name, backupRunId: $run->id);
+        // A group member run is executed inline by the group worker, not dispatched
+        // as its own queue job, so it is never a WithoutOverlapping lock waiter that
+        // will be redelivered. A crashed worker can leave it stuck queued; it must be
+        // reconciled (failed), not exempted — otherwise it stays queued forever and
+        // also keeps its group run open (groupRunHasActiveMemberRun sees it).
+        if ($run->belongsToGroupRun()) {
+            return false;
+        }
+
+        // A host-path job has no volume: it serializes on its per-job lock, so a
+        // queued run of the same job legitimately waiting on that lock must be
+        // exempt just like a volume waiter — otherwise WithoutOverlapping requeuing
+        // it (releaseAfter) would look stale and get failed out from under itself.
+        return $this->lockHeldByAnotherActiveBackup($run, $run->job?->volume_name);
+    }
+
+    /**
+     * Whether the lock this backup run serializes on is held — or was only just
+     * released — by another active run: the volume lock for a Docker-volume job,
+     * the per-job lock for a host-path job (which restores never share).
+     */
+    private function lockHeldByAnotherActiveBackup(BackupRun $run, ?string $volume): bool
+    {
+        if (filled($volume)) {
+            return $this->volumeHeldByAnotherActiveRun($volume, backupRunId: $run->id);
+        }
+
+        $recentlyReleased = now()->subSeconds(120);
+
+        return BackupRun::query()
+            ->where('backup_job_id', $run->backup_job_id)
+            ->whereKeyNot($run->id)
+            // A pre-restore safety backup runs inline and never holds this lock.
+            ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE)
+            ->where(fn ($query) => $this->stillHoldsVolume($query, $recentlyReleased))
+            ->exists();
     }
 
     /**
@@ -200,10 +370,16 @@ class ReconcileStaleRuns extends Command
 
     /**
      * Constrain to runs that still hold the volume: running, terminal but only
-     * just released (within the requeue window), or terminal but still owning
-     * stopped containers their finally has not restarted yet. The last case keeps
-     * this consistent with the jobs' volumeBusy guard, so a queued waiter is not
-     * swept while a terminal run is still mid-restart/reconcile of its containers.
+     * just released (within the requeue window), terminal but still finalizing with
+     * a fresh heartbeat, or terminal but still owning stopped containers their
+     * finally has not restarted yet.
+     *
+     * The heartbeat case matters because the WithoutOverlapping lock is held for the
+     * whole job — the run flips terminal before archive-metadata listing and
+     * notifications, which can outlast the fixed requeue window. The holder refreshes
+     * its heartbeat across that finalization, so it keeps counting as a holder and a
+     * legitimately-waiting run is not swept. The stopped-containers case keeps this
+     * consistent with the jobs' volumeBusy guard.
      *
      * STATUS_* values are identical across BackupRun and RestoreRun, so the same
      * constants apply to either query.
@@ -214,7 +390,9 @@ class ReconcileStaleRuns extends Command
             ->where('status', BackupRun::STATUS_RUNNING)
             ->orWhere(fn ($q) => $q
                 ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
-                ->where('finished_at', '>=', $recentlyReleased))
+                ->where(fn ($inner) => $inner
+                    ->where('finished_at', '>=', $recentlyReleased)
+                    ->orWhere('last_heartbeat_at', '>=', $recentlyReleased)))
             ->orWhere(fn ($q) => $q
                 ->whereNotNull('stopped_container_ids')
                 ->where('stopped_container_ids', '!=', '[]'));
@@ -226,13 +404,62 @@ class ReconcileStaleRuns extends Command
      *
      * @return Collection<int, BackupRun>
      */
-    private function backupRunsWithStoppedContainers(): Collection
+    private function backupRunsWithStoppedContainers(CarbonInterface $cutoff): Collection
     {
         return BackupRun::query()
             ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
             ->whereNotNull('stopped_container_ids')
             ->where('stopped_container_ids', '!=', '[]')
+            ->where(function ($query) use ($cutoff): void {
+                // Recover the containers unless we would be racing the group worker
+                // that is *currently* restarting this member's containers in its
+                // finally (docker start is idempotent, but a transient failure
+                // there could clash with the live restart).
+                $query
+                    // Not the current member of a live group run: either it has no
+                    // live group run at all...
+                    ->whereDoesntHave('groupRun', fn ($group) => $group
+                        ->where('status', BackupGroupRun::STATUS_RUNNING)
+                        ->where('last_heartbeat_at', '>=', $cutoff))
+                    // ...or the worker has already moved on to a later member (a
+                    // higher-id member run exists), so this member's restart has
+                    // finished or failed and must be recovered now — not left down
+                    // until the whole group ends.
+                    ->orWhereExists(fn ($exists) => $exists
+                        ->selectRaw('1')
+                        ->from('backup_runs as later_member')
+                        ->whereColumn('later_member.backup_group_run_id', 'backup_runs.backup_group_run_id')
+                        ->whereColumn('later_member.id', '>', 'backup_runs.id'));
+            })
             ->get();
+    }
+
+    /**
+     * Container ids that a still-running sibling member of this run's group run
+     * has deliberately stopped for its own in-flight backup. These must not be
+     * restarted while recovering this run's leftover containers — doing so would
+     * bring the application up in the middle of the sibling's archive. Empty for a
+     * standalone run or one whose group run is no longer running.
+     *
+     * @return array<int, string>
+     */
+    private function containersHeldByActiveGroupMembers(BackupRun $run): array
+    {
+        if ($run->backup_group_run_id === null) {
+            return [];
+        }
+
+        return BackupRun::query()
+            ->where('backup_group_run_id', $run->backup_group_run_id)
+            ->whereKeyNot($run->id)
+            ->where('status', BackupRun::STATUS_RUNNING)
+            ->whereNotNull('stopped_container_ids')
+            ->pluck('stopped_container_ids')
+            ->flatMap(fn ($ids) => is_array($ids) ? $ids : [])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

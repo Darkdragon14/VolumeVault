@@ -35,6 +35,7 @@ class BackupJob extends Model
 
     protected $fillable = [
         'name',
+        'backup_job_group_id',
         'source_type',
         'volume_name',
         'host_path',
@@ -94,6 +95,20 @@ class BackupJob extends Model
         return $this->belongsTo(BackupDestination::class, 'backup_destination_id');
     }
 
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(BackupJobGroup::class, 'backup_job_group_id');
+    }
+
+    /**
+     * A group member delegates its schedule and notifications to its group: it is
+     * never dispatched on its own and its runs stay silent (the group notifies).
+     */
+    public function isGroupMember(): bool
+    {
+        return $this->backup_job_group_id !== null;
+    }
+
     public function sourceType(): string
     {
         return $this->source_type ?: self::SOURCE_TYPE_DOCKER_VOLUME;
@@ -124,6 +139,21 @@ class BackupJob extends Model
     public function runs(): HasMany
     {
         return $this->hasMany(BackupRun::class)->latest();
+    }
+
+    /**
+     * Whether a backup OR restore run of this job still matters for crash recovery:
+     * queued/running, or terminal but still owning containers it stopped and has not
+     * restarted yet (a worker can mark a run SUCCESS then crash in its finally). Used
+     * to refuse changing the source or deleting the job: RunBackup reloads the job
+     * before mounting the source (a mid-run change would back up the wrong volume),
+     * and deleting cascade-drops the run row ReconcileStaleRuns needs to restart the
+     * stopped containers.
+     */
+    public function hasRunInProgress(): bool
+    {
+        return $this->runs()->activeOrHoldingContainers()->exists()
+            || $this->restoreRuns()->activeOrHoldingContainers()->exists();
     }
 
     public function restoreRuns(): HasMany

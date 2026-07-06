@@ -16,6 +16,7 @@ const props = defineProps<{
     alertRules: any[];
     timezones: string[];
     appTimezone: string;
+    groups?: any[];
 }>();
 
 const page = usePage();
@@ -70,7 +71,43 @@ const form = useForm({
     alert_configs: initialAlertConfigs,
     stop_containers_before_backup: props.job?.stop_containers_before_backup || false,
     stop_container_names: (props.job?.stop_container_names || []) as string[],
+    // Planning mode: a standalone job keeps its own schedule/notifications; a
+    // grouped job delegates them to a backup group (existing or created inline).
+    planning_mode: props.job?.backup_job_group_id ? 'group' : 'standalone',
+    group_selection: (props.job?.backup_job_group_id || props.groups?.length) ? 'existing' : 'new',
+    backup_job_group_id: props.job?.backup_job_group_id || props.groups?.[0]?.id || '',
+    new_group: {
+        name: '',
+        schedule_type: 'daily',
+        schedule_config: { time: '02:00', everyHours: 6, dayOfWeek: 'sunday', expression: '0 2 * * *' },
+        timezone: '',
+        failure_policy: 'continue',
+        notifications_enabled: true,
+        notification_channel_ids: (props.defaultNotificationChannelIds || []) as number[],
+    },
 });
+
+const groups = computed(() => props.groups || []);
+const isGrouped = computed(() => form.planning_mode === 'group');
+const creatingNewGroup = computed(() => form.group_selection === 'new');
+const failurePolicies = ['continue', 'stop'];
+
+const newGroupSummary = computed(() => {
+    const config = form.new_group.schedule_config;
+    if (form.new_group.schedule_type === 'hourly') return t('Every {hours} hours', { hours: config.everyHours || 1 });
+    if (form.new_group.schedule_type === 'daily') return t('Every day at {time}', { time: config.time || '02:00' });
+    if (form.new_group.schedule_type === 'weekly') return t('Every {day} at {time}', { day: t(config.dayOfWeek || 'sunday'), time: config.time || '03:00' });
+    return t('Cron: {expression}', { expression: config.expression || '' });
+});
+
+const toggleNewGroupNotifications = () => {
+    form.new_group.notifications_enabled = !form.new_group.notifications_enabled;
+};
+
+const toggleNewGroupChannel = (id: number) => {
+    const ids = form.new_group.notification_channel_ids as number[];
+    form.new_group.notification_channel_ids = ids.includes(id) ? ids.filter((channelId) => channelId !== id) : [...ids, id];
+};
 
 const volumeSearch = ref(form.volume_name);
 const volumeSelectorOpen = ref(false);
@@ -322,6 +359,133 @@ const submit = () => {
             </div>
 
             <section class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-lg font-semibold">{{ t('Planning mode') }}</h2>
+                    <InfoTooltip :text="t('A standalone job runs on its own schedule with its own notifications. A grouped job is scheduled by its group, which sends a single start/success/fail notification for all its volumes.')" />
+                </div>
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm">
+                        <input v-model="form.planning_mode" type="radio" value="standalone" class="mt-1 text-sky-400">
+                        <span>
+                            <span class="block font-semibold text-white">{{ t('Scheduled individually') }}</span>
+                            <span class="mt-1 block text-slate-300">{{ t('This job runs on its own schedule with its own notifications.') }}</span>
+                        </span>
+                    </label>
+                    <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm">
+                        <input v-model="form.planning_mode" type="radio" value="group" class="mt-1 text-sky-400">
+                        <span>
+                            <span class="block font-semibold text-white">{{ t('Part of a group') }}</span>
+                            <span class="mt-1 block text-slate-300">{{ t('The group owns the schedule and sends one notification for all its volumes.') }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div v-if="isGrouped" class="mt-4 space-y-4">
+                    <div v-if="groups.length" class="grid gap-3 sm:grid-cols-2">
+                        <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
+                            <input v-model="form.group_selection" type="radio" value="existing" class="text-sky-400">
+                            {{ t('Use an existing group') }}
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
+                            <input v-model="form.group_selection" type="radio" value="new" class="text-sky-400">
+                            {{ t('Create a new group') }}
+                        </label>
+                    </div>
+
+                    <label v-if="!creatingNewGroup" class="block space-y-2">
+                        <span class="label">{{ t('Group') }}</span>
+                        <select v-model="form.backup_job_group_id" class="input" required>
+                            <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
+                        </select>
+                        <span v-if="form.errors.backup_job_group_id" class="text-sm text-rose-300">{{ form.errors.backup_job_group_id }}</span>
+                    </label>
+
+                    <div v-else class="space-y-4 rounded-xl border border-white/10 bg-slate-950/40 p-4">
+                        <label class="block space-y-2">
+                            <span class="label">{{ t('New group name') }}</span>
+                            <input v-model="form.new_group.name" class="input" :placeholder="t('Nightly backups')">
+                            <span v-if="form.errors['new_group.name']" class="text-sm text-rose-300">{{ form.errors['new_group.name'] }}</span>
+                        </label>
+
+                        <div>
+                            <span class="label">{{ t('Schedule') }}</span>
+                            <div class="mt-2 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                                <label v-for="type in scheduleTypes" :key="type" class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm capitalize">
+                                    <input v-model="form.new_group.schedule_type" type="radio" :value="type" class="text-sky-400">
+                                    {{ t(type) }}
+                                </label>
+                            </div>
+                            <div class="mt-3 grid gap-4 sm:grid-cols-2">
+                                <label v-if="form.new_group.schedule_type === 'hourly'" class="space-y-2">
+                                    <span class="label">{{ t('Every X hours') }}</span>
+                                    <input v-model="form.new_group.schedule_config.everyHours" class="input" type="number" min="1" max="24">
+                                </label>
+                                <label v-if="form.new_group.schedule_type === 'daily' || form.new_group.schedule_type === 'weekly'" class="space-y-2">
+                                    <span class="label">{{ t('Time') }}</span>
+                                    <input v-model="form.new_group.schedule_config.time" class="input" type="time">
+                                </label>
+                                <label v-if="form.new_group.schedule_type === 'weekly'" class="space-y-2">
+                                    <span class="label">{{ t('Day of week') }}</span>
+                                    <select v-model="form.new_group.schedule_config.dayOfWeek" class="input">
+                                        <option v-for="day in days" :key="day" :value="day">{{ t(day) }}</option>
+                                    </select>
+                                </label>
+                                <label v-if="form.new_group.schedule_type === 'cron'" class="space-y-2 sm:col-span-2">
+                                    <span class="label">{{ t('Cron expression') }}</span>
+                                    <input v-model="form.new_group.schedule_config.expression" class="input" placeholder="0 2 * * *">
+                                </label>
+                                <label class="space-y-2 sm:col-span-2">
+                                    <span class="label">{{ t('Timezone') }}</span>
+                                    <select v-model="form.new_group.timezone" class="input">
+                                        <option value="">{{ t('Application default ({timezone})', { timezone: appTimezone }) }}</option>
+                                        <option v-for="tz in timezones" :key="tz" :value="tz">{{ tz }}</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <p class="mt-3 break-words rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-100">{{ t('Schedule summary: {summary}', { summary: newGroupSummary }) }}</p>
+                            <span v-if="form.errors['new_group.schedule_config']" class="mt-2 block text-sm text-rose-300">{{ form.errors['new_group.schedule_config'] }}</span>
+                        </div>
+
+                        <div>
+                            <span class="label">{{ t('On member failure') }}</span>
+                            <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                                <label v-for="policy in failurePolicies" :key="policy" class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
+                                    <input v-model="form.new_group.failure_policy" type="radio" :value="policy" class="mt-1 text-sky-400">
+                                    <span>
+                                        <span class="block font-semibold text-white">{{ policy === 'stop' ? t('Stop at first failure') : t('Continue, report failure') }}</span>
+                                        <span class="mt-1 block text-slate-300">{{ policy === 'stop' ? t('Stop the run as soon as one volume fails.') : t('Back up every volume; the run fails if any volume fails.') }}</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="label">{{ t('Notifications') }}</span>
+                                <button type="button" role="switch" class="inline-flex shrink-0 items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-sm" :aria-checked="form.new_group.notifications_enabled" :aria-label="t('Enable notifications for this group')" @click="toggleNewGroupNotifications">
+                                    <span class="relative inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition" :class="form.new_group.notifications_enabled ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50' : 'border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-slate-800'">
+                                        <span class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" :class="form.new_group.notifications_enabled ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
+                                    </span>
+                                    <span class="font-medium">{{ form.new_group.notifications_enabled ? t('Enabled') : t('Disabled') }}</span>
+                                </button>
+                            </div>
+                            <div v-if="notificationChannels.length" class="mt-3 grid gap-2 sm:grid-cols-2" :class="{ 'opacity-60': !form.new_group.notifications_enabled }">
+                                <button v-for="channel in notificationChannels" :key="channel.id" type="button" role="switch" class="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-left text-sm" :aria-checked="form.new_group.notification_channel_ids.includes(channel.id)" :aria-label="t('Toggle notification channel')" @click="toggleNewGroupChannel(channel.id)">
+                                    <span class="min-w-0">
+                                        <span class="break-words font-medium text-white">{{ channel.name }}</span>
+                                        <span class="mt-1 block text-slate-400">{{ channel.service }}</span>
+                                    </span>
+                                    <span class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border p-1 transition" :class="form.new_group.notification_channel_ids.includes(channel.id) ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50' : 'border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-slate-800'">
+                                        <span class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" :class="form.new_group.notification_channel_ids.includes(channel.id) ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section v-if="!isGrouped" class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
                 <h2 class="mb-4 text-lg font-semibold">{{ t('Schedule') }}</h2>
                 <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
                     <label v-for="type in scheduleTypes" :key="type" class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm capitalize">
@@ -438,7 +602,7 @@ const submit = () => {
                 <span v-if="form.errors.stop_container_names" class="mt-2 block text-sm text-rose-300">{{ form.errors.stop_container_names }}</span>
             </section>
 
-            <section class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+            <section v-if="!isGrouped" class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex items-center gap-2">
                         <h2 class="text-lg font-semibold">{{ t('Notifications') }}</h2>

@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+if [ "${VOLUMEVAULT_QUEUE_ENABLED:-true}" != "true" ]; then
+    exec sleep infinity
+fi
+
+cd /app
+# Dedicated worker for the "metadata" queue (RecordArchiveMetadataJob). A backup's
+# archive-metadata listing can be slow (WebDAV Depth: infinity, recursive SFTP,
+# slow NFS); running it on the main worker would block backups/restores and let a
+# requeued same-volume waiter be reconciled as stale. Isolating it here keeps the
+# main worker free even on the single-main-worker packaged image.
+exec /command/s6-setuidgid www-data php artisan queue:work --queue=metadata --tries=1 --timeout=0

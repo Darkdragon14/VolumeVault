@@ -127,11 +127,11 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Schedule') }}</dt><dd class="mt-1 break-words text-slate-200">{{ job.schedule_summary }}</dd></div>
                             <div class="grid grid-cols-2 gap-3">
                                 <div><dt class="text-xs uppercase text-slate-500">{{ t('Last run') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(job.last_run_at) }}</dd></div>
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Next run') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(job.next_run_at) }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Next run') }}</dt><dd class="mt-1 text-slate-200">{{ job.backup_job_group_id ? t('Managed by group') : formatDate(job.next_run_at) }}</dd></div>
                             </div>
                         </dl>
                         <div class="flex flex-wrap gap-2" @click.stop @keydown.stop>
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Run now')" icon="play" :disabled="job.status !== 'active'" @click="runNow(job.id)" />
+                            <ActionIcon v-if="can.runDockerActions && !job.backup_job_group_id" :label="t('Run now')" icon="play" :disabled="job.status !== 'active'" @click="runNow(job.id)" />
                             <ActionIcon v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" :label="t('Resume')" icon="play" @click="resume(job.id)" />
                             <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="job.status === 'running'" @click="pause(job.id)" />
                             <ActionIcon v-if="can.runDockerActions" :label="t('Restore')" icon="restore" :href="`/backup-jobs/${job.id}/restore`" />
@@ -162,10 +162,10 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                                 <td class="px-4 py-3 text-slate-300">{{ job.schedule_summary }}</td>
                                 <td class="px-4 py-3"><StatusBadge :status="job.status" /></td>
                                 <td class="px-4 py-3 text-slate-300">{{ formatDate(job.last_run_at) }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ formatDate(job.next_run_at) }}</td>
+                                <td class="px-4 py-3 text-slate-300">{{ job.backup_job_group_id ? t('Managed by group') : formatDate(job.next_run_at) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex md:min-w-52 flex-wrap gap-2" @click.stop @keydown.stop>
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Run now')" icon="play" :disabled="job.status !== 'active'" @click="runNow(job.id)" />
+                                        <ActionIcon v-if="can.runDockerActions && !job.backup_job_group_id" :label="t('Run now')" icon="play" :disabled="job.status !== 'active'" @click="runNow(job.id)" />
                                         <ActionIcon v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" :label="t('Resume')" icon="play" @click="resume(job.id)" />
                                         <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="job.status === 'running'" @click="pause(job.id)" />
                                         <ActionIcon v-if="can.runDockerActions" :label="t('Restore')" icon="restore" :href="`/backup-jobs/${job.id}/restore`" />
