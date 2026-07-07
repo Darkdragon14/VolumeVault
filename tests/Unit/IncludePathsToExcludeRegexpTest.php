@@ -24,7 +24,8 @@ class IncludePathsToExcludeRegexpTest extends TestCase
     {
         $this->assertNotNull($regexp);
 
-        return preg_match('#'.$regexp.'#', $absolutePath) !== 1;
+        // Go's regexp engine matches runes; use the "u" flag so PHP mirrors it.
+        return preg_match('#'.$regexp.'#u', $absolutePath) !== 1;
     }
 
     public function test_empty_list_produces_no_filter(): void
@@ -113,5 +114,16 @@ class IncludePathsToExcludeRegexpTest extends TestCase
         // The "." must be a literal, not "any char": "aXb" must not be kept.
         $this->assertFalse($this->isKept($regexp, '/backup/vol/aXb'));
         $this->assertFalse($this->isKept($regexp, '/backup/vol/data'));
+    }
+
+    public function test_multibyte_paths_are_matched_as_whole_characters(): void
+    {
+        $regexp = $this->builder->build('/backup/vol', ['café', 'photos/été']);
+
+        $this->assertTrue($this->isKept($regexp, '/backup/vol/café/x.jpg'));
+        $this->assertTrue($this->isKept($regexp, '/backup/vol/photos/été/2024.jpg'));
+
+        $this->assertFalse($this->isKept($regexp, '/backup/vol/cafe'));
+        $this->assertFalse($this->isKept($regexp, '/backup/vol/photos/hiver'));
     }
 }

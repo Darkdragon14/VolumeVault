@@ -37,7 +37,11 @@ class BackupJobRequest extends FormRequest
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
             'backup_filter_mode' => (string) ($this->input('backup_filter_mode') ?: BackupJob::FILTER_MODE_EXCLUDE),
-            'backup_include_paths' => $this->normalizeIncludePaths($this->input('backup_include_paths')),
+            // Leave a non-string value untouched so the "string" rule can reject it
+            // with a 422 instead of casting an array to "Array".
+            'backup_include_paths' => is_string($this->input('backup_include_paths'))
+                ? $this->normalizeIncludePaths($this->input('backup_include_paths'))
+                : $this->input('backup_include_paths'),
             'alert_configs' => $alertConfigs,
             // Absent/blank planning_mode = a standalone job (the historical
             // behaviour), so existing clients keep working. A *present* value is
@@ -231,8 +235,10 @@ class BackupJobRequest extends FormRequest
         }
 
         foreach ($this->includePaths() as $path) {
-            if (in_array('..', explode('/', $path), true)) {
-                $validator->errors()->add('backup_include_paths', 'Include paths are relative to the volume root and cannot contain "..".');
+            $segments = explode('/', $path);
+
+            if (in_array('.', $segments, true) || in_array('..', $segments, true)) {
+                $validator->errors()->add('backup_include_paths', 'Include paths are relative to the volume root and cannot contain "." or ".." segments.');
 
                 return;
             }
@@ -244,12 +250,18 @@ class BackupJobRequest extends FormRequest
      */
     private function includePaths(): array
     {
-        return preg_split('/\s*,\s*/', (string) $this->input('backup_include_paths'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $value = $this->input('backup_include_paths');
+
+        if (! is_string($value)) {
+            return [];
+        }
+
+        return preg_split('/\s*,\s*/', $value, -1, PREG_SPLIT_NO_EMPTY) ?: [];
     }
 
-    private function normalizeIncludePaths(mixed $value): ?string
+    private function normalizeIncludePaths(string $value): ?string
     {
-        $parts = preg_split('/\s*,\s*/', trim((string) $value), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $parts = preg_split('/\s*,\s*/', trim($value), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
         $normalized = [];
         foreach ($parts as $part) {

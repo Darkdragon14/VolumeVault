@@ -49,7 +49,7 @@ class IncludePathsToExcludeRegexp
         $trie = ['children' => [], 'terminal' => false];
 
         foreach (array_keys($targets) as $target) {
-            $this->insert($trie, $target);
+            $this->insert($trie, $this->characters($target));
         }
 
         $branches = [];
@@ -59,16 +59,26 @@ class IncludePathsToExcludeRegexp
     }
 
     /**
-     * @param  array{children: array<string, mixed>, terminal: bool}  $trie
+     * Split into UTF-8 characters, not bytes: the trie nodes and the negated
+     * character classes must key on whole runes so Go's regexp engine (which
+     * matches runes) interprets the generated pattern the same way as PHP.
+     *
+     * @return array<int, string>
      */
-    private function insert(array &$trie, string $target): void
+    private function characters(string $value): array
+    {
+        return preg_split('//u', $value, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    }
+
+    /**
+     * @param  array{children: array<string, mixed>, terminal: bool}  $trie
+     * @param  array<int, string>  $characters
+     */
+    private function insert(array &$trie, array $characters): void
     {
         $node = &$trie;
 
-        $length = strlen($target);
-        for ($i = 0; $i < $length; $i++) {
-            $char = $target[$i];
-
+        foreach ($characters as $char) {
             if (! isset($node['children'][$char])) {
                 $node['children'][$char] = ['children' => [], 'terminal' => false];
             }

@@ -247,9 +247,9 @@ class BackupDestinationProviderTest extends TestCase
         $this->assertSame($expected, $regexp);
 
         // Sanity-check the behaviour offen will apply: keep the listed paths, drop the rest.
-        $this->assertSame(0, preg_match('#'.$regexp.'#', '/backup/app_data/Backups/db.sql'));
-        $this->assertSame(0, preg_match('#'.$regexp.'#', '/backup/app_data/config/app.conf'));
-        $this->assertSame(1, preg_match('#'.$regexp.'#', '/backup/app_data/logs/x.log'));
+        $this->assertSame(0, preg_match('#'.$regexp.'#u', '/backup/app_data/Backups/db.sql'));
+        $this->assertSame(0, preg_match('#'.$regexp.'#u', '/backup/app_data/config/app.conf'));
+        $this->assertSame(1, preg_match('#'.$regexp.'#u', '/backup/app_data/logs/x.log'));
     }
 
     public function test_include_mode_without_paths_applies_no_filter(): void
