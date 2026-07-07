@@ -36,12 +36,12 @@ class BackupJobRequest extends FormRequest
             'host_path' => $hostPath !== '' ? $hostPath : null,
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
-            // Default to exclude only when the field is absent; a present value is
-            // passed through unchanged so an invalid one (array, empty string) is
-            // rejected by the enum rule with a 422 instead of being coerced.
-            'backup_filter_mode' => $this->has('backup_filter_mode')
-                ? $this->input('backup_filter_mode')
-                : BackupJob::FILTER_MODE_EXCLUDE,
+            // Absent, null or blank all mean "use the default"; any other value is
+            // passed through unchanged so an invalid one (a bad string, an array) is
+            // rejected by the enum rule with a 422 rather than silently coerced.
+            'backup_filter_mode' => ($this->input('backup_filter_mode') === null || $this->input('backup_filter_mode') === '')
+                ? BackupJob::FILTER_MODE_EXCLUDE
+                : $this->input('backup_filter_mode'),
             // Leave a non-string value untouched so the "string" rule can reject it
             // with a 422 instead of casting an array to "Array".
             'backup_include_paths' => is_string($this->input('backup_include_paths'))
@@ -101,7 +101,9 @@ class BackupJobRequest extends FormRequest
             'retention_days' => ['nullable', 'integer', 'min:1'],
             'retention_count' => ['nullable', 'integer', 'min:1'],
             'backup_exclude_regexp' => ['nullable', 'string', 'max:1000'],
-            'backup_filter_mode' => ['nullable', 'string', Rule::in([
+            // Not nullable: prepareForValidation already maps absent/null/blank to
+            // the default, so only the two enum values are ever accepted here.
+            'backup_filter_mode' => ['string', Rule::in([
                 BackupJob::FILTER_MODE_EXCLUDE,
                 BackupJob::FILTER_MODE_INCLUDE,
             ])],

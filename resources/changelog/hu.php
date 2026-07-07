@@ -3,7 +3,7 @@
 return [
     'inclusive_backup_filter' => [
         'title' => 'Mentés szűrése belefoglalással',
-        'description' => 'A mentési feladatok mostantól csak a felsorolt mappákat vagy fájlokat tarthatják meg, ahelyett, hogy csak néhányat zárnának ki. Válassza a „Csak belefoglalás“ lehetőséget a feladat űrlapján, és adjon meg egy vesszővel elválasztott, a kötet gyökeréhez viszonyított útvonallistát (például „Backups, config/app.conf“); minden mást kihagy, így az archívumok kicsik maradnak. A haladó, regex alapú kizárási mód továbbra is elérhető, és a csak belefoglalást használó feladatok az API-n keresztül is létrehozhatók.',
+        'description' => 'A mentési feladatok mostantól csak a felsorolt mappákat vagy fájlokat tarthatják meg, ahelyett, hogy csak néhányat zárnának ki. Válassza a „Csak belefoglalás“ lehetőséget a feladat űrlapján, és adjon meg egy vesszővel elválasztott, a mentési forrás gyökeréhez viszonyított útvonallistát (például „Backups, config/app.conf“); minden mást kihagy, így az archívumok kicsik maradnak. A haladó, regex alapú kizárási mód továbbra is elérhető, és a csak belefoglalást használó feladatok az API-n keresztül is létrehozhatók.',
     ],
     'grouped_backup_jobs' => [
         'title' => 'Csoportosított biztonsági mentési feladatok',

@@ -3,7 +3,7 @@
 return [
     'inclusive_backup_filter' => [
         'title' => 'Filtrado de copia por inclusión',
-        'description' => 'Las tareas de copia ahora pueden conservar solo las carpetas o archivos que indiques, en lugar de solo excluir algunos. Elige «Incluir solo» en el formulario de la tarea e introduce una lista de rutas separadas por comas, relativas a la raíz del volumen (por ejemplo «Backups, config/app.conf»); todo lo demás se omite, manteniendo los archivos pequeños. El modo avanzado de exclusión por regex sigue disponible, y las tareas de solo inclusión también se pueden crear a través de la API.',
+        'description' => 'Las tareas de copia ahora pueden conservar solo las carpetas o archivos que indiques, en lugar de solo excluir algunos. Elige «Incluir solo» en el formulario de la tarea e introduce una lista de rutas separadas por comas, relativas a la raíz de la fuente de copia (por ejemplo «Backups, config/app.conf»); todo lo demás se omite, manteniendo los archivos pequeños. El modo avanzado de exclusión por regex sigue disponible, y las tareas de solo inclusión también se pueden crear a través de la API.',
     ],
     'grouped_backup_jobs' => [
         'title' => 'Trabajos de copia de seguridad agrupados',

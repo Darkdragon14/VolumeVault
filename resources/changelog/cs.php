@@ -3,7 +3,7 @@
 return [
     'inclusive_backup_filter' => [
         'title' => 'Filtrování zálohy podle zahrnutí',
-        'description' => 'Zálohovací úlohy nyní mohou zachovat pouze složky nebo soubory, které uvedete, místo pouhého vyloučení některých. Ve formuláři úlohy zvolte „Pouze zahrnout“ a zadejte seznam cest oddělených čárkami, relativních ke kořeni svazku (například „Backups, config/app.conf“); vše ostatní se přeskočí, takže archivy zůstanou malé. Pokročilý režim vyloučení pomocí regexu zůstává k dispozici a úlohy pouze se zahrnutím lze vytvořit i přes API.',
+        'description' => 'Zálohovací úlohy nyní mohou zachovat pouze složky nebo soubory, které uvedete, místo pouhého vyloučení některých. Ve formuláři úlohy zvolte „Pouze zahrnout“ a zadejte seznam cest oddělených čárkami, relativních ke kořeni zdroje zálohy (například „Backups, config/app.conf”); vše ostatní se přeskočí, takže archivy zůstanou malé. Pokročilý režim vyloučení pomocí regexu zůstává k dispozici a úlohy pouze se zahrnutím lze vytvořit i přes API.',
     ],
     'grouped_backup_jobs' => [
         'title' => 'Seskupené zálohovací úlohy',

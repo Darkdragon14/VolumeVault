@@ -3,7 +3,7 @@
 return [
     'inclusive_backup_filter' => [
         'title' => 'Back-upfiltering op basis van insluiten',
-        'description' => 'Back-uptaken kunnen nu alleen de door jou opgegeven mappen of bestanden behouden in plaats van alleen sommige uit te sluiten. Kies "Alleen opnemen" in het taakformulier en voer een door komma\'s gescheiden lijst met paden in, relatief ten opzichte van de volume-hoofdmap (bijvoorbeeld "Backups, config/app.conf"); al het andere wordt overgeslagen, waardoor de archieven klein blijven. De geavanceerde regex-uitsluitmodus blijft beschikbaar en taken met alleen insluiten kunnen ook via de API worden aangemaakt.',
+        'description' => 'Back-uptaken kunnen nu alleen de door jou opgegeven mappen of bestanden behouden in plaats van alleen sommige uit te sluiten. Kies "Alleen opnemen" in het taakformulier en voer een door komma\'s gescheiden lijst met paden in, relatief ten opzichte van de hoofdmap van de back-upbron (bijvoorbeeld "Backups, config/app.conf"); al het andere wordt overgeslagen, waardoor de archieven klein blijven. De geavanceerde regex-uitsluitmodus blijft beschikbaar en taken met alleen insluiten kunnen ook via de API worden aangemaakt.',
     ],
     'grouped_backup_jobs' => [
         'title' => 'Gegroepeerde back-uptaken',

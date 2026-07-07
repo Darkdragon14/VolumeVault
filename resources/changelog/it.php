@@ -3,7 +3,7 @@
 return [
     'inclusive_backup_filter' => [
         'title' => 'Filtraggio dei backup per inclusione',
-        'description' => 'Le attività di backup ora possono conservare solo le cartelle o i file che elenchi, invece di escluderne soltanto alcuni. Scegli «Includi solo» nel modulo dell\'attività e inserisci un elenco di percorsi separati da virgole, relativi alla radice del volume (ad esempio «Backups, config/app.conf»); tutto il resto viene ignorato, mantenendo gli archivi piccoli. La modalità avanzata di esclusione tramite regex resta disponibile e le attività di sola inclusione possono essere create anche tramite l\'API.',
+        'description' => 'Le attività di backup ora possono conservare solo le cartelle o i file che elenchi, invece di escluderne soltanto alcuni. Scegli «Includi solo» nel modulo dell\'attività e inserisci un elenco di percorsi separati da virgole, relativi alla radice della sorgente di backup (ad esempio «Backups, config/app.conf»); tutto il resto viene ignorato, mantenendo gli archivi piccoli. La modalità avanzata di esclusione tramite regex resta disponibile e le attività di sola inclusione possono essere create anche tramite l\'API.',
     ],
     'grouped_backup_jobs' => [
         'title' => 'Job di backup raggruppati',

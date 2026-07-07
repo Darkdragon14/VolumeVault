@@ -3,7 +3,7 @@
 return [
     'inclusive_backup_filter' => [
         'title' => 'Filtrage de sauvegarde par inclusion',
-        'description' => 'Les tâches de sauvegarde peuvent désormais ne conserver que les dossiers ou fichiers que vous listez, au lieu d\'en exclure seulement certains. Choisissez « Inclure uniquement » dans le formulaire de la tâche et saisissez une liste de chemins séparés par des virgules, relatifs à la racine du volume (par exemple « Backups, config/app.conf ») ; tout le reste est ignoré, ce qui garde des archives légères. Le mode d\'exclusion par regex avancée reste disponible, et les tâches en inclusion seule peuvent aussi être créées via l\'API.',
+        'description' => 'Les tâches de sauvegarde peuvent désormais ne conserver que les dossiers ou fichiers que vous listez, au lieu d\'en exclure seulement certains. Choisissez « Inclure uniquement » dans le formulaire de la tâche et saisissez une liste de chemins séparés par des virgules, relatifs à la racine de la source de sauvegarde (par exemple « Backups, config/app.conf ») ; tout le reste est ignoré, ce qui garde des archives légères. Le mode d\'exclusion par regex avancée reste disponible, et les tâches en inclusion seule peuvent aussi être créées via l\'API.',
     ],
     'grouped_backup_jobs' => [
         'title' => 'Jobs de sauvegarde groupés',

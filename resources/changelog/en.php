@@ -3,7 +3,7 @@
 return [
     'inclusive_backup_filter' => [
         'title' => 'Include-only backup filtering',
-        'description' => 'Backup jobs can now keep only the folders or files you list instead of only excluding some. Choose "Include only" on the job form and enter a comma-separated list of paths relative to the volume root (for example "Backups, config/app.conf"); everything else is skipped, keeping archives small. The advanced regex exclude mode is still available, and include-only jobs can also be created through the API.',
+        'description' => 'Backup jobs can now keep only the folders or files you list instead of only excluding some. Choose "Include only" on the job form and enter a comma-separated list of paths relative to the backup source root (for example "Backups, config/app.conf"); everything else is skipped, keeping archives small. The advanced regex exclude mode is still available, and include-only jobs can also be created through the API.',
     ],
     'grouped_backup_jobs' => [
         'title' => 'Grouped backup jobs',
