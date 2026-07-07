@@ -245,7 +245,7 @@ class BackupJobRequest extends FormRequest
             $segments = explode('/', $path);
 
             if (in_array('.', $segments, true) || in_array('..', $segments, true)) {
-                $validator->errors()->add('backup_include_paths', 'Include paths are relative to the volume root and cannot contain "." or ".." segments.');
+                $validator->errors()->add('backup_include_paths', 'Include paths are relative to the backup source root and cannot contain "." or ".." segments.');
 
                 return;
             }

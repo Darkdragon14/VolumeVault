@@ -282,7 +282,7 @@ const submit = () => {
 
 <template>
     <Head :title="editing ? t('Edit backup job') : t('New backup job')" />
-    <AppLayout :title="editing ? t('Edit backup job') : t('New backup job')" :subtitle="t('Choose the backup source, destination, schedule, retention, and exclusions.')">
+    <AppLayout :title="editing ? t('Edit backup job') : t('New backup job')" :subtitle="t('Choose the backup source, destination, schedule, retention, and file filtering.')">
         <form class="card max-w-4xl space-y-6 p-4 sm:p-6" @submit.prevent="submit">
             <div v-if="!destinations.length || (isDockerVolumeSource && !volumes.length)" class="space-y-2 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
                 <p v-if="!destinations.length">{{ t('You need at least one active backup destination before creating a job.') }}</p>
@@ -833,7 +833,7 @@ const submit = () => {
                     <input id="backup_include_paths" v-model="form.backup_include_paths" type="text" class="input font-mono text-sm" :placeholder="t('For example: {example}', { example: 'Backups, config/app.conf' })">
                     <p class="text-sm text-slate-300">{{ t('Comma-separated folders or files to keep, relative to the backup source root. Leave empty to back up everything.') }}</p>
                     <p class="text-sm text-slate-400">{{ t('Paths are relative to the backup source root: use "Backups", not "/_data/Backups".') }}</p>
-                    <span v-if="form.errors.backup_include_paths" class="text-sm text-rose-300">{{ form.errors.backup_include_paths }}</span>
+                    <span v-if="form.errors.backup_include_paths" class="text-sm text-rose-300">{{ translateError(form.errors.backup_include_paths) }}</span>
                 </div>
 
                 <div v-else class="mt-4 space-y-2">
