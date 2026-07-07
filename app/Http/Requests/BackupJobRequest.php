@@ -36,6 +36,17 @@ class BackupJobRequest extends FormRequest
             'host_path' => $hostPath !== '' ? $hostPath : null,
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
+            // Absent, null or blank all mean "use the default"; any other value is
+            // passed through unchanged so an invalid one (a bad string, an array) is
+            // rejected by the enum rule with a 422 rather than silently coerced.
+            'backup_filter_mode' => ($this->input('backup_filter_mode') === null || $this->input('backup_filter_mode') === '')
+                ? BackupJob::FILTER_MODE_EXCLUDE
+                : $this->input('backup_filter_mode'),
+            // Leave a non-string value untouched so the "string" rule can reject it
+            // with a 422 instead of casting an array to "Array".
+            'backup_include_paths' => is_string($this->input('backup_include_paths'))
+                ? $this->normalizeIncludePaths($this->input('backup_include_paths'))
+                : $this->input('backup_include_paths'),
             'alert_configs' => $alertConfigs,
             // Absent/blank planning_mode = a standalone job (the historical
             // behaviour), so existing clients keep working. A *present* value is
@@ -90,6 +101,14 @@ class BackupJobRequest extends FormRequest
             'retention_days' => ['nullable', 'integer', 'min:1'],
             'retention_count' => ['nullable', 'integer', 'min:1'],
             'backup_exclude_regexp' => ['nullable', 'string', 'max:1000'],
+            // Not nullable: prepareForValidation already maps absent/null/blank to
+            // the default, so only the two enum values are ever accepted here.
+            'backup_filter_mode' => ['string', Rule::in([
+                BackupJob::FILTER_MODE_EXCLUDE,
+                BackupJob::FILTER_MODE_INCLUDE,
+            ])],
+            // Never required: include mode with no paths simply keeps everything.
+            'backup_include_paths' => ['nullable', 'string', 'max:2000'],
             'backup_filename_template' => ['nullable', 'string', 'max:180'],
             'notifications_enabled' => ['boolean'],
             'notification_channel_ids' => ['nullable', 'array'],
@@ -135,6 +154,7 @@ class BackupJobRequest extends FormRequest
 
             $this->validateHostPathSource($validator);
             $this->validateBackupFilenameTemplate($validator);
+            $this->validateIncludePaths($validator);
             $this->validateAlertSizeRanges($validator);
         });
     }
@@ -213,5 +233,60 @@ class BackupJobRequest extends FormRequest
         if ($message = app(RenderBackupFilename::class)->validationError($this->input('backup_filename_template'))) {
             $validator->errors()->add('backup_filename_template', $message);
         }
+    }
+
+    private function validateIncludePaths(Validator $validator): void
+    {
+        if ($this->input('backup_filter_mode') !== BackupJob::FILTER_MODE_INCLUDE) {
+            return;
+        }
+
+        foreach ($this->includePaths() as $path) {
+            $segments = explode('/', $path);
+
+            if (in_array('.', $segments, true) || in_array('..', $segments, true)) {
+                $validator->errors()->add('backup_include_paths', 'Include paths are relative to the backup source root and cannot contain "." or ".." segments.');
+
+                return;
+            }
+
+            // Bound the depth of the generated exclude regexp (one nesting level
+            // per character) so it stays well within every engine's parser limit.
+            if (mb_strlen($path) > 200) {
+                $validator->errors()->add('backup_include_paths', 'Each include path must be 200 characters or fewer.');
+
+                return;
+            }
+        }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function includePaths(): array
+    {
+        $value = $this->input('backup_include_paths');
+
+        if (! is_string($value)) {
+            return [];
+        }
+
+        return preg_split('/\s*,\s*/', $value, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    }
+
+    private function normalizeIncludePaths(string $value): ?string
+    {
+        $parts = preg_split('/\s*,\s*/', trim($value), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        $normalized = [];
+        foreach ($parts as $part) {
+            $part = trim(preg_replace('#/+#', '/', trim($part)) ?? '', '/');
+
+            if ($part !== '') {
+                $normalized[] = $part;
+            }
+        }
+
+        return $normalized === [] ? null : implode(', ', $normalized);
     }
 }

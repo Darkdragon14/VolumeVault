@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'inclusive_backup_filter',
+        ],
+    ],
     'releases' => [
         'v1.17.0' => [
             'date' => '2026-07-06',

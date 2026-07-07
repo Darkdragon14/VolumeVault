@@ -331,6 +331,10 @@ class BackupJobController extends Controller
     private function payload(BackupJobRequest $request, ?string $status = BackupJob::STATUS_ACTIVE, ?BackupJob $job = null, ?BackupJobGroup $group = null): array
     {
         $backupExcludeRegexp = trim((string) $request->input('backup_exclude_regexp', ''));
+        $backupFilterMode = $request->input('backup_filter_mode') === BackupJob::FILTER_MODE_INCLUDE
+            ? BackupJob::FILTER_MODE_INCLUDE
+            : BackupJob::FILTER_MODE_EXCLUDE;
+        $backupIncludePaths = trim((string) $request->input('backup_include_paths', ''));
         $backupFilenameTemplate = trim((string) $request->input('backup_filename_template', ''));
         $sourceType = $request->input('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME);
         $isHostPath = $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH;
@@ -347,6 +351,8 @@ class BackupJobController extends Controller
             'retention_days' => $request->input('retention_days'),
             'retention_count' => $request->input('retention_count'),
             'backup_exclude_regexp' => $backupExcludeRegexp !== '' ? $backupExcludeRegexp : null,
+            'backup_filter_mode' => $backupFilterMode,
+            'backup_include_paths' => $backupIncludePaths !== '' ? $backupIncludePaths : null,
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
             'stop_containers_before_backup' => $request->boolean('stop_containers_before_backup'),
             'stop_container_names' => $isHostPath && $request->boolean('stop_containers_before_backup')

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'inclusive_backup_filter' => [
+        'title' => 'Include-only backup filtering',
+        'description' => 'Backup jobs can now keep only the folders or files you list instead of only excluding some. Choose "Include only" on the job form and enter a comma-separated list of paths relative to the backup source root (for example "Backups, config/app.conf"); everything else is skipped, keeping archives small. The advanced regex exclude mode is still available, and include-only jobs can also be created through the API.',
+    ],
     'grouped_backup_jobs' => [
         'title' => 'Grouped backup jobs',
         'description' => 'Back up several volumes as a single scheduled operation: a backup group owns the schedule and notifications, and jobs are attached to it from the backup job form. The group sends one start notification and one success/fail notification for all its volumes — ideal for a single dead man\'s switch monitor — and you can choose whether a failing volume stops the run or the group continues and still reports the failure. Backup groups are also available through the API.',

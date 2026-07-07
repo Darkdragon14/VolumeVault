@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'inclusive_backup_filter' => [
+        'title' => 'Filtrado de copia por inclusión',
+        'description' => 'Las tareas de copia ahora pueden conservar solo las carpetas o archivos que indiques, en lugar de solo excluir algunos. Elige «Incluir solo» en el formulario de la tarea e introduce una lista de rutas separadas por comas, relativas a la raíz de la fuente de copia (por ejemplo «Backups, config/app.conf»); todo lo demás se omite, manteniendo los archivos pequeños. El modo avanzado de exclusión por regex sigue disponible, y las tareas de solo inclusión también se pueden crear a través de la API.',
+    ],
     'grouped_backup_jobs' => [
         'title' => 'Trabajos de copia de seguridad agrupados',
         'description' => 'Haz una copia de seguridad de varios volúmenes como una única operación programada: un grupo de copia de seguridad posee la programación y las notificaciones, y los trabajos se adjuntan a él desde el formulario de trabajo de copia de seguridad. El grupo envía una única notificación de inicio y una de éxito/fallo para todos sus volúmenes —ideal para un único monitor de tipo dead man\'s switch— y puedes elegir si un volumen fallido detiene la ejecución o si el grupo continúa e informa igualmente del fallo. Los grupos de copia de seguridad también están disponibles a través de la API.',

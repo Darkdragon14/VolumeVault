@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'inclusive_backup_filter' => [
+        'title' => 'Back-upfiltering op basis van insluiten',
+        'description' => 'Back-uptaken kunnen nu alleen de door jou opgegeven mappen of bestanden behouden in plaats van alleen sommige uit te sluiten. Kies "Alleen opnemen" in het taakformulier en voer een door komma\'s gescheiden lijst met paden in, relatief ten opzichte van de hoofdmap van de back-upbron (bijvoorbeeld "Backups, config/app.conf"); al het andere wordt overgeslagen, waardoor de archieven klein blijven. De geavanceerde regex-uitsluitmodus blijft beschikbaar en taken met alleen insluiten kunnen ook via de API worden aangemaakt.',
+    ],
     'grouped_backup_jobs' => [
         'title' => 'Gegroepeerde back-uptaken',
         'description' => 'Maak een back-up van meerdere volumes als één geplande bewerking: een back-upgroep bezit het schema en de meldingen, en taken worden eraan gekoppeld via het back-uptaakformulier. De groep verstuurt één startmelding en één succes-/foutmelding voor al zijn volumes — ideaal voor één dead man\'s switch-monitor — en je kunt kiezen of een mislukt volume de uitvoering stopt of dat de groep doorgaat en de fout alsnog meldt. Back-upgroepen zijn ook beschikbaar via de API.',

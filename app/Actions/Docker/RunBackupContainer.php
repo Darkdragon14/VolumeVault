@@ -6,6 +6,7 @@ use App\Actions\Backup\RenderBackupFilename;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Services\Backup\IncludePathsToExcludeRegexp;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
@@ -21,13 +22,17 @@ class RunBackupContainer
 
     private readonly RenderBackupFilename $renderBackupFilename;
 
+    private readonly IncludePathsToExcludeRegexp $includePathsToExcludeRegexp;
+
     public function __construct(
         private readonly DockerProcess $dockerProcess,
         ?RenderBackupFilename $renderBackupFilename = null,
         ?HostPathPolicy $hostPathPolicy = null,
+        ?IncludePathsToExcludeRegexp $includePathsToExcludeRegexp = null,
     ) {
         $this->renderBackupFilename = $renderBackupFilename ?? app(RenderBackupFilename::class);
         $this->hostPathPolicy = $hostPathPolicy ?? app(HostPathPolicy::class);
+        $this->includePathsToExcludeRegexp = $includePathsToExcludeRegexp ?? app(IncludePathsToExcludeRegexp::class);
     }
 
     public function handle(BackupRun $run): DockerProcessResult
@@ -100,7 +105,16 @@ class RunBackupContainer
             $environment['BACKUP_RETENTION_COUNT'] = (string) $job->retention_count;
         }
 
-        if (filled($job->backup_exclude_regexp)) {
+        if ($job->backup_filter_mode === BackupJob::FILTER_MODE_INCLUDE) {
+            $paths = preg_split('/\s*,\s*/', (string) $job->backup_include_paths, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            // offen only supports exclusion, so translate the "keep only these paths"
+            // intent into the equivalent exclude regexp against the mounted paths.
+            $exclude = $this->includePathsToExcludeRegexp->build('/backup/'.$this->sourceMountName($job), $paths);
+
+            if (filled($exclude)) {
+                $environment['BACKUP_EXCLUDE_REGEXP'] = $exclude;
+            }
+        } elseif (filled($job->backup_exclude_regexp)) {
             $environment['BACKUP_EXCLUDE_REGEXP'] = (string) $job->backup_exclude_regexp;
         }
 

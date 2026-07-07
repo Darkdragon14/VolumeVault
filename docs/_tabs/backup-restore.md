@@ -20,12 +20,17 @@ To create a backup job:
 2. Create and test at least one active destination.
 3. Open `Backup jobs` and create a job for a Docker volume or an absolute host path.
 4. Choose a schedule: hourly, daily, weekly, or cron.
-5. Optionally set retention days, retention count, archive name template, file exclusion regexp, and container stop behavior.
+5. Optionally set retention days, retention count, archive name template, file filtering (include or exclude), and container stop behavior.
 6. Save the job and run it manually once to validate the destination and logs.
 
 Backup times are interpreted in `APP_TIMEZONE`. For example, set `APP_TIMEZONE=Europe/Paris` if a daily schedule at `02:00` should run at 02:00 Paris time instead of 02:00 UTC.
 
-Backup jobs can optionally exclude files from the archive with `BACKUP_EXCLUDE_REGEXP`. The value is a Go regular expression matched against each file's full path inside `BACKUP_SOURCES`. For example, `\.log$` excludes log files, `(^|/)cache(/|$)` excludes folders named `cache`, and `(^|/)node_modules(/|$)` excludes `node_modules` folders. Leave the field empty to include everything.
+Backup jobs can optionally filter which files end up in the archive. Two modes are available:
+
+- **Include only (simple)** — keep only the folders or files you list. Enter a comma-separated list of paths relative to the backup source root (for example `Backups, config/app.conf`); everything else is skipped. This is the simplest way to back up just one or two folders. Paths are relative to the backup source root as Offen sees it under `/backup/<mount>`, so use `Backups`, not the Docker host path `/_data/Backups`. Each path must be 200 characters or fewer, segments `.` and `..` are rejected, and an empty list backs up everything. VolumeVault generates the matching `BACKUP_EXCLUDE_REGEXP` automatically (`offen/docker-volume-backup` only supports exclusion, and Go's RE2 engine has no negative lookahead, so the include list is compiled into the equivalent exclusion regexp).
+- **Exclude with regex (advanced)** — exclude files with `BACKUP_EXCLUDE_REGEXP`. The value is a Go regular expression matched against each file's full path inside `BACKUP_SOURCES`. For example, `\.log$` excludes log files, `(^|/)cache(/|$)` excludes folders named `cache`, and `(^|/)node_modules(/|$)` excludes `node_modules` folders. Leave the field empty to include everything.
+
+In the web form, creating a job defaults to the simple include mode, while existing jobs keep their stored mode. Through the API the behavior differs for backward compatibility: `backup_filter_mode` is optional and defaults to `exclude` when omitted, so an API client that wants include mode must set `backup_filter_mode` to `include` explicitly. The related API fields are `backup_include_paths` (used in include mode) and `backup_exclude_regexp` (used in exclude mode).
 
 Backup jobs can also define an archive name template without the extension. Supported tokens are `{name}`, `{source}`, `{id}`, `{run}`, `{year}`, `{month}`, `{day}`, `{time}`, `{hour}`, `{minute}`, and `{second}`. `{name}` is the job name sanitized for filenames, `{source}` is the Docker volume or host path source, and `{id}` / `{run}` is the backup run ID. VolumeVault appends `.tar.gz` automatically. Include a uniqueness token such as `{id}` or `{time}` to avoid overwriting earlier archives with the same generated name.
 

@@ -233,7 +233,9 @@ class OpenApiController extends Controller
                     'schedule_config' => ['type' => 'object'],
                     'retention_days' => ['type' => ['integer', 'null'], 'minimum' => 1],
                     'retention_count' => ['type' => ['integer', 'null'], 'minimum' => 1],
-                    'backup_exclude_regexp' => ['type' => ['string', 'null'], 'maxLength' => 1000, 'description' => 'Go regular expression passed to BACKUP_EXCLUDE_REGEXP for offen/docker-volume-backup. Matching full file paths are excluded.'],
+                    'backup_exclude_regexp' => ['type' => ['string', 'null'], 'maxLength' => 1000, 'description' => 'Go regular expression passed to BACKUP_EXCLUDE_REGEXP for offen/docker-volume-backup when backup_filter_mode is "exclude". Matching full file paths are excluded.'],
+                    'backup_filter_mode' => ['type' => 'string', 'enum' => ['exclude', 'include'], 'default' => 'exclude', 'description' => 'Filtering mode. "exclude" uses backup_exclude_regexp to drop matching paths (default). "include" keeps only the paths listed in backup_include_paths; VolumeVault generates the matching exclude regexp automatically.'],
+                    'backup_include_paths' => ['type' => ['string', 'null'], 'maxLength' => 2000, 'description' => 'Comma-separated list of folders/files to keep, relative to the backup source root (e.g. "Backups, config/app.conf"). Used only when backup_filter_mode is "include"; empty keeps everything. Each individual path must be 200 characters or fewer and cannot contain "." or ".." segments.'],
                     'backup_filename_template' => ['type' => ['string', 'null'], 'maxLength' => 180, 'description' => 'Optional archive filename template without extension. Supported tokens: {name}, {source}, {id}, {run}, {year}, {month}, {day}, {time}, {hour}, {minute}, {second}. Existing jobs with null keep the legacy volumevault-{source}-run-{id}.tar.gz naming.'],
                     'notifications_enabled' => ['type' => 'boolean', 'default' => true],
                     'notification_channel_ids' => [
