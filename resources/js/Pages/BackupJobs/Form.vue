@@ -63,6 +63,9 @@ const form = useForm({
     retention_days: props.job?.retention_days || '',
     retention_count: props.job?.retention_count || '',
     backup_exclude_regexp: props.job?.backup_exclude_regexp || '',
+    // New jobs default to the simple include mode; editing keeps the stored mode.
+    backup_filter_mode: props.job?.backup_filter_mode || (props.job ? 'exclude' : 'include'),
+    backup_include_paths: props.job?.backup_include_paths || '',
     backup_filename_template: props.job?.backup_filename_template || '',
     notifications_enabled: props.job?.notifications_enabled ?? true,
     notification_channel_ids: (props.job?.notification_channel_ids || props.defaultNotificationChannelIds || []) as number[],
@@ -805,20 +808,49 @@ const submit = () => {
             </section>
 
             <section class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
-                <div class="space-y-2">
+                <div class="space-y-3">
+                    <span class="label">{{ t('File filtering') }}</span>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm">
+                            <input v-model="form.backup_filter_mode" type="radio" value="include" class="mt-1 text-sky-400">
+                            <span>
+                                <span class="block font-semibold text-white">{{ t('Include only (simple)') }}</span>
+                                <span class="mt-1 block text-slate-300">{{ t('Back up only the folders/files you list; everything else is skipped.') }}</span>
+                            </span>
+                        </label>
+                        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm">
+                            <input v-model="form.backup_filter_mode" type="radio" value="exclude" class="mt-1 text-sky-400">
+                            <span>
+                                <span class="block font-semibold text-white">{{ t('Exclude with regex (advanced)') }}</span>
+                                <span class="mt-1 block text-slate-300">{{ t('Back up everything except paths matching a Go regular expression.') }}</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div v-if="form.backup_filter_mode === 'include'" class="mt-4 space-y-2">
+                    <label for="backup_include_paths" class="label">{{ t('Folders or files to include') }}</label>
+                    <input id="backup_include_paths" v-model="form.backup_include_paths" type="text" class="input font-mono text-sm" :placeholder="t('For example: {example}', { example: 'Backups, config/app.conf' })">
+                    <p class="text-sm text-slate-300">{{ t('Comma-separated folders or files to keep, relative to the volume root. Leave empty to back up everything.') }}</p>
+                    <p class="text-sm text-slate-400">{{ t('Paths are relative to the volume root: use "Backups", not "/_data/Backups".') }}</p>
+                    <span v-if="form.errors.backup_include_paths" class="text-sm text-rose-300">{{ form.errors.backup_include_paths }}</span>
+                </div>
+
+                <div v-else class="mt-4 space-y-2">
                     <label for="backup_exclude_regexp" class="label">{{ t('Exclude files') }}</label>
                     <textarea id="backup_exclude_regexp" v-model="form.backup_exclude_regexp" class="input min-h-24 font-mono text-sm" :placeholder="t('Optional regex, for example: {example}', { example: '\\.log$' })" />
                     <p class="text-sm text-slate-300">{{ t('Files whose full path matches this Go regular expression are excluded from the archive. Leave empty to include everything.') }}</p>
                     <span v-if="form.errors.backup_exclude_regexp" class="text-sm text-rose-300">{{ form.errors.backup_exclude_regexp }}</span>
-                </div>
-                <div class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-50">
-                    <p class="font-medium">{{ t('Not comfortable with regex? Start with one of these examples:') }}</p>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <button v-for="example in excludeExamples" :key="example.value" type="button" class="max-w-full break-all rounded-lg border border-sky-200 bg-sky-100 px-3 py-2 text-left font-mono text-xs text-sky-800 hover:bg-sky-200 dark:border-sky-200/30 dark:bg-sky-300/10 dark:text-sky-50 dark:hover:bg-sky-300/20" @click="form.backup_exclude_regexp = example.value">
-                            {{ t(example.label) }}: {{ example.value }}
-                        </button>
+
+                    <div class="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-50">
+                        <p class="font-medium">{{ t('Not comfortable with regex? Start with one of these examples:') }}</p>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button v-for="example in excludeExamples" :key="example.value" type="button" class="max-w-full break-all rounded-lg border border-sky-200 bg-sky-100 px-3 py-2 text-left font-mono text-xs text-sky-800 hover:bg-sky-200 dark:border-sky-200/30 dark:bg-sky-300/10 dark:text-sky-50 dark:hover:bg-sky-300/20" @click="form.backup_exclude_regexp = example.value">
+                                {{ t(example.label) }}: {{ example.value }}
+                            </button>
+                        </div>
+                        <p class="mt-3 text-sky-700 dark:text-sky-100">{{ t('Ask for help if you are unsure: describe what should be ignored, such as log files or cache folders, and VolumeVault can guide the regex.') }}</p>
                     </div>
-                    <p class="mt-3 text-sky-700 dark:text-sky-100">{{ t('Ask for help if you are unsure: describe what should be ignored, such as log files or cache folders, and VolumeVault can guide the regex.') }}</p>
                 </div>
             </section>
 

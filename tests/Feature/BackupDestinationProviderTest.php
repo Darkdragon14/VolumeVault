@@ -6,6 +6,7 @@ use App\Actions\Docker\RunBackupContainer;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Services\Backup\IncludePathsToExcludeRegexp;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -197,6 +198,102 @@ class BackupDestinationProviderTest extends TestCase
 
         $this->assertSame('\\.log$', $call['environment']['BACKUP_EXCLUDE_REGEXP'] ?? null);
         $this->assertContains('BACKUP_EXCLUDE_REGEXP', $call['command']);
+    }
+
+    public function test_include_mode_generates_exclude_regexp_from_paths(): void
+    {
+        $process = new class extends DockerProcess
+        {
+            public array $calls = [];
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                $this->calls[] = ['command' => $command, 'environment' => $environment];
+
+                return new DockerProcessResult($command, 0, 'ok', '');
+            }
+        };
+        $action = new RunBackupContainer($process);
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/archive', 'archive_mount_source' => '/host/archive'],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Only backups folder',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+            'backup_filter_mode' => BackupJob::FILTER_MODE_INCLUDE,
+            'backup_include_paths' => 'Backups, config/app.conf',
+        ]);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+        ]);
+
+        $action->handle($run);
+        $regexp = $process->calls[0]['environment']['BACKUP_EXCLUDE_REGEXP'] ?? null;
+
+        // The volume mounts at /backup/<mount>; the generated regexp is anchored there.
+        $expected = (new IncludePathsToExcludeRegexp)->build('/backup/app_data', ['Backups', 'config/app.conf']);
+        $this->assertSame($expected, $regexp);
+
+        // Sanity-check the behaviour offen will apply: keep the listed paths, drop the rest.
+        $this->assertSame(0, preg_match('#'.$regexp.'#', '/backup/app_data/Backups/db.sql'));
+        $this->assertSame(0, preg_match('#'.$regexp.'#', '/backup/app_data/config/app.conf'));
+        $this->assertSame(1, preg_match('#'.$regexp.'#', '/backup/app_data/logs/x.log'));
+    }
+
+    public function test_include_mode_without_paths_applies_no_filter(): void
+    {
+        $process = new class extends DockerProcess
+        {
+            public array $calls = [];
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                $this->calls[] = ['command' => $command, 'environment' => $environment];
+
+                return new DockerProcessResult($command, 0, 'ok', '');
+            }
+        };
+        $action = new RunBackupContainer($process);
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/archive', 'archive_mount_source' => '/host/archive'],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Include everything',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+            'backup_filter_mode' => BackupJob::FILTER_MODE_INCLUDE,
+            'backup_include_paths' => null,
+        ]);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+        ]);
+
+        $action->handle($run);
+
+        $this->assertArrayNotHasKey('BACKUP_EXCLUDE_REGEXP', $process->calls[0]['environment']);
     }
 
     public function test_host_path_source_is_mounted_read_only_for_offen(): void

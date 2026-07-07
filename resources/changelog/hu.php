@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'inclusive_backup_filter' => [
+        'title' => 'Mentés szűrése belefoglalással',
+        'description' => 'A mentési feladatok mostantól csak a felsorolt mappákat vagy fájlokat tarthatják meg, ahelyett, hogy csak néhányat zárnának ki. Válassza a „Csak belefoglalás“ lehetőséget a feladat űrlapján, és adjon meg egy vesszővel elválasztott, a kötet gyökeréhez viszonyított útvonallistát (például „Backups, config/app.conf“); minden mást kihagy, így az archívumok kicsik maradnak. A haladó, regex alapú kizárási mód továbbra is elérhető, és a csak belefoglalást használó feladatok az API-n keresztül is létrehozhatók.',
+    ],
     'grouped_backup_jobs' => [
         'title' => 'Csoportosított biztonsági mentési feladatok',
         'description' => 'Több kötetet menthet egyetlen ütemezett műveletként: egy biztonsági mentési csoport birtokolja az ütemezést és az értesítéseket, a feladatokat pedig a biztonsági mentési feladat űrlapjáról csatolja hozzá. A csoport egyetlen indítási és egyetlen sikeres/hibás értesítést küld az összes kötetéről — ideális egyetlen dead man\'s switch típusú figyelőhöz —, és megválaszthatja, hogy egy hibás kötet leállítja-e a futást, vagy a csoport folytatja és mégis jelzi a hibát. A biztonsági mentési csoportok API-n keresztül is elérhetők.',

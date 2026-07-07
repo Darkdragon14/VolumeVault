@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'inclusive_backup_filter' => [
+        'title' => 'Filtrage de sauvegarde par inclusion',
+        'description' => 'Les tâches de sauvegarde peuvent désormais ne conserver que les dossiers ou fichiers que vous listez, au lieu d\'en exclure seulement certains. Choisissez « Inclure uniquement » dans le formulaire de la tâche et saisissez une liste de chemins séparés par des virgules, relatifs à la racine du volume (par exemple « Backups, config/app.conf ») ; tout le reste est ignoré, ce qui garde des archives légères. Le mode d\'exclusion par regex avancée reste disponible, et les tâches en inclusion seule peuvent aussi être créées via l\'API.',
+    ],
     'grouped_backup_jobs' => [
         'title' => 'Jobs de sauvegarde groupés',
         'description' => 'Sauvegardez plusieurs volumes en une seule opération planifiée : un groupe de sauvegarde possède le planning et les notifications, et les jobs y sont rattachés depuis le formulaire de job de sauvegarde. Le groupe envoie une seule notification de début et une seule notification de succès/échec pour tous ses volumes — idéal pour un unique moniteur de type dead man\'s switch — et vous pouvez choisir si un volume en échec arrête l\'exécution ou si le groupe continue en signalant tout de même l\'échec. Les groupes de sauvegarde sont aussi disponibles via l\'API.',

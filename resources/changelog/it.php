@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'inclusive_backup_filter' => [
+        'title' => 'Filtraggio dei backup per inclusione',
+        'description' => 'Le attività di backup ora possono conservare solo le cartelle o i file che elenchi, invece di escluderne soltanto alcuni. Scegli «Includi solo» nel modulo dell\'attività e inserisci un elenco di percorsi separati da virgole, relativi alla radice del volume (ad esempio «Backups, config/app.conf»); tutto il resto viene ignorato, mantenendo gli archivi piccoli. La modalità avanzata di esclusione tramite regex resta disponibile e le attività di sola inclusione possono essere create anche tramite l\'API.',
+    ],
     'grouped_backup_jobs' => [
         'title' => 'Job di backup raggruppati',
         'description' => 'Esegui il backup di più volumi come un\'unica operazione pianificata: un gruppo di backup possiede la pianificazione e le notifiche e i job vengono collegati ad esso dal modulo del job di backup. Il gruppo invia un\'unica notifica di avvio e una di successo/errore per tutti i suoi volumi — ideale per un unico monitor di tipo dead man\'s switch — e puoi scegliere se un volume fallito interrompe l\'esecuzione o se il gruppo continua segnalando comunque l\'errore. I gruppi di backup sono disponibili anche tramite l\'API.',

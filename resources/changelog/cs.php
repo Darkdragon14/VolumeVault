@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'inclusive_backup_filter' => [
+        'title' => 'Filtrování zálohy podle zahrnutí',
+        'description' => 'Zálohovací úlohy nyní mohou zachovat pouze složky nebo soubory, které uvedete, místo pouhého vyloučení některých. Ve formuláři úlohy zvolte „Pouze zahrnout“ a zadejte seznam cest oddělených čárkami, relativních ke kořeni svazku (například „Backups, config/app.conf“); vše ostatní se přeskočí, takže archivy zůstanou malé. Pokročilý režim vyloučení pomocí regexu zůstává k dispozici a úlohy pouze se zahrnutím lze vytvořit i přes API.',
+    ],
     'grouped_backup_jobs' => [
         'title' => 'Seskupené zálohovací úlohy',
         'description' => 'Zálohujte více svazků jako jedinou plánovanou operaci: skupina záloh vlastní plán a oznámení a úlohy se k ní připojují z formuláře zálohovací úlohy. Skupina odesílá jedno oznámení o zahájení a jedno o úspěchu/selhání pro všechny své svazky — ideální pro jediný monitor typu dead man\'s switch — a můžete zvolit, zda selhaný svazek zastaví běh, nebo skupina pokračuje a selhání přesto nahlásí. Skupiny záloh jsou dostupné také přes API.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'inclusive_backup_filter' => [
+        'title' => 'Backup-Filterung nach Einschluss',
+        'description' => 'Backup-Aufträge können jetzt nur die von Ihnen aufgelisteten Ordner oder Dateien behalten, anstatt nur einige auszuschließen. Wählen Sie im Auftragsformular „Nur einschließen“ und geben Sie eine kommagetrennte Liste von Pfaden relativ zum Volume-Stammverzeichnis ein (zum Beispiel „Backups, config/app.conf“); alles andere wird übersprungen, wodurch die Archive klein bleiben. Der erweiterte Regex-Ausschlussmodus bleibt verfügbar, und Aufträge mit reiner Einschließung können auch über die API erstellt werden.',
+    ],
     'grouped_backup_jobs' => [
         'title' => 'Gruppierte Backup-Jobs',
         'description' => 'Sichern Sie mehrere Volumes als einen einzigen geplanten Vorgang: Eine Backup-Gruppe besitzt den Zeitplan und die Benachrichtigungen, und Jobs werden ihr über das Backup-Job-Formular hinzugefügt. Die Gruppe sendet eine Start- und eine Erfolgs-/Fehlerbenachrichtigung für alle ihre Volumes — ideal für einen einzelnen Dead-Man\'s-Switch-Monitor — und Sie können wählen, ob ein fehlgeschlagenes Volume den Lauf stoppt oder die Gruppe fortfährt und den Fehler dennoch meldet. Backup-Gruppen sind auch über die API verfügbar.',

@@ -189,6 +189,68 @@ class ExternalApiTest extends TestCase
             ->assertJsonMissing(['secret-access-key-id']);
     }
 
+    public function test_admin_write_token_can_create_include_mode_backup_job(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $destination = BackupDestination::create([
+            'name' => 'R2',
+            'provider' => BackupDestination::PROVIDER_CLOUDFLARE_R2,
+            'endpoint' => 'https://account.r2.cloudflarestorage.com',
+            'region' => 'auto',
+            'bucket' => 'volumevault',
+            'access_key_id' => 'secret-access-key-id',
+            'secret_access_key' => 'secret-access-key',
+            'is_active' => true,
+        ]);
+        DockerVolume::create(['name' => 'app-data', 'exists' => true]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson('/api/v1/backup-jobs', [
+                'name' => 'Only backups folder',
+                'volume_name' => 'app-data',
+                'backup_destination_id' => $destination->id,
+                'schedule_type' => BackupJob::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '02:00'],
+                'backup_filter_mode' => BackupJob::FILTER_MODE_INCLUDE,
+                // Leading slash and duplicate slashes get normalised away.
+                'backup_include_paths' => '/Backups/, config//app.conf',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.backup_filter_mode', BackupJob::FILTER_MODE_INCLUDE)
+            ->assertJsonPath('data.backup_include_paths', 'Backups, config/app.conf');
+    }
+
+    public function test_include_mode_rejects_parent_directory_traversal(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $destination = BackupDestination::create([
+            'name' => 'R2',
+            'provider' => BackupDestination::PROVIDER_CLOUDFLARE_R2,
+            'endpoint' => 'https://account.r2.cloudflarestorage.com',
+            'region' => 'auto',
+            'bucket' => 'volumevault',
+            'access_key_id' => 'secret-access-key-id',
+            'secret_access_key' => 'secret-access-key',
+            'is_active' => true,
+        ]);
+        DockerVolume::create(['name' => 'app-data', 'exists' => true]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->postJson('/api/v1/backup-jobs', [
+                'name' => 'Traversal attempt',
+                'volume_name' => 'app-data',
+                'backup_destination_id' => $destination->id,
+                'schedule_type' => BackupJob::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '02:00'],
+                'backup_filter_mode' => BackupJob::FILTER_MODE_INCLUDE,
+                'backup_include_paths' => '../secrets',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrorFor('backup_include_paths');
+    }
+
     public function test_admin_write_token_can_create_host_path_backup_job_when_allowed(): void
     {
         config(['volumevault.host_path_allowlist' => ['/srv', '/mnt/data']]);

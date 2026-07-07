@@ -33,6 +33,10 @@ class BackupJob extends Model
 
     public const SCHEDULE_CRON = 'cron';
 
+    public const FILTER_MODE_EXCLUDE = 'exclude';
+
+    public const FILTER_MODE_INCLUDE = 'include';
+
     protected $fillable = [
         'name',
         'backup_job_group_id',
@@ -57,6 +61,8 @@ class BackupJob extends Model
         'retention_days',
         'retention_count',
         'backup_exclude_regexp',
+        'backup_filter_mode',
+        'backup_include_paths',
         'backup_filename_template',
         'stop_containers_before_backup',
         'stop_container_names',
