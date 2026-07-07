@@ -36,7 +36,12 @@ class BackupJobRequest extends FormRequest
             'host_path' => $hostPath !== '' ? $hostPath : null,
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
-            'backup_filter_mode' => (string) ($this->input('backup_filter_mode') ?: BackupJob::FILTER_MODE_EXCLUDE),
+            // Default to exclude only when the field is absent; a present value is
+            // passed through unchanged so an invalid one (array, empty string) is
+            // rejected by the enum rule with a 422 instead of being coerced.
+            'backup_filter_mode' => $this->has('backup_filter_mode')
+                ? $this->input('backup_filter_mode')
+                : BackupJob::FILTER_MODE_EXCLUDE,
             // Leave a non-string value untouched so the "string" rule can reject it
             // with a 422 instead of casting an array to "Array".
             'backup_include_paths' => is_string($this->input('backup_include_paths'))
@@ -239,6 +244,14 @@ class BackupJobRequest extends FormRequest
 
             if (in_array('.', $segments, true) || in_array('..', $segments, true)) {
                 $validator->errors()->add('backup_include_paths', 'Include paths are relative to the volume root and cannot contain "." or ".." segments.');
+
+                return;
+            }
+
+            // Bound the depth of the generated exclude regexp (one nesting level
+            // per character) so it stays well within every engine's parser limit.
+            if (mb_strlen($path) > 200) {
+                $validator->errors()->add('backup_include_paths', 'Each include path must be 200 characters or fewer.');
 
                 return;
             }

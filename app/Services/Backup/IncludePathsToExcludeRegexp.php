@@ -16,8 +16,9 @@ class IncludePathsToExcludeRegexp
      * nor located under one of them.
      *
      * The targets are literal paths (not regexes), so the complement is built from a
-     * character trie of the absolute targets — no regex negation is required, which
-     * makes the result fully deterministic and testable.
+     * character trie of the paths under the mount (the mount base is emitted as a
+     * flat literal prefix) — no regex negation is required, which makes the result
+     * fully deterministic and testable.
      *
      * @param  string  $mountBase  absolute mount base, e.g. "/backup/<mount>"
      * @param  array<int, string>  $relativePaths  paths relative to the volume root
@@ -27,7 +28,7 @@ class IncludePathsToExcludeRegexp
     {
         $base = '/'.trim($mountBase, '/');
 
-        $targets = [];
+        $relativeTargets = [];
 
         foreach ($relativePaths as $path) {
             $relative = preg_replace('#/+#', '/', trim((string) $path)) ?? '';
@@ -37,25 +38,28 @@ class IncludePathsToExcludeRegexp
                 continue;
             }
 
-            // De-duplicate; a nested target that is already covered by an ancestor
-            // stays harmless because the trie prunes at the ancestor boundary.
-            $targets[$base.'/'.$relative] = true;
+            // Keyed by the path relative to the mount (with its leading slash). A
+            // nested target already covered by an ancestor stays harmless because
+            // the trie prunes at the ancestor boundary.
+            $relativeTargets['/'.$relative] = true;
         }
 
-        if ($targets === []) {
+        if ($relativeTargets === []) {
             return null;
         }
 
         $trie = ['children' => [], 'terminal' => false];
 
-        foreach (array_keys($targets) as $target) {
+        foreach (array_keys($relativeTargets) as $target) {
             $this->insert($trie, $this->characters($target));
         }
 
-        $branches = [];
-        $this->collect($trie, '', $branches);
-
-        return '^(?:'.implode('|', $branches).')';
+        // A backup job mounts a single source under /backup, so no sibling of the
+        // mount base ever exists on disk. Emit the base as a flat literal (no
+        // per-character divergence) and only nest the pattern for the paths under
+        // it, so the regexp's nesting depth is bounded by the relative path length
+        // rather than the whole absolute path (which also carries the volume name).
+        return '^'.$this->escapeLiteral($base).$this->pattern($trie);
     }
 
     /**
@@ -91,48 +95,45 @@ class IncludePathsToExcludeRegexp
     }
 
     /**
-     * Walk the trie and emit, for every node, the branch matching the paths that
-     * "fall off" the set of kept targets at that node.
+     * Emit the exclude pattern for a trie node as a nested alternation. Nesting —
+     * rather than one flat branch per node, each carrying its full prefix — keeps
+     * the generated regexp linear in the number of characters instead of O(n^2),
+     * so a long include list cannot inflate BACKUP_EXCLUDE_REGEXP to a size that
+     * would break the backup container's environment.
      *
      * @param  array{children: array<string, mixed>, terminal: bool}  $node
-     * @param  array<int, string>  $branches
      */
-    private function collect(array $node, string $prefix, array &$branches): void
+    private function pattern(array $node): string
     {
         $childChars = array_keys($node['children']);
-        $literal = $this->escapeLiteral($prefix);
 
         if ($node['terminal']) {
             // Everything at or under this target is kept: the entry itself (end of
             // string), anything below "/", and any sibling target that shares this
-            // exact prefix (a child char, e.g. "Backups" vs "Backups2"). Exclude a
-            // continuation that is none of those.
-            $allowed = $childChars;
-            if (! in_array('/', $allowed, true)) {
-                $allowed[] = '/';
+            // exact prefix (a child char, e.g. "Backups" vs "Backups2"). Match — and
+            // therefore exclude — any other continuation.
+            $excluded = $childChars;
+            if (! in_array('/', $excluded, true)) {
+                $excluded[] = '/';
             }
 
-            $branches[] = $literal.'[^'.$this->escapeClass($allowed).']';
-
-            foreach ($node['children'] as $char => $child) {
-                // The whole "/" subtree is kept; only descend sibling-prefix targets.
-                if ($char === '/') {
-                    continue;
-                }
-
-                $this->collect($child, $prefix.$char, $branches);
-            }
-
-            return;
+            $alternatives = ['[^'.$this->escapeClass($excluded).']'];
+        } else {
+            // A path diverges here if the next char is not one of the known
+            // children, or if it ends here (an ancestor above every target).
+            $alternatives = ['[^'.$this->escapeClass($childChars).']', '$'];
         }
-
-        // Non-terminal: a path diverges here if the next char is not one of the known
-        // children, or if the path ends here (an ancestor above every target).
-        $branches[] = $literal.'(?:[^'.$this->escapeClass($childChars).']|$)';
 
         foreach ($node['children'] as $char => $child) {
-            $this->collect($child, $prefix.$char, $branches);
+            // A terminal node's "/" child is a fully kept subtree — do not descend.
+            if ($node['terminal'] && $char === '/') {
+                continue;
+            }
+
+            $alternatives[] = $this->escapeLiteral($char).$this->pattern($child);
         }
+
+        return '(?:'.implode('|', $alternatives).')';
     }
 
     private function escapeLiteral(string $value): string

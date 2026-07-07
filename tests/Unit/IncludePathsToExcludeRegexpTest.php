@@ -116,6 +116,23 @@ class IncludePathsToExcludeRegexpTest extends TestCase
         $this->assertFalse($this->isKept($regexp, '/backup/vol/data'));
     }
 
+    public function test_deep_include_path_produces_a_linear_size_regexp(): void
+    {
+        // A deep path (within the per-path limit) must stay linear in size; a flat
+        // per-node build would be quadratic and could grow to megabytes, breaking
+        // the backup container's environment.
+        $deep = implode('/', array_fill(0, 24, 'segment')); // ~191 chars
+
+        $regexp = $this->builder->build('/backup/vol', [$deep]);
+
+        $this->assertNotNull($regexp);
+        // Linear: well under the quadratic size (strlen^2 would be ~36k here).
+        $this->assertLessThan(strlen($deep) * 20, strlen($regexp));
+
+        $this->assertTrue($this->isKept($regexp, '/backup/vol/'.$deep.'/file'));
+        $this->assertFalse($this->isKept($regexp, '/backup/vol/other'));
+    }
+
     public function test_multibyte_paths_are_matched_as_whole_characters(): void
     {
         $regexp = $this->builder->build('/backup/vol', ['café', 'photos/été']);

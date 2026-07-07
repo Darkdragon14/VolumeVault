@@ -831,8 +831,8 @@ const submit = () => {
                 <div v-if="form.backup_filter_mode === 'include'" class="mt-4 space-y-2">
                     <label for="backup_include_paths" class="label">{{ t('Folders or files to include') }}</label>
                     <input id="backup_include_paths" v-model="form.backup_include_paths" type="text" class="input font-mono text-sm" :placeholder="t('For example: {example}', { example: 'Backups, config/app.conf' })">
-                    <p class="text-sm text-slate-300">{{ t('Comma-separated folders or files to keep, relative to the volume root. Leave empty to back up everything.') }}</p>
-                    <p class="text-sm text-slate-400">{{ t('Paths are relative to the volume root: use "Backups", not "/_data/Backups".') }}</p>
+                    <p class="text-sm text-slate-300">{{ t('Comma-separated folders or files to keep, relative to the backup source root. Leave empty to back up everything.') }}</p>
+                    <p class="text-sm text-slate-400">{{ t('Paths are relative to the backup source root: use "Backups", not "/_data/Backups".') }}</p>
                     <span v-if="form.errors.backup_include_paths" class="text-sm text-rose-300">{{ form.errors.backup_include_paths }}</span>
                 </div>
 
