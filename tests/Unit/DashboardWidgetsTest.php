@@ -22,6 +22,7 @@ class DashboardWidgetsTest extends TestCase
         $byKey = collect($normalized['stats'])->keyBy('key');
 
         $this->assertFalse($byKey['last_successful_backup_size']['visible']);
+        $this->assertFalse($byKey['last_successful_group_backup_size']['visible']);
         $this->assertTrue($byKey['total_volumes']['visible']);
     }
 

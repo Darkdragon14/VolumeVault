@@ -193,6 +193,7 @@ class OpenApiController extends Controller
                     'total_members' => ['type' => 'integer'],
                     'succeeded_members' => ['type' => 'integer'],
                     'failed_members' => ['type' => 'integer'],
+                    'total_backup_size_bytes' => ['type' => ['integer', 'null'], 'description' => 'Sum of the member runs\' archive sizes in bytes. Null until at least one member archive size is recorded (sizes arrive asynchronously shortly after each volume finishes).'],
                     'error_message' => ['type' => ['string', 'null']],
                 ],
             ],

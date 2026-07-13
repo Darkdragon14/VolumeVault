@@ -3,6 +3,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
+import { formatBytes } from '@/Composables/useFormatBytes';
 
 defineProps<{
     run: any;
@@ -29,6 +30,7 @@ const can = usePage().props.can as { runDockerActions?: boolean };
                 <div><dt class="text-xs uppercase text-slate-500">{{ t('Started') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(run.started_at) }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-500">{{ t('Finished') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(run.finished_at) }}</dd></div>
                 <div v-if="run.duration_seconds !== null"><dt class="text-xs uppercase text-slate-500">{{ t('Duration') }}</dt><dd class="mt-1 text-slate-200">{{ run.duration_seconds }}s</dd></div>
+                <div v-if="run.total_backup_size_bytes !== null"><dt class="text-xs uppercase text-slate-500">{{ t('Backup size') }}</dt><dd class="mt-1 text-slate-200">{{ formatBytes(run.total_backup_size_bytes) }}</dd></div>
             </dl>
 
             <p v-if="run.error_message" class="rounded-xl border border-rose-300/30 bg-rose-500/10 p-3 text-sm text-rose-100">{{ run.error_message }}</p>

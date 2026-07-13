@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -56,6 +57,7 @@ class BackupGroupRun extends Model
             'total_members' => 'integer',
             'succeeded_members' => 'integer',
             'failed_members' => 'integer',
+            'total_backup_size_bytes' => 'integer',
         ];
     }
 
@@ -67,6 +69,43 @@ class BackupGroupRun extends Model
     public function memberRuns(): HasMany
     {
         return $this->hasMany(BackupRun::class, 'backup_group_run_id');
+    }
+
+    /**
+     * Aggregate the member runs' archive sizes into a `total_backup_size_bytes`
+     * attribute. Uses SQL `SUM`, so a run with no member sizes recorded yet stays
+     * null (never coerced to 0) — the metadata is written asynchronously shortly
+     * after each volume finishes, so it can lag the group run's finalization.
+     */
+    public function scopeWithTotalBackupSize(Builder $query): Builder
+    {
+        return $query->withSum('memberRuns as total_backup_size_bytes', 'backup_size_bytes');
+    }
+
+    /**
+     * Load the aggregated member archive size onto this already-fetched run as a
+     * `total_backup_size_bytes` attribute — the instance counterpart of
+     * {@see scopeWithTotalBackupSize()}, staying null until member sizes exist.
+     */
+    public function loadTotalBackupSize(): self
+    {
+        return $this->loadSum('memberRuns as total_backup_size_bytes', 'backup_size_bytes');
+    }
+
+    /**
+     * The aggregated archive size of the most recent successful group run, or
+     * null when none exists yet or its member sizes have not been recorded.
+     */
+    public static function lastSuccessfulTotalBackupSize(): ?int
+    {
+        return static::query()
+            ->where('status', self::STATUS_SUCCESS)
+            ->select('id')
+            ->withTotalBackupSize()
+            ->orderByDesc('finished_at')
+            ->orderByDesc('created_at')
+            ->first()
+            ?->total_backup_size_bytes;
     }
 
     public function initiatedBy(): BelongsTo

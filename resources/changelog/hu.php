@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'group_backup_size_reporting' => [
+        'title' => 'Csoportos mentések méretének jelentése',
+        'description' => 'A csoportos mentési futtatások mostantól jelentik tagjaik archívumainak teljes méretét. Egy új, választható irányítópult-widget, „Utolsó sikeres csoportos mentés mérete“, bekapcsolható az irányítópult Testreszabás paneljén, és az összesített méret megjelenik a legutóbbi csoportos futtatásoknál és az egyes csoportok futtatási előzményeiben is. Az API-n keresztül a csoportos futtatások közzéteszik a total_backup_size_bytes értéket, az irányítópult pedig egy last_successful_group_backup_size statisztikával bővül. A méretek egy futtatás befejezése után rövid késéssel jelenhetnek meg, mivel az egyes tagarchívumok méretét a rendszer aszinkron módon rögzíti.',
+    ],
     'inclusive_backup_filter' => [
         'title' => 'Mentés szűrése belefoglalással',
         'description' => 'A mentési feladatok mostantól csak a felsorolt mappákat vagy fájlokat tarthatják meg, ahelyett, hogy csak néhányat zárnának ki. Válassza a „Csak belefoglalás“ lehetőséget a feladat űrlapján, és adjon meg egy vesszővel elválasztott, a mentési forrás gyökeréhez viszonyított útvonallistát (például „Backups, config/app.conf“); minden mást kihagy, így az archívumok kicsik maradnak. A haladó, regex alapú kizárási mód továbbra is elérhető, és a csak belefoglalást használó feladatok az API-n keresztül is létrehozhatók.',

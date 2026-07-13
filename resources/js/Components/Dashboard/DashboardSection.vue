@@ -27,7 +27,7 @@ const can = usePage().props.can as { runDockerActions?: boolean };
             <Link v-for="run in recentBackupRuns" :key="run.id" :href="`/backup-runs/${run.id}`" class="flex flex-col gap-2 rounded-xl bg-white/5 px-4 py-3 hover:bg-slate-100 dark:hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
                     <p class="break-words font-medium">{{ run.job?.name || t('Backup run #{id}', { id: run.id }) }}</p>
-                    <p class="text-xs text-slate-400">{{ formatDate(run.started_at || run.created_at) }} <span v-if="run.backup_size_bytes">/ {{ formatBytes(run.backup_size_bytes) }}</span></p>
+                    <p class="text-xs text-slate-400">{{ formatDate(run.started_at || run.created_at) }} <span v-if="run.backup_size_bytes !== null">/ {{ formatBytes(run.backup_size_bytes) }}</span></p>
                 </div>
                 <StatusBadge :status="run.status" />
             </Link>
@@ -44,7 +44,7 @@ const can = usePage().props.can as { runDockerActions?: boolean };
             <Link v-for="run in recentGroupRuns" :key="run.id" :href="`/backup-group-runs/${run.id}`" class="flex flex-col gap-2 rounded-xl bg-white/5 px-4 py-3 hover:bg-slate-100 dark:hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
                     <p class="break-words font-medium">{{ run.group?.name || t('Group run #{id}', { id: run.id }) }}</p>
-                    <p class="text-xs text-slate-400">{{ formatDate(run.started_at || run.created_at) }} <span v-if="run.total_members">/ {{ t('{ok}/{total} volumes', { ok: run.succeeded_members, total: run.total_members }) }}</span></p>
+                    <p class="text-xs text-slate-400">{{ formatDate(run.started_at || run.created_at) }} <span v-if="run.total_members">/ {{ t('{ok}/{total} volumes', { ok: run.succeeded_members, total: run.total_members }) }}</span> <span v-if="run.total_backup_size_bytes !== null">/ {{ formatBytes(run.total_backup_size_bytes) }}</span></p>
                 </div>
                 <StatusBadge :status="run.status" />
             </Link>

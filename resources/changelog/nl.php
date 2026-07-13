@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'group_backup_size_reporting' => [
+        'title' => 'Groottereportage van groepsback-ups',
+        'description' => 'Groepsback-upuitvoeringen rapporteren nu de totale grootte van de archieven van hun leden. Een nieuwe optionele dashboardwidget, "Grootte laatste geslaagde groepsback-up", kan worden ingeschakeld via het paneel Aanpassen van het dashboard, en de geaggregeerde grootte verschijnt ook bij recente groepsuitvoeringen en in de uitvoeringsgeschiedenis van elke groep. Via de API tonen groepsuitvoeringen total_backup_size_bytes en het dashboard voegt een statistiek last_successful_group_backup_size toe. Groottes kunnen met een korte vertraging na afloop van een uitvoering verschijnen, omdat de grootte van elk lidarchief asynchroon wordt vastgelegd.',
+    ],
     'inclusive_backup_filter' => [
         'title' => 'Back-upfiltering op basis van insluiten',
         'description' => 'Back-uptaken kunnen nu alleen de door jou opgegeven mappen of bestanden behouden in plaats van alleen sommige uit te sluiten. Kies "Alleen opnemen" in het taakformulier en voer een door komma\'s gescheiden lijst met paden in, relatief ten opzichte van de hoofdmap van de back-upbron (bijvoorbeeld "Backups, config/app.conf"); al het andere wordt overgeslagen, waardoor de archieven klein blijven. De geavanceerde regex-uitsluitmodus blijft beschikbaar en taken met alleen insluiten kunnen ook via de API worden aangemaakt.',

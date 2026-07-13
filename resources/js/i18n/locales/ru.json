@@ -312,6 +312,7 @@
   "Error jobs": "Задачи с ошибками",
   "Last backup run status": "Статус выполнения последней резервной копии",
   "Last successful backup size": "Размер последней успешной резервной копии",
+  "Last successful group backup size": "Размер последней успешной групповой резервной копии",
   "Last backup size": "Размер последней резервной копии",
   "Next scheduled backup": "Следующая запланированная резервная копия",
   "Backup coverage": "Покрытие резервными копиями",

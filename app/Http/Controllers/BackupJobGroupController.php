@@ -262,7 +262,7 @@ class BackupJobGroupController extends Controller
                 'last_error' => $member->last_error,
             ])->values()->all();
 
-            $data['recent_runs'] = $group->groupRuns()->limit(10)->get()->map(fn (BackupGroupRun $run): array => [
+            $data['recent_runs'] = $group->groupRuns()->withTotalBackupSize()->limit(10)->get()->map(fn (BackupGroupRun $run): array => [
                 'id' => $run->id,
                 'status' => $run->status,
                 'trigger' => $run->trigger,
@@ -272,6 +272,7 @@ class BackupJobGroupController extends Controller
                 'started_at' => $run->started_at,
                 'finished_at' => $run->finished_at,
                 'duration_seconds' => $run->duration_seconds,
+                'total_backup_size_bytes' => $run->total_backup_size_bytes,
             ])->values()->all();
         }
 

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'group_backup_size_reporting' => [
+        'title' => 'Rapport de taille des sauvegardes groupées',
+        'description' => 'Les exécutions de groupe de sauvegarde indiquent désormais la taille totale des archives de leurs membres. Un nouveau widget de tableau de bord optionnel, « Taille de la dernière sauvegarde groupée réussie », peut être activé depuis le panneau Personnaliser du tableau de bord, et la taille agrégée apparaît aussi sur les exécutions de groupe récentes et dans l\'historique des exécutions de chaque groupe. Via l\'API, les exécutions de groupe exposent total_backup_size_bytes et le tableau de bord ajoute une statistique last_successful_group_backup_size. Les tailles peuvent apparaître avec un léger délai après la fin d\'une exécution, car la taille de chaque archive membre est enregistrée de façon asynchrone.',
+    ],
     'inclusive_backup_filter' => [
         'title' => 'Filtrage de sauvegarde par inclusion',
         'description' => 'Les tâches de sauvegarde peuvent désormais ne conserver que les dossiers ou fichiers que vous listez, au lieu d\'en exclure seulement certains. Choisissez « Inclure uniquement » dans le formulaire de la tâche et saisissez une liste de chemins séparés par des virgules, relatifs à la racine de la source de sauvegarde (par exemple « Backups, config/app.conf ») ; tout le reste est ignoré, ce qui garde des archives légères. Le mode d\'exclusion par regex avancée reste disponible, et les tâches en inclusion seule peuvent aussi être créées via l\'API.',

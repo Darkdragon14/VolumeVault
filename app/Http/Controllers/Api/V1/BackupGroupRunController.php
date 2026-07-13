@@ -12,13 +12,14 @@ class BackupGroupRunController extends Controller
     public function index(): JsonResponse
     {
         return response()->json([
-            'data' => BackupGroupRun::with('group:id,name')->latest()->limit(100)->get(),
+            'data' => BackupGroupRun::with('group:id,name')->withTotalBackupSize()->latest()->limit(100)->get(),
         ]);
     }
 
     public function show(BackupGroupRun $backupGroupRun): JsonResponse
     {
         $backupGroupRun->load('group:id,name');
+        $backupGroupRun->loadTotalBackupSize();
 
         return response()->json([
             'data' => [

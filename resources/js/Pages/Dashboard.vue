@@ -29,10 +29,10 @@ const DEFAULT_STAT_KEYS = [
     'configured_volumes', 'unprotected_volumes', 'total_jobs', 'active_jobs',
     'paused_jobs', 'error_jobs', 'total_groups', 'active_groups', 'paused_groups',
     'error_groups', 'last_backup_run_status', 'last_successful_backup_size',
-    'next_scheduled_backup',
+    'last_successful_group_backup_size', 'next_scheduled_backup',
 ];
 const DEFAULT_SECTION_KEYS = ['recent_backups', 'recent_group_runs', 'recent_restores', 'jobs_with_errors', 'groups_with_errors'];
-const HIDDEN_BY_DEFAULT = ['last_successful_backup_size'];
+const HIDDEN_BY_DEFAULT = ['last_successful_backup_size', 'last_successful_group_backup_size'];
 
 const statLabels: Record<string, string> = {
     total_volumes: 'Total volumes',
@@ -51,6 +51,7 @@ const statLabels: Record<string, string> = {
     error_groups: 'Error groups',
     last_backup_run_status: 'Last backup run status',
     last_successful_backup_size: 'Last successful backup size',
+    last_successful_group_backup_size: 'Last successful group backup size',
     next_scheduled_backup: 'Next scheduled backup',
 };
 

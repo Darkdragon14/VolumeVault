@@ -31,6 +31,10 @@ class DashboardController extends Controller
             ->orderByDesc('finished_at')
             ->orderByDesc('created_at')
             ->first();
+        // Group counterpart of the standalone stat above, aggregated at read time
+        // because member archive sizes are recorded asynchronously and can lag the
+        // group run's finalization (stays null, never 0, until at least one lands).
+        $lastSuccessfulGroupBackupSize = BackupGroupRun::lastSuccessfulTotalBackupSize();
         // The next scheduled backup is whichever comes first: a standalone job
         // (group members are scheduled by their group, not on their own) or a group.
         $nextJob = BackupJob::query()
@@ -68,13 +72,14 @@ class DashboardController extends Controller
                 'error_groups' => BackupJobGroup::where('status', BackupJobGroup::STATUS_ERROR)->count(),
                 'last_backup_run_status' => $lastBackupRun?->status,
                 'last_successful_backup_size' => $lastSuccessfulBackupRun?->backup_size_bytes,
+                'last_successful_group_backup_size' => $lastSuccessfulGroupBackupSize,
                 'next_scheduled_backup' => $nextScheduledBackup,
             ],
             'recentBackupRuns' => DashboardWidgets::isSectionVisible($preferences, 'recent_backups')
                 ? BackupRun::with('job')->whereNull('backup_group_run_id')->latest()->limit(8)->get()
                 : [],
             'recentGroupRuns' => DashboardWidgets::isSectionVisible($preferences, 'recent_group_runs')
-                ? BackupGroupRun::with('group')->latest()->limit(8)->get()
+                ? BackupGroupRun::with('group')->withTotalBackupSize()->latest()->limit(8)->get()
                 : [],
             'recentRestoreRuns' => DashboardWidgets::isSectionVisible($preferences, 'recent_restores')
                 ? RestoreRun::with('job')->latest()->limit(8)->get()

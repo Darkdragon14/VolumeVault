@@ -27,6 +27,10 @@ class DashboardController extends Controller
             ->orderByDesc('finished_at')
             ->orderByDesc('created_at')
             ->first();
+        // Group counterpart of the standalone stat above, aggregated at read time
+        // because member archive sizes are recorded asynchronously and can lag the
+        // group run's finalization (stays null, never 0, until at least one lands).
+        $lastSuccessfulGroupBackupSize = BackupGroupRun::lastSuccessfulTotalBackupSize();
         $nextJob = BackupJob::query()
             ->where('status', BackupJob::STATUS_ACTIVE)
             ->whereNull('backup_job_group_id')
@@ -62,10 +66,11 @@ class DashboardController extends Controller
                     'error_groups' => BackupJobGroup::where('status', BackupJobGroup::STATUS_ERROR)->count(),
                     'last_backup_run_status' => $lastBackupRun?->status,
                     'last_successful_backup_size' => $lastSuccessfulBackupRun?->backup_size_bytes,
+                    'last_successful_group_backup_size' => $lastSuccessfulGroupBackupSize,
                     'next_scheduled_backup' => $nextScheduledBackup,
                 ],
                 'recent_backup_runs' => BackupRun::with('job')->whereNull('backup_group_run_id')->latest()->limit(8)->get(),
-                'recent_group_runs' => BackupGroupRun::with('group')->latest()->limit(8)->get(),
+                'recent_group_runs' => BackupGroupRun::with('group')->withTotalBackupSize()->latest()->limit(8)->get(),
                 'recent_restore_runs' => RestoreRun::with('job')->latest()->limit(8)->get(),
                 'jobs_with_errors' => BackupJob::with('destination')
                     ->whereNull('backup_job_group_id')

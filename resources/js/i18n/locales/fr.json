@@ -312,6 +312,7 @@
   "Error jobs": "Taches en erreur",
   "Last backup run status": "Statut derniere sauvegarde",
   "Last successful backup size": "Taille derniere sauvegarde reussie",
+  "Last successful group backup size": "Taille derniere sauvegarde groupee reussie",
   "Last backup size": "Taille derniere sauvegarde",
   "Next scheduled backup": "Prochaine sauvegarde planifiee",
   "Backup coverage": "Couverture sauvegarde",
