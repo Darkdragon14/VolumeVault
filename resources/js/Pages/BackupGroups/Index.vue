@@ -31,8 +31,12 @@ const editGroup = (id: number) => router.visit(`/backup-groups/${id}/edit`);
 <template>
     <Head :title="t('Backup groups')" />
     <AppLayout :title="t('Backup groups')" :subtitle="t('Group several volumes into one scheduled backup with a single start/success/fail notification.')">
+        <template #title-actions>
+            <ActionIcon v-if="can.runDockerActions" :label="t('New backup group')" icon="add" href="/backup-groups/create" />
+        </template>
+
         <template #actions>
-            <Link v-if="can.runDockerActions" href="/backup-groups/create" class="btn-primary shrink-0 gap-2 px-3">
+            <Link v-if="can.runDockerActions" href="/backup-groups/create" class="btn-primary hidden shrink-0 gap-2 px-3 sm:inline-flex">
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M12 5v14" />
                     <path d="M5 12h14" />

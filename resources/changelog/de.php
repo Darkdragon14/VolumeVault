@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mobile_header_actions' => [
+        'title' => 'Aufgeräumtere mobile Kopfzeilenaktionen',
+        'description' => 'Dashboard-Anpassung und Erstellungsaktionen auf Listenseiten verwenden mobil jetzt kompakte Symbolschaltflächen neben dem Seitentitel, während auf größeren Bildschirmen die vollständigen Textschaltflächen erhalten bleiben.',
+    ],
     'group_backup_size_reporting' => [
         'title' => 'Größenberichte für Gruppen-Backups',
         'description' => 'Gruppen-Backup-Läufe melden jetzt die Gesamtgröße der Archive ihrer Mitglieder. Ein neues optionales Dashboard-Widget „Größe des letzten erfolgreichen Gruppen-Backups“ lässt sich über das Menü Anpassen des Dashboards aktivieren, und die aggregierte Größe erscheint auch bei den letzten Gruppenläufen und im Laufverlauf jeder Gruppe. Über die API geben Gruppenläufe total_backup_size_bytes aus, und das Dashboard ergänzt eine Statistik last_successful_group_backup_size. Größen können mit kurzer Verzögerung nach dem Ende eines Laufs erscheinen, da die Größe jedes Mitglieds-Archivs asynchron erfasst wird.',

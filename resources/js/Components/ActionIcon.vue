@@ -3,7 +3,7 @@ import { Link } from '@inertiajs/vue3';
 
 const props = withDefaults(defineProps<{
     label: string;
-    icon: 'archive' | 'delete' | 'edit' | 'eye' | 'pause' | 'play' | 'refresh' | 'restore' | 'test' | 'token';
+    icon: 'add' | 'archive' | 'delete' | 'edit' | 'eye' | 'pause' | 'play' | 'refresh' | 'restore' | 'test' | 'token';
     href?: string;
     disabled?: boolean;
     variant?: 'default' | 'danger';
@@ -32,6 +32,8 @@ const variantClass = props.variant === 'danger'
         :title="label"
     >
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path v-if="icon === 'add'" d="M12 5v14" />
+            <path v-if="icon === 'add'" d="M5 12h14" />
             <path v-if="icon === 'archive'" d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8" />
             <path v-if="icon === 'archive'" d="M10 12h4" />
             <path v-if="icon === 'archive'" d="M3 3h18v5H3z" />
@@ -71,6 +73,8 @@ const variantClass = props.variant === 'danger'
         @click="$emit('click')"
     >
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path v-if="icon === 'add'" d="M12 5v14" />
+            <path v-if="icon === 'add'" d="M5 12h14" />
             <path v-if="icon === 'archive'" d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8" />
             <path v-if="icon === 'archive'" d="M10 12h4" />
             <path v-if="icon === 'archive'" d="M3 3h18v5H3z" />

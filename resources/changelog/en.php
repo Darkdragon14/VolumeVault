@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mobile_header_actions' => [
+        'title' => 'Cleaner mobile header actions',
+        'description' => 'Dashboard customization and creation actions on list pages now use compact icon buttons beside the page title on mobile, while keeping the full text buttons on larger screens.',
+    ],
     'group_backup_size_reporting' => [
         'title' => 'Group backup size reporting',
         'description' => 'Backup group runs now report the total size of their member archives. A new optional dashboard widget, "Last successful group backup size", can be enabled from the dashboard\'s Customize panel, and the aggregated size also appears on recent group runs and in each group\'s run history. Through the API, group runs expose total_backup_size_bytes and the dashboard adds a last_successful_group_backup_size stat. Sizes may appear with a short delay after a run finishes, because each member archive\'s size is recorded asynchronously.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mobile_header_actions' => [
+        'title' => 'Acciones de cabecera móvil más limpias',
+        'description' => 'La personalización del panel y las acciones de creación en las páginas de lista ahora usan botones compactos con icono junto al título en móvil, manteniendo los botones de texto completos en pantallas más grandes.',
+    ],
     'group_backup_size_reporting' => [
         'title' => 'Informe de tamaño de las copias de grupo',
         'description' => 'Las ejecuciones de copia de grupo ahora informan del tamaño total de los archivos de sus miembros. Un nuevo widget opcional del panel, «Tamaño de la última copia de grupo exitosa», se puede activar desde la opción Personalizar del panel, y el tamaño agregado también aparece en las ejecuciones de grupo recientes y en el historial de ejecuciones de cada grupo. A través de la API, las ejecuciones de grupo exponen total_backup_size_bytes y el panel añade una estadística last_successful_group_backup_size. Los tamaños pueden aparecer con un breve retraso tras finalizar una ejecución, porque el tamaño de cada archivo de miembro se registra de forma asíncrona.',

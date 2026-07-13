@@ -48,8 +48,12 @@ const toggleDestinationActive = (destination: any) => router.patch(`/destination
 <template>
     <Head :title="t('Destinations')" />
     <AppLayout :title="t('Backup destinations')" :subtitle="t('Configure encrypted storage targets for backup archives and installation saves.')">
+        <template #title-actions>
+            <ActionIcon :label="t('New destination')" icon="add" href="/destinations/create" />
+        </template>
+
         <template #actions>
-            <Link href="/destinations/create" class="btn-primary">{{ t('New destination') }}</Link>
+            <Link href="/destinations/create" class="btn-primary hidden sm:inline-flex">{{ t('New destination') }}</Link>
         </template>
 
         <div class="card overflow-hidden">

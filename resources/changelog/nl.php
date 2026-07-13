@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mobile_header_actions' => [
+        'title' => 'Strakkere mobiele headeracties',
+        'description' => 'Dashboardaanpassing en aanmaakacties op lijstpagina\'s gebruiken op mobiel nu compacte pictogramknoppen naast de paginatitel, terwijl de volledige tekstknoppen op grotere schermen behouden blijven.',
+    ],
     'group_backup_size_reporting' => [
         'title' => 'Groottereportage van groepsback-ups',
         'description' => 'Groepsback-upuitvoeringen rapporteren nu de totale grootte van de archieven van hun leden. Een nieuwe optionele dashboardwidget, "Grootte laatste geslaagde groepsback-up", kan worden ingeschakeld via het paneel Aanpassen van het dashboard, en de geaggregeerde grootte verschijnt ook bij recente groepsuitvoeringen en in de uitvoeringsgeschiedenis van elke groep. Via de API tonen groepsuitvoeringen total_backup_size_bytes en het dashboard voegt een statistiek last_successful_group_backup_size toe. Groottes kunnen met een korte vertraging na afloop van een uitvoering verschijnen, omdat de grootte van elk lidarchief asynchroon wordt vastgelegd.',
