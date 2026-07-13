@@ -312,6 +312,7 @@
   "Error jobs": "Chybove ulohy",
   "Last backup run status": "Stav posledniho behu zalohy",
   "Last successful backup size": "Velikost posledni uspesne zalohy",
+  "Last successful group backup size": "Velikost posledni uspesne skupinove zalohy",
   "Last backup size": "Velikost posledni zalohy",
   "Next scheduled backup": "Dalsi naplanovana zaloha",
   "Backup coverage": "Pokryti zalohou",

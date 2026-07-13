@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'group_backup_size_reporting' => [
+        'title' => 'Hlášení velikosti skupinových záloh',
+        'description' => 'Běhy skupinových záloh nyní uvádějí celkovou velikost archivů svých členů. Nový volitelný widget přehledu „Velikost poslední úspěšné skupinové zálohy“ lze zapnout v panelu Přizpůsobit v přehledu a agregovaná velikost se zobrazuje také u nedávných skupinových běhů a v historii běhů každé skupiny. Přes API běhy skupin poskytují total_backup_size_bytes a přehled přidává statistiku last_successful_group_backup_size. Velikosti se mohou objevit s malým zpožděním po dokončení běhu, protože velikost archivu každého člena se zaznamenává asynchronně.',
+    ],
     'inclusive_backup_filter' => [
         'title' => 'Filtrování zálohy podle zahrnutí',
         'description' => 'Zálohovací úlohy nyní mohou zachovat pouze složky nebo soubory, které uvedete, místo pouhého vyloučení některých. Ve formuláři úlohy zvolte „Pouze zahrnout“ a zadejte seznam cest oddělených čárkami, relativních ke kořeni zdroje zálohy (například „Backups, config/app.conf”); vše ostatní se přeskočí, takže archivy zůstanou malé. Pokročilý režim vyloučení pomocí regexu zůstává k dispozici a úlohy pouze se zahrnutím lze vytvořit i přes API.',

@@ -20,7 +20,7 @@ class DashboardPreferencesTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Dashboard')
-                ->has('dashboardPreferences.stats', 17)
+                ->has('dashboardPreferences.stats', 18)
                 ->has('dashboardPreferences.sections', 5));
     }
 
@@ -45,7 +45,7 @@ class DashboardPreferencesTest extends TestCase
         // Stored order is preserved and re-normalized (all canonical stats present).
         $this->assertSame('error_jobs', $stats[0]['key']);
         $this->assertFalse($stats[1]['visible']);
-        $this->assertCount(17, $stats);
+        $this->assertCount(18, $stats);
 
         $sections = collect($user->fresh()->dashboard_preferences['sections'])->keyBy('key');
         $this->assertFalse($sections['jobs_with_errors']['visible']);

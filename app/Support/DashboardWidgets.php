@@ -26,6 +26,7 @@ class DashboardWidgets
         'error_groups',
         'last_backup_run_status',
         'last_successful_backup_size',
+        'last_successful_group_backup_size',
         'next_scheduled_backup',
     ];
 
@@ -49,6 +50,7 @@ class DashboardWidgets
      */
     public const HIDDEN_BY_DEFAULT = [
         'last_successful_backup_size',
+        'last_successful_group_backup_size',
     ];
 
     /**

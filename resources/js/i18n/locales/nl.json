@@ -312,6 +312,7 @@
   "Error jobs": "Taken met fouten",
   "Last backup run status": "Status laatste backuprun",
   "Last successful backup size": "Grootte laatste geslaagde backup",
+  "Last successful group backup size": "Grootte laatste geslaagde groepsbackup",
   "Last backup size": "Grootte laatste backup",
   "Next scheduled backup": "Volgende geplande backup",
   "Backup coverage": "Back-updekking",

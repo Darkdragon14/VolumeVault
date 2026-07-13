@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'group_backup_size_reporting' => [
+        'title' => 'Informe de tamaño de las copias de grupo',
+        'description' => 'Las ejecuciones de copia de grupo ahora informan del tamaño total de los archivos de sus miembros. Un nuevo widget opcional del panel, «Tamaño de la última copia de grupo exitosa», se puede activar desde la opción Personalizar del panel, y el tamaño agregado también aparece en las ejecuciones de grupo recientes y en el historial de ejecuciones de cada grupo. A través de la API, las ejecuciones de grupo exponen total_backup_size_bytes y el panel añade una estadística last_successful_group_backup_size. Los tamaños pueden aparecer con un breve retraso tras finalizar una ejecución, porque el tamaño de cada archivo de miembro se registra de forma asíncrona.',
+    ],
     'inclusive_backup_filter' => [
         'title' => 'Filtrado de copia por inclusión',
         'description' => 'Las tareas de copia ahora pueden conservar solo las carpetas o archivos que indiques, en lugar de solo excluir algunos. Elige «Incluir solo» en el formulario de la tarea e introduce una lista de rutas separadas por comas, relativas a la raíz de la fuente de copia (por ejemplo «Backups, config/app.conf»); todo lo demás se omite, manteniendo los archivos pequeños. El modo avanzado de exclusión por regex sigue disponible, y las tareas de solo inclusión también se pueden crear a través de la API.',

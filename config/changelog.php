@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'feature',
+            'key' => 'group_backup_size_reporting',
+        ],
+    ],
     'releases' => [
         'v1.18.0' => [
             'date' => '2026-07-07',

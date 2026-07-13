@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Actions\Backup\CreateBackupGroupRun;
-use App\Actions\Backup\CreateBackupRun;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
 use App\Actions\Docker\StartDockerContainers;
@@ -19,6 +18,7 @@ use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
+use App\Models\User;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Services\Docker\SelfContainerResolver;
@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 use Mockery;
 use Tests\TestCase;
 
@@ -92,6 +93,34 @@ class GroupedBackupTest extends TestCase
         $memberRuns = BackupRun::where('backup_group_run_id', $run->id)->get();
         $this->assertCount(2, $memberRuns);
         $this->assertTrue($memberRuns->every(fn (BackupRun $r): bool => $r->status === BackupRun::STATUS_SUCCESS));
+    }
+
+    public function test_group_run_detail_page_reports_the_aggregated_size(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_SUCCESS,
+            'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'total_members' => 1,
+            'succeeded_members' => 1,
+        ]);
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'backup_size_bytes' => 4096,
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('backup-group-runs.show', $groupRun))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('BackupGroups/RunShow')
+                ->where('run.total_backup_size_bytes', 4096)
+            );
     }
 
     public function test_a_group_run_fails_when_any_member_fails_but_still_backs_up_the_others(): void

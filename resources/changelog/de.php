@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'group_backup_size_reporting' => [
+        'title' => 'Größenberichte für Gruppen-Backups',
+        'description' => 'Gruppen-Backup-Läufe melden jetzt die Gesamtgröße der Archive ihrer Mitglieder. Ein neues optionales Dashboard-Widget „Größe des letzten erfolgreichen Gruppen-Backups“ lässt sich über das Menü Anpassen des Dashboards aktivieren, und die aggregierte Größe erscheint auch bei den letzten Gruppenläufen und im Laufverlauf jeder Gruppe. Über die API geben Gruppenläufe total_backup_size_bytes aus, und das Dashboard ergänzt eine Statistik last_successful_group_backup_size. Größen können mit kurzer Verzögerung nach dem Ende eines Laufs erscheinen, da die Größe jedes Mitglieds-Archivs asynchron erfasst wird.',
+    ],
     'inclusive_backup_filter' => [
         'title' => 'Backup-Filterung nach Einschluss',
         'description' => 'Backup-Aufträge können jetzt nur die von Ihnen aufgelisteten Ordner oder Dateien behalten, anstatt nur einige auszuschließen. Wählen Sie im Auftragsformular „Nur einschließen“ und geben Sie eine kommagetrennte Liste von Pfaden relativ zum Stammverzeichnis der Backup-Quelle ein (zum Beispiel „Backups, config/app.conf”); alles andere wird übersprungen, wodurch die Archive klein bleiben. Der erweiterte Regex-Ausschlussmodus bleibt verfügbar, und Aufträge mit reiner Einschließung können auch über die API erstellt werden.',

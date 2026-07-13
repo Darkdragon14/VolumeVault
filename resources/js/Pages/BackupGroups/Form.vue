@@ -6,6 +6,7 @@ import StatusBadge from '@/Components/StatusBadge.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { useI18n } from '@/i18n';
+import { formatBytes } from '@/Composables/useFormatBytes';
 
 const props = defineProps<{
     group: any | null;
@@ -181,6 +182,7 @@ const submit = () => {
                         <div class="flex items-center gap-3">
                             <StatusBadge :status="run.status" />
                             <span class="text-slate-300">{{ t('{ok}/{total} volumes', { ok: run.succeeded_members, total: run.total_members }) }}</span>
+                            <span v-if="run.total_backup_size_bytes" class="text-slate-400">{{ formatBytes(run.total_backup_size_bytes) }}</span>
                         </div>
                         <span class="text-slate-400">{{ formatDate(run.started_at) }}</span>
                     </Link>

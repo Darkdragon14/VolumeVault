@@ -312,6 +312,7 @@
   "Error jobs": "Processi in errore",
   "Last backup run status": "Stato ultima esecuzione backup",
   "Last successful backup size": "Dimensione ultimo backup riuscito",
+  "Last successful group backup size": "Dimensione ultimo backup di gruppo riuscito",
   "Last backup size": "Dimensione ultimo backup",
   "Next scheduled backup": "Prossimo backup pianificato",
   "Backup coverage": "Copertura backup",

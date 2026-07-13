@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'group_backup_size_reporting' => [
+        'title' => 'Group backup size reporting',
+        'description' => 'Backup group runs now report the total size of their member archives. A new optional dashboard widget, "Last successful group backup size", can be enabled from the dashboard\'s Customize panel, and the aggregated size also appears on recent group runs and in each group\'s run history. Through the API, group runs expose total_backup_size_bytes and the dashboard adds a last_successful_group_backup_size stat. Sizes may appear with a short delay after a run finishes, because each member archive\'s size is recorded asynchronously.',
+    ],
     'inclusive_backup_filter' => [
         'title' => 'Include-only backup filtering',
         'description' => 'Backup jobs can now keep only the folders or files you list instead of only excluding some. Choose "Include only" on the job form and enter a comma-separated list of paths relative to the backup source root (for example "Backups, config/app.conf"); everything else is skipped, keeping archives small. The advanced regex exclude mode is still available, and include-only jobs can also be created through the API.',

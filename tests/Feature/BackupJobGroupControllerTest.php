@@ -7,9 +7,11 @@ use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
+use App\Models\BackupRun;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class BackupJobGroupControllerTest extends TestCase
@@ -381,6 +383,34 @@ class BackupJobGroupControllerTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->get(route('backup-groups.edit', $group))
             ->assertForbidden();
+    }
+
+    public function test_group_edit_page_lists_recent_runs_with_their_aggregated_size(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_SUCCESS,
+            'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'total_members' => 1,
+            'succeeded_members' => 1,
+        ]);
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'backup_size_bytes' => 4096,
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get(route('backup-groups.edit', $group))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('BackupGroups/Form')
+                ->where('group.recent_runs.0.total_backup_size_bytes', 4096)
+            );
     }
 
     private function admin(): User

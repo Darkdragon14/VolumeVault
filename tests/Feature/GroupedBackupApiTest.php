@@ -7,6 +7,7 @@ use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
+use App\Models\BackupRun;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
@@ -18,12 +19,16 @@ class GroupedBackupApiTest extends TestCase
 
     public function test_openapi_document_lists_the_backup_group_endpoints(): void
     {
-        $paths = $this->getJson('/api/v1/openapi.json')->assertOk()->json('paths');
+        $document = $this->getJson('/api/v1/openapi.json')->assertOk()->json();
+        $paths = $document['paths'];
 
         $this->assertArrayHasKey('/backup-groups', $paths);
         $this->assertArrayHasKey('/backup-groups/{id}', $paths);
         $this->assertArrayHasKey('/backup-groups/{id}/run', $paths);
         $this->assertArrayHasKey('/backup-group-runs', $paths);
+
+        // The BackupGroupRun schema documents the aggregated member archive size.
+        $this->assertArrayHasKey('total_backup_size_bytes', $document['components']['schemas']['BackupGroupRun']['properties']);
     }
 
     public function test_admin_write_token_can_create_a_backup_group(): void
@@ -228,8 +233,8 @@ class GroupedBackupApiTest extends TestCase
         $admin = User::factory()->admin()->create();
         $token = $admin->createToken('grp-read', ['read'])->plainTextToken;
         $group = $this->group();
-        $this->member($group);
-        BackupGroupRun::create([
+        $member = $this->member($group);
+        $groupRun = BackupGroupRun::create([
             'backup_job_group_id' => $group->id,
             'status' => BackupGroupRun::STATUS_SUCCESS,
             'trigger' => BackupGroupRun::TRIGGER_MANUAL,
@@ -238,12 +243,52 @@ class GroupedBackupApiTest extends TestCase
             'total_members' => 1,
             'succeeded_members' => 1,
         ]);
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'backup_size_bytes' => 4096,
+        ]);
 
         $this->withToken($token)
             ->getJson("/api/v1/backup-groups/{$group->id}")
             ->assertOk()
             ->assertJsonStructure(['data' => ['members', 'recent_group_runs']])
-            ->assertJsonCount(1, 'data.recent_group_runs');
+            ->assertJsonCount(1, 'data.recent_group_runs')
+            ->assertJsonPath('data.recent_group_runs.0.total_backup_size_bytes', 4096);
+    }
+
+    public function test_group_run_endpoints_report_the_aggregated_size(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-read', ['read'])->plainTextToken;
+        $group = $this->group();
+        $member = $this->member($group);
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_SUCCESS,
+            'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'total_members' => 1,
+            'succeeded_members' => 1,
+        ]);
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'backup_size_bytes' => 4096,
+        ]);
+
+        $this->withToken($token)
+            ->getJson('/api/v1/backup-group-runs')
+            ->assertOk()
+            ->assertJsonPath('data.0.total_backup_size_bytes', 4096);
+
+        $this->withToken($token)
+            ->getJson("/api/v1/backup-group-runs/{$groupRun->id}")
+            ->assertOk()
+            ->assertJsonPath('data.total_backup_size_bytes', 4096);
     }
 
     private function destination(): BackupDestination

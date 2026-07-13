@@ -312,6 +312,7 @@
   "Error jobs": "Tareas con error",
   "Last backup run status": "Estado de la ultima ejecucion de copia",
   "Last successful backup size": "Tamano de la ultima copia exitosa",
+  "Last successful group backup size": "Tamano de la ultima copia de grupo exitosa",
   "Last backup size": "Tamano de la ultima copia",
   "Next scheduled backup": "Proxima copia programada",
   "Backup coverage": "Cobertura de copia",

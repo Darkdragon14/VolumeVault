@@ -312,6 +312,7 @@
   "Error jobs": "Hibas feladatok",
   "Last backup run status": "Utolso mentesi futas allapota",
   "Last successful backup size": "Utolso sikeres mentes merete",
+  "Last successful group backup size": "Utolso sikeres csoportos mentes merete",
   "Last backup size": "Utolso mentes merete",
   "Next scheduled backup": "Kovetkezo utemezett mentes",
   "Backup coverage": "Mentesi lefedettseg",
