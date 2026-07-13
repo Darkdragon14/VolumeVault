@@ -12,7 +12,7 @@ class BackupGroupRunController extends Controller
     public function show(BackupGroupRun $backupGroupRun): Response
     {
         $backupGroupRun->load('group', 'initiatedBy:id,name,email');
-        $backupGroupRun->loadSum('memberRuns as total_backup_size_bytes', 'backup_size_bytes');
+        $backupGroupRun->loadTotalBackupSize();
 
         return Inertia::render('BackupGroups/RunShow', [
             'run' => [

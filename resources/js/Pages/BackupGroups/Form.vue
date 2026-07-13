@@ -182,7 +182,7 @@ const submit = () => {
                         <div class="flex items-center gap-3">
                             <StatusBadge :status="run.status" />
                             <span class="text-slate-300">{{ t('{ok}/{total} volumes', { ok: run.succeeded_members, total: run.total_members }) }}</span>
-                            <span v-if="run.total_backup_size_bytes" class="text-slate-400">{{ formatBytes(run.total_backup_size_bytes) }}</span>
+                            <span v-if="run.total_backup_size_bytes !== null" class="text-slate-400">{{ formatBytes(run.total_backup_size_bytes) }}</span>
                         </div>
                         <span class="text-slate-400">{{ formatDate(run.started_at) }}</span>
                     </Link>

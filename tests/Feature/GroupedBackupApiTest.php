@@ -130,9 +130,14 @@ class GroupedBackupApiTest extends TestCase
         $group = $this->group();
         $this->member($group);
 
-        $this->withToken($token)
+        $response = $this->withToken($token)
             ->postJson("/api/v1/backup-groups/{$group->id}/run")
-            ->assertStatus(202);
+            ->assertStatus(202)
+            // A freshly queued run has no member sizes yet: the documented aggregate
+            // key must be present and null, not omitted from the payload.
+            ->assertJsonPath('data.total_backup_size_bytes', null);
+
+        $this->assertArrayHasKey('total_backup_size_bytes', $response->json('data'));
 
         Bus::assertDispatched(RunBackupGroupJob::class);
         $this->assertSame(1, $group->groupRuns()->count());

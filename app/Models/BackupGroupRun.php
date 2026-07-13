@@ -83,6 +83,16 @@ class BackupGroupRun extends Model
     }
 
     /**
+     * Load the aggregated member archive size onto this already-fetched run as a
+     * `total_backup_size_bytes` attribute — the instance counterpart of
+     * {@see scopeWithTotalBackupSize()}, staying null until member sizes exist.
+     */
+    public function loadTotalBackupSize(): self
+    {
+        return $this->loadSum('memberRuns as total_backup_size_bytes', 'backup_size_bytes');
+    }
+
+    /**
      * The aggregated archive size of the most recent successful group run, or
      * null when none exists yet or its member sizes have not been recorded.
      */
@@ -90,6 +100,7 @@ class BackupGroupRun extends Model
     {
         return static::query()
             ->where('status', self::STATUS_SUCCESS)
+            ->select('id')
             ->withTotalBackupSize()
             ->orderByDesc('finished_at')
             ->orderByDesc('created_at')

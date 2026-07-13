@@ -82,6 +82,10 @@ class BackupJobGroupController extends Controller
         $run = $createBackupGroupRun->handle($backupGroup, BackupGroupRun::TRIGGER_MANUAL, $request->user());
         RunBackupGroupJob::dispatch($run->id);
 
+        // Surface the documented aggregate key (null for a freshly created run) so the
+        // 202 payload matches the other group-run responses instead of omitting it.
+        $run->loadTotalBackupSize();
+
         return response()->json(['data' => $run], 202);
     }
 
@@ -211,7 +215,7 @@ class BackupJobGroupController extends Controller
 
             // The show endpoint documents "member jobs and recent group runs"; include
             // the latter so the response matches the OpenAPI contract.
-            $data['recent_group_runs'] = $group->groupRuns()->withTotalBackupSize()->latest()->limit(10)->get()->map(fn (BackupGroupRun $run): array => [
+            $data['recent_group_runs'] = $group->groupRuns()->withTotalBackupSize()->limit(10)->get()->map(fn (BackupGroupRun $run): array => [
                 'id' => $run->id,
                 'status' => $run->status,
                 'trigger' => $run->trigger,

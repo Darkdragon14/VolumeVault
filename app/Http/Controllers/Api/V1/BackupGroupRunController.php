@@ -19,7 +19,7 @@ class BackupGroupRunController extends Controller
     public function show(BackupGroupRun $backupGroupRun): JsonResponse
     {
         $backupGroupRun->load('group:id,name');
-        $backupGroupRun->loadSum('memberRuns as total_backup_size_bytes', 'backup_size_bytes');
+        $backupGroupRun->loadTotalBackupSize();
 
         return response()->json([
             'data' => [
