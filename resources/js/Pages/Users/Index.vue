@@ -27,8 +27,12 @@ const resetTwoFactor = (id: number) => {
 <template>
     <Head :title="t('Users')" />
     <AppLayout :title="t('Users')" :subtitle="t('Manage team access, roles, and preferred languages.')">
+        <template #title-actions>
+            <ActionIcon :label="t('New user')" icon="add" href="/users/create" />
+        </template>
+
         <template #actions>
-            <Link href="/users/create" class="btn-primary">{{ t('New user') }}</Link>
+            <Link href="/users/create" class="btn-primary hidden sm:inline-flex">{{ t('New user') }}</Link>
         </template>
 
         <div class="card overflow-hidden">

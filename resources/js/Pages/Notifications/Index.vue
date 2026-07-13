@@ -43,8 +43,12 @@ const toggleChannelActive = (channel: any) => router.patch(`/notifications/${cha
 <template>
     <Head :title="t('Notifications')" />
     <AppLayout :title="t('Notifications')" :subtitle="t('Route backup results to Shoutrrr channels selected per backup job.')">
+        <template #title-actions>
+            <ActionIcon :label="t('New channel')" icon="add" href="/notifications/create" />
+        </template>
+
         <template #actions>
-            <Link href="/notifications/create" class="btn-primary">{{ t('New channel') }}</Link>
+            <Link href="/notifications/create" class="btn-primary hidden sm:inline-flex">{{ t('New channel') }}</Link>
         </template>
 
         <div class="mb-6 grid gap-4 lg:grid-cols-3">

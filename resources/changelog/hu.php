@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mobile_header_actions' => [
+        'title' => 'Letisztultabb mobil fejlécműveletek',
+        'description' => 'Az irányítópult testreszabása és a listanézetek létrehozási műveletei mobilon most kompakt ikon gombokként jelennek meg az oldal címe mellett, míg nagyobb képernyőkön megmaradnak a teljes szöveges gombok.',
+    ],
     'group_backup_size_reporting' => [
         'title' => 'Csoportos mentések méretének jelentése',
         'description' => 'A csoportos mentési futtatások mostantól jelentik tagjaik archívumainak teljes méretét. Egy új, választható irányítópult-widget, „Utolsó sikeres csoportos mentés mérete“, bekapcsolható az irányítópult Testreszabás paneljén, és az összesített méret megjelenik a legutóbbi csoportos futtatásoknál és az egyes csoportok futtatási előzményeiben is. Az API-n keresztül a csoportos futtatások közzéteszik a total_backup_size_bytes értéket, az irányítópult pedig egy last_successful_group_backup_size statisztikával bővül. A méretek egy futtatás befejezése után rövid késéssel jelenhetnek meg, mivel az egyes tagarchívumok méretét a rendszer aszinkron módon rögzíti.',

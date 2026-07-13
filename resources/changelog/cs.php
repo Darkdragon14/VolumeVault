@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mobile_header_actions' => [
+        'title' => 'Čistší akce v mobilní hlavičce',
+        'description' => 'Přizpůsobení přehledu a akce vytváření na stránkách se seznamy nyní na mobilech používají kompaktní ikonová tlačítka vedle názvu stránky, zatímco na větších obrazovkách zůstávají plná textová tlačítka.',
+    ],
     'group_backup_size_reporting' => [
         'title' => 'Hlášení velikosti skupinových záloh',
         'description' => 'Běhy skupinových záloh nyní uvádějí celkovou velikost archivů svých členů. Nový volitelný widget přehledu „Velikost poslední úspěšné skupinové zálohy“ lze zapnout v panelu Přizpůsobit v přehledu a agregovaná velikost se zobrazuje také u nedávných skupinových běhů a v historii běhů každé skupiny. Přes API běhy skupin poskytují total_backup_size_bytes a přehled přidává statistiku last_successful_group_backup_size. Velikosti se mohou objevit s malým zpožděním po dokončení běhu, protože velikost archivu každého člena se zaznamenává asynchronně.',

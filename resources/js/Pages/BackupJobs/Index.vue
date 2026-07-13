@@ -69,6 +69,10 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
 <template>
     <Head :title="t('Backup jobs')" />
     <AppLayout :title="t('Backup jobs')" :subtitle="t('Schedule, pause, run, and restore Docker volume or host path backups from one place.')">
+        <template #title-actions>
+            <ActionIcon v-if="can.runDockerActions" :label="t('New backup job')" icon="add" href="/backup-jobs/create" />
+        </template>
+
         <template #actions>
             <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                 <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
@@ -80,7 +84,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         </button>
                     </div>
                 </div>
-                <Link v-if="can.runDockerActions" href="/backup-jobs/create" class="btn-primary shrink-0 gap-2 px-3">
+                <Link v-if="can.runDockerActions" href="/backup-jobs/create" class="btn-primary hidden shrink-0 gap-2 px-3 sm:inline-flex">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M12 5v14" />
                         <path d="M5 12h14" />

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
+import ActionIcon from '@/Components/ActionIcon.vue';
 import StatCard from '@/Components/Dashboard/StatCard.vue';
 import DashboardSection from '@/Components/Dashboard/DashboardSection.vue';
 import VisibilityToggleIcon from '@/Components/Dashboard/VisibilityToggleIcon.vue';
@@ -121,8 +122,12 @@ const save = () => {
 <template>
     <Head :title="t('Dashboard')" />
     <AppLayout :title="t('Dashboard')">
+        <template #title-actions>
+            <ActionIcon v-if="!editing" :label="t('Customize')" icon="edit" @click="startEdit" />
+        </template>
+
         <template #actions>
-            <button v-if="!editing" type="button" class="btn-secondary" @click="startEdit">
+            <button v-if="!editing" type="button" class="btn-secondary hidden sm:inline-flex" @click="startEdit">
                 {{ t('Customize') }}
             </button>
             <div v-else class="flex flex-wrap gap-2">

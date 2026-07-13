@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mobile_header_actions' => [
+        'title' => 'Azioni dell\'intestazione mobile più pulite',
+        'description' => 'La personalizzazione della dashboard e le azioni di creazione nelle pagine elenco ora usano pulsanti icona compatti accanto al titolo su mobile, mantenendo i pulsanti di testo completi sugli schermi più grandi.',
+    ],
     'group_backup_size_reporting' => [
         'title' => 'Report della dimensione dei backup di gruppo',
         'description' => 'Le esecuzioni di backup di gruppo ora riportano la dimensione totale degli archivi dei loro membri. Un nuovo widget opzionale della dashboard, «Dimensione dell\'ultimo backup di gruppo riuscito», può essere attivato dal pannello Personalizza della dashboard, e la dimensione aggregata compare anche nelle esecuzioni di gruppo recenti e nella cronologia delle esecuzioni di ogni gruppo. Tramite l\'API, le esecuzioni di gruppo espongono total_backup_size_bytes e la dashboard aggiunge una statistica last_successful_group_backup_size. Le dimensioni possono comparire con un breve ritardo dopo la fine di un\'esecuzione, perché la dimensione di ogni archivio membro viene registrata in modo asincrono.',
