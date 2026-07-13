@@ -783,5 +783,10 @@
   "No group runs yet.": "Zatím žádné běhy skupin.",
   "No groups are currently in error.": "Aktuálně nejsou žádné skupiny v chybě.",
   "Group run #{id}": "Běh skupiny č. {id}",
-  "Managed by group": "Spravováno skupinou"
+  "Managed by group": "Spravováno skupinou",
+  "Review schedule, members, run history, and actions for this group.": "Zobrazte planovani, cleny, historii spusteni a akce teto skupiny.",
+  "Group info": "Informace o skupine",
+  "Failure policy": "Zasady pri selhani",
+  "Members": "Clenove",
+  "Last success": "Posledni uspech"
 }

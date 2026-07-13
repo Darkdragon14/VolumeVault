@@ -60,6 +60,29 @@ class BackupJobGroupController extends Controller
         return redirect()->route('backup-groups.edit', $group)->with('success', 'Backup group created. Add jobs to it from the backup job form.');
     }
 
+    public function show(Request $request, BackupJobGroup $backupGroup): Response
+    {
+        $backupGroup->load(['notificationChannels', 'members.destination'])->loadCount('members');
+        $perPage = $this->perPageForRequest($request);
+
+        return Inertia::render('BackupGroups/Show', [
+            'group' => $this->serializeGroup($backupGroup, withMembers: true),
+            // groupRuns() is already ->latest() ordered, so reorder() before
+            // sorting by finished_at, otherwise the relation's created_at ordering
+            // wins the ORDER BY. select() must precede withTotalBackupSize() so the
+            // aggregate select does not overwrite the targeted columns.
+            'lastSuccessfulGroupRun' => $backupGroup->groupRuns()
+                ->where('status', BackupGroupRun::STATUS_SUCCESS)
+                ->select('id', 'finished_at')
+                ->withTotalBackupSize()
+                ->reorder()
+                ->orderByDesc('finished_at')
+                ->orderByDesc('created_at')
+                ->first(),
+            'runs' => $this->paginateForInertia($backupGroup->groupRuns()->withTotalBackupSize()->with('initiatedBy:id,name,email'), $perPage, null, 'runs_page'),
+        ]);
+    }
+
     public function edit(BackupJobGroup $backupGroup): Response
     {
         $backupGroup->load(['notificationChannels', 'members.destination']);
@@ -260,19 +283,6 @@ class BackupJobGroupController extends Controller
                 'destination' => $member->destination?->name,
                 'last_success_at' => $member->last_success_at,
                 'last_error' => $member->last_error,
-            ])->values()->all();
-
-            $data['recent_runs'] = $group->groupRuns()->withTotalBackupSize()->limit(10)->get()->map(fn (BackupGroupRun $run): array => [
-                'id' => $run->id,
-                'status' => $run->status,
-                'trigger' => $run->trigger,
-                'total_members' => $run->total_members,
-                'succeeded_members' => $run->succeeded_members,
-                'failed_members' => $run->failed_members,
-                'started_at' => $run->started_at,
-                'finished_at' => $run->finished_at,
-                'duration_seconds' => $run->duration_seconds,
-                'total_backup_size_bytes' => $run->total_backup_size_bytes,
             ])->values()->all();
         }
 

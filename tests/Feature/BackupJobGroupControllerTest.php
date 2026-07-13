@@ -385,7 +385,19 @@ class BackupJobGroupControllerTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_group_edit_page_lists_recent_runs_with_their_aggregated_size(): void
+    public function test_group_show_page_renders_for_any_authenticated_user(): void
+    {
+        $group = $this->group();
+
+        // The show route lives in the plain auth zone (not admin), so a read-only
+        // user can open a group's detail page just like a job's.
+        $this->actingAs(User::factory()->create())
+            ->get(route('backup-groups.show', $group))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('BackupGroups/Show'));
+    }
+
+    public function test_group_show_lists_paginated_runs_with_their_aggregated_size(): void
     {
         $group = $this->group();
         $member = $this->member($group);
@@ -405,12 +417,23 @@ class BackupJobGroupControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->admin())
-            ->get(route('backup-groups.edit', $group))
+            ->get(route('backup-groups.show', $group))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('BackupGroups/Form')
-                ->where('group.recent_runs.0.total_backup_size_bytes', 4096)
+                ->component('BackupGroups/Show')
+                ->has('group.members', 1)
+                ->where('runs.data.0.total_backup_size_bytes', 4096)
+                ->where('lastSuccessfulGroupRun.total_backup_size_bytes', 4096)
             );
+    }
+
+    public function test_group_create_route_is_not_captured_by_show_route(): void
+    {
+        // create/edit are registered before the show wildcard, so /create must not
+        // resolve to show with {backup_group} = "create".
+        $this->actingAs($this->admin())
+            ->get('/backup-groups/create')
+            ->assertOk();
     }
 
     private function admin(): User

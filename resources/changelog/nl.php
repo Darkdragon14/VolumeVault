@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_group_detail_page' => [
+        'title' => 'Detailpagina voor back-upgroepen',
+        'description' => 'Back-upgroepen hebben nu een alleen-lezen detailpagina, beschikbaar voor elke gebruiker, die de planning van de groep, de leden, de samengevoegde uitvoeringsgeschiedenis en de grootte van de laatste geslaagde back-up toont. Een groep openen vanuit de lijst, vanuit de dashboardwidget met groepen met fouten of via de terug-naar-groep-link van een groepsuitvoering leidt nu naar deze pagina in plaats van het bewerkingsformulier dat alleen voor beheerders is. Beheerders houden daar de acties uitvoeren, pauzeren, hervatten, bewerken en verwijderen, en de uitvoeringsgeschiedenis van de groep is naar deze pagina verplaatst vanuit het bewerkingsformulier, dat nu een puur formulier is.',
+    ],
     'mobile_header_actions' => [
         'title' => 'Strakkere mobiele headeracties',
         'description' => 'Dashboardaanpassing en aanmaakacties op lijstpagina\'s gebruiken op mobiel nu compacte pictogramknoppen naast de paginatitel, terwijl de volledige tekstknoppen op grotere schermen behouden blijven.',

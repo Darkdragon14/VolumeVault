@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_group_detail_page' => [
+        'title' => 'Backup group detail page',
+        'description' => 'Backup groups now have a read-only detail page, available to every user, that shows the group\'s schedule, members, aggregated run history and last successful backup size. Opening a group from the list, from the dashboard\'s groups-in-error widget, or from a group run\'s back-to-group link now leads to this page instead of the admin-only edit form. Administrators still have the run, pause, resume, edit and delete actions there, and the group run history moved to this page from the edit form, which is now a pure form.',
+    ],
     'mobile_header_actions' => [
         'title' => 'Cleaner mobile header actions',
         'description' => 'Dashboard customization and creation actions on list pages now use compact icon buttons beside the page title on mobile, while keeping the full text buttons on larger screens.',

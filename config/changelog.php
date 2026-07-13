@@ -3,6 +3,10 @@
 return [
     'unreleased' => [
         [
+            'type' => 'feature',
+            'key' => 'backup_group_detail_page',
+        ],
+        [
             'type' => 'change',
             'key' => 'mobile_header_actions',
         ],

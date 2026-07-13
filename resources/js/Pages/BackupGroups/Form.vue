@@ -6,7 +6,6 @@ import StatusBadge from '@/Components/StatusBadge.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { useI18n } from '@/i18n';
-import { formatBytes } from '@/Composables/useFormatBytes';
 
 const props = defineProps<{
     group: any | null;
@@ -15,7 +14,7 @@ const props = defineProps<{
     appTimezone: string;
 }>();
 
-const { t, formatDate } = useI18n();
+const { t } = useI18n();
 const editing = computed(() => Boolean(props.group));
 const scheduleTypes = ['hourly', 'daily', 'weekly', 'cron'];
 const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -32,7 +31,6 @@ const form = useForm({
 });
 
 const members = computed(() => props.group?.members || []);
-const recentRuns = computed(() => props.group?.recent_runs || []);
 
 const summary = computed(() => {
     if (form.schedule_type === 'hourly') return t('Every {hours} hours', { hours: form.schedule_config.everyHours || 1 });
@@ -173,20 +171,6 @@ const submit = () => {
                     </div>
                 </div>
                 <p v-else class="rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('No jobs in this group yet. Create or edit a backup job and attach it to this group.') }}</p>
-            </section>
-
-            <section v-if="editing && recentRuns.length" class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
-                <h2 class="mb-4 text-lg font-semibold">{{ t('Recent group runs') }}</h2>
-                <div class="divide-y divide-white/10 rounded-xl border border-white/10">
-                    <Link v-for="run in recentRuns" :key="run.id" :href="`/backup-group-runs/${run.id}`" class="flex items-center justify-between gap-3 p-3 text-sm hover:bg-white/[0.03]">
-                        <div class="flex items-center gap-3">
-                            <StatusBadge :status="run.status" />
-                            <span class="text-slate-300">{{ t('{ok}/{total} volumes', { ok: run.succeeded_members, total: run.total_members }) }}</span>
-                            <span v-if="run.total_backup_size_bytes !== null" class="text-slate-400">{{ formatBytes(run.total_backup_size_bytes) }}</span>
-                        </div>
-                        <span class="text-slate-400">{{ formatDate(run.started_at) }}</span>
-                    </Link>
-                </div>
             </section>
 
             <div class="flex flex-wrap gap-3">

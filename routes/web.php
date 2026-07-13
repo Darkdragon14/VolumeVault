@@ -115,6 +115,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/alerts/{alert}', [AlertController::class, 'show'])->name('alerts.show');
 
     Route::resource('backup-jobs', BackupJobController::class)->only(['show']);
+    Route::resource('backup-groups', BackupJobGroupController::class)->only(['show']);
 
     Route::get('/backup-runs/{backupRun}', [BackupRunController::class, 'show'])->name('backup-runs.show');
 

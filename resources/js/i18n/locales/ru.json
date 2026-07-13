@@ -783,5 +783,10 @@
   "No group runs yet.": "Пока нет запусков групп.",
   "No groups are currently in error.": "Сейчас нет групп с ошибкой.",
   "Group run #{id}": "Запуск группы №{id}",
-  "Managed by group": "Управляется группой"
+  "Managed by group": "Управляется группой",
+  "Review schedule, members, run history, and actions for this group.": "Просмотрите расписание, участников, историю запусков и действия этой группы.",
+  "Group info": "Информация о группе",
+  "Failure policy": "Политика при сбоях",
+  "Members": "Участники",
+  "Last success": "Последний успех"
 }
