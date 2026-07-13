@@ -13,7 +13,7 @@ interface PaginatedData<T> {
 
 const props = defineProps<{
     group: any;
-    lastSuccessfulGroupRun?: any | null;
+    lastSuccessfulGroupBackupSize?: number | null;
     runs: PaginatedData<any>;
 }>();
 
@@ -51,7 +51,7 @@ const destroyGroup = (id: number) => confirm(t('Delete this backup group? Detach
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Members') }}</dt><dd class="mt-1 text-white">{{ group.members_count }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Last run') }}</dt><dd class="mt-1 text-white">{{ formatDate(group.last_run_at) }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Next run') }}</dt><dd class="mt-1 text-white">{{ formatDate(group.next_run_at) }}</dd></div>
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Last backup size') }}</dt><dd class="mt-1 text-white">{{ formatBytes(lastSuccessfulGroupRun?.total_backup_size_bytes, t('Unknown')) }}</dd></div>
+                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Last backup size') }}</dt><dd class="mt-1 text-white">{{ formatBytes(lastSuccessfulGroupBackupSize, t('Unknown')) }}</dd></div>
                 </dl>
             </section>
             <section class="card p-4 sm:p-5">

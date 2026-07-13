@@ -67,18 +67,7 @@ class BackupJobGroupController extends Controller
 
         return Inertia::render('BackupGroups/Show', [
             'group' => $this->serializeGroup($backupGroup, withMembers: true),
-            // groupRuns() is already ->latest() ordered, so reorder() before
-            // sorting by finished_at, otherwise the relation's created_at ordering
-            // wins the ORDER BY. select() must precede withTotalBackupSize() so the
-            // aggregate select does not overwrite the targeted columns.
-            'lastSuccessfulGroupRun' => $backupGroup->groupRuns()
-                ->where('status', BackupGroupRun::STATUS_SUCCESS)
-                ->select('id', 'finished_at')
-                ->withTotalBackupSize()
-                ->reorder()
-                ->orderByDesc('finished_at')
-                ->orderByDesc('created_at')
-                ->first(),
+            'lastSuccessfulGroupBackupSize' => BackupGroupRun::lastSuccessfulTotalBackupSize($backupGroup->id),
             'runs' => $this->paginateForInertia($backupGroup->groupRuns()->withTotalBackupSize()->with('initiatedBy:id,name,email'), $perPage, null, 'runs_page'),
         ]);
     }

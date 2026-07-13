@@ -73,7 +73,7 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
                                 <td class="px-4 py-3 font-medium text-white">{{ group.name }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ group.members_count }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ group.schedule_summary }}</td>
-                                <td class="px-4 py-3" @click.stop>
+                                <td class="px-4 py-3" @click.stop @keydown.stop>
                                     <button
                                         type="button"
                                         role="switch"
