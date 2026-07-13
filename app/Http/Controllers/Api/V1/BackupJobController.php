@@ -52,7 +52,7 @@ class BackupJobController extends Controller
         return response()->json(['data' => $this->serializeJob($job->load(['destination', 'notificationChannels']))], 201);
     }
 
-    public function show(BackupJob $backupJob): JsonResponse
+    public function show(Request $request, BackupJob $backupJob): JsonResponse
     {
         $backupJob->load(['destination', 'notificationChannels']);
 
@@ -82,7 +82,7 @@ class BackupJobController extends Controller
         return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
     }
 
-    public function destroy(BackupJob $backupJob): JsonResponse
+    public function destroy(Request $request, BackupJob $backupJob): JsonResponse
     {
         if ($backupJob->hasRunInProgress()) {
             throw ValidationException::withMessages([
@@ -123,7 +123,7 @@ class BackupJobController extends Controller
         return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
     }
 
-    public function resume(BackupJob $backupJob): JsonResponse
+    public function resume(Request $request, BackupJob $backupJob): JsonResponse
     {
         // Atomic conditional update so a worker flipping the job to running between
         // a stale read and the save cannot be overwritten with active (which would
@@ -171,8 +171,10 @@ class BackupJobController extends Controller
         return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
     }
 
-    public function backups(BackupJob $backupJob, ListBackupObjects $listBackupObjects): JsonResponse
+    public function backups(Request $request, BackupJob $backupJob, ListBackupObjects $listBackupObjects): JsonResponse
     {
+        $this->authorizeHostAccess($request, $backupJob->host_id);
+
         $backupJob->load('destination');
 
         return response()->json([

@@ -128,6 +128,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         </div>
                         <dl class="grid gap-3 text-sm">
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Destination') }}</dt><dd class="mt-1 break-words text-slate-200">{{ job.destination?.name || t('Missing') }}</dd></div>
+                            <div v-if="showHostFilter"><dt class="text-xs uppercase text-slate-500">{{ t('Host') }}</dt><dd class="mt-1 break-words text-slate-200">{{ job.host?.name || t('Unknown') }}</dd></div>
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Schedule') }}</dt><dd class="mt-1 break-words text-slate-200">{{ job.schedule_summary }}</dd></div>
                             <div class="grid grid-cols-2 gap-3">
                                 <div><dt class="text-xs uppercase text-slate-500">{{ t('Last run') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(job.last_run_at) }}</dd></div>

@@ -9,6 +9,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -57,6 +58,74 @@ Artisan::command('volumevault:reset-password {email : The account email address}
 
     return 0;
 })->purpose('Reset a VolumeVault user password from the container CLI');
+
+Artisan::command('volumevault:agent {--once : Lease at most one command and exit}', function (ListDockerVolumes $listDockerVolumes) {
+    if (! config('volumevault.agent.enabled')) {
+        $this->info('VolumeVault agent is disabled.');
+
+        return 0;
+    }
+
+    $centralUrl = rtrim((string) config('volumevault.agent.central_url'), '/');
+    $token = (string) config('volumevault.agent.token');
+
+    if ($centralUrl === '' || $token === '') {
+        $this->error('VOLUMEVAULT_CENTRAL_URL and VOLUMEVAULT_AGENT_TOKEN are required.');
+
+        return 1;
+    }
+
+    $client = Http::baseUrl($centralUrl.'/api/v1/agent')
+        ->withToken($token)
+        ->acceptJson()
+        ->timeout(30)
+        ->retry(2, 500);
+
+    $metadata = [
+        'agent_version' => config('app.version'),
+        'docker_version' => trim((string) shell_exec('docker version --format "{{.Server.Version}}" 2>/dev/null')),
+        'capabilities' => ['sync_volumes' => true],
+    ];
+
+    $client->post('/heartbeat', $metadata)->throw();
+
+    do {
+        $lease = $client->post('/commands/lease')->throw()->json('data');
+
+        if (! $lease) {
+            if ($this->option('once')) {
+                return 0;
+            }
+
+            sleep(max(1, (int) config('volumevault.agent.poll_seconds', 10)));
+
+            continue;
+        }
+
+        try {
+            if ($lease['type'] === 'sync_volumes') {
+                $client->post('/commands/'.$lease['id'].'/complete', [
+                    'status' => 'completed',
+                    'volumes' => $listDockerVolumes->handle(),
+                ])->throw();
+            } else {
+                $client->post('/commands/'.$lease['id'].'/complete', [
+                    'status' => 'failed',
+                    'error' => 'This agent runtime currently supports sync_volumes commands only.',
+                ])->throw();
+            }
+        } catch (Throwable $exception) {
+            $client->post('/commands/'.$lease['id'].'/complete', [
+                'status' => 'failed',
+                'error' => str($exception->getMessage())->limit(1000)->toString(),
+            ])->throw();
+        }
+
+        if ($this->option('once')) {
+            return 0;
+        }
+    } while (true);
+})->purpose('Run the VolumeVault agent command loop');
 
 Schedule::job(new DispatchDueBackupJobsJob)->everyMinute()->withoutOverlapping();
 Schedule::job(new DispatchDueBackupGroupsJob)->everyMinute()->withoutOverlapping();

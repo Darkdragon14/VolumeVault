@@ -13,6 +13,7 @@ use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardPreferenceController;
 use App\Http\Controllers\DestinationController;
+use App\Http\Controllers\HostController;
 use App\Http\Controllers\InstallationSaveController;
 use App\Http\Controllers\NotificationChannelController;
 use App\Http\Controllers\OnboardingController;
@@ -106,6 +107,10 @@ Route::middleware('auth')->group(function () {
         Route::resource('users', UserController::class)->except(['show']);
         Route::delete('/users/{user}/two-factor', [UserController::class, 'resetTwoFactor'])->name('users.two-factor.reset');
         Route::resource('api-tokens', ApiTokenController::class)->only(['index', 'store', 'destroy']);
+        Route::resource('hosts', HostController::class)->only(['index', 'store', 'update']);
+        Route::post('/hosts/{host}/activate', [HostController::class, 'activate'])->name('hosts.activate');
+        Route::post('/hosts/{host}/deactivate', [HostController::class, 'deactivate'])->name('hosts.deactivate');
+        Route::post('/hosts/{host}/enrollment-token', [HostController::class, 'enrollmentToken'])->name('hosts.enrollment-token');
 
         Route::get('/backup-jobs/{backupJob}/restore', [RestoreController::class, 'create'])->name('backup-jobs.restore');
         Route::get('/backup-jobs/{backupJob}/backups', [RestoreController::class, 'listBackups'])->name('backup-jobs.backups');

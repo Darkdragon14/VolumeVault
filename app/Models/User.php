@@ -21,6 +21,12 @@ class User extends Authenticatable
 
     public const ROLES = [self::ROLE_ADMIN, self::ROLE_USER];
 
+    public const HOST_ACCESS_ALL = 'all';
+
+    public const HOST_ACCESS_SELECTED = 'selected';
+
+    public const HOST_ACCESS_MODES = [self::HOST_ACCESS_ALL, self::HOST_ACCESS_SELECTED];
+
     public const DEFAULT_LOCALE = 'en';
 
     public const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'it', 'de', 'cs', 'nl', 'hu', 'ru'];
@@ -41,6 +47,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'host_access_mode',
         'locale',
         'date_locale',
         'theme',

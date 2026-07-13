@@ -24,8 +24,10 @@ class RestoreRunController extends Controller
         ]);
     }
 
-    public function show(RestoreRun $restoreRun): JsonResponse
+    public function show(Request $request, RestoreRun $restoreRun): JsonResponse
     {
+        $this->authorizeHostAccess($request, $restoreRun->host_id);
+
         return response()->json(['data' => $this->serializeRun($restoreRun->load('job.destination', 'destination', 'host'))]);
     }
 

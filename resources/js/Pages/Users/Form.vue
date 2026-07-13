@@ -8,6 +8,8 @@ import { languageNames, useI18n } from '@/i18n';
 const props = defineProps<{
     managedUser: any | null;
     roles: string[];
+    hostAccessModes: string[];
+    hosts: any[];
     locales: string[];
 }>();
 
@@ -18,6 +20,8 @@ const form = useForm({
     name: props.managedUser?.name || '',
     email: props.managedUser?.email || '',
     role: props.managedUser?.role || 'user',
+    host_access_mode: props.managedUser?.host_access_mode || 'all',
+    host_ids: props.managedUser?.hosts?.map((host: any) => host.id) || [],
     locale: props.managedUser?.locale || 'en',
     password: '',
     password_confirmation: '',
@@ -30,6 +34,15 @@ const submit = () => {
     }
 
     form.post('/users');
+};
+
+const toggleHost = (hostId: number) => {
+    if (form.host_ids.includes(hostId)) {
+        form.host_ids = form.host_ids.filter((id: number) => id !== hostId);
+        return;
+    }
+
+    form.host_ids = [...form.host_ids, hostId];
 };
 </script>
 
@@ -56,6 +69,37 @@ const submit = () => {
                 </select>
                 <span v-if="form.errors.role" class="text-sm text-rose-300">{{ form.errors.role }}</span>
             </label>
+
+            <section v-if="form.role !== 'admin'" class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <h2 class="font-semibold text-white">{{ t('Host access') }}</h2>
+                        <p class="mt-1 text-sm text-slate-400">{{ t('Choose whether this user can see all hosts or only selected hosts.') }}</p>
+                    </div>
+                    <label class="flex shrink-0 items-center gap-3 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm">
+                        <input v-model="form.host_access_mode" type="checkbox" true-value="all" false-value="selected" class="rounded border-slate-600 bg-slate-950 text-sky-400">
+                        {{ t('Access all hosts') }}
+                    </label>
+                </div>
+
+                <div v-if="form.host_access_mode === 'selected'" class="mt-4 grid gap-2 sm:grid-cols-2">
+                    <button
+                        v-for="host in hosts"
+                        :key="host.id"
+                        type="button"
+                        class="flex items-start gap-3 rounded-xl border p-3 text-left text-sm transition"
+                        :class="form.host_ids.includes(host.id) ? 'border-sky-300/60 bg-sky-400/10 text-sky-50' : 'border-white/10 bg-slate-950/50 text-slate-300 hover:bg-white/10'"
+                        @click="toggleHost(host.id)"
+                    >
+                        <input :checked="form.host_ids.includes(host.id)" type="checkbox" class="mt-1 rounded border-slate-600 bg-slate-950 text-sky-400" tabindex="-1" readonly>
+                        <span class="min-w-0">
+                            <span class="block break-words font-medium">{{ host.name }}</span>
+                            <span class="mt-1 block text-xs text-slate-400">{{ t(host.type) }} / {{ t(host.status) }}</span>
+                        </span>
+                    </button>
+                </div>
+                <span v-if="form.errors.host_ids" class="mt-2 block text-sm text-rose-300">{{ form.errors.host_ids }}</span>
+            </section>
 
             <label class="space-y-2">
                 <span class="label">{{ t('Language') }}</span>

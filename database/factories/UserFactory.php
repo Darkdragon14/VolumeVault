@@ -30,6 +30,7 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'role' => User::ROLE_USER,
+            'host_access_mode' => User::HOST_ACCESS_ALL,
             'locale' => User::DEFAULT_LOCALE,
             'theme' => User::DEFAULT_THEME,
             'remember_token' => Str::random(10),

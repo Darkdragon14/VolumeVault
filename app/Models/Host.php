@@ -21,6 +21,8 @@ class Host extends Model
 
     public const STATUS_ERROR = 'error';
 
+    public const STATUSES = [self::STATUS_ONLINE, self::STATUS_OFFLINE, self::STATUS_ERROR];
+
     protected $fillable = [
         'name',
         'type',
@@ -58,6 +60,16 @@ class Host extends Model
         return $query->where('type', self::TYPE_LOCAL);
     }
 
+    public function scopeAgents(Builder $query): Builder
+    {
+        return $query->where('type', self::TYPE_AGENT);
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
     public static function localHost(): self
     {
         return self::query()->local()->sole();
@@ -81,5 +93,33 @@ class Host extends Model
     public function restoreRuns(): HasMany
     {
         return $this->hasMany(RestoreRun::class);
+    }
+
+    public function agentCommands(): HasMany
+    {
+        return $this->hasMany(AgentCommand::class);
+    }
+
+    /**
+     * @return array{id: int, name: string, type: string, status: string, is_active: bool, last_seen_at: mixed, agent_version: string|null, docker_version: string|null, capabilities: array<mixed>, metadata: array<mixed>, enrolled_at: mixed, last_error: string|null, created_at: mixed, updated_at: mixed}
+     */
+    public function safeForFrontend(): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'type' => $this->type,
+            'status' => $this->status,
+            'is_active' => $this->is_active,
+            'last_seen_at' => $this->last_seen_at,
+            'agent_version' => $this->agent_version,
+            'docker_version' => $this->docker_version,
+            'capabilities' => $this->capabilities ?: [],
+            'metadata' => $this->metadata ?: [],
+            'enrolled_at' => $this->enrolled_at,
+            'last_error' => $this->last_error,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+        ];
     }
 }

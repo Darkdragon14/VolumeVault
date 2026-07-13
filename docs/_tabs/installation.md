@@ -233,6 +233,18 @@ Roles:
 - `admin`: full access, including users, destinations, notification channels, restore flows, API tokens, installation saves, and Docker actions.
 - `user`: read-only access to dashboard, volumes, jobs, runs, and logs.
 
+Admins can restrict regular users to selected hosts. API tokens inherit the host access of the user who created them.
+
 VolumeVault prevents deleting your own account and prevents deleting or demoting the last admin.
 
 During onboarding, you can either create the first administrator or import a `.vvsave` from a previous VolumeVault installation.
+
+## Hosts And Agents
+
+VolumeVault creates a `Local Docker Host` automatically for the Docker socket mounted into the central app. This host is active by default and counts toward the free active-host limit.
+
+Admins can add agent hosts from the `Hosts` screen. Creating or regenerating an agent enrollment token shows the token once; only a hash is stored. Agent endpoints use that token separately from user API tokens.
+
+The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. Configure it with `VOLUMEVAULT_CENTRAL_URL` and the one-time enrollment token shown by the central app as `VOLUMEVAULT_AGENT_TOKEN`. The first agent runtime is intentionally narrow: it heartbeats, leases commands, and executes remote volume sync. Backup and restore commands are created by the central app but require the agent executor to support those command types before they will run remotely.
+
+Remote agent hosts execute Docker work on their own Docker host. Local filesystem and Docker-volume destinations are therefore host-local when executed by an agent, while cloud, SFTP, and WebDAV destinations are reached by the agent directly.

@@ -52,6 +52,18 @@ Useful API calls:
 ```text
 GET    /api/v1/openapi.json
 GET    /api/v1/me
+GET    /api/v1/hosts
+POST   /api/v1/hosts
+GET    /api/v1/hosts/{id}
+PUT    /api/v1/hosts/{id}
+POST   /api/v1/hosts/{id}/activate
+POST   /api/v1/hosts/{id}/deactivate
+POST   /api/v1/hosts/{id}/enrollment-token
+POST   /api/v1/agent/enroll
+POST   /api/v1/agent/heartbeat
+POST   /api/v1/agent/commands/lease
+POST   /api/v1/agent/commands/{id}/logs
+POST   /api/v1/agent/commands/{id}/complete
 GET    /api/v1/dashboard
 GET    /api/v1/volumes
 POST   /api/v1/volumes/sync

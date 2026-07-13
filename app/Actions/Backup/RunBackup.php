@@ -117,8 +117,8 @@ class RunBackup
         }
 
         try {
-            if (! $host || $host->type !== Host::TYPE_LOCAL) {
-                throw new RuntimeException('Only local backup jobs can run through the local Docker worker.');
+            if (! $host) {
+                throw new RuntimeException('The backup job host is missing.');
             }
 
             if (! $job->destination?->is_active) {

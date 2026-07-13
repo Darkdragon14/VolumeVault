@@ -42,6 +42,7 @@ const resetTwoFactor = (id: number) => {
                         <div class="min-w-0">
                             <h2 class="break-words font-semibold text-white">{{ user.name }}</h2>
                             <p class="mt-1 break-all text-sm text-slate-400">{{ user.email }}</p>
+                            <p class="mt-2 text-xs text-slate-500">{{ user.role === 'admin' || user.host_access_mode === 'all' ? t('All hosts') : t('{count} selected hosts', { count: user.hosts.length }) }}</p>
                         </div>
                         <div class="flex shrink-0 flex-wrap gap-2">
                             <ActionIcon :label="t('Edit')" icon="edit" :href="`/users/${user.id}/edit`" />
@@ -51,6 +52,7 @@ const resetTwoFactor = (id: number) => {
                     </div>
                     <dl class="grid grid-cols-2 gap-3 text-sm">
                         <div><dt class="text-xs uppercase text-slate-500">{{ t('Role') }}</dt><dd class="mt-1 text-slate-200">{{ user.role }}</dd></div>
+                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Host access') }}</dt><dd class="mt-1 text-slate-200">{{ user.role === 'admin' || user.host_access_mode === 'all' ? t('All hosts') : t('{count} selected hosts', { count: user.hosts.length }) }}</dd></div>
                         <div><dt class="text-xs uppercase text-slate-500">{{ t('Language') }}</dt><dd class="mt-1 text-slate-200">{{ languageName(user.locale) }}</dd></div>
                         <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Created') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(user.created_at) }}</dd></div>
                     </dl>
@@ -63,6 +65,7 @@ const resetTwoFactor = (id: number) => {
                             <th class="px-4 py-3">{{ t('Name') }}</th>
                             <th class="px-4 py-3">{{ t('Email') }}</th>
                             <th class="px-4 py-3">{{ t('Role') }}</th>
+                            <th class="px-4 py-3">{{ t('Host access') }}</th>
                             <th class="px-4 py-3">{{ t('Language') }}</th>
                             <th class="px-4 py-3">{{ t('Created') }}</th>
                             <th class="px-4 py-3">{{ t('Actions') }}</th>
@@ -73,6 +76,7 @@ const resetTwoFactor = (id: number) => {
                             <td class="px-4 py-3 font-medium text-white">{{ user.name }}</td>
                             <td class="px-4 py-3 text-slate-300">{{ user.email }}</td>
                             <td class="px-4 py-3 text-slate-300">{{ user.role }}</td>
+                            <td class="px-4 py-3 text-slate-300">{{ user.role === 'admin' || user.host_access_mode === 'all' ? t('All hosts') : t('{count} selected hosts', { count: user.hosts.length }) }}</td>
                             <td class="px-4 py-3 text-slate-300">{{ languageName(user.locale) }}</td>
                             <td class="px-4 py-3 text-slate-300">{{ formatDate(user.created_at) }}</td>
                             <td class="px-4 py-3">

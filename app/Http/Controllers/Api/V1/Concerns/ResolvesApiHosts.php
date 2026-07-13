@@ -6,11 +6,12 @@ use App\Models\Host;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 trait ResolvesApiHosts
 {
     /**
-     * @return array{host_id: int|null, all_hosts: bool}
+     * @return array{host_id: int|null, host_ids: list<int>, all_hosts: bool}
      */
     protected function resolveHostScope(Request $request): array
     {
@@ -19,9 +20,19 @@ trait ResolvesApiHosts
             'all_hosts' => ['nullable', Rule::in(['true', 'false', '1', '0', true, false, 1, 0])],
         ]);
 
+        $user = $request->user();
+        $accessibleHostIds = $user?->accessibleHostIds() ?? [];
+
         if ($request->filled('host_id')) {
+            $hostId = (int) $validated['host_id'];
+
+            if (! in_array($hostId, $accessibleHostIds, true)) {
+                throw new HttpException(403, 'You do not have access to this host.');
+            }
+
             return [
-                'host_id' => (int) $validated['host_id'],
+                'host_id' => $hostId,
+                'host_ids' => [$hostId],
                 'all_hosts' => false,
             ];
         }
@@ -29,28 +40,50 @@ trait ResolvesApiHosts
         if ($request->boolean('all_hosts')) {
             return [
                 'host_id' => null,
+                'host_ids' => $accessibleHostIds,
                 'all_hosts' => true,
             ];
         }
 
+        $localHostId = Host::localHost()->id;
+        $canAccessLocalHost = in_array($localHostId, $accessibleHostIds, true);
+
         return [
-            'host_id' => Host::localHost()->id,
+            'host_id' => $canAccessLocalHost ? $localHostId : null,
+            'host_ids' => $canAccessLocalHost ? [$localHostId] : [],
             'all_hosts' => false,
         ];
     }
 
     /**
      * @param  Builder<*>  $query
-     * @param  array{host_id: int|null, all_hosts: bool}  $scope
+     * @param  array{host_id: int|null, host_ids: list<int>, all_hosts: bool}  $scope
      * @return Builder<*>
      */
     protected function applyHostScope(Builder $query, array $scope): Builder
     {
         if ($scope['host_id'] !== null) {
             $query->where('host_id', $scope['host_id']);
+
+            return $query;
         }
 
+        if ($scope['host_ids'] === []) {
+            $query->whereRaw('1 = 0');
+
+            return $query;
+        }
+
+        $query->whereIn('host_id', $scope['host_ids']);
+
         return $query;
+    }
+
+    protected function authorizeHostAccess(Request $request, ?int $hostId): void
+    {
+        if ($hostId === null || ! $request->user()?->canAccessHostId($hostId)) {
+            throw new HttpException(403, 'You do not have access to this host.');
+        }
     }
 
     /**

@@ -19,11 +19,13 @@ return new class extends Migration
             'job_batches',
             'failed_jobs',
             'hosts',
+            'host_user',
             'docker_volumes',
             'backup_destinations',
             'backup_jobs',
             'backup_runs',
             'restore_runs',
+            'agent_commands',
             'activity_logs',
             'notification_channels',
             'backup_job_notification_channel',
@@ -47,6 +49,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->string('role')->default('user')->index();
+            $table->string('host_access_mode')->default('all')->index();
             $table->string('locale', 5)->default('en');
             $table->string('theme', 10)->default('dark');
             $table->rememberToken();
@@ -141,6 +144,15 @@ return new class extends Migration
             'updated_at' => $now,
         ]);
 
+        Schema::create('host_user', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('host_id')->constrained('hosts')->cascadeOnDelete();
+            $table->timestamps();
+
+            $table->unique(['user_id', 'host_id']);
+        });
+
         Schema::create('docker_volumes', function (Blueprint $table) use ($localHostId) {
             $table->id();
             $table->foreignId('host_id')->default($localHostId)->constrained('hosts')->restrictOnDelete();
@@ -233,6 +245,23 @@ return new class extends Migration
             $table->timestamps();
         });
 
+        Schema::create('agent_commands', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('host_id')->constrained('hosts')->cascadeOnDelete();
+            $table->string('type')->index();
+            $table->string('status')->default('pending')->index();
+            $table->json('payload')->nullable();
+            $table->text('secret_payload')->nullable();
+            $table->foreignId('backup_run_id')->nullable()->constrained('backup_runs')->nullOnDelete();
+            $table->foreignId('restore_run_id')->nullable()->constrained('restore_runs')->nullOnDelete();
+            $table->timestamp('lease_until')->nullable()->index();
+            $table->unsignedInteger('attempts')->default(0);
+            $table->text('last_error')->nullable();
+            $table->timestamps();
+
+            $table->index(['host_id', 'status']);
+        });
+
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
             $table->string('event_type')->index();
@@ -284,11 +313,13 @@ return new class extends Migration
         Schema::dropIfExists('backup_job_notification_channel');
         Schema::dropIfExists('notification_channels');
         Schema::dropIfExists('activity_logs');
+        Schema::dropIfExists('agent_commands');
         Schema::dropIfExists('restore_runs');
         Schema::dropIfExists('backup_runs');
         Schema::dropIfExists('backup_jobs');
         Schema::dropIfExists('backup_destinations');
         Schema::dropIfExists('docker_volumes');
+        Schema::dropIfExists('host_user');
         Schema::dropIfExists('hosts');
         Schema::dropIfExists('failed_jobs');
         Schema::dropIfExists('job_batches');

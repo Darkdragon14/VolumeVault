@@ -14,16 +14,25 @@ class SyncDockerVolumes
         private readonly MarkMissingVolumeJobs $markMissingVolumeJobs,
     ) {}
 
-    public function handle(): array
+    public function handle(?Host $host = null): array
     {
-        $localHost = Host::localHost();
+        $host ??= Host::localHost();
+
+        if ($host->type !== Host::TYPE_LOCAL) {
+            throw new \RuntimeException('Only the local host can be synced through the local Docker worker.');
+        }
+
+        return $this->applyVolumeList($host, $this->listDockerVolumes->handle());
+    }
+
+    public function applyVolumeList(Host $host, array $volumes): array
+    {
         $seenAt = now();
-        $volumes = $this->listDockerVolumes->handle();
         $names = collect($volumes)->pluck('name')->filter()->values();
 
         foreach ($volumes as $volume) {
             DockerVolume::updateOrCreate(
-                ['host_id' => $localHost->id, 'name' => $volume['name']],
+                ['host_id' => $host->id, 'name' => $volume['name']],
                 [
                     'driver' => $volume['driver'] ?? null,
                     'mountpoint' => $volume['mountpoint'] ?? null,
@@ -36,7 +45,7 @@ class SyncDockerVolumes
         }
 
         $missingQuery = DockerVolume::query()
-            ->where('host_id', $localHost->id)
+            ->where('host_id', $host->id)
             ->where('exists', true);
 
         if ($names->isNotEmpty()) {
@@ -57,11 +66,11 @@ class SyncDockerVolumes
             ->whereNotIn('name', clone $jobVolumeNames)
             ->delete();
         $removed += DockerVolume::query()
-            ->where('host_id', $localHost->id)
+            ->where('host_id', $host->id)
             ->where('exists', false)
             ->whereNotIn('name', clone $jobVolumeNames)
             ->delete();
-        $affectedJobs = $this->markMissingVolumeJobs->handle($missingNames->all(), $localHost);
+        $affectedJobs = $this->markMissingVolumeJobs->handle($missingNames->all(), $host);
 
         return [
             'found' => $names->count(),

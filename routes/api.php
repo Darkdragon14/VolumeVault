@@ -19,8 +19,18 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
     Route::get('/openapi.json', OpenApiController::class);
 
+    Route::prefix('agent')->group(function () {
+        Route::post('/enroll', EnrollmentController::class);
+        Route::post('/heartbeat', HeartbeatController::class);
+        Route::post('/commands/lease', CommandLeaseController::class);
+        Route::post('/commands/{agentCommand}/logs', CommandLogController::class);
+        Route::post('/commands/{agentCommand}/complete', CommandCompletionController::class);
+    });
+
     Route::middleware(['auth:sanctum', 'abilities:read'])->group(function () {
         Route::get('/me', MeController::class);
+        Route::get('/hosts', [HostController::class, 'index']);
+        Route::get('/hosts/{host}', [HostController::class, 'show']);
         Route::get('/dashboard', DashboardController::class);
         Route::get('/volumes', [VolumeController::class, 'index']);
         Route::get('/backup-jobs', [BackupJobController::class, 'index']);

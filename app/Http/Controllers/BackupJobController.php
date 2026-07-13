@@ -101,7 +101,7 @@ class BackupJobController extends Controller
         ]);
     }
 
-    public function edit(BackupJob $backupJob): Response
+    public function edit(Request $request, BackupJob $backupJob): Response
     {
         $backupJob->load(['destination', 'notificationChannels', 'alertConfigs']);
 
@@ -129,7 +129,7 @@ class BackupJobController extends Controller
         return redirect()->route('backup-jobs.index')->with('success', 'Backup job updated.');
     }
 
-    public function destroy(BackupJob $backupJob)
+    public function destroy(Request $request, BackupJob $backupJob)
     {
         if ($backupJob->hasRunInProgress()) {
             return back()->with('error', 'This job has a backup run in progress. Wait for it to finish before deleting it.');
@@ -173,7 +173,7 @@ class BackupJobController extends Controller
         return back()->with('success', 'Backup job paused.');
     }
 
-    public function resume(BackupJob $backupJob)
+    public function resume(Request $request, BackupJob $backupJob)
     {
         // Atomic conditional update, not read-then-write: a worker can flip the job
         // to running between a stale read and the save. Resuming only from a

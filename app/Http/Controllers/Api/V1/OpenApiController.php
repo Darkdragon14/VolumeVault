@@ -175,6 +175,40 @@ class OpenApiController extends Controller
         return $operation;
     }
 
+    private function agentOperation(string $summary, ?array $body = null, bool $id = false, int $status = 200): array
+    {
+        $operation = [
+            'summary' => $summary,
+            'description' => 'Requires Bearer authentication with the assigned agent enrollment token. Agents can only access commands for their own host.',
+            'responses' => [
+                (string) $status => ['description' => 'Successful response.'],
+                '401' => ['description' => 'Missing or invalid agent token.'],
+                '403' => ['description' => 'The command belongs to another host.'],
+                '422' => ['description' => 'Validation or operation error.'],
+            ],
+        ];
+
+        if ($id) {
+            $operation['parameters'] = [[
+                'name' => 'id',
+                'in' => 'path',
+                'required' => true,
+                'schema' => ['type' => 'integer'],
+            ]];
+        }
+
+        if ($body) {
+            $operation['requestBody'] = [
+                'required' => true,
+                'content' => [
+                    'application/json' => ['schema' => $body],
+                ],
+            ];
+        }
+
+        return $operation;
+    }
+
     private function schemas(): array
     {
         return [
@@ -382,6 +416,61 @@ class OpenApiController extends Controller
                     'docker_version' => ['type' => ['string', 'null']],
                     'capabilities' => ['type' => 'object', 'additionalProperties' => true],
                     'metadata' => ['type' => 'object', 'additionalProperties' => true],
+                ],
+            ],
+            'HostCreateRequest' => [
+                'type' => 'object',
+                'required' => ['name'],
+                'properties' => [
+                    'name' => ['type' => 'string', 'maxLength' => 255],
+                ],
+            ],
+            'HostUpdateRequest' => [
+                'type' => 'object',
+                'required' => ['name', 'status'],
+                'properties' => [
+                    'name' => ['type' => 'string', 'maxLength' => 255],
+                    'status' => ['type' => 'string', 'enum' => ['online', 'offline', 'error']],
+                ],
+            ],
+            'AgentHeartbeatRequest' => [
+                'type' => 'object',
+                'properties' => [
+                    'agent_version' => ['type' => ['string', 'null']],
+                    'docker_version' => ['type' => ['string', 'null']],
+                    'capabilities' => ['type' => ['object', 'null'], 'additionalProperties' => true],
+                    'metadata' => ['type' => ['object', 'null'], 'additionalProperties' => true],
+                    'last_error' => ['type' => ['string', 'null']],
+                ],
+            ],
+            'AgentCommandLogRequest' => [
+                'type' => 'object',
+                'required' => ['logs'],
+                'properties' => [
+                    'logs' => ['type' => 'string'],
+                ],
+            ],
+            'AgentCommandCompletionRequest' => [
+                'type' => 'object',
+                'required' => ['status'],
+                'properties' => [
+                    'status' => ['type' => 'string', 'enum' => ['completed', 'failed']],
+                    'logs' => ['type' => ['string', 'null']],
+                    'error' => ['type' => ['string', 'null']],
+                    'volumes' => [
+                        'type' => ['array', 'null'],
+                        'items' => [
+                            'type' => 'object',
+                            'required' => ['name'],
+                            'properties' => [
+                                'name' => ['type' => 'string'],
+                                'driver' => ['type' => ['string', 'null']],
+                                'mountpoint' => ['type' => ['string', 'null']],
+                                'labels' => ['type' => ['object', 'null'], 'additionalProperties' => true],
+                                'options' => ['type' => ['object', 'null'], 'additionalProperties' => true],
+                            ],
+                        ],
+                    ],
                 ],
             ],
             'PauseRequest' => [

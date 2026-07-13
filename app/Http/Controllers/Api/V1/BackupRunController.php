@@ -24,8 +24,10 @@ class BackupRunController extends Controller
         ]);
     }
 
-    public function show(BackupRun $backupRun): JsonResponse
+    public function show(Request $request, BackupRun $backupRun): JsonResponse
     {
+        $this->authorizeHostAccess($request, $backupRun->host_id);
+
         return response()->json(['data' => $this->serializeRun($backupRun->load('job.destination', 'host'))]);
     }
 

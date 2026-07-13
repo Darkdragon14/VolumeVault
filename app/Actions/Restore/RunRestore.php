@@ -348,4 +348,64 @@ class RunRestore
             default => throw new RuntimeException('Unsupported restore mode: '.$mode),
         };
     }
+
+    private function queueAgentRestore(RestoreRun $run, Host $host): void
+    {
+        AgentCommand::create([
+            'host_id' => $host->id,
+            'type' => AgentCommand::TYPE_RESTORE_RUN,
+            'status' => AgentCommand::STATUS_PENDING,
+            'restore_run_id' => $run->id,
+            'payload' => [
+                'restore_run_id' => $run->id,
+                'selected_backup_key' => $run->selected_backup_key,
+                'source_volume_name' => $run->source_volume_name,
+                'target_volume_name' => $run->target_volume_name,
+                'mode' => $run->mode,
+                'destination' => $this->destinationPayload($run->destination),
+            ],
+            'secret_payload' => [
+                'destination' => $this->destinationSecretPayload($run->destination),
+            ],
+        ]);
+
+        $this->appendRunLog->handle($run, 'Queued restore command for agent host '.$host->name.'.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function destinationPayload(?BackupDestination $destination): array
+    {
+        if (! $destination) {
+            return [];
+        }
+
+        return [
+            'id' => $destination->id,
+            'provider' => $destination->provider,
+            'endpoint' => $destination->endpoint,
+            'region' => $destination->region,
+            'bucket' => $destination->bucket,
+            'path_prefix' => $destination->path_prefix,
+            'settings' => $destination->settings ?: [],
+            'use_path_style_endpoint' => $destination->use_path_style_endpoint,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function destinationSecretPayload(?BackupDestination $destination): array
+    {
+        if (! $destination) {
+            return [];
+        }
+
+        return [
+            'access_key_id' => $destination->secret('access_key_id'),
+            'secret_access_key' => $destination->secret('secret_access_key'),
+            'secrets' => $destination->secrets ?: [],
+        ];
+    }
 }

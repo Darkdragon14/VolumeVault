@@ -8,6 +8,7 @@ import { bestSizeUnit, bytesToUnitValue, sizeUnits, type SizeUnit, unitValueToBy
 
 const props = defineProps<{
     job: any | null;
+    hosts: any[];
     volumes: any[];
     containers?: any[];
     destinations: any[];
@@ -151,9 +152,9 @@ const filteredVolumes = computed(() => {
 
     const query = volumeSearch.value.trim().toLowerCase();
 
-    if (!query) return props.volumes;
+    if (!query) return hostVolumes.value;
 
-    return props.volumes.filter((volume) => volume.name.toLowerCase().includes(query));
+    return hostVolumes.value.filter((volume) => volume.name.toLowerCase().includes(query));
 });
 
 const selectedVolume = computed(() => props.volumes.find((volume) => volume.name === form.volume_name));
@@ -332,7 +333,7 @@ const submit = () => {
                         <div v-if="volumeSelectorOpen" class="absolute z-20 mt-2 max-h-60 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-xl shadow-slate-200/60 dark:border-slate-700 dark:bg-slate-950 dark:shadow-black/30">
                             <button
                                 v-for="volume in filteredVolumes"
-                                :key="volume.name"
+                            :key="`${volume.host_id}:${volume.name}`"
                                 type="button"
                                 class="block w-full px-3 py-2 text-left text-slate-700 hover:bg-sky-50 hover:text-sky-700 dark:text-slate-200 dark:hover:bg-sky-400/10 dark:hover:text-sky-100"
                                 @mousedown.prevent="selectVolume(volume)"

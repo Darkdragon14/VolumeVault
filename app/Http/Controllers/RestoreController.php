@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\Restore\CreateRestoreRun;
 use App\Actions\Restore\GenerateRestoreVolumeName;
+use App\Http\Controllers\Concerns\AuthorizesHostAccess;
 use App\Http\Requests\StoreRestoreRequest;
 use App\Jobs\RunRestoreJob;
 use App\Models\BackupJob;
@@ -19,6 +20,8 @@ class RestoreController extends Controller
 {
     public function create(Request $request, BackupJob $backupJob, ListBackupObjects $listBackupObjects, GenerateRestoreVolumeName $generateRestoreVolumeName): Response
     {
+        $this->authorizeHostAccess($request, $backupJob->host_id);
+
         $backupJob->load('destination');
         $hostId = (int) ($backupJob->host_id ?: Host::localHost()->id);
         $listError = null;
@@ -89,6 +92,8 @@ class RestoreController extends Controller
 
     public function listBackups(BackupJob $backupJob, ListBackupObjects $listBackupObjects): JsonResponse
     {
+        $this->authorizeHostAccess($request, $backupJob->host_id);
+
         $backupJob->load('destination');
 
         return response()->json([

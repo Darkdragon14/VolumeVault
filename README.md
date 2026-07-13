@@ -66,6 +66,10 @@ The single container runs nginx, PHP-FPM, database migrations, queue worker, and
 
 Defaults are built into the application for a production SQLite setup. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
 
+VolumeVault always creates a local host for the Docker socket mounted into the central app. Admins can add agent hosts from the `Hosts` screen; without a license, up to two hosts can be active, including the local host. Agent enrollment uses a one-time token that is shown only when an agent host is created or the token is regenerated.
+
+The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. The initial agent runtime heartbeats, leases commands, and supports remote volume sync commands.
+
 You can also use `env_file: .env` for overrides, but do not reuse a development `.env` in production without review. Values such as `APP_ENV=local` or `APP_DEBUG=true` override the safe production defaults.
 
 Host path backup jobs **and local backup destinations** are restricted by `VOLUMEVAULT_HOST_PATH_ALLOWLIST`, a comma-separated list of allowed Docker host path prefixes such as `/srv,/mnt/data`. This is **fail-closed**: when the variable is empty, host path sources and local destinations are refused entirely. Configure the prefixes you intend to back up to/from; paths outside them are rejected both when saved and again at run time (defending against a symlink swapped in afterwards).

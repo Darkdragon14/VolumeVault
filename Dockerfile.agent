@@ -1,0 +1,29 @@
+FROM serversideup/php:8.5-cli-alpine
+
+USER root
+
+RUN apk add --no-cache docker-cli tzdata \
+    && install-php-extensions zip
+
+ENV APP_BASE_DIR=/app \
+    VOLUMEVAULT_AGENT_ENABLED=true
+
+WORKDIR /app
+
+COPY --chown=www-data:www-data composer.json composer.lock ./
+RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --no-scripts --optimize-autoloader
+
+COPY --chown=www-data:www-data app ./app
+COPY --chown=www-data:www-data bootstrap ./bootstrap
+COPY --chown=www-data:www-data config ./config
+COPY --chown=www-data:www-data database ./database
+COPY --chown=www-data:www-data routes ./routes
+COPY --chown=www-data:www-data artisan ./artisan
+
+RUN mkdir -p storage/framework/cache storage/framework/views storage/logs bootstrap/cache \
+    && chown -R www-data:www-data /app/storage /app/bootstrap/cache \
+    && composer dump-autoload --optimize
+
+USER www-data
+
+CMD ["php", "artisan", "volumevault:agent"]

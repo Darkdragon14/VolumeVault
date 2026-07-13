@@ -8,7 +8,7 @@ import { computed, ref } from 'vue';
 import { matchesSearch, readFiltersFromUrl, uniqueSortedOptions, useListFilters, useUrlFilters } from '@/Composables/useListFilters';
 import { formatBytes } from '@/Composables/useFormatBytes';
 
-const props = defineProps<{ volumes: any[] }>();
+const props = defineProps<{ volumes: any[]; hosts: any[]; currentHostId: number | null }>();
 
 const page = usePage();
 const can = page.props.can as { runDockerActions?: boolean };
@@ -18,6 +18,7 @@ const statusFilter = ref('');
 const driverFilter = ref('');
 const stackFilter = ref('');
 const backupFilter = ref('');
+const hostFilter = ref(props.currentHostId ? String(props.currentHostId) : '');
 const filtersVisible = ref(false);
 
 readFiltersFromUrl({ search, status: statusFilter, driver: driverFilter, stack: stackFilter, backup_status: backupFilter });
@@ -138,8 +139,8 @@ const sync = () => router.post('/volumes/sync');
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Last seen') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(volume.last_seen_at) }}</dd></div>
                         </dl>
                         <div class="flex flex-wrap gap-2">
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}`" />
-                            <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume.name)" />
+                            <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="createJobHref(volume)" />
+                            <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume)" />
                         </div>
                     </article>
                 </div>

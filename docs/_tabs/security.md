@@ -10,6 +10,8 @@ Mounting `/var/run/docker.sock` gives this application high privileges on the Do
 
 VolumeVault can start privileged Docker operations through the Docker socket. Treat access to the web UI and write-capable API tokens like access to the Docker host.
 
+In multi-host setups, each agent host has the same Docker-socket sensitivity on its own machine. Agent tokens are separate from user API tokens, are shown only once, and should be handled as host-level credentials.
+
 On first launch, VolumeVault requires onboarding and creates the first account as an administrator. Admins can manage users, encrypted destinations, notification channels, restores, and active Docker operations such as volume sync and manual backup runs. Regular users have read-only access to operational screens.
 
 ## HTTPS And Session Cookie
