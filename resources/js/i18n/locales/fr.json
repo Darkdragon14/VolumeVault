@@ -784,9 +784,9 @@
   "No groups are currently in error.": "Aucun groupe n'est actuellement en erreur.",
   "Group run #{id}": "Exécution de groupe n°{id}",
   "Managed by group": "Géré par le groupe",
-  "Review schedule, members, run history, and actions for this group.": "Consultez la planification, les membres, l'historique des executions et les actions de ce groupe.",
+  "Review schedule, members, run history, and actions for this group.": "Consultez la planification, les membres, l'historique des exécutions et les actions de ce groupe.",
   "Group info": "Infos du groupe",
-  "Failure policy": "Politique d'echec",
+  "Failure policy": "Politique d'échec",
   "Members": "Membres",
-  "Last success": "Dernier succes"
+  "Last success": "Dernier succès"
 }

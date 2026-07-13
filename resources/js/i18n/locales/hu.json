@@ -784,9 +784,9 @@
   "No groups are currently in error.": "Jelenleg egyetlen csoport sincs hibás állapotban.",
   "Group run #{id}": "Csoportfuttatás #{id}",
   "Managed by group": "Csoport által kezelve",
-  "Review schedule, members, run history, and actions for this group.": "Tekintse at a csoport utemezeset, tagjait, futasi elozmenyeit es muveleteit.",
-  "Group info": "Csoport informacio",
-  "Failure policy": "Hibakezelesi szabaly",
+  "Review schedule, members, run history, and actions for this group.": "Tekintse át a csoport ütemezését, tagjait, futási előzményeit és műveleteit.",
+  "Group info": "Csoport információ",
+  "Failure policy": "Hibakezelési szabály",
   "Members": "Tagok",
-  "Last success": "Utolso siker"
+  "Last success": "Utolsó siker"
 }

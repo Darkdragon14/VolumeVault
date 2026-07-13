@@ -784,7 +784,7 @@
   "No groups are currently in error.": "Derzeit sind keine Gruppen fehlerhaft.",
   "Group run #{id}": "Gruppenlauf #{id}",
   "Managed by group": "Von Gruppe verwaltet",
-  "Review schedule, members, run history, and actions for this group.": "Zeitplan, Mitglieder, Ausfuhrungsverlauf und Aktionen dieser Gruppe anzeigen.",
+  "Review schedule, members, run history, and actions for this group.": "Zeitplan, Mitglieder, Ausführungsverlauf und Aktionen dieser Gruppe anzeigen.",
   "Group info": "Gruppeninfo",
   "Failure policy": "Fehlerrichtlinie",
   "Members": "Mitglieder",
