@@ -1,21 +1,26 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'backup_group_detail_page',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'mobile_header_actions',
-        ],
-        [
-            'type' => 'feature',
-            'key' => 'group_backup_size_reporting',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.19.0' => [
+            'date' => '2026-07-14',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.19.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'backup_group_detail_page',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'mobile_header_actions',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'group_backup_size_reporting',
+                ],
+            ],
+        ],
         'v1.18.0' => [
             'date' => '2026-07-07',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.18.0',
