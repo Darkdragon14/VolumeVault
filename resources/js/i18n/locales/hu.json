@@ -783,5 +783,10 @@
   "No group runs yet.": "Még nincsenek csoportfuttatások.",
   "No groups are currently in error.": "Jelenleg egyetlen csoport sincs hibás állapotban.",
   "Group run #{id}": "Csoportfuttatás #{id}",
-  "Managed by group": "Csoport által kezelve"
+  "Managed by group": "Csoport által kezelve",
+  "Review schedule, members, run history, and actions for this group.": "Tekintse át a csoport ütemezését, tagjait, futási előzményeit és műveleteit.",
+  "Group info": "Csoport információ",
+  "Failure policy": "Hibakezelési szabály",
+  "Members": "Tagok",
+  "Last success": "Utolsó siker"
 }

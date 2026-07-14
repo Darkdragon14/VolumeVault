@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
 
@@ -14,7 +14,6 @@ defineProps<{
 }>();
 
 const { t, formatDate } = useI18n();
-const can = usePage().props.can as { runDockerActions?: boolean };
 </script>
 
 <template>
@@ -80,16 +79,10 @@ const can = usePage().props.can as { runDockerActions?: boolean };
     <section v-else-if="sectionKey === 'groups_with_errors'" class="card h-full p-5">
         <h2 class="mb-4 text-lg font-semibold">{{ t('Groups with errors') }}</h2>
         <div v-if="groupsWithErrors.length" class="space-y-3">
-            <template v-for="group in groupsWithErrors" :key="group.id">
-                <Link v-if="can.runDockerActions" :href="`/backup-groups/${group.id}/edit`" class="block rounded-xl bg-rose-400/10 px-4 py-3 hover:bg-rose-400/15">
-                    <p class="break-words font-medium text-rose-100">{{ group.name }}</p>
-                    <p class="break-words text-sm text-rose-200/80">{{ group.last_error || t('Unknown error') }}</p>
-                </Link>
-                <div v-else class="block rounded-xl bg-rose-400/10 px-4 py-3">
-                    <p class="break-words font-medium text-rose-100">{{ group.name }}</p>
-                    <p class="break-words text-sm text-rose-200/80">{{ group.last_error || t('Unknown error') }}</p>
-                </div>
-            </template>
+            <Link v-for="group in groupsWithErrors" :key="group.id" :href="`/backup-groups/${group.id}`" class="block rounded-xl bg-rose-400/10 px-4 py-3 hover:bg-rose-400/15">
+                <p class="break-words font-medium text-rose-100">{{ group.name }}</p>
+                <p class="break-words text-sm text-rose-200/80">{{ group.last_error || t('Unknown error') }}</p>
+            </Link>
         </div>
         <p v-else class="text-sm text-slate-400">{{ t('No groups are currently in error.') }}</p>
     </section>

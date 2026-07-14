@@ -783,5 +783,10 @@
   "No group runs yet.": "Nessuna esecuzione di gruppo ancora.",
   "No groups are currently in error.": "Nessun gruppo è attualmente in errore.",
   "Group run #{id}": "Esecuzione di gruppo #{id}",
-  "Managed by group": "Gestito dal gruppo"
+  "Managed by group": "Gestito dal gruppo",
+  "Review schedule, members, run history, and actions for this group.": "Rivedi pianificazione, membri, cronologia delle esecuzioni e azioni di questo gruppo.",
+  "Group info": "Informazioni gruppo",
+  "Failure policy": "Criterio di errore",
+  "Members": "Membri",
+  "Last success": "Ultimo successo"
 }

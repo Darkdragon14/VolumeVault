@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
 
@@ -10,7 +10,6 @@ defineProps<{
 }>();
 
 const { t, formatDate } = useI18n();
-const can = usePage().props.can as { runDockerActions?: boolean };
 </script>
 
 <template>
@@ -22,7 +21,7 @@ const can = usePage().props.can as { runDockerActions?: boolean };
                     <StatusBadge :status="run.status" />
                     <span class="text-sm text-slate-300">{{ t('{ok}/{total} volumes succeeded', { ok: run.succeeded_members, total: run.total_members }) }}</span>
                 </div>
-                <Link v-if="run.group && can.runDockerActions" :href="`/backup-groups/${run.group.id}/edit`" class="btn-secondary">{{ t('Back to group') }}</Link>
+                <Link v-if="run.group" :href="`/backup-groups/${run.group.id}`" class="btn-secondary">{{ t('Back to group') }}</Link>
             </div>
 
             <dl class="grid gap-4 text-sm sm:grid-cols-2">

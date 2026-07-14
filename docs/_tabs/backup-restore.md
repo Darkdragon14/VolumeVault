@@ -101,6 +101,8 @@ Disable (pause) a member to skip its volume without removing it, and edit a memb
 
 The dashboard shows groups as their own widgets (group counts, recent group runs, and groups in error), separate from standalone jobs, so a member failure surfaces as one group in error rather than many individual jobs. Each member volume keeps its own run history and restore, reachable from the job.
 
+Open a group (from the groups list, the dashboard's groups-in-error widget, or a group run's `Back to group` link) to see its detail page: the group's schedule, members, aggregated run history, and last successful backup size. Any user can view this page; administrators also get the run, pause, resume, edit, and delete actions there. The group's own run history lives on this page, while the edit form stays a pure form.
+
 Proactive alerts still evaluate each member volume individually (backup too old, job in error too long, and so on); because the group owns notifications, a member's alert is delivered through the group's notification channels.
 
 ## Backup Engine Details

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_group_detail_page' => [
+        'title' => 'Pagina di dettaglio del gruppo di backup',
+        'description' => 'I gruppi di backup ora dispongono di una pagina di dettaglio di sola lettura, disponibile per ogni utente, che mostra la pianificazione del gruppo, i suoi membri, la cronologia aggregata delle esecuzioni e la dimensione dell\'ultimo backup riuscito. Aprire un gruppo dall\'elenco, dal widget dei gruppi con errori della dashboard o dal collegamento torna al gruppo di un\'esecuzione porta ora a questa pagina anziché al modulo di modifica riservato agli amministratori. Gli amministratori mantengono qui le azioni esegui, sospendi, riprendi, modifica ed elimina, e la cronologia delle esecuzioni del gruppo è stata spostata in questa pagina dal modulo di modifica, che ora è un modulo puro.',
+    ],
     'mobile_header_actions' => [
         'title' => 'Azioni dell\'intestazione mobile più pulite',
         'description' => 'La personalizzazione della dashboard e le azioni di creazione nelle pagine elenco ora usano pulsanti icona compatti accanto al titolo su mobile, mantenendo i pulsanti di testo completi sugli schermi più grandi.',

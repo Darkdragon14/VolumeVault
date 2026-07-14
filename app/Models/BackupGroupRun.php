@@ -93,12 +93,14 @@ class BackupGroupRun extends Model
     }
 
     /**
-     * The aggregated archive size of the most recent successful group run, or
-     * null when none exists yet or its member sizes have not been recorded.
+     * The aggregated archive size of the most recent successful group run — for a
+     * given group when $groupId is passed, or across all groups otherwise. Null
+     * when none exists yet or its member sizes have not been recorded.
      */
-    public static function lastSuccessfulTotalBackupSize(): ?int
+    public static function lastSuccessfulTotalBackupSize(?int $groupId = null): ?int
     {
         return static::query()
+            ->when($groupId !== null, fn (Builder $query): Builder => $query->where('backup_job_group_id', $groupId))
             ->where('status', self::STATUS_SUCCESS)
             ->select('id')
             ->withTotalBackupSize()

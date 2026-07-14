@@ -783,5 +783,10 @@
   "No group runs yet.": "No group runs yet.",
   "No groups are currently in error.": "No groups are currently in error.",
   "Group run #{id}": "Group run #{id}",
-  "Managed by group": "Managed by group"
+  "Managed by group": "Managed by group",
+  "Review schedule, members, run history, and actions for this group.": "Review schedule, members, run history, and actions for this group.",
+  "Group info": "Group info",
+  "Failure policy": "Failure policy",
+  "Members": "Members",
+  "Last success": "Last success"
 }

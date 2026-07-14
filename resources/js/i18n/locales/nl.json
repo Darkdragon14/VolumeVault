@@ -783,5 +783,10 @@
   "No group runs yet.": "Nog geen groepsuitvoeringen.",
   "No groups are currently in error.": "Er zijn momenteel geen groepen met fouten.",
   "Group run #{id}": "Groepsuitvoering #{id}",
-  "Managed by group": "Beheerd door groep"
+  "Managed by group": "Beheerd door groep",
+  "Review schedule, members, run history, and actions for this group.": "Bekijk planning, leden, uitvoeringsgeschiedenis en acties voor deze groep.",
+  "Group info": "Groepsinfo",
+  "Failure policy": "Foutbeleid",
+  "Members": "Leden",
+  "Last success": "Laatste succes"
 }

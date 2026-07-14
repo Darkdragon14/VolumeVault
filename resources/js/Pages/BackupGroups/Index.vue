@@ -25,7 +25,13 @@ const pause = (id: number) => router.post(`/backup-groups/${id}/pause`);
 const resume = (id: number) => router.post(`/backup-groups/${id}/resume`);
 const toggleNotifications = (group: any) => router.patch(`/backup-groups/${group.id}/notifications`, { notifications_enabled: !group.notifications_enabled });
 const destroyGroup = (id: number) => confirm(t('Delete this backup group? Detach its jobs first.')) && router.delete(`/backup-groups/${id}`);
-const editGroup = (id: number) => router.visit(`/backup-groups/${id}/edit`);
+const viewGroup = (id: number) => router.visit(`/backup-groups/${id}`);
+const onGroupKeydown = (event: KeyboardEvent, id: number) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        viewGroup(id);
+    }
+};
 </script>
 
 <template>
@@ -63,11 +69,11 @@ const editGroup = (id: number) => router.visit(`/backup-groups/${id}/edit`);
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-white/10">
-                            <tr v-for="group in groups.data" :key="group.id" :class="can.runDockerActions ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03]' : ''" :role="can.runDockerActions ? 'link' : undefined" :tabindex="can.runDockerActions ? 0 : undefined" @click="can.runDockerActions && editGroup(group.id)">
+                            <tr v-for="group in groups.data" :key="group.id" class="cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewGroup(group.id)" @keydown="onGroupKeydown($event, group.id)">
                                 <td class="px-4 py-3 font-medium text-white">{{ group.name }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ group.members_count }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ group.schedule_summary }}</td>
-                                <td class="px-4 py-3" @click.stop>
+                                <td class="px-4 py-3" @click.stop @keydown.stop>
                                     <button
                                         type="button"
                                         role="switch"
@@ -98,7 +104,7 @@ const editGroup = (id: number) => router.visit(`/backup-groups/${id}/edit`);
                 </div>
 
                 <div class="divide-y divide-white/10 md:hidden">
-                    <article v-for="group in groups.data" :key="group.id" class="space-y-4 p-4">
+                    <article v-for="group in groups.data" :key="group.id" class="space-y-4 p-4 cursor-pointer transition hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewGroup(group.id)" @keydown="onGroupKeydown($event, group.id)">
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <h2 class="break-words font-semibold text-white">{{ group.name }}</h2>
@@ -106,7 +112,7 @@ const editGroup = (id: number) => router.visit(`/backup-groups/${id}/edit`);
                             </div>
                             <StatusBadge :status="group.status" />
                         </div>
-                        <div class="flex flex-wrap gap-2">
+                        <div class="flex flex-wrap gap-2" @click.stop @keydown.stop>
                             <ActionIcon v-if="can.runDockerActions" :label="t('Run now')" icon="play" :disabled="group.status !== 'active'" @click="runNow(group.id)" />
                             <ActionIcon v-if="can.runDockerActions && (group.status === 'paused' || group.status === 'error')" :label="t('Resume')" icon="play" @click="resume(group.id)" />
                             <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="group.status === 'running'" @click="pause(group.id)" />
