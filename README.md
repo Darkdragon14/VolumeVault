@@ -68,7 +68,7 @@ Defaults are built into the application for a production SQLite setup. Add envir
 
 VolumeVault always creates a local host for the Docker socket mounted into the central app. Admins can add agent hosts from the `Hosts` screen; without a license, up to two hosts can be active, including the local host. Agent enrollment uses a one-time bootstrap token that is shown only when an agent host is created or the token is regenerated. During enrollment, the agent exchanges it for a durable credential stored at the configured credential path. Persist the path's parent directory with a bind mount or Docker volume so the credential survives container replacement.
 
-The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. Remote agents currently support volume sync only; backup jobs and restores remain limited to the local host.
+The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. Remote agents currently support volume sync only; backup jobs and restores remain limited to the local host. Agents initiate outbound API requests and require no inbound port. For homelab deployments, use HTTP only inside an encrypted WireGuard/Tailscale network; otherwise terminate HTTPS at a reverse proxy. Never expose port `8080` over an untrusted network.
 
 You can also use `env_file: .env` for overrides, but do not reuse a development `.env` in production without review. Values such as `APP_ENV=local` or `APP_DEBUG=true` override the safe production defaults.
 

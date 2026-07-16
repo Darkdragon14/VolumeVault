@@ -12,6 +12,25 @@ VolumeVault can start privileged Docker operations through the Docker socket. Tr
 
 In multi-host setups, each agent host has the same Docker-socket sensitivity on its own machine. The one-time bootstrap token is separate from user API tokens and is exchanged during enrollment for a durable agent credential. It remains retryable only until the first authenticated heartbeat. Both should be handled as host-level credentials. Persist the configured credential path with a dedicated volume or bind mount and restrict access to it.
 
+## Agent Network Security
+
+Agents make outbound requests to the central API. They do not need an inbound port. The recommended homelab deployment uses HTTP only inside an encrypted WireGuard, Tailscale, or equivalent private network. Use a reverse proxy with a publicly trusted HTTPS certificate when traffic is not protected by such a tunnel.
+
+Recommended firewall policy:
+
+| Machine | Direction | Allow | Deny |
+| --- | --- | --- | --- |
+| Central host | Inbound | TCP `8080` from the VPN subnet only, or TCP `443` to the HTTPS reverse proxy | Public or unrestricted access to `8080` |
+| Agent host | Inbound | Nothing for VolumeVault Agent | All unsolicited traffic to the agent container |
+| Agent host | Outbound | DNS, NTP, and the central VolumeVault address | Unnecessary destinations according to local policy |
+| Any host | Docker API | Local Unix socket `/var/run/docker.sock` | Unauthenticated Docker TCP `2375` |
+
+Docker TCP `2376` should only be used by operators who have deliberately configured mutual TLS. VolumeVault agents do not require Docker TCP access.
+
+If the central UI must also be reachable outside the VPN, protect it with HTTPS, normal user authentication, and a restrictive firewall or identity-aware proxy. Configure `TRUSTED_PROXIES` only for the actual reverse proxy address or network.
+
+The agent credential grants access to commands for one host and must not be logged or committed. If it may have leaked, regenerate the enrollment token from the `Hosts` screen; this revokes the previous durable credential. Preserve `APP_KEY` separately because losing it makes encrypted application data unrecoverable.
+
 On first launch, VolumeVault requires onboarding and creates the first account as an administrator. Admins can manage users, encrypted destinations, notification channels, restores, and active Docker operations such as volume sync and manual backup runs. Regular users have read-only access to operational screens.
 
 ## HTTPS And Session Cookie

@@ -250,3 +250,68 @@ The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. Configure
 The credential defaults to `/app/storage/agent-token`. Mount `/app/storage` persistently, or set `VOLUMEVAULT_AGENT_CREDENTIAL_PATH` to a path backed by a volume. If the durable credential is lost, regenerate the enrollment token in the `Hosts` screen and restart the agent with the new bootstrap token.
 
 Remote volume sync runs against the Docker socket on the agent's own host. Backup destinations are not used by remote agents while their capability is limited to volume sync.
+
+### Recommended Private Network
+
+The agent initiates every connection to the central VolumeVault API. The central app never connects to an agent, and the agent image does not expose an inbound network port.
+
+For a homelab, connect the machines with WireGuard, Tailscale, NetBird, or another encrypted private network. HTTP is acceptable inside that tunnel because the tunnel encrypts traffic between the hosts:
+
+```text
+Remote agent
+  -> encrypted WireGuard or Tailscale network
+  -> http://100.64.0.10:8080/api/v1/agent/*
+  -> central VolumeVault
+```
+
+Bind the central port to its VPN address instead of every host interface when possible. Replace `100.64.0.10` with the central machine's VPN address:
+
+```yaml
+services:
+  volumevault:
+    image: ghcr.io/darkdragon14/volumevault:latest
+    ports:
+      - "100.64.0.10:8080:8080"
+    volumes:
+      - volumevault_data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      APP_KEY: ${APP_KEY:?Set APP_KEY before starting VolumeVault}
+      APP_URL: http://100.64.0.10:8080
+    restart: unless-stopped
+
+volumes:
+  volumevault_data:
+```
+
+Create the remote host in the `Hosts` screen, then run this Compose file on that remote Docker machine:
+
+```yaml
+services:
+  volumevault-agent:
+    image: ghcr.io/darkdragon14/volumevault-agent:latest
+    volumes:
+      - volumevault_agent_data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      VOLUMEVAULT_CENTRAL_URL: http://100.64.0.10:8080
+      VOLUMEVAULT_AGENT_TOKEN: ${VOLUMEVAULT_AGENT_TOKEN:?Set the one-time bootstrap token}
+    restart: unless-stopped
+
+volumes:
+  volumevault_agent_data:
+```
+
+After the host shows a successful heartbeat, the durable credential is stored in `volumevault_agent_data`. Remove `VOLUMEVAULT_AGENT_TOKEN` from the Compose configuration and redeploy the agent. Keep the storage volume: deleting it requires a new enrollment token.
+
+### HTTPS Alternative
+
+If agent traffic crosses the public Internet or any network that is not already encrypted and trusted, expose the central app through an HTTPS reverse proxy and set the agent URL to the proxy address:
+
+```env
+VOLUMEVAULT_CENTRAL_URL=https://volumevault.example.com
+```
+
+The reverse proxy terminates TLS and forwards plain HTTP to the central container on port `8080`. The agent validates HTTPS certificates normally. VolumeVault does not automatically generate or trust a self-signed certificate; using one requires installing its certificate authority in the agent container trust store.
+
+Never use plain HTTP over the public Internet or an untrusted LAN. Agent Bearer credentials would be exposed to interception.
