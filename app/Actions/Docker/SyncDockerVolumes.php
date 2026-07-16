@@ -3,9 +3,12 @@
 namespace App\Actions\Docker;
 
 use App\Actions\Backup\MarkMissingVolumeJobs;
+use App\Models\AgentCommand;
 use App\Models\BackupJob;
 use App\Models\DockerVolume;
 use App\Models\Host;
+use Illuminate\Support\Facades\Cache;
+use RuntimeException;
 
 class SyncDockerVolumes
 {
@@ -19,10 +22,38 @@ class SyncDockerVolumes
         $host ??= Host::localHost();
 
         if ($host->type !== Host::TYPE_LOCAL) {
-            throw new \RuntimeException('Only the local host can be synced through the local Docker worker.');
+            throw new RuntimeException('Only the local host can be synced through the local Docker worker.');
         }
 
         return $this->applyVolumeList($host, $this->listDockerVolumes->handle());
+    }
+
+    public function queueAgentSync(Host $host): bool
+    {
+        if ($host->type !== Host::TYPE_AGENT) {
+            throw new RuntimeException('Only agent hosts can queue a remote Docker volume sync.');
+        }
+
+        return Cache::lock('volumevault:agent-sync:'.$host->id, 10)->block(5, function () use ($host): bool {
+            $hasPendingSync = AgentCommand::query()
+                ->where('host_id', $host->id)
+                ->where('type', AgentCommand::TYPE_SYNC_VOLUMES)
+                ->whereIn('status', [AgentCommand::STATUS_PENDING, AgentCommand::STATUS_LEASED])
+                ->exists();
+
+            if ($hasPendingSync) {
+                return false;
+            }
+
+            AgentCommand::create([
+                'host_id' => $host->id,
+                'type' => AgentCommand::TYPE_SYNC_VOLUMES,
+                'status' => AgentCommand::STATUS_PENDING,
+                'payload' => [],
+            ]);
+
+            return true;
+        });
     }
 
     public function applyVolumeList(Host $host, array $volumes): array

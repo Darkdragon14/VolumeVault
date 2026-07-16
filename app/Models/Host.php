@@ -35,12 +35,14 @@ class Host extends Model
         'metadata',
         'enrollment_token_hash',
         'enrollment_token_expires_at',
+        'agent_token_hash',
         'enrolled_at',
         'last_error',
     ];
 
     protected $hidden = [
         'enrollment_token_hash',
+        'agent_token_hash',
     ];
 
     protected function casts(): array

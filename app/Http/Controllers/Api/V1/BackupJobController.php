@@ -59,7 +59,12 @@ class BackupJobController extends Controller
         return response()->json([
             'data' => [
                 ...$this->serializeJob($backupJob),
-                'runs' => $backupJob->runs()->with('host')->limit(50)->get()->map(fn (BackupRun $run) => $this->serializeRun($run)),
+                'runs' => $backupJob->runs()
+                    ->whereIn('host_id', $request->user()?->accessibleHostIds() ?? [])
+                    ->with('host')
+                    ->limit(50)
+                    ->get()
+                    ->map(fn (BackupRun $run) => $this->serializeRun($run)),
             ],
         ]);
     }

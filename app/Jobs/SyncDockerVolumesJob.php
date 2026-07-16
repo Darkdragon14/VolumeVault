@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Actions\Docker\SyncDockerVolumes;
-use App\Models\AgentCommand;
 use App\Models\Host;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -11,6 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
+use Throwable;
 
 class SyncDockerVolumesJob implements ShouldQueue
 {
@@ -28,28 +28,20 @@ class SyncDockerVolumesJob implements ShouldQueue
     public function handle(SyncDockerVolumes $syncDockerVolumes): void
     {
         Host::query()->active()->orderBy('id')->each(function (Host $host) use ($syncDockerVolumes): void {
-            if ($host->type === Host::TYPE_LOCAL) {
-                $syncDockerVolumes->handle($host);
+            try {
+                if ($host->type === Host::TYPE_LOCAL) {
+                    $syncDockerVolumes->handle($host);
+                    $host->forceFill(['last_error' => null])->save();
 
-                return;
+                    return;
+                }
+
+                $syncDockerVolumes->queueAgentSync($host);
+            } catch (Throwable $exception) {
+                $host->forceFill([
+                    'last_error' => str($exception->getMessage())->limit(1000)->toString(),
+                ])->save();
             }
-
-            $hasPendingSync = AgentCommand::query()
-                ->where('host_id', $host->id)
-                ->where('type', AgentCommand::TYPE_SYNC_VOLUMES)
-                ->whereIn('status', [AgentCommand::STATUS_PENDING, AgentCommand::STATUS_LEASED])
-                ->exists();
-
-            if ($hasPendingSync) {
-                return;
-            }
-
-            AgentCommand::create([
-                'host_id' => $host->id,
-                'type' => AgentCommand::TYPE_SYNC_VOLUMES,
-                'status' => AgentCommand::STATUS_PENDING,
-                'payload' => [],
-            ]);
         });
     }
 }

@@ -13,6 +13,7 @@ use App\Services\Logging\AppendRunLog;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class CommandCompletionController extends Controller
@@ -26,9 +27,10 @@ class CommandCompletionController extends Controller
 
         $data = $request->validate([
             'status' => ['required', 'string', Rule::in([AgentCommand::STATUS_COMPLETED, AgentCommand::STATUS_FAILED])],
+            'lease_token' => ['required', 'string', 'size:64'],
             'logs' => ['nullable', 'string', 'max:20000'],
             'error' => ['nullable', 'string', 'max:2000'],
-            'volumes' => ['nullable', 'array'],
+            'volumes' => [Rule::requiredIf(fn (): bool => $agentCommand->type === AgentCommand::TYPE_SYNC_VOLUMES && $request->input('status') === AgentCommand::STATUS_COMPLETED), 'array'],
             'volumes.*.name' => ['required_with:volumes', 'string', 'max:255'],
             'volumes.*.driver' => ['nullable', 'string', 'max:255'],
             'volumes.*.mountpoint' => ['nullable', 'string'],
@@ -36,52 +38,68 @@ class CommandCompletionController extends Controller
             'volumes.*.options' => ['nullable', 'array'],
         ]);
 
-        $finishedAt = now();
-        $runStatus = $data['status'] === AgentCommand::STATUS_COMPLETED
-            ? BackupRun::STATUS_SUCCESS
-            : BackupRun::STATUS_FAILED;
+        $agentCommand = DB::transaction(function () use ($agentCommand, $host, $data, $appendRunLog, $syncDockerVolumes, $scheduleCalculator): AgentCommand {
+            $command = AgentCommand::query()
+                ->whereKey($agentCommand->id)
+                ->where('host_id', $host->id)
+                ->where('status', AgentCommand::STATUS_LEASED)
+                ->where('lease_until', '>=', now())
+                ->where('lease_token_hash', hash('sha256', $data['lease_token']))
+                ->lockForUpdate()
+                ->first();
 
-        if ($agentCommand->backupRun) {
-            $backupRun = $agentCommand->backupRun;
-            $job = $backupRun->job;
-            $appendRunLog->handle($agentCommand->backupRun, $data['logs'] ?? null);
-            $backupRun->forceFill([
-                'status' => $runStatus,
-                'finished_at' => $finishedAt,
-                'duration_seconds' => $backupRun->started_at?->diffInSeconds($finishedAt),
-                'error_message' => $data['error'] ?? null,
-            ])->save();
+            abort_unless($command, 409, 'The command lease is no longer active.');
 
-            if ($job) {
-                $job->forceFill([
-                    'status' => $runStatus === BackupRun::STATUS_SUCCESS ? BackupJob::STATUS_ACTIVE : BackupJob::STATUS_ERROR,
-                    'last_success_at' => $runStatus === BackupRun::STATUS_SUCCESS ? $finishedAt : $job->last_success_at,
-                    'last_error' => $runStatus === BackupRun::STATUS_SUCCESS ? null : ($data['error'] ?? 'Agent backup failed.'),
-                    'next_run_at' => $scheduleCalculator->nextRunAt($job->schedule_type, $job->schedule_config ?? [], $finishedAt),
+            $finishedAt = now();
+            $runStatus = $data['status'] === AgentCommand::STATUS_COMPLETED
+                ? BackupRun::STATUS_SUCCESS
+                : BackupRun::STATUS_FAILED;
+
+            if ($command->backupRun) {
+                $backupRun = $command->backupRun;
+                $job = $backupRun->job;
+                $appendRunLog->handle($backupRun, $data['logs'] ?? null);
+                $backupRun->forceFill([
+                    'status' => $runStatus,
+                    'finished_at' => $finishedAt,
+                    'duration_seconds' => $backupRun->started_at?->diffInSeconds($finishedAt),
+                    'error_message' => $data['error'] ?? null,
+                ])->save();
+
+                if ($job) {
+                    $job->forceFill([
+                        'status' => $runStatus === BackupRun::STATUS_SUCCESS ? BackupJob::STATUS_ACTIVE : BackupJob::STATUS_ERROR,
+                        'last_success_at' => $runStatus === BackupRun::STATUS_SUCCESS ? $finishedAt : $job->last_success_at,
+                        'last_error' => $runStatus === BackupRun::STATUS_SUCCESS ? null : ($data['error'] ?? 'Agent backup failed.'),
+                        'next_run_at' => $scheduleCalculator->nextRunAt($job->schedule_type, $job->schedule_config ?? [], $finishedAt),
+                    ])->save();
+                }
+            }
+
+            if ($command->restoreRun) {
+                $restoreRun = $command->restoreRun;
+                $appendRunLog->handle($restoreRun, $data['logs'] ?? null);
+                $restoreRun->forceFill([
+                    'status' => $runStatus === BackupRun::STATUS_SUCCESS ? RestoreRun::STATUS_SUCCESS : RestoreRun::STATUS_FAILED,
+                    'finished_at' => $finishedAt,
+                    'duration_seconds' => $restoreRun->started_at?->diffInSeconds($finishedAt),
+                    'error_message' => $data['error'] ?? null,
                 ])->save();
             }
-        }
 
-        if ($agentCommand->restoreRun) {
-            $restoreRun = $agentCommand->restoreRun;
-            $appendRunLog->handle($agentCommand->restoreRun, $data['logs'] ?? null);
-            $restoreRun->forceFill([
-                'status' => $runStatus === BackupRun::STATUS_SUCCESS ? RestoreRun::STATUS_SUCCESS : RestoreRun::STATUS_FAILED,
-                'finished_at' => $finishedAt,
-                'duration_seconds' => $restoreRun->started_at?->diffInSeconds($finishedAt),
-                'error_message' => $data['error'] ?? null,
+            if ($command->type === AgentCommand::TYPE_SYNC_VOLUMES && $data['status'] === AgentCommand::STATUS_COMPLETED) {
+                $syncDockerVolumes->applyVolumeList($host, $data['volumes']);
+            }
+
+            $command->forceFill([
+                'status' => $data['status'],
+                'lease_until' => null,
+                'lease_token_hash' => null,
+                'last_error' => $data['error'] ?? null,
             ])->save();
-        }
 
-        if ($agentCommand->type === AgentCommand::TYPE_SYNC_VOLUMES && $data['status'] === AgentCommand::STATUS_COMPLETED) {
-            $syncDockerVolumes->applyVolumeList($host, $data['volumes'] ?? []);
-        }
-
-        $agentCommand->forceFill([
-            'status' => $data['status'],
-            'lease_until' => null,
-            'last_error' => $data['error'] ?? null,
-        ])->save();
+            return $command;
+        }, 3);
 
         return response()->json(['data' => [
             'id' => $agentCommand->id,

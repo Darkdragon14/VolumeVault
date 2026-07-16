@@ -2,10 +2,13 @@ FROM serversideup/php:8.5-cli-alpine
 
 USER root
 
-RUN apk add --no-cache docker-cli tzdata \
+RUN apk add --no-cache docker-cli su-exec tzdata \
     && install-php-extensions zip
 
+ARG APP_VERSION=main
+
 ENV APP_BASE_DIR=/app \
+    APP_VERSION=${APP_VERSION} \
     VOLUMEVAULT_AGENT_ENABLED=true
 
 WORKDIR /app
@@ -24,6 +27,7 @@ RUN mkdir -p storage/framework/cache storage/framework/views storage/logs bootst
     && chown -R www-data:www-data /app/storage /app/bootstrap/cache \
     && composer dump-autoload --optimize
 
-USER www-data
+COPY --chmod=755 docker-agent-entrypoint.sh /usr/local/bin/docker-agent-entrypoint
 
+ENTRYPOINT ["docker-agent-entrypoint"]
 CMD ["php", "artisan", "volumevault:agent"]

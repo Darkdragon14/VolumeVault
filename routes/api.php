@@ -20,11 +20,13 @@ Route::prefix('v1')->group(function () {
     Route::get('/openapi.json', OpenApiController::class);
 
     Route::prefix('agent')->group(function () {
-        Route::post('/enroll', EnrollmentController::class);
-        Route::post('/heartbeat', HeartbeatController::class);
-        Route::post('/commands/lease', CommandLeaseController::class);
-        Route::post('/commands/{agentCommand}/logs', CommandLogController::class);
-        Route::post('/commands/{agentCommand}/complete', CommandCompletionController::class);
+        Route::post('/enroll', EnrollmentController::class)->middleware('throttle:agent-enrollment');
+        Route::middleware('throttle:agent')->group(function () {
+            Route::post('/heartbeat', HeartbeatController::class);
+            Route::post('/commands/lease', CommandLeaseController::class);
+            Route::post('/commands/{agentCommand}/logs', CommandLogController::class);
+            Route::post('/commands/{agentCommand}/complete', CommandCompletionController::class);
+        });
     });
 
     Route::middleware(['auth:sanctum', 'abilities:read'])->group(function () {

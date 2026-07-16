@@ -15,6 +15,8 @@ class HostEnrollmentTokens
         $host->forceFill([
             'enrollment_token_hash' => Hash::make($secret),
             'enrollment_token_expires_at' => now()->addHours((int) config('volumevault.hosts.enrollment_token_ttl_hours', 24)),
+            'agent_token_hash' => null,
+            'status' => Host::STATUS_OFFLINE,
         ])->save();
 
         return $host->id.'|'.$secret;

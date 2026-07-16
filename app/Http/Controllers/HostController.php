@@ -35,18 +35,18 @@ class HostController extends Controller
             'name' => ['required', 'string', 'max:255'],
         ]);
 
-        $limits->ensureCanActivate();
+        [$host, $token] = $limits->withActivationSlot(function () use ($data, $tokens): array {
+            $host = Host::create([
+                'name' => $data['name'],
+                'type' => Host::TYPE_AGENT,
+                'status' => Host::STATUS_OFFLINE,
+                'is_active' => true,
+                'capabilities' => [],
+                'metadata' => [],
+            ]);
 
-        $host = Host::create([
-            'name' => $data['name'],
-            'type' => Host::TYPE_AGENT,
-            'status' => Host::STATUS_OFFLINE,
-            'is_active' => true,
-            'capabilities' => [],
-            'metadata' => [],
-        ]);
-
-        $token = $tokens->issue($host);
+            return [$host, $tokens->issue($host)];
+        });
 
         return redirect()
             ->route('hosts.index')
@@ -75,9 +75,7 @@ class HostController extends Controller
 
     public function activate(Host $host, HostLimitService $limits)
     {
-        $limits->ensureCanActivate($host);
-
-        $host->forceFill(['is_active' => true])->save();
+        $limits->withActivationSlot(fn () => $host->forceFill(['is_active' => true])->save(), $host);
 
         return redirect()->route('hosts.index')->with('success', 'Host activated.');
     }

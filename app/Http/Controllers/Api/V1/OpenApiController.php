@@ -175,15 +175,18 @@ class OpenApiController extends Controller
         return $operation;
     }
 
-    private function agentOperation(string $summary, ?array $body = null, bool $id = false, int $status = 200): array
+    private function agentOperation(string $summary, ?array $body = null, bool $id = false, int $status = 200, bool $bootstrap = false): array
     {
         $operation = [
             'summary' => $summary,
-            'description' => 'Requires Bearer authentication with the assigned agent enrollment token. Agents can only access commands for their own host.',
+            'description' => $bootstrap
+                ? 'Requires the one-time enrollment token and returns agent_token. The bootstrap remains retryable until the first authenticated heartbeat, which invalidates it.'
+                : 'Requires Bearer authentication with the durable agent credential. Agents can only access commands for their own host.',
             'responses' => [
                 (string) $status => ['description' => 'Successful response.'],
                 '401' => ['description' => 'Missing or invalid agent token.'],
                 '403' => ['description' => 'The command belongs to another host.'],
+                '409' => ['description' => 'The command lease is expired, completed, or owned by another worker.'],
                 '422' => ['description' => 'Validation or operation error.'],
             ],
         ];
@@ -445,20 +448,23 @@ class OpenApiController extends Controller
             ],
             'AgentCommandLogRequest' => [
                 'type' => 'object',
-                'required' => ['logs'],
+                'required' => ['logs', 'lease_token'],
                 'properties' => [
                     'logs' => ['type' => 'string'],
+                    'lease_token' => ['type' => 'string', 'minLength' => 64, 'maxLength' => 64],
                 ],
             ],
             'AgentCommandCompletionRequest' => [
                 'type' => 'object',
-                'required' => ['status'],
+                'required' => ['status', 'lease_token'],
                 'properties' => [
                     'status' => ['type' => 'string', 'enum' => ['completed', 'failed']],
+                    'lease_token' => ['type' => 'string', 'minLength' => 64, 'maxLength' => 64],
                     'logs' => ['type' => ['string', 'null']],
                     'error' => ['type' => ['string', 'null']],
                     'volumes' => [
                         'type' => ['array', 'null'],
+                        'description' => 'Required when a sync_volumes command completes successfully.',
                         'items' => [
                             'type' => 'object',
                             'required' => ['name'],

@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Models\AgentCommand;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
+use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\Host;
 use App\Models\User;
 use App\Services\Hosts\HostEnrollmentTokens;
+use App\Services\Hosts\HostAgentTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -35,6 +37,13 @@ class HostAccessAndAgentTest extends TestCase
             'cron_expression' => '0 2 * * *',
             'status' => BackupJob::STATUS_ACTIVE,
         ]);
+        BackupRun::create([
+            'host_id' => $localHost->id,
+            'backup_job_id' => $agentJob->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'logs' => 'local host secret log',
+        ]);
 
         $user = User::factory()->user()->create([
             'host_access_mode' => User::HOST_ACCESS_SELECTED,
@@ -60,7 +69,9 @@ class HostAccessAndAgentTest extends TestCase
         $this->withToken($token)
             ->getJson('/api/v1/backup-jobs/'.$agentJob->id)
             ->assertOk()
-            ->assertJsonPath('data.host.id', $agentHost->id);
+            ->assertJsonPath('data.host.id', $agentHost->id)
+            ->assertJsonCount(0, 'data.runs')
+            ->assertJsonMissing(['local host secret log']);
     }
 
     public function test_user_management_requires_selected_hosts_when_mode_is_selected(): void
@@ -126,27 +137,52 @@ class HostAccessAndAgentTest extends TestCase
             'secret_payload' => ['destination' => ['password' => 'super-secret']],
         ]);
 
-        $this->withToken($token)
+        $enrollment = $this->withToken($token)
             ->postJson('/api/v1/agent/enroll', [
                 'agent_version' => '0.1.0',
                 'docker_version' => '26.0.0',
             ])
             ->assertOk()
-            ->assertJsonPath('data.id', $host->id);
+            ->assertJsonPath('data.id', $host->id)
+            ->assertJsonStructure(['agent_token']);
+        $firstAgentToken = $enrollment->json('agent_token');
+
+        $agentToken = $this->withToken($token)
+            ->postJson('/api/v1/agent/enroll')
+            ->assertOk()
+            ->json('agent_token');
+
+        $this->withToken($firstAgentToken)
+            ->postJson('/api/v1/agent/heartbeat')
+            ->assertUnauthorized();
 
         $this->withToken($token)
+            ->postJson('/api/v1/agent/heartbeat')
+            ->assertUnauthorized();
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/heartbeat')
+            ->assertOk();
+
+        $this->withToken($token)
+            ->postJson('/api/v1/agent/enroll')
+            ->assertUnauthorized();
+
+        $lease = $this->withToken($agentToken)
             ->postJson('/api/v1/agent/commands/lease')
             ->assertOk()
             ->assertJsonPath('data.id', $command->id)
-            ->assertJsonPath('data.secret_payload.destination.password', 'super-secret');
+            ->assertJsonPath('data.secret_payload.destination.password', 'super-secret')
+            ->assertJsonStructure(['data' => ['lease_token']]);
 
-        $this->withToken($token)
+        $this->withToken($agentToken)
             ->postJson('/api/v1/agent/commands/'.$otherCommand->id.'/complete', [
                 'status' => AgentCommand::STATUS_COMPLETED,
+                'lease_token' => $lease->json('data.lease_token'),
             ])
             ->assertForbidden();
 
-        $rawSecretPayload = DB::table('agent_commands')->whereKey($command->id)->value('secret_payload');
+        $rawSecretPayload = DB::table('agent_commands')->where('id', $command->id)->value('secret_payload');
         $this->assertIsString($rawSecretPayload);
         $this->assertStringNotContainsString('super-secret', $rawSecretPayload);
     }
@@ -161,25 +197,83 @@ class HostAccessAndAgentTest extends TestCase
         $command = AgentCommand::factory()->create([
             'host_id' => $host->id,
             'type' => AgentCommand::TYPE_SYNC_VOLUMES,
-            'status' => AgentCommand::STATUS_LEASED,
-            'lease_until' => now()->addMinutes(5),
+            'status' => AgentCommand::STATUS_PENDING,
+            'lease_until' => null,
         ]);
 
-        $this->withToken($token)
+        $enrollment = $this->withToken($token)
             ->postJson('/api/v1/agent/enroll')
             ->assertOk();
+        $agentToken = $enrollment->json('agent_token');
 
-        $this->withToken($token)
+        $lease = $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/lease')
+            ->assertOk()
+            ->assertJsonPath('data.id', $command->id);
+
+        $completion = [
+            'status' => AgentCommand::STATUS_COMPLETED,
+            'lease_token' => $lease->json('data.lease_token'),
+            'volumes' => [
+                ['name' => 'agent-only-data', 'driver' => 'local'],
+            ],
+        ];
+
+        $this->withToken($agentToken)
             ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
-                'status' => AgentCommand::STATUS_COMPLETED,
-                'volumes' => [
-                    ['name' => 'agent-only-data', 'driver' => 'local'],
-                ],
+                ...$completion,
             ])
             ->assertOk();
 
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', $completion)
+            ->assertStatus(409);
+
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $host->id, 'name' => 'agent-only-data', 'exists' => true]);
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $otherHost->id, 'name' => 'shared-data', 'exists' => true]);
+    }
+
+    public function test_successful_agent_sync_requires_a_volume_inventory(): void
+    {
+        $host = Host::factory()->agent()->create();
+        $bootstrapToken = app(HostEnrollmentTokens::class)->issue($host);
+        $agentToken = $this->withToken($bootstrapToken)
+            ->postJson('/api/v1/agent/enroll')
+            ->assertOk()
+            ->json('agent_token');
+        $command = AgentCommand::factory()->create([
+            'host_id' => $host->id,
+            'type' => AgentCommand::TYPE_SYNC_VOLUMES,
+        ]);
+        $leaseToken = $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/lease')
+            ->assertOk()
+            ->json('data.lease_token');
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
+                'status' => AgentCommand::STATUS_COMPLETED,
+                'lease_token' => $leaseToken,
+            ])
+            ->assertJsonValidationErrors('volumes');
+    }
+
+    public function test_agents_behind_the_same_ip_have_separate_operational_rate_limits(): void
+    {
+        $firstHost = Host::factory()->agent()->create();
+        $secondHost = Host::factory()->agent()->create();
+        $agentTokens = app(HostAgentTokens::class);
+        $firstToken = $agentTokens->issue($firstHost);
+        $secondToken = $agentTokens->issue($secondHost);
+
+        foreach (range(1, 31) as $attempt) {
+            $this->withToken($firstToken)
+                ->postJson('/api/v1/agent/commands/lease')
+                ->assertOk();
+            $this->withToken($secondToken)
+                ->postJson('/api/v1/agent/commands/lease')
+                ->assertOk();
+        }
     }
 
     private function destination(): BackupDestination

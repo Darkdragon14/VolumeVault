@@ -31,6 +31,8 @@ class HeartbeatController extends Controller
             'docker_version' => $data['docker_version'] ?? $host->docker_version,
             'capabilities' => $data['capabilities'] ?? $host->capabilities,
             'metadata' => $data['metadata'] ?? $host->metadata,
+            'enrollment_token_hash' => null,
+            'enrollment_token_expires_at' => null,
             'last_error' => $data['last_error'] ?? null,
         ])->save();
 

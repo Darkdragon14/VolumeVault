@@ -8,6 +8,7 @@ use App\Models\AgentCommand;
 use App\Services\Logging\AppendRunLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CommandLogController extends Controller
 {
@@ -20,15 +21,29 @@ class CommandLogController extends Controller
 
         $data = $request->validate([
             'logs' => ['required', 'string', 'max:20000'],
+            'lease_token' => ['required', 'string', 'size:64'],
         ]);
 
-        if ($agentCommand->backupRun) {
-            $appendRunLog->handle($agentCommand->backupRun, $data['logs']);
-        }
+        DB::transaction(function () use ($agentCommand, $host, $data, $appendRunLog): void {
+            $command = AgentCommand::query()
+                ->whereKey($agentCommand->id)
+                ->where('host_id', $host->id)
+                ->where('status', AgentCommand::STATUS_LEASED)
+                ->where('lease_until', '>=', now())
+                ->where('lease_token_hash', hash('sha256', $data['lease_token']))
+                ->lockForUpdate()
+                ->first();
 
-        if ($agentCommand->restoreRun) {
-            $appendRunLog->handle($agentCommand->restoreRun, $data['logs']);
-        }
+            abort_unless($command, 409, 'The command lease is no longer active.');
+
+            if ($command->backupRun) {
+                $appendRunLog->handle($command->backupRun, $data['logs']);
+            }
+
+            if ($command->restoreRun) {
+                $appendRunLog->handle($command->restoreRun, $data['logs']);
+            }
+        }, 3);
 
         return response()->json(status: 204);
     }

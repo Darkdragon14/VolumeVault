@@ -28,14 +28,14 @@ class VolumeController extends Controller
         try {
             $result = $this->syncHosts($request, $syncDockerVolumes);
 
-            return back()->with('success', "Synced {$result['found']} Docker volumes. {$result['marked_missing']} marked missing. {$result['removed']} removed. {$result['queued_agent_syncs']} agent syncs queued.");
+            return back()->with('success', "Synced {$result['found']} Docker volumes. {$result['marked_missing']} marked missing. {$result['removed']} removed. {$result['queued_agent_syncs']} agent syncs queued. {$result['errors']} hosts failed.");
         } catch (Throwable $exception) {
             return back()->with('error', 'Unable to sync Docker volumes: '.str($exception->getMessage())->limit(500)->toString());
         }
     }
 
     /**
-     * @return array{found: int, marked_missing: int, removed: int, affected_jobs: int, queued_agent_syncs: int}
+     * @return array{found: int, marked_missing: int, removed: int, affected_jobs: int, queued_agent_syncs: int, errors: int}
      */
     private function syncHosts(Request $request, SyncDockerVolumes $syncDockerVolumes): array
     {
@@ -46,26 +46,31 @@ class VolumeController extends Controller
             'removed' => 0,
             'affected_jobs' => 0,
             'queued_agent_syncs' => 0,
+            'errors' => 0,
         ];
 
         foreach ($hosts as $host) {
-            if ($host->type === Host::TYPE_LOCAL) {
-                $localResult = $syncDockerVolumes->handle($host);
-                $result['found'] += $localResult['found'];
-                $result['marked_missing'] += $localResult['marked_missing'];
-                $result['removed'] += $localResult['removed'];
-                $result['affected_jobs'] += $localResult['affected_jobs'];
+            try {
+                if ($host->type === Host::TYPE_LOCAL) {
+                    $localResult = $syncDockerVolumes->handle($host);
+                    $result['found'] += $localResult['found'];
+                    $result['marked_missing'] += $localResult['marked_missing'];
+                    $result['removed'] += $localResult['removed'];
+                    $result['affected_jobs'] += $localResult['affected_jobs'];
+                    $host->forceFill(['last_error' => null])->save();
 
-                continue;
+                    continue;
+                }
+
+                if ($syncDockerVolumes->queueAgentSync($host)) {
+                    $result['queued_agent_syncs']++;
+                }
+            } catch (Throwable $exception) {
+                $host->forceFill([
+                    'last_error' => str($exception->getMessage())->limit(1000)->toString(),
+                ])->save();
+                $result['errors']++;
             }
-
-            AgentCommand::create([
-                'host_id' => $host->id,
-                'type' => AgentCommand::TYPE_SYNC_VOLUMES,
-                'status' => AgentCommand::STATUS_PENDING,
-                'payload' => [],
-            ]);
-            $result['queued_agent_syncs']++;
         }
 
         return $result;

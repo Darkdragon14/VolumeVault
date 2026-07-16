@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schedule;
@@ -67,27 +68,70 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
     }
 
     $centralUrl = rtrim((string) config('volumevault.agent.central_url'), '/');
-    $token = (string) config('volumevault.agent.token');
+    $bootstrapToken = (string) config('volumevault.agent.token');
+    $credentialPath = (string) config('volumevault.agent.credential_path');
+    $agentToken = File::isFile($credentialPath) ? trim(File::get($credentialPath)) : '';
 
-    if ($centralUrl === '' || $token === '') {
-        $this->error('VOLUMEVAULT_CENTRAL_URL and VOLUMEVAULT_AGENT_TOKEN are required.');
+    if ($centralUrl === '' || ($agentToken === '' && $bootstrapToken === '')) {
+        $this->error('VOLUMEVAULT_CENTRAL_URL and an agent bootstrap or persisted credential are required.');
 
         return 1;
     }
-
-    $client = Http::baseUrl($centralUrl.'/api/v1/agent')
-        ->withToken($token)
-        ->acceptJson()
-        ->timeout(30)
-        ->retry(2, 500);
 
     $metadata = [
         'agent_version' => config('app.version'),
         'docker_version' => trim((string) shell_exec('docker version --format "{{.Server.Version}}" 2>/dev/null')),
         'capabilities' => ['sync_volumes' => true],
     ];
+    File::ensureDirectoryExists(dirname($credentialPath));
 
-    $client->post('/heartbeat', $metadata)->throw();
+    if (! is_writable(dirname($credentialPath))) {
+        throw new RuntimeException('The agent credential directory is not writable: '.dirname($credentialPath));
+    }
+
+    $persistCredential = function (string $token) use ($credentialPath): void {
+        $temporaryPath = $credentialPath.'.'.Str::random(12).'.tmp';
+
+        if (File::put($temporaryPath, $token, true) === false || ! chmod($temporaryPath, 0600) || ! rename($temporaryPath, $credentialPath)) {
+            File::delete($temporaryPath);
+
+            throw new RuntimeException('Unable to persist the agent credential atomically.');
+        }
+    };
+    $clientFor = fn (string $token) => Http::baseUrl($centralUrl.'/api/v1/agent')
+        ->withToken($token)
+        ->acceptJson()
+        ->timeout(30)
+        ->retry(2, 500, null, false);
+    $enroll = function () use ($clientFor, $bootstrapToken, $metadata, $persistCredential): string {
+        $token = (string) $clientFor($bootstrapToken)
+            ->post('/enroll', $metadata)
+            ->throw()
+            ->json('agent_token');
+
+        if ($token === '') {
+            throw new RuntimeException('The central server did not return an agent credential.');
+        }
+
+        $persistCredential($token);
+
+        return $token;
+    };
+
+    if ($agentToken === '') {
+        $agentToken = $enroll();
+    }
+
+    $client = $clientFor($agentToken);
+    $heartbeat = $client->post('/heartbeat', $metadata);
+
+    if ($heartbeat->unauthorized() && $bootstrapToken !== '') {
+        $agentToken = $enroll();
+        $client = $clientFor($agentToken);
+        $heartbeat = $client->post('/heartbeat', $metadata);
+    }
+
+    $heartbeat->throw();
 
     do {
         $lease = $client->post('/commands/lease')->throw()->json('data');
@@ -106,17 +150,20 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
             if ($lease['type'] === 'sync_volumes') {
                 $client->post('/commands/'.$lease['id'].'/complete', [
                     'status' => 'completed',
+                    'lease_token' => $lease['lease_token'],
                     'volumes' => $listDockerVolumes->handle(),
                 ])->throw();
             } else {
                 $client->post('/commands/'.$lease['id'].'/complete', [
                     'status' => 'failed',
+                    'lease_token' => $lease['lease_token'],
                     'error' => 'This agent runtime currently supports sync_volumes commands only.',
                 ])->throw();
             }
         } catch (Throwable $exception) {
             $client->post('/commands/'.$lease['id'].'/complete', [
                 'status' => 'failed',
+                'lease_token' => $lease['lease_token'],
                 'error' => str($exception->getMessage())->limit(1000)->toString(),
             ])->throw();
         }

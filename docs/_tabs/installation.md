@@ -243,8 +243,10 @@ During onboarding, you can either create the first administrator or import a `.v
 
 VolumeVault creates a `Local Docker Host` automatically for the Docker socket mounted into the central app. This host is active by default and counts toward the free active-host limit.
 
-Admins can add agent hosts from the `Hosts` screen. Creating or regenerating an agent enrollment token shows the token once; only a hash is stored. Agent endpoints use that token separately from user API tokens.
+Admins can add agent hosts from the `Hosts` screen. Creating or regenerating an agent enrollment token shows a one-time bootstrap token; only a hash is stored by the central app. On first startup, the agent exchanges that bootstrap token for a durable credential and writes it to the configured credential path. Mount the credential path's parent directory from a persistent Docker volume or bind mount so the enrolled identity survives agent container replacement. Do not bind-mount the credential file itself because the agent replaces it atomically.
 
-The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. Configure it with `VOLUMEVAULT_CENTRAL_URL` and the one-time enrollment token shown by the central app as `VOLUMEVAULT_AGENT_TOKEN`. The first agent runtime is intentionally narrow: it heartbeats, leases commands, and executes remote volume sync. Backup and restore commands are created by the central app but require the agent executor to support those command types before they will run remotely.
+The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. Configure it with `VOLUMEVAULT_CENTRAL_URL` and the one-time bootstrap token shown by the central app as `VOLUMEVAULT_AGENT_TOKEN`. Remote agents currently heartbeat, lease commands, and execute volume sync only. Backup jobs and restores remain limited to the local host until those agent command types are supported.
 
-Remote agent hosts execute Docker work on their own Docker host. Local filesystem and Docker-volume destinations are therefore host-local when executed by an agent, while cloud, SFTP, and WebDAV destinations are reached by the agent directly.
+The credential defaults to `/app/storage/agent-token`. Mount `/app/storage` persistently, or set `VOLUMEVAULT_AGENT_CREDENTIAL_PATH` to a path backed by a volume. If the durable credential is lost, regenerate the enrollment token in the `Hosts` screen and restart the agent with the new bootstrap token.
+
+Remote volume sync runs against the Docker socket on the agent's own host. Backup destinations are not used by remote agents while their capability is limited to volume sync.

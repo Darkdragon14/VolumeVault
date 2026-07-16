@@ -3,6 +3,9 @@
 namespace App\Services\Hosts;
 
 use App\Models\Host;
+use Closure;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class HostLimitService
@@ -35,5 +38,15 @@ class HostLimitService
         throw ValidationException::withMessages([
             'host' => 'The active host limit has been reached.',
         ]);
+    }
+
+    public function withActivationSlot(Closure $callback, ?Host $host = null): mixed
+    {
+        return Cache::lock('volumevault:active-host-limit', 10)->block(5, function () use ($callback, $host): mixed {
+            $host?->refresh();
+            $this->ensureCanActivate($host);
+
+            return DB::transaction($callback, 3);
+        });
     }
 }

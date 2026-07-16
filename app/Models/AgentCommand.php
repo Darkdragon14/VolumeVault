@@ -35,8 +35,14 @@ class AgentCommand extends Model
         'backup_run_id',
         'restore_run_id',
         'lease_until',
+        'lease_token_hash',
         'attempts',
         'last_error',
+    ];
+
+    protected $hidden = [
+        'lease_token_hash',
+        'secret_payload',
     ];
 
     protected function casts(): array

@@ -46,6 +46,23 @@ class HostsFoundationMigrationTest extends TestCase
             $this->assertFalse(Schema::hasIndex('docker_volumes', ['name'], 'unique'));
             $this->assertTrue(Schema::hasIndex('docker_volumes', ['host_id', 'name'], 'unique'));
 
+            Schema::create('agent_commands', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('host_id');
+                $table->timestamp('lease_until')->nullable();
+            });
+
+            $authenticationMigration = require database_path('migrations/2026_07_15_135920_add_agent_authentication_columns.php');
+            $authenticationMigration->up();
+
+            $this->assertTrue(Schema::hasColumn('hosts', 'agent_token_hash'));
+            $this->assertTrue(Schema::hasColumn('agent_commands', 'lease_token_hash'));
+
+            $authenticationMigration->down();
+            $this->assertFalse(Schema::hasColumn('hosts', 'agent_token_hash'));
+            $this->assertFalse(Schema::hasColumn('agent_commands', 'lease_token_hash'));
+            $authenticationMigration->up();
+
             $agentHostId = DB::table('hosts')->insertGetId([
                 'name' => 'Remote Agent',
                 'type' => 'agent',

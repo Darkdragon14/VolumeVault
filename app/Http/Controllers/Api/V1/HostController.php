@@ -45,20 +45,22 @@ class HostController extends Controller
             'name' => ['required', 'string', 'max:255'],
         ]);
 
-        $limits->ensureCanActivate();
+        [$host, $enrollmentToken] = $limits->withActivationSlot(function () use ($data, $tokens): array {
+            $host = Host::create([
+                'name' => $data['name'],
+                'type' => Host::TYPE_AGENT,
+                'status' => Host::STATUS_OFFLINE,
+                'is_active' => true,
+                'capabilities' => [],
+                'metadata' => [],
+            ]);
 
-        $host = Host::create([
-            'name' => $data['name'],
-            'type' => Host::TYPE_AGENT,
-            'status' => Host::STATUS_OFFLINE,
-            'is_active' => true,
-            'capabilities' => [],
-            'metadata' => [],
-        ]);
+            return [$host, $tokens->issue($host)];
+        });
 
         return response()->json([
             'data' => $this->safeHost($host),
-            'enrollment_token' => $tokens->issue($host),
+            'enrollment_token' => $enrollmentToken,
         ], 201);
     }
 
@@ -82,9 +84,7 @@ class HostController extends Controller
 
     public function activate(Host $host, HostLimitService $limits): JsonResponse
     {
-        $limits->ensureCanActivate($host);
-
-        $host->forceFill(['is_active' => true])->save();
+        $limits->withActivationSlot(fn () => $host->forceFill(['is_active' => true])->save(), $host);
 
         return response()->json(['data' => $this->safeHost($host->refresh())]);
     }

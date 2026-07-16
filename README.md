@@ -66,9 +66,9 @@ The single container runs nginx, PHP-FPM, database migrations, queue worker, and
 
 Defaults are built into the application for a production SQLite setup. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
 
-VolumeVault always creates a local host for the Docker socket mounted into the central app. Admins can add agent hosts from the `Hosts` screen; without a license, up to two hosts can be active, including the local host. Agent enrollment uses a one-time token that is shown only when an agent host is created or the token is regenerated.
+VolumeVault always creates a local host for the Docker socket mounted into the central app. Admins can add agent hosts from the `Hosts` screen; without a license, up to two hosts can be active, including the local host. Agent enrollment uses a one-time bootstrap token that is shown only when an agent host is created or the token is regenerated. During enrollment, the agent exchanges it for a durable credential stored at the configured credential path. Persist the path's parent directory with a bind mount or Docker volume so the credential survives container replacement.
 
-The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. The initial agent runtime heartbeats, leases commands, and supports remote volume sync commands.
+The dedicated agent image is `ghcr.io/darkdragon14/volumevault-agent`. Remote agents currently support volume sync only; backup jobs and restores remain limited to the local host.
 
 You can also use `env_file: .env` for overrides, but do not reuse a development `.env` in production without review. Values such as `APP_ENV=local` or `APP_DEBUG=true` override the safe production defaults.
 

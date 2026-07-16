@@ -78,6 +78,7 @@ class HostModelTest extends TestCase
             'metadata' => ['region' => 'lab'],
             'last_seen_at' => now(),
             'enrollment_token_hash' => 'hashed-token',
+            'agent_token_hash' => hash('sha256', 'agent-token'),
             'enrollment_token_expires_at' => now()->addHour(),
             'enrolled_at' => now(),
         ]);
@@ -90,6 +91,7 @@ class HostModelTest extends TestCase
         $this->assertNotNull($host->enrolled_at);
         $this->assertSame('hashed-token', $host->getRawOriginal('enrollment_token_hash'));
         $this->assertArrayNotHasKey('enrollment_token_hash', $host->toArray());
+        $this->assertArrayNotHasKey('agent_token_hash', $host->toArray());
     }
 
     private function destination(): BackupDestination

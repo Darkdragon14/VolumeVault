@@ -19,6 +19,19 @@ class CreateBackupRun
     {
         $job->loadMissing('destination');
         $hostId = (int) ($job->host_id ?: Host::localHost()->id);
+        $host = Host::query()->find($hostId);
+
+        if (! $host || $host->type !== Host::TYPE_LOCAL) {
+            $job->forceFill([
+                'status' => BackupJob::STATUS_PAUSED,
+                'pause_reason' => 'Remote agent backups are not supported yet.',
+                'next_run_at' => null,
+            ])->save();
+
+            throw ValidationException::withMessages([
+                'host' => 'Remote agent backups are not supported yet.',
+            ]);
+        }
 
         // A group member is only ever run as part of its group run (which creates
         // its BackupRun directly). Block the standalone run paths — manual "run

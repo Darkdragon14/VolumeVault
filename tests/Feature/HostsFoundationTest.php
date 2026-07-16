@@ -3,16 +3,21 @@
 namespace Tests\Feature;
 
 use App\Actions\Backup\CreateBackupRun;
+use App\Actions\Backup\MarkMissingVolumeJobs;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Docker\CreateDockerVolume;
 use App\Actions\Docker\FindContainersUsingVolume;
 use App\Actions\Docker\InspectDockerVolume;
+use App\Actions\Docker\ListDockerVolumes;
 use App\Actions\Docker\RunBackupContainer;
 use App\Actions\Docker\RunRestoreContainer;
 use App\Actions\Docker\StartDockerContainers;
 use App\Actions\Docker\StopDockerContainers;
+use App\Actions\Docker\SyncDockerVolumes;
 use App\Actions\Restore\CreateRestoreRun;
 use App\Actions\Restore\RunRestore;
+use App\Jobs\SyncDockerVolumesJob;
+use App\Models\AgentCommand;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
@@ -109,7 +114,7 @@ class HostsFoundationTest extends TestCase
         DockerVolume::create(['name' => 'shared_data', 'exists' => true]);
     }
 
-    public function test_backup_run_creation_uses_the_job_host(): void
+    public function test_backup_run_creation_rejects_agent_hosts(): void
     {
         $agentHost = Host::factory()->agent()->create(['name' => 'Remote Agent']);
         $destination = $this->destination();
@@ -125,9 +130,17 @@ class HostsFoundationTest extends TestCase
             'status' => BackupJob::STATUS_ACTIVE,
         ]);
 
-        $run = app(CreateBackupRun::class)->handle($job, BackupRun::TRIGGER_MANUAL);
-
-        $this->assertSame($agentHost->id, $run->host_id);
+        try {
+            app(CreateBackupRun::class)->handle($job, BackupRun::TRIGGER_MANUAL);
+            $this->fail('Expected remote backup creation to be rejected.');
+        } catch (ValidationException) {
+            $this->assertDatabaseHas('backup_jobs', [
+                'id' => $job->id,
+                'status' => BackupJob::STATUS_PAUSED,
+                'pause_reason' => 'Remote agent backups are not supported yet.',
+                'next_run_at' => null,
+            ]);
+        }
     }
 
     public function test_backup_run_creation_rejects_volume_that_exists_only_on_another_host(): void
@@ -152,7 +165,7 @@ class HostsFoundationTest extends TestCase
         app(CreateBackupRun::class)->handle($job, BackupRun::TRIGGER_MANUAL);
     }
 
-    public function test_restore_run_creation_uses_the_job_host(): void
+    public function test_restore_run_creation_rejects_agent_hosts(): void
     {
         $agentHost = Host::factory()->agent()->create(['name' => 'Remote Agent']);
         $destination = $this->destination();
@@ -167,13 +180,14 @@ class HostsFoundationTest extends TestCase
             'status' => BackupJob::STATUS_ACTIVE,
         ]);
 
-        $run = app(CreateRestoreRun::class)->handle($job, [
+        $this->expectException(ValidationException::class);
+
+        app(CreateRestoreRun::class)->handle($job, [
             'selected_backup_key' => 'backups/agent_data.tar.gz',
             'mode' => RestoreRun::MODE_NEW_VOLUME,
             'target_volume_name' => 'agent_data_restored',
         ]);
 
-        $this->assertSame($agentHost->id, $run->host_id);
     }
 
     public function test_local_backup_updates_volume_for_the_local_host_only(): void
@@ -226,6 +240,50 @@ class HostsFoundationTest extends TestCase
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $agentHost->id, 'name' => 'app_data', 'exists' => false]);
     }
 
+    public function test_backup_execution_rejects_a_job_moved_after_the_run_was_queued(): void
+    {
+        $localHost = Host::localHost();
+        $agentHost = Host::factory()->agent()->create();
+        $destination = $this->destination();
+        $job = BackupJob::create([
+            'host_id' => $agentHost->id,
+            'name' => 'Moved job',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+        $run = BackupRun::create([
+            'host_id' => $localHost->id,
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+        ]);
+        $sendNotification = Mockery::mock(SendShoutrrrNotification::class);
+        $sendNotification->shouldReceive('sendBackupRunFinished')->once();
+        $action = new RunBackup(
+            Mockery::mock(InspectDockerVolume::class),
+            Mockery::mock(FindContainersUsingVolume::class),
+            Mockery::mock(StopDockerContainers::class),
+            Mockery::mock(StartDockerContainers::class),
+            Mockery::mock(RunBackupContainer::class),
+            app(AppendRunLog::class),
+            $sendNotification,
+            app(BackupScheduleCalculator::class),
+        );
+
+        $action->handle($run);
+
+        $this->assertDatabaseHas('backup_runs', [
+            'id' => $run->id,
+            'host_id' => $localHost->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'error_message' => 'The backup job host changed after this run was queued.',
+        ]);
+    }
+
     public function test_local_restore_updates_volume_for_the_local_host_only(): void
     {
         $localHost = Host::localHost();
@@ -276,6 +334,42 @@ class HostsFoundationTest extends TestCase
 
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $localHost->id, 'name' => 'app_data_restored', 'exists' => true]);
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $agentHost->id, 'name' => 'app_data_restored', 'exists' => false]);
+    }
+
+    public function test_scheduled_sync_still_queues_agent_hosts_when_local_docker_fails(): void
+    {
+        $agentHost = Host::factory()->agent()->create();
+        $listDockerVolumes = Mockery::mock(ListDockerVolumes::class);
+        $listDockerVolumes->shouldReceive('handle')->once()->andThrow(new RuntimeException('Docker socket unavailable'));
+        $syncDockerVolumes = new SyncDockerVolumes($listDockerVolumes, app(MarkMissingVolumeJobs::class));
+
+        (new SyncDockerVolumesJob)->handle($syncDockerVolumes);
+
+        $this->assertDatabaseHas('hosts', [
+            'id' => Host::localHost()->id,
+            'last_error' => 'Docker socket unavailable',
+        ]);
+        $this->assertDatabaseHas('agent_commands', [
+            'host_id' => $agentHost->id,
+            'type' => AgentCommand::TYPE_SYNC_VOLUMES,
+            'status' => AgentCommand::STATUS_PENDING,
+        ]);
+    }
+
+    public function test_agent_sync_queue_deduplicates_active_commands(): void
+    {
+        $agentHost = Host::factory()->agent()->create();
+        $syncDockerVolumes = new SyncDockerVolumes(
+            Mockery::mock(ListDockerVolumes::class),
+            app(MarkMissingVolumeJobs::class),
+        );
+
+        $this->assertTrue($syncDockerVolumes->queueAgentSync($agentHost));
+        $this->assertFalse($syncDockerVolumes->queueAgentSync($agentHost));
+        $this->assertSame(1, AgentCommand::query()
+            ->where('host_id', $agentHost->id)
+            ->where('type', AgentCommand::TYPE_SYNC_VOLUMES)
+            ->count());
     }
 
     private function destination(): BackupDestination

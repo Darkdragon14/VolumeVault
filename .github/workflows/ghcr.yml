@@ -55,6 +55,17 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
 
+      - name: Extract agent metadata
+        id: agent_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-agent
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+            type=ref,event=branch
+            type=ref,event=tag
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -63,5 +74,17 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+
+      - name: Build and push agent
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.agent
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.agent_meta.outputs.tags }}
+          labels: ${{ steps.agent_meta.outputs.labels }}
           build-args: |
             APP_VERSION=${{ github.ref_name }}

@@ -40,7 +40,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                 <button v-if="can.runDockerActions && !job.backup_job_group_id" class="btn-primary" :disabled="job.status !== 'active'" @click="runNow(job.id)">{{ t('Run now') }}</button>
                 <button v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" class="btn-secondary" @click="resume(job.id)">{{ t('Resume') }}</button>
                 <button v-else-if="can.runDockerActions" class="btn-secondary" :disabled="job.status === 'running'" @click="pause(job.id)">{{ t('Pause') }}</button>
-                <Link v-if="can.runDockerActions" :href="`/backup-jobs/${job.id}/restore`" class="btn-secondary">{{ t('Restore') }}</Link>
+                <Link v-if="can.runDockerActions && job.host?.type === 'local'" :href="`/backup-jobs/${job.id}/restore`" class="btn-secondary">{{ t('Restore') }}</Link>
                 <Link v-if="can.runDockerActions" :href="`/backup-jobs/${job.id}/edit`" class="btn-secondary">{{ t('Edit') }}</Link>
                 <button v-if="can.runDockerActions" type="button" class="btn-danger" @click="destroyJob(job.id)">{{ t('Delete') }}</button>
             </div>

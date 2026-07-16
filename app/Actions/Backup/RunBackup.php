@@ -118,7 +118,11 @@ class RunBackup
 
         try {
             if (! $host) {
-                throw new RuntimeException('The backup job host is missing.');
+                throw new RuntimeException('The backup run host is missing.');
+            }
+
+            if ($job->host_id !== $run->host_id) {
+                throw new RuntimeException('The backup job host changed after this run was queued.');
             }
 
             if (! $job->destination?->is_active) {
