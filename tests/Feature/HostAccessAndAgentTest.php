@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Docker\ListDockerVolumes;
 use App\Models\AgentCommand;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
@@ -14,10 +15,10 @@ use App\Services\Hosts\HostAgentTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
-use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Mockery;
 use Tests\TestCase;
 
 class HostAccessAndAgentTest extends TestCase
@@ -279,7 +280,10 @@ class HostAccessAndAgentTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.id', $command->id);
 
-        $this->assertTrue($command->refresh()->lease_until->equalTo(now()->addMinutes(60)));
+        $this->assertSame(
+            now()->addMinutes(60)->format('Y-m-d H:i:s'),
+            $command->refresh()->lease_until->format('Y-m-d H:i:s'),
+        );
     }
 
     public function test_expired_agent_heartbeats_are_marked_offline(): void
@@ -319,7 +323,44 @@ class HostAccessAndAgentTest extends TestCase
         $this->assertSame(Host::STATUS_OFFLINE, $neverSeenHost->refresh()->status);
         $this->assertSame(Host::STATUS_ONLINE, $freshHost->refresh()->status);
         $this->assertSame(Host::STATUS_ONLINE, $inactiveHost->refresh()->status);
-        $this->assertSame(Host::STATUS_ONLINE, $leasedHost->refresh()->status);
+        $this->assertSame(Host::STATUS_OFFLINE, $leasedHost->refresh()->status);
+    }
+
+    public function test_agent_can_recover_its_active_command_lease_with_a_new_token(): void
+    {
+        $host = Host::factory()->agent()->create();
+        $agentToken = app(HostAgentTokens::class)->issue($host);
+        $command = AgentCommand::factory()->create([
+            'host_id' => $host->id,
+            'status' => AgentCommand::STATUS_PENDING,
+        ]);
+
+        $firstLease = $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/lease')
+            ->assertOk();
+        $secondLease = $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/lease')
+            ->assertOk()
+            ->assertJsonPath('data.id', $command->id)
+            ->assertJsonPath('data.attempts', 1);
+
+        $this->assertNotSame($firstLease->json('data.lease_token'), $secondLease->json('data.lease_token'));
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
+                'status' => AgentCommand::STATUS_COMPLETED,
+                'lease_token' => $firstLease->json('data.lease_token'),
+                'volumes' => [['name' => 'app-data']],
+            ])
+            ->assertStatus(409);
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
+                'status' => AgentCommand::STATUS_COMPLETED,
+                'lease_token' => $secondLease->json('data.lease_token'),
+                'volumes' => [['name' => 'app-data']],
+            ])
+            ->assertOk();
     }
 
     public function test_agent_command_loop_does_not_retry_failed_lease_posts(): void
@@ -339,7 +380,7 @@ class HostAccessAndAgentTest extends TestCase
 
         $leaseRequests = 0;
 
-        Http::fake(function (Request $request) use (&$leaseRequests): Response {
+        Http::fake(function (Request $request) use (&$leaseRequests) {
             if (str_ends_with($request->url(), '/enroll')) {
                 return Http::response(['agent_token' => 'agent-token'], 200);
             }
@@ -368,6 +409,69 @@ class HostAccessAndAgentTest extends TestCase
         }
 
         $this->assertSame(1, $leaseRequests);
+    }
+
+    public function test_agent_command_loop_does_not_report_transport_failure_as_execution_failure(): void
+    {
+        $credentialPath = storage_path('framework/testing/agent-token');
+
+        if (file_exists($credentialPath)) {
+            unlink($credentialPath);
+        }
+
+        config([
+            'volumevault.agent.enabled' => true,
+            'volumevault.agent.central_url' => 'https://volumevault.test',
+            'volumevault.agent.token' => 'bootstrap-token',
+            'volumevault.agent.credential_path' => $credentialPath,
+        ]);
+
+        $completionRequests = [];
+        $listDockerVolumes = Mockery::mock(ListDockerVolumes::class);
+        $listDockerVolumes->shouldReceive('handle')->once()->andReturn([
+            ['name' => 'app-data', 'driver' => 'local'],
+        ]);
+        $this->app->instance(ListDockerVolumes::class, $listDockerVolumes);
+
+        Http::fake(function (Request $request) use (&$completionRequests) {
+            if (str_ends_with($request->url(), '/enroll')) {
+                return Http::response(['agent_token' => 'agent-token'], 200);
+            }
+
+            if (str_ends_with($request->url(), '/heartbeat')) {
+                return Http::response(['data' => []], 200);
+            }
+
+            if (str_ends_with($request->url(), '/commands/lease')) {
+                return Http::response(['data' => [
+                    'id' => 123,
+                    'type' => AgentCommand::TYPE_SYNC_VOLUMES,
+                    'lease_token' => str_repeat('a', 64),
+                ]], 200);
+            }
+
+            if (str_ends_with($request->url(), '/commands/123/complete')) {
+                $completionRequests[] = $request->data();
+
+                return Http::response(['message' => 'temporary failure'], 500);
+            }
+
+            return Http::response([], 404);
+        });
+
+        try {
+            Artisan::call('volumevault:agent', ['--once' => true]);
+        } catch (RequestException) {
+            // Expected: a completion transport failure terminates this agent invocation.
+        } finally {
+            if (file_exists($credentialPath)) {
+                unlink($credentialPath);
+            }
+        }
+
+        $this->assertCount(1, $completionRequests);
+        $this->assertSame(AgentCommand::STATUS_COMPLETED, $completionRequests[0]['status']);
+        $this->assertSame('app-data', $completionRequests[0]['volumes'][0]['name']);
     }
 
     public function test_targeted_sync_rejects_inactive_agent_hosts(): void

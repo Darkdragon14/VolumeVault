@@ -372,6 +372,29 @@ class HostsFoundationTest extends TestCase
             ->count());
     }
 
+    public function test_agent_sync_queue_rechecks_host_activation_from_the_database(): void
+    {
+        $agentHost = Host::factory()->agent()->create();
+        $syncDockerVolumes = new SyncDockerVolumes(
+            Mockery::mock(ListDockerVolumes::class),
+            app(MarkMissingVolumeJobs::class),
+        );
+
+        Host::query()->whereKey($agentHost->id)->update(['is_active' => false]);
+
+        try {
+            $syncDockerVolumes->queueAgentSync($agentHost);
+            $this->fail('An inactive host should not accept agent sync commands.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Inactive agent hosts cannot queue a remote Docker volume sync.', $exception->getMessage());
+        }
+
+        $this->assertDatabaseMissing('agent_commands', [
+            'host_id' => $agentHost->id,
+            'type' => AgentCommand::TYPE_SYNC_VOLUMES,
+        ]);
+    }
+
     private function destination(): BackupDestination
     {
         return BackupDestination::create([

@@ -65,6 +65,39 @@ class InitialSchemaMigrationTest extends TestCase
         $this->assertFalse(Schema::hasTable('agent_commands'));
     }
 
+    public function test_hosts_foundation_rollback_allows_duplicate_volume_names_across_hosts(): void
+    {
+        Schema::create('hosts', function (Blueprint $table): void {
+            $table->id();
+        });
+
+        foreach (['docker_volumes', 'backup_jobs', 'backup_runs', 'restore_runs'] as $tableName) {
+            Schema::create($tableName, function (Blueprint $table) use ($tableName): void {
+                $table->id();
+                $table->foreignId('host_id');
+
+                if ($tableName === 'docker_volumes') {
+                    $table->string('name');
+                    $table->unique(['host_id', 'name']);
+                }
+            });
+        }
+
+        DB::table('hosts')->insert([['id' => 1], ['id' => 2]]);
+        DB::table('docker_volumes')->insert([
+            ['host_id' => 1, 'name' => 'app-data'],
+            ['host_id' => 2, 'name' => 'app-data'],
+        ]);
+
+        $migration = require database_path('migrations/2026_05_21_000000_add_hosts_foundation.php');
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasColumn('docker_volumes', 'host_id'));
+        $this->assertSame(2, DB::table('docker_volumes')->where('name', 'app-data')->count());
+        $this->assertFalse(Schema::hasIndex('docker_volumes', ['name'], 'unique'));
+    }
+
     /**
      * @return list<string>
      */

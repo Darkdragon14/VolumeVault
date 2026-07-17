@@ -8,6 +8,7 @@ use App\Models\BackupJob;
 use App\Models\DockerVolume;
 use App\Models\Host;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class SyncDockerVolumes
@@ -30,33 +31,37 @@ class SyncDockerVolumes
 
     public function queueAgentSync(Host $host): bool
     {
-        if ($host->type !== Host::TYPE_AGENT) {
-            throw new RuntimeException('Only agent hosts can queue a remote Docker volume sync.');
-        }
-
-        if (! $host->is_active) {
-            throw new RuntimeException('Inactive agent hosts cannot queue a remote Docker volume sync.');
-        }
-
         return Cache::lock('volumevault:agent-sync:'.$host->id, 10)->block(5, function () use ($host): bool {
-            $hasPendingSync = AgentCommand::query()
-                ->where('host_id', $host->id)
-                ->where('type', AgentCommand::TYPE_SYNC_VOLUMES)
-                ->whereIn('status', [AgentCommand::STATUS_PENDING, AgentCommand::STATUS_LEASED])
-                ->exists();
+            return DB::transaction(function () use ($host): bool {
+                $currentHost = Host::query()->lockForUpdate()->findOrFail($host->id);
 
-            if ($hasPendingSync) {
-                return false;
-            }
+                if ($currentHost->type !== Host::TYPE_AGENT) {
+                    throw new RuntimeException('Only agent hosts can queue a remote Docker volume sync.');
+                }
 
-            AgentCommand::create([
-                'host_id' => $host->id,
-                'type' => AgentCommand::TYPE_SYNC_VOLUMES,
-                'status' => AgentCommand::STATUS_PENDING,
-                'payload' => [],
-            ]);
+                if (! $currentHost->is_active) {
+                    throw new RuntimeException('Inactive agent hosts cannot queue a remote Docker volume sync.');
+                }
 
-            return true;
+                $hasPendingSync = AgentCommand::query()
+                    ->where('host_id', $currentHost->id)
+                    ->where('type', AgentCommand::TYPE_SYNC_VOLUMES)
+                    ->whereIn('status', [AgentCommand::STATUS_PENDING, AgentCommand::STATUS_LEASED])
+                    ->exists();
+
+                if ($hasPendingSync) {
+                    return false;
+                }
+
+                AgentCommand::create([
+                    'host_id' => $currentHost->id,
+                    'type' => AgentCommand::TYPE_SYNC_VOLUMES,
+                    'status' => AgentCommand::STATUS_PENDING,
+                    'payload' => [],
+                ]);
+
+                return true;
+            }, 3);
         });
     }
 

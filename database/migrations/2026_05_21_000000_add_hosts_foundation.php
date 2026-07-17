@@ -27,7 +27,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        $this->restoreDockerVolumeNameUniqueIndex();
+        $this->dropScopedDockerVolumeNameUniqueIndex();
 
         $this->dropHostId('restore_runs');
         $this->dropHostId('backup_runs');
@@ -124,7 +124,7 @@ return new class extends Migration
         }
     }
 
-    private function restoreDockerVolumeNameUniqueIndex(): void
+    private function dropScopedDockerVolumeNameUniqueIndex(): void
     {
         if (! Schema::hasTable('docker_volumes')) {
             return;
@@ -133,12 +133,6 @@ return new class extends Migration
         if (Schema::hasIndex('docker_volumes', ['host_id', 'name'], 'unique')) {
             Schema::table('docker_volumes', function (Blueprint $table) {
                 $table->dropUnique('docker_volumes_host_id_name_unique');
-            });
-        }
-
-        if (Schema::hasColumn('docker_volumes', 'name') && ! Schema::hasIndex('docker_volumes', ['name'], 'unique')) {
-            Schema::table('docker_volumes', function (Blueprint $table) {
-                $table->unique('name');
             });
         }
     }

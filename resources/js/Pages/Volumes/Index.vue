@@ -67,7 +67,7 @@ const sync = () => router.post('/volumes/sync');
                 <div v-if="volumes.length" class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                     <input v-model="search" class="input sm:w-72" data-list-search :aria-label="t('Search')" :placeholder="t('Search volumes, stacks, drivers, paths')">
                     <div class="flex items-center gap-3">
-                        <p class="whitespace-nowrap text-sm text-slate-400">{{ t('{count} results', { count: filteredVolumes.length }) }}</p>
+                        <p v-if="volumes.length" class="whitespace-nowrap text-sm text-slate-400">{{ t('{count} results', { count: filteredVolumes.length }) }}</p>
                         <button type="button" class="btn-secondary gap-2" :aria-expanded="filtersVisible" :aria-label="filtersVisible ? t('Hide filters') : t('Show filters')" @click="filtersVisible = !filtersVisible">
                             <span>{{ t('Filters') }}</span>
                             <span v-if="activeAdvancedFilterCount" class="rounded-full bg-sky-400/20 px-2 py-0.5 text-xs text-sky-100">{{ activeAdvancedFilterCount }}</span>

@@ -24,6 +24,23 @@ class CommandLeaseController extends Controller
         $leaseUntil = now()->addMinutes($leaseMinutes);
 
         $command = DB::transaction(function () use ($host, $leaseTokenHash, $leaseUntil): ?AgentCommand {
+            $activeCommand = AgentCommand::query()
+                ->where('host_id', $host->id)
+                ->where('status', AgentCommand::STATUS_LEASED)
+                ->where('lease_until', '>=', now())
+                ->oldest()
+                ->lockForUpdate()
+                ->first();
+
+            if ($activeCommand) {
+                $activeCommand->forceFill([
+                    'lease_until' => $leaseUntil,
+                    'lease_token_hash' => $leaseTokenHash,
+                ])->save();
+
+                return $activeCommand;
+            }
+
             $command = AgentCommand::query()
                 ->where('host_id', $host->id)
                 ->where(function ($query) {

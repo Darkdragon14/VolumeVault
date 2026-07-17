@@ -158,27 +158,29 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
             continue;
         }
 
-        try {
-            if ($lease['type'] === 'sync_volumes') {
-                $client->post('/commands/'.$lease['id'].'/complete', [
+        if ($lease['type'] === AgentCommand::TYPE_SYNC_VOLUMES) {
+            try {
+                $completion = [
                     'status' => 'completed',
                     'lease_token' => $lease['lease_token'],
                     'volumes' => $listDockerVolumes->handle(),
-                ])->throw();
-            } else {
-                $client->post('/commands/'.$lease['id'].'/complete', [
+                ];
+            } catch (Throwable $exception) {
+                $completion = [
                     'status' => 'failed',
                     'lease_token' => $lease['lease_token'],
-                    'error' => 'This agent runtime currently supports sync_volumes commands only.',
-                ])->throw();
+                    'error' => str($exception->getMessage())->limit(1000)->toString(),
+                ];
             }
-        } catch (Throwable $exception) {
-            $client->post('/commands/'.$lease['id'].'/complete', [
+        } else {
+            $completion = [
                 'status' => 'failed',
                 'lease_token' => $lease['lease_token'],
-                'error' => str($exception->getMessage())->limit(1000)->toString(),
-            ])->throw();
+                'error' => 'This agent runtime currently supports sync_volumes commands only.',
+            ];
         }
+
+        $client->post('/commands/'.$lease['id'].'/complete', $completion)->throw();
 
         if ($this->option('once')) {
             return 0;
@@ -193,10 +195,6 @@ Artisan::command('volumevault:agents:expire-offline', function () {
         ->agents()
         ->active()
         ->whereIn('status', [Host::STATUS_ONLINE, Host::STATUS_ERROR])
-        ->whereDoesntHave('agentCommands', function (Builder $query): void {
-            $query->where('status', AgentCommand::STATUS_LEASED)
-                ->where('lease_until', '>=', now());
-        })
         ->where(function (Builder $query) use ($expiresBefore): void {
             $query->whereNull('last_seen_at')
                 ->orWhere('last_seen_at', '<', $expiresBefore);
