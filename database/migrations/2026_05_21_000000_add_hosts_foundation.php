@@ -27,12 +27,17 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (Schema::hasTable('docker_volumes') && DB::table('docker_volumes')->select('name')->groupBy('name')->havingRaw('count(*) > 1')->exists()) {
+            throw new RuntimeException('Cannot roll back host support while Docker volume names are duplicated across hosts.');
+        }
+
         $this->dropScopedDockerVolumeNameUniqueIndex();
 
         $this->dropHostId('restore_runs');
         $this->dropHostId('backup_runs');
         $this->dropHostId('backup_jobs');
         $this->dropHostId('docker_volumes');
+        $this->restoreDockerVolumeNameUniqueIndex();
 
         Schema::dropIfExists('hosts');
     }
@@ -133,6 +138,15 @@ return new class extends Migration
         if (Schema::hasIndex('docker_volumes', ['host_id', 'name'], 'unique')) {
             Schema::table('docker_volumes', function (Blueprint $table) {
                 $table->dropUnique('docker_volumes_host_id_name_unique');
+            });
+        }
+    }
+
+    private function restoreDockerVolumeNameUniqueIndex(): void
+    {
+        if (Schema::hasTable('docker_volumes') && ! Schema::hasIndex('docker_volumes', ['name'], 'unique')) {
+            Schema::table('docker_volumes', function (Blueprint $table) {
+                $table->unique('name');
             });
         }
     }

@@ -36,12 +36,14 @@ class AgentCommand extends Model
         'restore_run_id',
         'lease_until',
         'lease_token_hash',
+        'lease_request_id',
         'attempts',
         'last_error',
     ];
 
     protected $hidden = [
         'lease_token_hash',
+        'lease_request_id',
         'secret_payload',
     ];
 

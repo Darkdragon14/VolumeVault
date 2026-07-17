@@ -29,31 +29,35 @@ class VolumeBackupSummaries
     {
         $volumes = $volumes->values();
         $volumeNames = $volumes->pluck('name')->filter()->values();
+        $hostIds = $volumes->pluck('host_id')->filter()->unique()->values();
 
         $jobsByVolume = $volumeNames->isEmpty()
             ? collect()
             : BackupJob::query()
                 ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
+                ->whereIn('host_id', $hostIds->all())
                 ->whereIn('volume_name', $volumeNames->all())
-                ->get(['id', 'name', 'volume_name', 'status'])
-                ->groupBy('volume_name');
+                ->get(['id', 'host_id', 'name', 'volume_name', 'status'])
+                ->groupBy(fn (BackupJob $job): string => $this->volumeKey($job->host_id, $job->volume_name));
 
         $runsByVolume = $volumeNames->isEmpty()
             ? collect()
             : BackupRun::query()
-                ->select('backup_runs.*', 'backup_jobs.volume_name as summary_volume_name')
+                ->select('backup_runs.*', 'backup_jobs.host_id as summary_host_id', 'backup_jobs.volume_name as summary_volume_name')
                 ->join('backup_jobs', 'backup_jobs.id', '=', 'backup_runs.backup_job_id')
                 ->where('backup_jobs.source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
+                ->whereIn('backup_jobs.host_id', $hostIds->all())
                 ->whereIn('backup_jobs.volume_name', $volumeNames->all())
                 ->where('backup_runs.status', BackupRun::STATUS_SUCCESS)
                 ->orderByDesc('backup_runs.finished_at')
                 ->orderByDesc('backup_runs.created_at')
                 ->get()
-                ->groupBy('summary_volume_name');
+                ->groupBy(fn (BackupRun $run): string => $this->volumeKey($run->summary_host_id, $run->summary_volume_name));
 
         return $volumes->map(function (DockerVolume $volume) use ($jobsByVolume, $runsByVolume): array {
-            $jobs = $jobsByVolume->get($volume->name, collect());
-            $lastSuccessfulRun = $runsByVolume->get($volume->name, collect())->first();
+            $key = $this->volumeKey($volume->host_id, $volume->name);
+            $jobs = $jobsByVolume->get($key, collect());
+            $lastSuccessfulRun = $runsByVolume->get($key, collect())->first();
 
             return [
                 ...$volume->toArray(),
@@ -139,6 +143,11 @@ class VolumeBackupSummaries
         }
 
         return $jobCount > 0 ? self::STATE_CONFIGURED : self::STATE_UNPROTECTED;
+    }
+
+    private function volumeKey(int|string|null $hostId, ?string $volumeName): string
+    {
+        return (string) $hostId."\0".(string) $volumeName;
     }
 
     private function stackConfigurationState(int $existingVolumeCount, int $configuredJobVolumeCount): string

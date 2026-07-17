@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
+use App\Models\Host;
 use App\Models\User;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Support\Facades\DB;
@@ -55,7 +56,10 @@ class CreateBackupRun
         }
 
         if ($job->isDockerVolumeSource()) {
-            $volume = DockerVolume::where('name', $job->volume_name)->first();
+            $volume = DockerVolume::query()
+                ->where('host_id', $hostId)
+                ->where('name', $job->volume_name)
+                ->first();
 
             if (! $volume || ! $volume->exists) {
                 throw ValidationException::withMessages([
@@ -75,7 +79,7 @@ class CreateBackupRun
             ]);
         }
 
-        return DB::transaction(function () use ($job, $trigger, $initiatedBy): BackupRun {
+        return DB::transaction(function () use ($job, $trigger, $initiatedBy, $hostId): BackupRun {
             $run = BackupRun::create([
                 'host_id' => $hostId,
                 'backup_job_id' => $job->id,

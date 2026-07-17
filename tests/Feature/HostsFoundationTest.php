@@ -14,6 +14,7 @@ use App\Actions\Docker\RunRestoreContainer;
 use App\Actions\Docker\StartDockerContainers;
 use App\Actions\Docker\StopDockerContainers;
 use App\Actions\Docker\SyncDockerVolumes;
+use App\Actions\Docker\VerifyRestoreArchive;
 use App\Actions\Restore\CreateRestoreRun;
 use App\Actions\Restore\RunRestore;
 use App\Jobs\SyncDockerVolumesJob;
@@ -31,7 +32,10 @@ use App\Services\Notifications\SendShoutrrrNotification;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Mockery;
@@ -222,18 +226,14 @@ class HostsFoundationTest extends TestCase
             ->once()
             ->andReturn(new DockerProcessResult([], 0, 'ok', ''));
         $sendNotification = Mockery::mock(SendShoutrrrNotification::class);
-        $sendNotification->shouldReceive('sendBackupRunFinished')->once();
+        $sendNotification->shouldReceive('sendBackupRunStarted')->once();
+        $sendNotification->shouldReceive('sendBackupRunFinished')->zeroOrMoreTimes();
 
-        $action = new RunBackup(
-            $inspectDockerVolume,
-            $findContainersUsingVolume,
-            Mockery::mock(StopDockerContainers::class),
-            Mockery::mock(StartDockerContainers::class),
-            $runBackupContainer,
-            app(AppendRunLog::class),
-            $sendNotification,
-            app(BackupScheduleCalculator::class),
-        );
+        $this->app->instance(InspectDockerVolume::class, $inspectDockerVolume);
+        $this->app->instance(FindContainersUsingVolume::class, $findContainersUsingVolume);
+        $this->app->instance(RunBackupContainer::class, $runBackupContainer);
+        $this->app->instance(SendShoutrrrNotification::class, $sendNotification);
+        $action = app(RunBackup::class);
         $action->handle($run);
 
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $localHost->id, 'name' => 'app_data', 'exists' => true]);
@@ -262,17 +262,10 @@ class HostsFoundationTest extends TestCase
             'trigger' => BackupRun::TRIGGER_MANUAL,
         ]);
         $sendNotification = Mockery::mock(SendShoutrrrNotification::class);
+        $sendNotification->shouldReceive('sendBackupRunStarted')->once();
         $sendNotification->shouldReceive('sendBackupRunFinished')->once();
-        $action = new RunBackup(
-            Mockery::mock(InspectDockerVolume::class),
-            Mockery::mock(FindContainersUsingVolume::class),
-            Mockery::mock(StopDockerContainers::class),
-            Mockery::mock(StartDockerContainers::class),
-            Mockery::mock(RunBackupContainer::class),
-            app(AppendRunLog::class),
-            $sendNotification,
-            app(BackupScheduleCalculator::class),
-        );
+        $this->app->instance(SendShoutrrrNotification::class, $sendNotification);
+        $action = app(RunBackup::class);
 
         $action->handle($run);
 
@@ -321,15 +314,23 @@ class HostsFoundationTest extends TestCase
         $storage = Mockery::mock(DestinationStorage::class);
         $storage->shouldReceive('download')
             ->once()
-            ->with(Mockery::on(fn (BackupDestination $givenDestination): bool => $givenDestination->is($destination)), 'backups/app_data.tar.gz', Mockery::type('string'));
+            ->with(Mockery::on(fn (BackupDestination $givenDestination): bool => $givenDestination->is($destination)), 'backups/app_data.tar.gz', Mockery::type('string'))
+            ->andReturnUsing(function (BackupDestination $destination, string $key, string $path): void {
+                File::ensureDirectoryExists(dirname($path));
+                File::put($path, 'archive');
+            });
+        $verifyRestoreArchive = Mockery::mock(VerifyRestoreArchive::class);
+        $verifyRestoreArchive->shouldReceive('handle')->once()->andReturn(new DockerProcessResult([], 0, 'ok', ''));
+        $sendNotification = Mockery::mock(SendShoutrrrNotification::class);
+        $sendNotification->shouldReceive('sendRestoreRun')->twice();
 
-        $action = new RunRestore(
-            $inspectDockerVolume,
-            $createDockerVolume,
-            $runRestoreContainer,
-            $storage,
-            app(AppendRunLog::class),
-        );
+        $this->app->instance(InspectDockerVolume::class, $inspectDockerVolume);
+        $this->app->instance(CreateDockerVolume::class, $createDockerVolume);
+        $this->app->instance(RunRestoreContainer::class, $runRestoreContainer);
+        $this->app->instance(DestinationStorage::class, $storage);
+        $this->app->instance(VerifyRestoreArchive::class, $verifyRestoreArchive);
+        $this->app->instance(SendShoutrrrNotification::class, $sendNotification);
+        $action = app(RunRestore::class);
         $action->handle($run);
 
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $localHost->id, 'name' => 'app_data_restored', 'exists' => true]);
@@ -354,6 +355,25 @@ class HostsFoundationTest extends TestCase
             'type' => AgentCommand::TYPE_SYNC_VOLUMES,
             'status' => AgentCommand::STATUS_PENDING,
         ]);
+    }
+
+    public function test_local_volume_sync_uses_a_shared_per_host_lock(): void
+    {
+        $localHost = Host::localHost();
+        $lock = Cache::lock('volumevault:docker-volume-sync:'.$localHost->id, 10);
+        $this->assertTrue($lock->get());
+        $listDockerVolumes = Mockery::mock(ListDockerVolumes::class);
+        $listDockerVolumes->shouldNotReceive('handle');
+        $syncDockerVolumes = new SyncDockerVolumes($listDockerVolumes, app(MarkMissingVolumeJobs::class));
+
+        try {
+            $syncDockerVolumes->handle($localHost);
+            $this->fail('A second synchronization should not enter the critical section.');
+        } catch (LockTimeoutException) {
+            $this->assertTrue(true);
+        } finally {
+            $lock->release();
+        }
     }
 
     public function test_agent_sync_queue_deduplicates_active_commands(): void

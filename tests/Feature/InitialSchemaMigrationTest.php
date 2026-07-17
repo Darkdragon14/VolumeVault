@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
@@ -65,7 +66,7 @@ class InitialSchemaMigrationTest extends TestCase
         $this->assertFalse(Schema::hasTable('agent_commands'));
     }
 
-    public function test_hosts_foundation_rollback_allows_duplicate_volume_names_across_hosts(): void
+    public function test_hosts_foundation_rollback_refuses_duplicate_volume_names_without_partial_changes(): void
     {
         Schema::create('hosts', function (Blueprint $table): void {
             $table->id();
@@ -91,11 +92,50 @@ class InitialSchemaMigrationTest extends TestCase
 
         $migration = require database_path('migrations/2026_05_21_000000_add_hosts_foundation.php');
 
+        try {
+            $migration->down();
+            $this->fail('Rollback should refuse duplicate legacy volume names.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Cannot roll back host support while Docker volume names are duplicated across hosts.', $exception->getMessage());
+        }
+
+        $this->assertTrue(Schema::hasColumn('docker_volumes', 'host_id'));
+        $this->assertSame(2, DB::table('docker_volumes')->where('name', 'app-data')->count());
+        $this->assertTrue(Schema::hasIndex('docker_volumes', ['host_id', 'name'], 'unique'));
+    }
+
+    public function test_hosts_foundation_rollback_restores_legacy_volume_name_uniqueness(): void
+    {
+        Schema::create('hosts', function (Blueprint $table): void {
+            $table->id();
+        });
+
+        foreach (['docker_volumes', 'backup_jobs', 'backup_runs', 'restore_runs'] as $tableName) {
+            Schema::create($tableName, function (Blueprint $table) use ($tableName): void {
+                $table->id();
+                $table->foreignId('host_id');
+
+                if ($tableName === 'docker_volumes') {
+                    $table->string('name');
+                    $table->unique(['host_id', 'name']);
+                }
+            });
+        }
+
+        DB::table('hosts')->insert([['id' => 1], ['id' => 2]]);
+        DB::table('docker_volumes')->insert([
+            ['host_id' => 1, 'name' => 'app-data'],
+            ['host_id' => 2, 'name' => 'other-data'],
+        ]);
+
+        $migration = require database_path('migrations/2026_05_21_000000_add_hosts_foundation.php');
         $migration->down();
 
         $this->assertFalse(Schema::hasColumn('docker_volumes', 'host_id'));
-        $this->assertSame(2, DB::table('docker_volumes')->where('name', 'app-data')->count());
-        $this->assertFalse(Schema::hasIndex('docker_volumes', ['name'], 'unique'));
+        $this->assertTrue(Schema::hasIndex('docker_volumes', ['name'], 'unique'));
+
+        $this->expectException(QueryException::class);
+        DB::table('docker_volumes')->insert(['name' => 'app-data']);
     }
 
     /**

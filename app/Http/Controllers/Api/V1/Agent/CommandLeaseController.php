@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\V1\Agent;
 use App\Http\Controllers\Api\V1\Agent\Concerns\AuthenticatesAgent;
 use App\Http\Controllers\Controller;
 use App\Models\AgentCommand;
+use App\Models\Host;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class CommandLeaseController extends Controller
 {
@@ -17,67 +19,76 @@ class CommandLeaseController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         $host = $this->agentHost($request);
-        $leaseMinutes = max(1, min(60, (int) $request->integer('lease_minutes', 60)));
-
-        $leaseToken = Str::random(64);
+        $data = $request->validate([
+            'lease_request_id' => ['required', 'uuid'],
+            'lease_token' => ['required', 'string', 'size:64'],
+            'lease_minutes' => ['nullable', 'integer', 'min:1', 'max:60'],
+        ]);
+        $leaseMinutes = (int) ($data['lease_minutes'] ?? 60);
+        $leaseToken = $data['lease_token'];
         $leaseTokenHash = hash('sha256', $leaseToken);
         $leaseUntil = now()->addMinutes($leaseMinutes);
 
-        $command = DB::transaction(function () use ($host, $leaseTokenHash, $leaseUntil): ?AgentCommand {
-            $activeCommand = AgentCommand::query()
-                ->where('host_id', $host->id)
-                ->where('status', AgentCommand::STATUS_LEASED)
-                ->where('lease_until', '>=', now())
-                ->oldest()
-                ->lockForUpdate()
-                ->first();
+        $command = Cache::lock('volumevault:agent-command-lease:'.$host->id, 10)->block(5, function () use ($host, $data, $leaseTokenHash, $leaseUntil): ?AgentCommand {
+            return DB::transaction(function () use ($host, $data, $leaseTokenHash, $leaseUntil): ?AgentCommand {
+                $lockedHost = $host->newQuery()->lockForUpdate()->findOrFail($host->id);
+                $existingRequest = AgentCommand::query()
+                    ->where('host_id', $lockedHost->id)
+                    ->where('lease_request_id', $data['lease_request_id'])
+                    ->lockForUpdate()
+                    ->first();
 
-            if ($activeCommand) {
-                $activeCommand->forceFill([
-                    'lease_until' => $leaseUntil,
-                    'lease_token_hash' => $leaseTokenHash,
-                ])->save();
+                if ($existingRequest) {
+                    abort_unless(hash_equals((string) $existingRequest->lease_token_hash, $leaseTokenHash), 409, 'The lease request identity does not match.');
 
-                return $activeCommand;
-            }
+                    if (in_array($existingRequest->status, [AgentCommand::STATUS_COMPLETED, AgentCommand::STATUS_FAILED], true)) {
+                        return $existingRequest;
+                    }
 
-            $command = AgentCommand::query()
-                ->where('host_id', $host->id)
-                ->where(function ($query) {
-                    $query->where('status', AgentCommand::STATUS_PENDING)
-                        ->orWhere(function ($query) {
-                            $query->where('status', AgentCommand::STATUS_LEASED)
-                                ->where('lease_until', '<', now());
-                        });
-                })
-                ->oldest()
-                ->lockForUpdate()
-                ->first();
+                    abort_unless($lockedHost->active_agent_command_id === $existingRequest->id, 409, 'The command lease is no longer active.');
 
-            if (! $command) {
-                return null;
-            }
+                    $existingRequest->forceFill(['lease_until' => $leaseUntil])->save();
 
-            $claimed = AgentCommand::query()
-                ->whereKey($command->id)
-                ->where(function ($query) {
-                    $query->where('status', AgentCommand::STATUS_PENDING)
-                        ->orWhere(function ($query) {
-                            $query->where('status', AgentCommand::STATUS_LEASED)
-                                ->where('lease_until', '<', now());
-                        });
-                })
-                ->update([
-                    'status' => AgentCommand::STATUS_LEASED,
-                    'lease_until' => $leaseUntil,
-                    'lease_token_hash' => $leaseTokenHash,
-                    'attempts' => DB::raw('attempts + 1'),
-                    'last_error' => null,
-                    'updated_at' => now(),
-                ]);
+                    return $existingRequest;
+                }
 
-            return $claimed === 1 ? $command->refresh() : null;
-        }, 3);
+                if ($lockedHost->active_agent_command_id !== null) {
+                    $activeCommand = AgentCommand::query()->lockForUpdate()->find($lockedHost->active_agent_command_id);
+
+                    if ($activeCommand?->status === AgentCommand::STATUS_LEASED && $activeCommand->lease_until?->isFuture()) {
+                        return null;
+                    }
+
+                    if ($activeCommand?->status === AgentCommand::STATUS_LEASED) {
+                        return $this->claim($activeCommand, $data['lease_request_id'], $leaseTokenHash, $leaseUntil);
+                    }
+
+                    $lockedHost->forceFill(['active_agent_command_id' => null])->save();
+                }
+
+                $command = AgentCommand::query()
+                    ->where('host_id', $lockedHost->id)
+                    ->where('status', AgentCommand::STATUS_PENDING)
+                    ->oldest()
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $command) {
+                    return null;
+                }
+
+                $reserved = Host::query()
+                    ->whereKey($lockedHost->id)
+                    ->whereNull('active_agent_command_id')
+                    ->update(['active_agent_command_id' => $command->id]);
+
+                if ($reserved !== 1) {
+                    return null;
+                }
+
+                return $this->claim($command, $data['lease_request_id'], $leaseTokenHash, $leaseUntil);
+            }, 3);
+        });
 
         if (! $command) {
             return response()->json(['data' => null]);
@@ -103,5 +114,19 @@ class CommandLeaseController extends Controller
             'lease_token' => $leaseToken,
             'attempts' => $command->attempts,
         ];
+    }
+
+    private function claim(AgentCommand $command, string $leaseRequestId, string $leaseTokenHash, CarbonInterface $leaseUntil): AgentCommand
+    {
+        $command->forceFill([
+            'status' => AgentCommand::STATUS_LEASED,
+            'lease_until' => $leaseUntil,
+            'lease_token_hash' => $leaseTokenHash,
+            'lease_request_id' => $leaseRequestId,
+            'attempts' => $command->attempts + 1,
+            'last_error' => null,
+        ])->save();
+
+        return $command;
     }
 }

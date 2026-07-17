@@ -51,7 +51,7 @@ class MissingVolumeDetectionTest extends TestCase
             'pause_reason' => 'Paused manually.',
         ]);
 
-        app(MarkMissingVolumeJobs::class)->handle(['missing_volume']);
+        app(MarkMissingVolumeJobs::class)->handle(['missing_volume'], Host::localHost());
 
         $job->refresh();
 

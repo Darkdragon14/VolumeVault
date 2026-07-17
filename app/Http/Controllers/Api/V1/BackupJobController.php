@@ -310,7 +310,9 @@ class BackupJobController extends Controller
 
     private function serializeJob(BackupJob $job): array
     {
-        $job->loadMissing('notificationChannels');
+        $job->loadMissing(['notificationChannels', 'host']);
+        $data = $job->toArray();
+        unset($data['destination'], $data['host']);
 
         return [
             ...$data,
@@ -318,6 +320,17 @@ class BackupJobController extends Controller
             'destination' => $job->destination?->safeForFrontend(),
             'notification_channel_ids' => $job->notificationChannels->pluck('id')->values()->all(),
             'schedule_summary' => $this->scheduleCalculator->summary($job->schedule_type, $job->schedule_config ?? []),
+        ];
+    }
+
+    private function serializeRun(BackupRun $run): array
+    {
+        $data = $run->toArray();
+        unset($data['host']);
+
+        return [
+            ...$data,
+            'host' => $this->safeHost($run->host),
         ];
     }
 

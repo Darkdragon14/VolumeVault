@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -110,5 +111,34 @@ class User extends Authenticatable
     public function twoFactorTrustedDevices(): HasMany
     {
         return $this->hasMany(TwoFactorTrustedDevice::class);
+    }
+
+    public function hosts(): BelongsToMany
+    {
+        return $this->belongsToMany(Host::class)->withTimestamps();
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function accessibleHostIds(): array
+    {
+        if ($this->isAdmin() || $this->host_access_mode === self::HOST_ACCESS_ALL) {
+            return Host::query()->pluck('id')->map(fn (int|string $id): int => (int) $id)->all();
+        }
+
+        return $this->hosts()
+            ->pluck('hosts.id')
+            ->map(fn (int|string $id): int => (int) $id)
+            ->all();
+    }
+
+    public function canAccessHostId(int $hostId): bool
+    {
+        if ($this->isAdmin() || $this->host_access_mode === self::HOST_ACCESS_ALL) {
+            return Host::query()->whereKey($hostId)->exists();
+        }
+
+        return $this->hosts()->whereKey($hostId)->exists();
     }
 }

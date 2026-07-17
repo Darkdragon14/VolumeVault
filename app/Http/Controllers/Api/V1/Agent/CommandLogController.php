@@ -21,6 +21,7 @@ class CommandLogController extends Controller
 
         $data = $request->validate([
             'logs' => ['required', 'string', 'max:20000'],
+            'lease_request_id' => ['required', 'uuid'],
             'lease_token' => ['required', 'string', 'size:64'],
         ]);
 
@@ -30,6 +31,7 @@ class CommandLogController extends Controller
                 ->where('host_id', $host->id)
                 ->where('status', AgentCommand::STATUS_LEASED)
                 ->where('lease_until', '>=', now())
+                ->where('lease_request_id', $data['lease_request_id'])
                 ->where('lease_token_hash', hash('sha256', $data['lease_token']))
                 ->lockForUpdate()
                 ->first();

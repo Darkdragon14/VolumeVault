@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DockerVolume extends Model
@@ -35,5 +36,10 @@ class DockerVolume extends Model
     {
         return $this->hasMany(BackupJob::class, 'volume_name', 'name')
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME);
+    }
+
+    public function host(): BelongsTo
+    {
+        return $this->belongsTo(Host::class);
     }
 }

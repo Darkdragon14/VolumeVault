@@ -17,11 +17,20 @@ class CreateRestoreRun
     {
         $job->loadMissing('destination');
         $mode = $data['mode'] ?? RestoreRun::MODE_NEW_VOLUME;
+        $hostId = (int) ($job->host_id ?: Host::localHost()->id);
+        $host = Host::query()->find($hostId);
+
+        if (! $host || $host->type !== Host::TYPE_LOCAL) {
+            throw ValidationException::withMessages([
+                'host' => 'Remote agent restores are not supported yet.',
+            ]);
+        }
+
         $sourceName = $job->sourceName();
 
         $targetVolume = $this->isInPlace($mode)
             ? $this->resolveInPlaceTarget($job)
-            : $this->resolveNewVolumeTarget($job, $sourceName, $data['target_volume_name'] ?? null);
+            : $this->resolveNewVolumeTarget($job, $sourceName, $data['target_volume_name'] ?? null, $hostId);
 
         $run = RestoreRun::create([
             'host_id' => $hostId,
@@ -70,9 +79,9 @@ class CreateRestoreRun
         return (string) $job->volume_name;
     }
 
-    private function resolveNewVolumeTarget(BackupJob $job, string $sourceName, ?string $requested): string
+    private function resolveNewVolumeTarget(BackupJob $job, string $sourceName, ?string $requested, int $hostId): string
     {
-        $targetVolume = ($requested ?: null) ?: $this->generateRestoreVolumeName->handle($sourceName);
+        $targetVolume = ($requested ?: null) ?: $this->generateRestoreVolumeName->handle($sourceName, hostId: $hostId);
 
         if ($job->isDockerVolumeSource() && $targetVolume === $job->volume_name) {
             throw ValidationException::withMessages([

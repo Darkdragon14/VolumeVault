@@ -1,11 +1,17 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Agent\CommandCompletionController;
+use App\Http\Controllers\Api\V1\Agent\CommandLeaseController;
+use App\Http\Controllers\Api\V1\Agent\CommandLogController;
+use App\Http\Controllers\Api\V1\Agent\EnrollmentController;
+use App\Http\Controllers\Api\V1\Agent\HeartbeatController;
 use App\Http\Controllers\Api\V1\BackupGroupRunController;
 use App\Http\Controllers\Api\V1\BackupJobController;
 use App\Http\Controllers\Api\V1\BackupJobGroupController;
 use App\Http\Controllers\Api\V1\BackupRunController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DestinationController;
+use App\Http\Controllers\Api\V1\HostController;
 use App\Http\Controllers\Api\V1\HostPathAllowlistController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\NotificationChannelController;
@@ -55,6 +61,11 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware(['auth:sanctum', 'abilities:write', 'admin'])->group(function () {
         Route::post('/volumes/sync', [VolumeController::class, 'sync']);
+        Route::post('/hosts', [HostController::class, 'store']);
+        Route::put('/hosts/{host}', [HostController::class, 'update']);
+        Route::post('/hosts/{host}/activate', [HostController::class, 'activate']);
+        Route::post('/hosts/{host}/deactivate', [HostController::class, 'deactivate']);
+        Route::post('/hosts/{host}/enrollment-token', [HostController::class, 'enrollmentToken']);
         Route::post('/stacks/backup', [StackController::class, 'backup']);
         Route::post('/backup-jobs', [BackupJobController::class, 'store']);
         Route::put('/backup-jobs/{backupJob}', [BackupJobController::class, 'update']);

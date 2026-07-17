@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'multi_host_agents' => [
+        'title' => 'Docker-Agenten fur mehrere Hosts',
+        'description' => 'VolumeVault kann Docker-Volumes jetzt uber registrierte Remote-Agenten erkennen, wahrend Backups und Wiederherstellungen lokal isoliert bleiben. Registrierung, Befehls-Leases, Heartbeats und Inventare sind gegen Wiederholungen, Uberschneidungen und zu grosse Anfragen abgesichert.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Detailseite für Sicherungsgruppen',
         'description' => 'Sicherungsgruppen haben jetzt eine schreibgeschützte Detailseite, die für jeden Benutzer verfügbar ist und den Zeitplan der Gruppe, ihre Mitglieder, den zusammengefassten Ausführungsverlauf und die Größe der letzten erfolgreichen Sicherung anzeigt. Das Öffnen einer Gruppe aus der Liste, aus dem Dashboard-Widget für Gruppen mit Fehlern oder über den Zurück-zur-Gruppe-Link eines Gruppenlaufs führt nun zu dieser Seite statt zum nur für Administratoren zugänglichen Bearbeitungsformular. Administratoren behalten dort die Aktionen Ausführen, Pausieren, Fortsetzen, Bearbeiten und Löschen, und der Ausführungsverlauf der Gruppe wurde vom Bearbeitungsformular — jetzt ein reines Formular — auf diese Seite verschoben.',

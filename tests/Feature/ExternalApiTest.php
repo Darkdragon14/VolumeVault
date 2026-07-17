@@ -71,6 +71,7 @@ class ExternalApiTest extends TestCase
         // id path parameter.
         $this->assertArrayNotHasKey('parameters', $paths['/backup-jobs']['post']);
         $this->assertArrayNotHasKey('parameters', $paths['/volumes/sync']['post']);
+        $this->assertSame('#/components/schemas/VolumeSyncRequest', $paths['/volumes/sync']['post']['requestBody']['content']['application/json']['schema']['$ref']);
         // Creating a job returns 201, not 200.
         $this->assertArrayHasKey('201', $paths['/backup-jobs']['post']['responses']);
         $this->assertArrayNotHasKey('200', $paths['/backup-jobs']['post']['responses']);

@@ -41,7 +41,7 @@ class DashboardController extends Controller
             ->where('status', BackupJob::STATUS_ACTIVE)
             ->whereNull('backup_job_group_id')
             ->whereNotNull('next_run_at')
-            ->orderBy('next_run_at'), $request)
+            ->orderBy('next_run_at')
             ->first();
         $nextGroup = BackupJobGroup::query()
             ->where('status', BackupJobGroup::STATUS_ACTIVE)

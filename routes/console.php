@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Docker\ListDockerVolumes;
 use App\Jobs\DispatchDueBackupGroupsJob;
 use App\Jobs\DispatchDueBackupJobsJob;
 use App\Jobs\RunAlertChecksJob;
@@ -73,6 +74,8 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
     $centralUrl = rtrim((string) config('volumevault.agent.central_url'), '/');
     $bootstrapToken = (string) config('volumevault.agent.token');
     $credentialPath = (string) config('volumevault.agent.credential_path');
+    $enrollmentStatePath = $credentialPath.'.enrollment';
+    $leaseStatePath = $credentialPath.'.lease';
     $agentToken = File::isFile($credentialPath) ? trim(File::get($credentialPath)) : '';
 
     if ($centralUrl === '' || ($agentToken === '' && $bootstrapToken === '')) {
@@ -92,13 +95,19 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
         throw new RuntimeException('The agent credential directory is not writable: '.dirname($credentialPath));
     }
 
-    $persistCredential = function (string $token) use ($credentialPath): void {
-        $temporaryPath = $credentialPath.'.'.Str::random(12).'.tmp';
+    $runtimeLock = fopen($credentialPath.'.runtime.lock', 'c');
 
-        if (File::put($temporaryPath, $token, true) === false || ! chmod($temporaryPath, 0600) || ! rename($temporaryPath, $credentialPath)) {
+    if ($runtimeLock === false || ! flock($runtimeLock, LOCK_EX | LOCK_NB)) {
+        throw new RuntimeException('Another VolumeVault agent process is already using this credential.');
+    }
+
+    $persistFile = function (string $path, string $contents): void {
+        $temporaryPath = $path.'.'.Str::random(12).'.tmp';
+
+        if (File::put($temporaryPath, $contents, true) === false || ! chmod($temporaryPath, 0600) || ! rename($temporaryPath, $path)) {
             File::delete($temporaryPath);
 
-            throw new RuntimeException('Unable to persist the agent credential atomically.');
+            throw new RuntimeException('Unable to persist agent state atomically.');
         }
     };
     $clientFor = fn (string $token) => Http::baseUrl($centralUrl.'/api/v1/agent')
@@ -106,10 +115,22 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
         ->acceptJson()
         ->connectTimeout(10)
         ->timeout(30);
-    $enroll = function () use ($clientFor, $bootstrapToken, $metadata, $persistCredential): string {
+    $enroll = function () use ($clientFor, $bootstrapToken, $metadata, $persistFile, $credentialPath, $enrollmentStatePath): string {
+        $enrollmentState = File::isFile($enrollmentStatePath)
+            ? json_decode(File::get($enrollmentStatePath), true)
+            : null;
+
+        if (! is_array($enrollmentState) || ! isset($enrollmentState['enrollment_request_id'], $enrollmentState['agent_secret'])) {
+            $enrollmentState = [
+                'enrollment_request_id' => (string) Str::uuid(),
+                'agent_secret' => Str::random(64),
+            ];
+            $persistFile($enrollmentStatePath, json_encode($enrollmentState, JSON_THROW_ON_ERROR));
+        }
+
         $token = (string) $clientFor($bootstrapToken)
             ->retry(2, 500, null, false)
-            ->post('/enroll', $metadata)
+            ->post('/enroll', [...$metadata, ...$enrollmentState])
             ->throw()
             ->json('agent_token');
 
@@ -117,7 +138,8 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
             throw new RuntimeException('The central server did not return an agent credential.');
         }
 
-        $persistCredential($token);
+        $persistFile($credentialPath, $token);
+        File::delete($enrollmentStatePath);
 
         return $token;
     };
@@ -146,9 +168,26 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
     do {
         $sendHeartbeat();
 
-        $lease = $client->post('/commands/lease', ['lease_minutes' => 60])->throw()->json('data');
+        $leaseState = File::isFile($leaseStatePath)
+            ? json_decode(File::get($leaseStatePath), true)
+            : null;
+
+        if (! is_array($leaseState) || ! isset($leaseState['lease_request_id'], $leaseState['lease_token'])) {
+            $leaseState = [
+                'lease_request_id' => (string) Str::uuid(),
+                'lease_token' => Str::random(64),
+            ];
+            $persistFile($leaseStatePath, json_encode($leaseState, JSON_THROW_ON_ERROR));
+        }
+
+        $lease = $client->retry(2, 500, null, false)->post('/commands/lease', [
+            ...$leaseState,
+            'lease_minutes' => 60,
+        ])->throw()->json('data');
 
         if (! $lease) {
+            File::delete($leaseStatePath);
+
             if ($this->option('once')) {
                 return 0;
             }
@@ -158,16 +197,28 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
             continue;
         }
 
+        if (in_array($lease['status'], [AgentCommand::STATUS_COMPLETED, AgentCommand::STATUS_FAILED], true)) {
+            File::delete($leaseStatePath);
+
+            if ($this->option('once')) {
+                return 0;
+            }
+
+            continue;
+        }
+
         if ($lease['type'] === AgentCommand::TYPE_SYNC_VOLUMES) {
             try {
                 $completion = [
                     'status' => 'completed',
+                    'lease_request_id' => $leaseState['lease_request_id'],
                     'lease_token' => $lease['lease_token'],
                     'volumes' => $listDockerVolumes->handle(),
                 ];
             } catch (Throwable $exception) {
                 $completion = [
                     'status' => 'failed',
+                    'lease_request_id' => $leaseState['lease_request_id'],
                     'lease_token' => $lease['lease_token'],
                     'error' => str($exception->getMessage())->limit(1000)->toString(),
                 ];
@@ -175,12 +226,14 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
         } else {
             $completion = [
                 'status' => 'failed',
+                'lease_request_id' => $leaseState['lease_request_id'],
                 'lease_token' => $lease['lease_token'],
                 'error' => 'This agent runtime currently supports sync_volumes commands only.',
             ];
         }
 
-        $client->post('/commands/'.$lease['id'].'/complete', $completion)->throw();
+        $client->retry(2, 500, null, false)->post('/commands/'.$lease['id'].'/complete', $completion)->throw();
+        File::delete($leaseStatePath);
 
         if ($this->option('once')) {
             return 0;
@@ -213,5 +266,6 @@ Schedule::job(new DispatchDueBackupJobsJob)->everyMinute()->withoutOverlapping()
 Schedule::job(new DispatchDueBackupGroupsJob)->everyMinute()->withoutOverlapping();
 Schedule::job(new SyncDockerVolumesJob)->everyFiveMinutes()->withoutOverlapping();
 Schedule::job(new RunAlertChecksJob)->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('volumevault:agents:expire-offline')->everyMinute()->withoutOverlapping();
 Schedule::command('volumevault:reconcile-stale-runs')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('volumevault:host-path-allowlist:audit')->hourly()->withoutOverlapping();

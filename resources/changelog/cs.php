@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'multi_host_agents' => [
+        'title' => 'Docker agenti pro vice hostu',
+        'description' => 'VolumeVault nyni umi zjistovat Docker svazky pomoci registrovanych vzdalenych agentu a pritom zachovava lokalni zalohy a obnovy oddelene. Registrace, pronajmy prikazu, heartbeat a inventare jsou chraneny proti opakovani, soubehu a prilis velkym pozadavkum.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Stránka s detailem skupiny záloh',
         'description' => 'Skupiny záloh nyní mají stránku s detailem jen pro čtení, dostupnou všem uživatelům, která zobrazuje plán skupiny, její členy, agregovanou historii běhů a velikost poslední úspěšné zálohy. Otevření skupiny ze seznamu, z widgetu skupin s chybami na přehledu nebo přes odkaz zpět na skupinu u běhu skupiny nyní vede na tuto stránku místo na formulář úprav vyhrazený administrátorům. Administrátoři zde mají i nadále akce spustit, pozastavit, obnovit, upravit a odstranit a historie běhů skupiny byla přesunuta na tuto stránku z formuláře úprav, který je nyní čistě formulářem.',

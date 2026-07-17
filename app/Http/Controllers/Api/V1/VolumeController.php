@@ -6,6 +6,7 @@ use App\Actions\Docker\SyncDockerVolumes;
 use App\Http\Controllers\Api\V1\Concerns\ResolvesApiHosts;
 use App\Http\Controllers\Controller;
 use App\Models\DockerVolume;
+use App\Models\Host;
 use App\Services\Volumes\VolumeBackupSummaries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,15 +14,23 @@ use Throwable;
 
 class VolumeController extends Controller
 {
-    public function index(VolumeBackupSummaries $volumeBackupSummaries): JsonResponse
+    use ResolvesApiHosts;
+
+    public function index(Request $request, VolumeBackupSummaries $volumeBackupSummaries): JsonResponse
     {
-        $volumes = DockerVolume::query()
+        $scope = $this->resolveHostScope($request);
+        $volumes = $this->applyHostScope(DockerVolume::with('host'), $scope)
             ->orderByDesc('exists')
             ->orderBy('name')
             ->get();
 
         return response()->json([
-            'data' => $volumeBackupSummaries->forVolumes($volumes),
+            'data' => $volumeBackupSummaries->forVolumes($volumes)->map(function (array $summary) use ($volumes): array {
+                $volume = $volumes->firstWhere('id', $summary['id']);
+                unset($summary['host']);
+
+                return [...$summary, 'host' => $this->safeHost($volume?->host)];
+            }),
         ]);
     }
 
@@ -82,17 +91,4 @@ class VolumeController extends Controller
         return $result;
     }
 
-    private function serializeVolume(DockerVolume $volume): array
-    {
-        $data = $volume->toArray();
-        unset($data['host']);
-
-        return [
-            ...$data,
-            'host' => $this->safeHost($volume->host),
-            'related_jobs_count' => BackupJob::where('host_id', $volume->host_id)
-                ->where('volume_name', $volume->name)
-                ->count(),
-        ];
-    }
 }

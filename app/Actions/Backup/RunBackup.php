@@ -14,6 +14,7 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
+use App\Models\Host;
 use App\Services\BackupDestinations\ListBackupObjects;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\SelfContainerResolver;
@@ -64,9 +65,10 @@ class RunBackup
         }
 
         $run->refresh();
-        $run->loadMissing('job.destination');
+        $run->loadMissing('job.destination', 'job.host');
 
         $job = $run->job;
+        $host = $job?->host;
         $stoppedContainers = [];
 
         // A pre-restore safety backup borrows the full backup pipeline but must
@@ -117,12 +119,12 @@ class RunBackup
         }
 
         try {
-            if (! $host) {
-                throw new RuntimeException('The backup run host is missing.');
-            }
-
             if ($job->host_id !== $run->host_id) {
                 throw new RuntimeException('The backup job host changed after this run was queued.');
+            }
+
+            if (! $host || $host->type !== Host::TYPE_LOCAL) {
+                throw new RuntimeException('Only local backup jobs can run through the local Docker worker.');
             }
 
             if (! $job->destination?->is_active) {
@@ -131,7 +133,10 @@ class RunBackup
 
             if ($job->isDockerVolumeSource()) {
                 $this->inspectDockerVolume->handle($job->volume_name);
-                DockerVolume::updateOrCreate(['name' => $job->volume_name], ['exists' => true, 'last_seen_at' => now()]);
+                DockerVolume::updateOrCreate(
+                    ['host_id' => $host->id, 'name' => $job->volume_name],
+                    ['exists' => true, 'last_seen_at' => now()],
+                );
             } else {
                 $this->hostPathPolicy->assertValid((string) $job->host_path);
             }

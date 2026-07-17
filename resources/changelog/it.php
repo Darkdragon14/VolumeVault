@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'multi_host_agents' => [
+        'title' => 'Agenti Docker multi-host',
+        'description' => 'VolumeVault puo ora rilevare i volumi Docker tramite agenti remoti registrati, mantenendo isolate le operazioni locali di backup e ripristino. Registrazione, lease dei comandi, heartbeat e inventari sono protetti da replay, sovrapposizioni e richieste eccessive.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Pagina di dettaglio del gruppo di backup',
         'description' => 'I gruppi di backup ora dispongono di una pagina di dettaglio di sola lettura, disponibile per ogni utente, che mostra la pianificazione del gruppo, i suoi membri, la cronologia aggregata delle esecuzioni e la dimensione dell\'ultimo backup riuscito. Aprire un gruppo dall\'elenco, dal widget dei gruppi con errori della dashboard o dal collegamento torna al gruppo di un\'esecuzione porta ora a questa pagina anziché al modulo di modifica riservato agli amministratori. Gli amministratori mantengono qui le azioni esegui, sospendi, riprendi, modifica ed elimina, e la cronologia delle esecuzioni del gruppo è stata spostata in questa pagina dal modulo di modifica, che ora è un modulo puro.',

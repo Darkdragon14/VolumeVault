@@ -18,6 +18,8 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia;
 use Mockery;
 use Tests\TestCase;
 
@@ -131,6 +133,23 @@ class HostAccessAndAgentTest extends TestCase
             ->assertJsonValidationErrors('host');
     }
 
+    public function test_web_enrollment_token_is_encrypted_in_session_and_page_history(): void
+    {
+        $token = '1|'.str_repeat('s', 64);
+        $tokens = Mockery::mock(HostEnrollmentTokens::class);
+        $tokens->shouldReceive('issue')->once()->andReturn($token);
+        $this->app->instance(HostEnrollmentTokens::class, $tokens);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post('/hosts', ['name' => 'Remote Agent'])
+            ->assertRedirect(route('hosts.index'))
+            ->assertSessionHas('host_enrollment_token', fn (string $value): bool => ! str_contains($value, $token));
+
+        $this->get('/hosts')->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('enrollmentToken', $token)
+            ->missing('flash.host_enrollment_token'));
+    }
+
     public function test_agent_can_only_lease_and_complete_own_commands(): void
     {
         $host = Host::factory()->agent()->create(['name' => 'Agent One']);
@@ -142,25 +161,26 @@ class HostAccessAndAgentTest extends TestCase
             'payload' => ['action' => 'sync'],
             'secret_payload' => ['destination' => ['password' => 'super-secret']],
         ]);
+        $enrollmentPayload = $this->enrollmentPayload([
+            'agent_version' => '0.1.0',
+            'docker_version' => '26.0.0',
+        ]);
 
         $enrollment = $this->withToken($token)
-            ->postJson('/api/v1/agent/enroll', [
-                'agent_version' => '0.1.0',
-                'docker_version' => '26.0.0',
-            ])
+            ->postJson('/api/v1/agent/enroll', $enrollmentPayload)
             ->assertOk()
             ->assertJsonPath('data.id', $host->id)
             ->assertJsonStructure(['agent_token']);
-        $firstAgentToken = $enrollment->json('agent_token');
+        $agentToken = $enrollment->json('agent_token');
 
-        $agentToken = $this->withToken($token)
-            ->postJson('/api/v1/agent/enroll')
+        $replayedAgentToken = $this->withToken($token)
+            ->postJson('/api/v1/agent/enroll', $enrollmentPayload)
             ->assertOk()
             ->json('agent_token');
+        $this->assertSame($agentToken, $replayedAgentToken);
+        $this->assertNotNull($host->refresh()->enrollment_token_consumed_at);
 
-        $this->withToken($firstAgentToken)
-            ->postJson('/api/v1/agent/heartbeat')
-            ->assertUnauthorized();
+        $this->withToken($agentToken)->postJson('/api/v1/agent/heartbeat')->assertOk();
 
         $this->withToken($token)
             ->postJson('/api/v1/agent/heartbeat')
@@ -171,11 +191,12 @@ class HostAccessAndAgentTest extends TestCase
             ->assertOk();
 
         $this->withToken($token)
-            ->postJson('/api/v1/agent/enroll')
+            ->postJson('/api/v1/agent/enroll', $this->enrollmentPayload())
             ->assertUnauthorized();
 
+        $leasePayload = $this->leasePayload();
         $lease = $this->withToken($agentToken)
-            ->postJson('/api/v1/agent/commands/lease')
+            ->postJson('/api/v1/agent/commands/lease', $leasePayload)
             ->assertOk()
             ->assertJsonPath('data.id', $command->id)
             ->assertJsonPath('data.secret_payload.destination.password', 'super-secret')
@@ -184,6 +205,7 @@ class HostAccessAndAgentTest extends TestCase
         $this->withToken($agentToken)
             ->postJson('/api/v1/agent/commands/'.$otherCommand->id.'/complete', [
                 'status' => AgentCommand::STATUS_COMPLETED,
+                'lease_request_id' => $leasePayload['lease_request_id'],
                 'lease_token' => $lease->json('data.lease_token'),
             ])
             ->assertForbidden();
@@ -208,17 +230,19 @@ class HostAccessAndAgentTest extends TestCase
         ]);
 
         $enrollment = $this->withToken($token)
-            ->postJson('/api/v1/agent/enroll')
+            ->postJson('/api/v1/agent/enroll', $this->enrollmentPayload())
             ->assertOk();
         $agentToken = $enrollment->json('agent_token');
 
+        $leasePayload = $this->leasePayload();
         $lease = $this->withToken($agentToken)
-            ->postJson('/api/v1/agent/commands/lease')
+            ->postJson('/api/v1/agent/commands/lease', $leasePayload)
             ->assertOk()
             ->assertJsonPath('data.id', $command->id);
 
         $completion = [
             'status' => AgentCommand::STATUS_COMPLETED,
+            'lease_request_id' => $leasePayload['lease_request_id'],
             'lease_token' => $lease->json('data.lease_token'),
             'volumes' => [
                 ['name' => 'agent-only-data', 'driver' => 'local'],
@@ -233,7 +257,7 @@ class HostAccessAndAgentTest extends TestCase
 
         $this->withToken($agentToken)
             ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', $completion)
-            ->assertStatus(409);
+            ->assertOk();
 
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $host->id, 'name' => 'agent-only-data', 'exists' => true]);
         $this->assertDatabaseHas('docker_volumes', ['host_id' => $otherHost->id, 'name' => 'shared-data', 'exists' => true]);
@@ -244,21 +268,23 @@ class HostAccessAndAgentTest extends TestCase
         $host = Host::factory()->agent()->create();
         $bootstrapToken = app(HostEnrollmentTokens::class)->issue($host);
         $agentToken = $this->withToken($bootstrapToken)
-            ->postJson('/api/v1/agent/enroll')
+            ->postJson('/api/v1/agent/enroll', $this->enrollmentPayload())
             ->assertOk()
             ->json('agent_token');
         $command = AgentCommand::factory()->create([
             'host_id' => $host->id,
             'type' => AgentCommand::TYPE_SYNC_VOLUMES,
         ]);
+        $leasePayload = $this->leasePayload();
         $leaseToken = $this->withToken($agentToken)
-            ->postJson('/api/v1/agent/commands/lease')
+            ->postJson('/api/v1/agent/commands/lease', $leasePayload)
             ->assertOk()
             ->json('data.lease_token');
 
         $this->withToken($agentToken)
             ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
                 'status' => AgentCommand::STATUS_COMPLETED,
+                'lease_request_id' => $leasePayload['lease_request_id'],
                 'lease_token' => $leaseToken,
             ])
             ->assertJsonValidationErrors('volumes');
@@ -274,9 +300,10 @@ class HostAccessAndAgentTest extends TestCase
             'host_id' => $host->id,
             'status' => AgentCommand::STATUS_PENDING,
         ]);
+        $leasePayload = $this->leasePayload();
 
         $this->withToken($agentToken)
-            ->postJson('/api/v1/agent/commands/lease')
+            ->postJson('/api/v1/agent/commands/lease', $leasePayload)
             ->assertOk()
             ->assertJsonPath('data.id', $command->id);
 
@@ -326,7 +353,7 @@ class HostAccessAndAgentTest extends TestCase
         $this->assertSame(Host::STATUS_OFFLINE, $leasedHost->refresh()->status);
     }
 
-    public function test_agent_can_recover_its_active_command_lease_with_a_new_token(): void
+    public function test_only_the_original_lease_request_can_recover_an_active_command(): void
     {
         $host = Host::factory()->agent()->create();
         $agentToken = app(HostAgentTokens::class)->issue($host);
@@ -335,41 +362,94 @@ class HostAccessAndAgentTest extends TestCase
             'status' => AgentCommand::STATUS_PENDING,
         ]);
 
+        $firstPayload = $this->leasePayload();
         $firstLease = $this->withToken($agentToken)
-            ->postJson('/api/v1/agent/commands/lease')
+            ->postJson('/api/v1/agent/commands/lease', $firstPayload)
             ->assertOk();
-        $secondLease = $this->withToken($agentToken)
-            ->postJson('/api/v1/agent/commands/lease')
+        $this->assertSame($command->id, $host->refresh()->active_agent_command_id);
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/lease', $this->leasePayload())
+            ->assertOk()
+            ->assertJsonPath('data', null);
+
+        $recoveredLease = $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/lease', $firstPayload)
             ->assertOk()
             ->assertJsonPath('data.id', $command->id)
             ->assertJsonPath('data.attempts', 1);
 
-        $this->assertNotSame($firstLease->json('data.lease_token'), $secondLease->json('data.lease_token'));
+        $this->assertSame($firstLease->json('data.lease_token'), $recoveredLease->json('data.lease_token'));
 
         $this->withToken($agentToken)
             ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
                 'status' => AgentCommand::STATUS_COMPLETED,
-                'lease_token' => $firstLease->json('data.lease_token'),
-                'volumes' => [['name' => 'app-data']],
-            ])
-            ->assertStatus(409);
-
-        $this->withToken($agentToken)
-            ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
-                'status' => AgentCommand::STATUS_COMPLETED,
-                'lease_token' => $secondLease->json('data.lease_token'),
+                'lease_request_id' => $firstPayload['lease_request_id'],
+                'lease_token' => $firstPayload['lease_token'],
                 'volumes' => [['name' => 'app-data']],
             ])
             ->assertOk();
+        $this->assertNull($host->refresh()->active_agent_command_id);
     }
 
-    public function test_agent_command_loop_does_not_retry_failed_lease_posts(): void
+    public function test_agent_payload_limits_reject_oversized_or_deep_data(): void
+    {
+        $host = Host::factory()->agent()->create();
+        $agentToken = app(HostAgentTokens::class)->issue($host);
+        $command = AgentCommand::factory()->create(['host_id' => $host->id]);
+        $leasePayload = $this->leasePayload();
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/heartbeat', [
+                'metadata' => ['one' => ['two' => ['three' => ['four' => 'too deep']]]],
+            ])
+            ->assertJsonValidationErrors('metadata');
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/lease', $leasePayload)
+            ->assertOk();
+
+        $volumes = array_map(fn (int $index): array => ['name' => 'volume-'.$index], range(1, 5001));
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
+                'status' => AgentCommand::STATUS_COMPLETED,
+                'lease_request_id' => $leasePayload['lease_request_id'],
+                'lease_token' => $leasePayload['lease_token'],
+                'volumes' => $volumes,
+            ])
+            ->assertJsonValidationErrors('volumes');
+
+        $this->assertSame(AgentCommand::STATUS_LEASED, $command->refresh()->status);
+    }
+
+    public function test_failed_agent_sync_error_survives_heartbeats_until_a_successful_sync(): void
+    {
+        $host = Host::factory()->agent()->create();
+        $agentToken = app(HostAgentTokens::class)->issue($host);
+        $command = AgentCommand::factory()->create(['host_id' => $host->id]);
+        $leasePayload = $this->leasePayload();
+
+        $this->withToken($agentToken)->postJson('/api/v1/agent/commands/lease', $leasePayload)->assertOk();
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/'.$command->id.'/complete', [
+                'status' => AgentCommand::STATUS_FAILED,
+                'lease_request_id' => $leasePayload['lease_request_id'],
+                'lease_token' => $leasePayload['lease_token'],
+                'error' => 'Docker socket unavailable',
+            ])
+            ->assertOk();
+
+        $this->withToken($agentToken)->postJson('/api/v1/agent/heartbeat')->assertOk();
+
+        $this->assertSame(Host::STATUS_ERROR, $host->refresh()->status);
+        $this->assertSame('Docker socket unavailable', $host->last_error);
+    }
+
+    public function test_agent_command_loop_retries_idempotent_lease_requests(): void
     {
         $credentialPath = storage_path('framework/testing/agent-token');
-
-        if (file_exists($credentialPath)) {
-            unlink($credentialPath);
-        }
+        $this->cleanupAgentState($credentialPath);
 
         config([
             'volumevault.agent.enabled' => true,
@@ -401,23 +481,18 @@ class HostAccessAndAgentTest extends TestCase
         try {
             Artisan::call('volumevault:agent', ['--once' => true]);
         } catch (RequestException) {
-            // Expected: the failed non-idempotent lease request must not be retried.
+            // Expected after the configured retries are exhausted.
         } finally {
-            if (file_exists($credentialPath)) {
-                unlink($credentialPath);
-            }
+            $this->cleanupAgentState($credentialPath);
         }
 
-        $this->assertSame(1, $leaseRequests);
+        $this->assertSame(2, $leaseRequests);
     }
 
-    public function test_agent_command_loop_does_not_report_transport_failure_as_execution_failure(): void
+    public function test_agent_command_loop_retries_completion_without_reporting_execution_failure(): void
     {
         $credentialPath = storage_path('framework/testing/agent-token');
-
-        if (file_exists($credentialPath)) {
-            unlink($credentialPath);
-        }
+        $this->cleanupAgentState($credentialPath);
 
         config([
             'volumevault.agent.enabled' => true,
@@ -446,6 +521,7 @@ class HostAccessAndAgentTest extends TestCase
                 return Http::response(['data' => [
                     'id' => 123,
                     'type' => AgentCommand::TYPE_SYNC_VOLUMES,
+                    'status' => AgentCommand::STATUS_LEASED,
                     'lease_token' => str_repeat('a', 64),
                 ]], 200);
             }
@@ -462,15 +538,14 @@ class HostAccessAndAgentTest extends TestCase
         try {
             Artisan::call('volumevault:agent', ['--once' => true]);
         } catch (RequestException) {
-            // Expected: a completion transport failure terminates this agent invocation.
+            // Expected after the configured retries are exhausted.
         } finally {
-            if (file_exists($credentialPath)) {
-                unlink($credentialPath);
-            }
+            $this->cleanupAgentState($credentialPath);
         }
 
-        $this->assertCount(1, $completionRequests);
+        $this->assertCount(2, $completionRequests);
         $this->assertSame(AgentCommand::STATUS_COMPLETED, $completionRequests[0]['status']);
+        $this->assertSame($completionRequests[0]['lease_request_id'], $completionRequests[1]['lease_request_id']);
         $this->assertSame('app-data', $completionRequests[0]['volumes'][0]['name']);
     }
 
@@ -504,11 +579,42 @@ class HostAccessAndAgentTest extends TestCase
 
         foreach (range(1, 31) as $attempt) {
             $this->withToken($firstToken)
-                ->postJson('/api/v1/agent/commands/lease')
+                ->postJson('/api/v1/agent/commands/lease', $this->leasePayload())
                 ->assertOk();
             $this->withToken($secondToken)
-                ->postJson('/api/v1/agent/commands/lease')
+                ->postJson('/api/v1/agent/commands/lease', $this->leasePayload())
                 ->assertOk();
+        }
+    }
+
+    private function enrollmentPayload(array $overrides = []): array
+    {
+        return [
+            ...[
+                'enrollment_request_id' => (string) Str::uuid(),
+                'agent_secret' => Str::random(64),
+            ],
+            ...$overrides,
+        ];
+    }
+
+    private function leasePayload(array $overrides = []): array
+    {
+        return [
+            ...[
+                'lease_request_id' => (string) Str::uuid(),
+                'lease_token' => Str::random(64),
+            ],
+            ...$overrides,
+        ];
+    }
+
+    private function cleanupAgentState(string $credentialPath): void
+    {
+        foreach ([$credentialPath, $credentialPath.'.enrollment', $credentialPath.'.lease', $credentialPath.'.runtime.lock'] as $path) {
+            if (file_exists($path)) {
+                unlink($path);
+            }
         }
     }
 

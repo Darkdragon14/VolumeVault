@@ -67,8 +67,6 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
                 'api_token' => fn () => $request->session()->get('api_token'),
-                'host_enrollment_token' => fn () => $request->session()->get('host_enrollment_token'),
-                'host_enrollment_host_id' => fn () => $request->session()->get('host_enrollment_host_id'),
             ],
         ];
     }

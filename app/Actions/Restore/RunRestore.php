@@ -61,7 +61,7 @@ class RunRestore
         }
 
         $run->refresh();
-        $run->loadMissing('job.destination', 'destination');
+        $run->loadMissing('job.destination', 'job.host', 'destination', 'host');
         $archivePath = storage_path('app/restore-runs/'.$run->id.'/backup.tar.gz');
         $handler = $this->handlerFor($run->mode);
         $prepared = false;
@@ -72,6 +72,16 @@ class RunRestore
         $this->notify($run, fn () => $this->heartbeat($run));
 
         try {
+            $host = $run->host ?: $run->job?->host;
+
+            if (! $host || $host->type !== Host::TYPE_LOCAL) {
+                throw new RuntimeException('Only local restore runs can run through the local Docker worker.');
+            }
+
+            if ($run->job && $run->job->host_id !== $run->host_id) {
+                throw new RuntimeException('The restore job host changed after this run was queued.');
+            }
+
             // Read-only precondition check first, so an invalid target (missing
             // source volume, or a taken new-volume name) fails fast — before the
             // download, the safety backup, and anything destructive.

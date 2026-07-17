@@ -63,6 +63,11 @@ class BackupRun extends Model
         return $this->belongsTo(BackupJob::class, 'backup_job_id');
     }
 
+    public function host(): BelongsTo
+    {
+        return $this->belongsTo(Host::class);
+    }
+
     public function groupRun(): BelongsTo
     {
         return $this->belongsTo(BackupGroupRun::class, 'backup_group_run_id');

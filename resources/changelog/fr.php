@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'multi_host_agents' => [
+        'title' => 'Agents Docker multi-hotes',
+        'description' => 'VolumeVault peut maintenant decouvrir les volumes Docker via des agents distants en conservant les sauvegardes et restaurations sur l’hote local. L’enrolement, les baux de commande, les heartbeats et les inventaires sont proteges contre les rejeux, les chevauchements et les requetes surdimensionnees.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Page de détail d\'un groupe de sauvegarde',
         'description' => 'Les groupes de sauvegarde disposent désormais d\'une page de détail en lecture seule, accessible à tous les utilisateurs, qui affiche la planification du groupe, ses membres, l\'historique agrégé des exécutions et la taille de la dernière sauvegarde réussie. Ouvrir un groupe depuis la liste, depuis le widget des groupes en erreur du tableau de bord ou depuis le lien de retour au groupe d\'une exécution mène désormais à cette page plutôt qu\'au formulaire d\'édition réservé aux administrateurs. Les administrateurs y conservent les actions exécuter, mettre en pause, reprendre, modifier et supprimer, et l\'historique des exécutions du groupe a été déplacé du formulaire d\'édition — désormais un simple formulaire — vers cette page.',

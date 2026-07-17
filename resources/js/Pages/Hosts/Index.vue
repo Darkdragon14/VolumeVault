@@ -2,7 +2,7 @@
 import ActionIcon from '@/Components/ActionIcon.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { useI18n } from '@/i18n';
 
@@ -13,11 +13,10 @@ const props = defineProps<{
         active_limit: number;
         can_create_active_host: boolean;
     };
+    enrollmentToken: string | null;
 }>();
 
-const page = usePage();
 const { t, formatDate } = useI18n();
-const flash = computed(() => (page.props.flash || {}) as { host_enrollment_token?: string; host_enrollment_host_id?: number });
 const form = useForm({ name: '' });
 
 const activeLabel = computed(() => t('{count} of {limit} active hosts', { count: props.limits.active, limit: props.limits.active_limit }));
@@ -121,10 +120,10 @@ const regenerateToken = (hostId: number) => router.post(`/hosts/${hostId}/enroll
                     <button class="btn-primary w-full justify-center" :disabled="form.processing || !limits.can_create_active_host">{{ t('Create host') }}</button>
                 </form>
 
-                <section v-if="flash.host_enrollment_token" class="card space-y-3 border-sky-300/30 bg-sky-400/10 p-4 sm:p-5">
+                <section v-if="enrollmentToken" class="card space-y-3 border-sky-300/30 bg-sky-400/10 p-4 sm:p-5">
                     <h2 class="font-semibold text-sky-50">{{ t('Enrollment token') }}</h2>
                     <p class="text-sm text-sky-100">{{ t('Copy this token now. It will not be shown again.') }}</p>
-                    <code class="block break-all rounded-xl border border-sky-200/20 bg-slate-950/80 p-3 text-xs text-sky-50">{{ flash.host_enrollment_token }}</code>
+                    <code class="block break-all rounded-xl border border-sky-200/20 bg-slate-950/80 p-3 text-xs text-sky-50">{{ enrollmentToken }}</code>
                 </section>
             </aside>
         </div>

@@ -16,24 +16,27 @@ use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function __invoke(VolumeBackupSummaries $volumeBackupSummaries): JsonResponse
+    use ResolvesApiHosts;
+
+    public function __invoke(Request $request, VolumeBackupSummaries $volumeBackupSummaries): JsonResponse
     {
-        $volumeSummaries = $volumeBackupSummaries->forVolumes(DockerVolume::query()->get());
+        $scope = $this->resolveHostScope($request);
+        $volumeSummaries = $volumeBackupSummaries->forVolumes($this->applyHostScope(DockerVolume::query(), $scope)->get());
         $coverageStats = $volumeBackupSummaries->coverageStats($volumeSummaries);
         // Standalone runs only: a group's outcome is shown by the group widgets,
         // and a member run can be success while its group run aggregated to failed.
-        $lastBackupRun = BackupRun::with('job')->whereNull('backup_group_run_id')->latest()->first();
-        $lastSuccessfulBackupRun = BackupRun::query()
+        $lastBackupRun = $this->applyHostScope(BackupRun::with('job')->whereNull('backup_group_run_id')->latest(), $scope)->first();
+        $lastSuccessfulBackupRun = $this->applyHostScope(BackupRun::query()
             ->whereNull('backup_group_run_id')
             ->where('status', BackupRun::STATUS_SUCCESS)
             ->orderByDesc('finished_at')
-            ->orderByDesc('created_at')
+            ->orderByDesc('created_at'), $scope)
             ->first();
         // Group counterpart of the standalone stat above, aggregated at read time
         // because member archive sizes are recorded asynchronously and can lag the
         // group run's finalization (stays null, never 0, until at least one lands).
         $lastSuccessfulGroupBackupSize = BackupGroupRun::lastSuccessfulTotalBackupSize();
-        $nextJob = BackupJob::query()
+        $nextJob = $this->applyHostScope(BackupJob::query()
             ->where('status', BackupJob::STATUS_ACTIVE)
             ->whereNull('backup_job_group_id')
             ->whereNotNull('next_run_at')
@@ -52,16 +55,16 @@ class DashboardController extends Controller
         return response()->json([
             'data' => [
                 'stats' => [
-                    'total_volumes' => DockerVolume::count(),
-                    'existing_volumes' => DockerVolume::where('exists', true)->count(),
-                    'missing_volumes' => DockerVolume::where('exists', false)->count(),
+                    'total_volumes' => $this->applyHostScope(DockerVolume::query(), $scope)->count(),
+                    'existing_volumes' => $this->applyHostScope(DockerVolume::where('exists', true), $scope)->count(),
+                    'missing_volumes' => $this->applyHostScope(DockerVolume::where('exists', false), $scope)->count(),
                     'backed_up_volumes' => $coverageStats['backed_up_volumes'],
                     'configured_volumes' => $coverageStats['configured_volumes'],
                     'unprotected_volumes' => $coverageStats['unprotected_volumes'],
-                    'total_jobs' => BackupJob::whereNull('backup_job_group_id')->count(),
-                    'active_jobs' => BackupJob::whereNull('backup_job_group_id')->where('status', BackupJob::STATUS_ACTIVE)->count(),
-                    'paused_jobs' => BackupJob::whereNull('backup_job_group_id')->where('status', BackupJob::STATUS_PAUSED)->count(),
-                    'error_jobs' => BackupJob::whereNull('backup_job_group_id')->where('status', BackupJob::STATUS_ERROR)->count(),
+                    'total_jobs' => $this->applyHostScope(BackupJob::whereNull('backup_job_group_id'), $scope)->count(),
+                    'active_jobs' => $this->applyHostScope(BackupJob::whereNull('backup_job_group_id')->where('status', BackupJob::STATUS_ACTIVE), $scope)->count(),
+                    'paused_jobs' => $this->applyHostScope(BackupJob::whereNull('backup_job_group_id')->where('status', BackupJob::STATUS_PAUSED), $scope)->count(),
+                    'error_jobs' => $this->applyHostScope(BackupJob::whereNull('backup_job_group_id')->where('status', BackupJob::STATUS_ERROR), $scope)->count(),
                     'total_groups' => BackupJobGroup::count(),
                     'active_groups' => BackupJobGroup::where('status', BackupJobGroup::STATUS_ACTIVE)->count(),
                     'paused_groups' => BackupJobGroup::where('status', BackupJobGroup::STATUS_PAUSED)->count(),
@@ -71,10 +74,10 @@ class DashboardController extends Controller
                     'last_successful_group_backup_size' => $lastSuccessfulGroupBackupSize,
                     'next_scheduled_backup' => $nextScheduledBackup,
                 ],
-                'recent_backup_runs' => BackupRun::with('job')->whereNull('backup_group_run_id')->latest()->limit(8)->get(),
+                'recent_backup_runs' => $this->applyHostScope(BackupRun::with('job', 'host')->whereNull('backup_group_run_id')->latest(), $scope)->limit(8)->get()->map(fn (BackupRun $run) => $this->backupRun($run)),
                 'recent_group_runs' => BackupGroupRun::with('group')->withTotalBackupSize()->latest()->limit(8)->get(),
-                'recent_restore_runs' => RestoreRun::with('job')->latest()->limit(8)->get(),
-                'jobs_with_errors' => BackupJob::with('destination')
+                'recent_restore_runs' => $this->applyHostScope(RestoreRun::with('job', 'host')->latest(), $scope)->limit(8)->get()->map(fn (RestoreRun $run) => $this->restoreRun($run)),
+                'jobs_with_errors' => $this->applyHostScope(BackupJob::with('destination', 'host')
                     ->whereNull('backup_job_group_id')
                     ->where('status', BackupJob::STATUS_ERROR)
                     ->latest(), $scope)

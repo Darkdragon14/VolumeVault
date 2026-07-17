@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'multi_host_agents' => [
+        'title' => 'Docker-agenty dlya neskolkikh khostov',
+        'description' => 'VolumeVault teper mozhet obnaruzhivat Docker-tomy cherez zaregistrirovannye udalennye agenty, sokhranyaya lokalnye operatsii rezervnogo kopirovaniya i vosstanovleniya izolirovannymi. Registratsiya, arenda komand, heartbeat i inventari zashchishcheny ot povtorov, peresecheniy i chrezmernykh zaprosov.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Страница сведений о группе резервного копирования',
         'description' => 'У групп резервного копирования теперь есть страница сведений только для чтения, доступная каждому пользователю, где показаны расписание группы, её участники, сводная история запусков и размер последней успешной резервной копии. Открытие группы из списка, из виджета групп с ошибками на панели или по ссылке возврата к группе из запуска группы теперь ведёт на эту страницу вместо формы редактирования, доступной только администраторам. Администраторы сохраняют здесь действия запустить, приостановить, возобновить, изменить и удалить, а история запусков группы перенесена на эту страницу из формы редактирования, которая теперь является обычной формой.',

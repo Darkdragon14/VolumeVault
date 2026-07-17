@@ -3,23 +3,30 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Docker\SyncDockerVolumes;
+use App\Http\Controllers\Concerns\AuthorizesHostAccess;
 use App\Models\DockerVolume;
+use App\Models\Host;
 use App\Services\Volumes\VolumeBackupSummaries;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
 
 class VolumeController extends Controller
 {
-    public function index(VolumeBackupSummaries $volumeBackupSummaries): Response
+    use AuthorizesHostAccess;
+
+    public function index(Request $request, VolumeBackupSummaries $volumeBackupSummaries): Response
     {
-        $volumes = DockerVolume::query()
+        $volumes = $this->applyHostFilter(DockerVolume::with('host'), $request)
             ->orderByDesc('exists')
             ->orderBy('name')
             ->get();
 
         return Inertia::render('Volumes/Index', [
             'volumes' => $volumeBackupSummaries->forVolumes($volumes),
+            'hosts' => $this->accessibleHostsForFrontend($request),
+            'currentHostId' => $this->selectedHostId($request),
         ]);
     }
 

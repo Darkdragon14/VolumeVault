@@ -43,13 +43,13 @@ class OpenApiController extends Controller
                 'get' => $this->operation('Read the OpenAPI document.', [], public: true),
             ],
             '/me' => ['get' => $this->operation('Inspect current authenticated user and token.', ['read'])],
-            '/dashboard' => ['get' => $this->operation('Read dashboard stats and recent activity.', ['read'])],
-            '/volumes' => ['get' => $this->operation('List Docker volumes.', ['read'])],
+            '/dashboard' => ['get' => $this->operation('Read dashboard stats and recent activity.', ['read'], hostList: true)],
+            '/volumes' => ['get' => $this->operation('List Docker volumes.', ['read'], hostList: true)],
             '/host-path-allowlist' => ['get' => $this->operation('Read the configured host-path allowlist (prefixes that host-path backup sources and local destinations may use). Empty/not configured means host paths are refused (fail-closed).', ['read'], null, false, true)],
-            '/volumes/sync' => ['post' => $this->operation('Synchronize Docker volumes from the host.', ['write'], null, false, true)],
+            '/volumes/sync' => ['post' => $this->operation('Synchronize Docker volumes from the selected host, all accessible hosts, or the local host by default.', ['write'], ['$ref' => '#/components/schemas/VolumeSyncRequest'], false, true, bodyRequired: false)],
             '/stacks/backup' => ['post' => $this->operation('Back up a whole stack at once. For every Docker volume in the stack that has no backup job yet, a job is created using the given destination and schedule; then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, omit destination/schedule to just queue a run for every job. Volumes whose job belongs to a backup group are reported under "grouped" and are not run here — they back up on their group\'s own schedule. The 202 response is { data: { created, queued, skipped, grouped } }.', ['write'], ['$ref' => '#/components/schemas/StackBackupRequest'], false, true, 202)],
             '/backup-jobs' => [
-                'get' => $this->operation('List backup jobs.', ['read']),
+                'get' => $this->operation('List backup jobs.', ['read'], hostList: true),
                 'post' => $this->operation('Create a backup job.', ['write'], ['$ref' => '#/components/schemas/BackupJobRequest'], false, true, 201),
             ],
             '/backup-jobs/{id}' => [
@@ -77,7 +77,7 @@ class OpenApiController extends Controller
             '/backup-groups/{id}/notifications' => ['patch' => $this->operation('Enable or disable a backup group\'s notifications.', ['write'], ['$ref' => '#/components/schemas/ToggleNotificationsRequest'], true, true)],
             '/backup-group-runs' => ['get' => $this->operation('List recent backup group runs.', ['read'])],
             '/backup-group-runs/{id}' => ['get' => $this->operation('Read a backup group run with its per-volume member runs.', ['read'], null, true)],
-            '/backup-runs' => ['get' => $this->operation('List recent backup runs.', ['read'])],
+            '/backup-runs' => ['get' => $this->operation('List recent backup runs.', ['read'], hostList: true)],
             '/backup-runs/{id}' => ['get' => $this->operation('Read backup run details and logs.', ['read'], null, true)],
             '/restore-runs' => ['get' => $this->operation('List recent restore runs.', ['read'], hostList: true)],
             '/restore-runs/{id}' => ['get' => $this->operation('Read restore run details and logs.', ['read'], null, true)],
@@ -101,7 +101,7 @@ class OpenApiController extends Controller
         ];
     }
 
-    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true): array
+    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true, bool $hostList = false): array
     {
         $description = trim(($abilities ? 'Requires token abilities: '.implode(', ', $abilities).'. ' : '').($admin ? 'Requires an admin user token.' : ''));
 
@@ -113,7 +113,7 @@ class OpenApiController extends Controller
             'summary' => $summary,
             'description' => $public
                 ? 'Public endpoint; no authentication required.'
-                : trim(($abilities ? 'Requires token abilities: '.implode(', ', $abilities).'. ' : '').($admin ? 'Requires an admin user token.' : '')),
+                : $description,
             'responses' => [
                 (string) $status => ['description' => 'Successful response.'],
             ],
@@ -281,6 +281,13 @@ class OpenApiController extends Controller
                 'required' => ['notifications_enabled'],
                 'properties' => [
                     'notifications_enabled' => ['type' => 'boolean', 'description' => 'Required. Omitting it is rejected rather than silently disabling notifications.'],
+                ],
+            ],
+            'VolumeSyncRequest' => [
+                'type' => 'object',
+                'properties' => [
+                    'host_id' => ['type' => ['integer', 'null'], 'description' => 'Target one accessible active host. Takes precedence over all_hosts.'],
+                    'all_hosts' => ['type' => 'boolean', 'default' => false, 'description' => 'Synchronize every accessible active host. When both fields are omitted, only the local host is synchronized.'],
                 ],
             ],
             'BackupJobRequest' => [

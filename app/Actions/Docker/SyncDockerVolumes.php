@@ -26,7 +26,11 @@ class SyncDockerVolumes
             throw new RuntimeException('Only the local host can be synced through the local Docker worker.');
         }
 
-        return $this->applyVolumeList($host, $this->listDockerVolumes->handle());
+        return Cache::lock('volumevault:docker-volume-sync:'.$host->id, 300)->block(5, function () use ($host): array {
+            $volumes = $this->listDockerVolumes->handle();
+
+            return DB::transaction(fn (): array => $this->applyVolumeList($host, $volumes), 3);
+        });
     }
 
     public function queueAgentSync(Host $host): bool
@@ -93,17 +97,20 @@ class SyncDockerVolumes
         }
 
         $jobVolumeNames = BackupJob::query()
+            ->where('host_id', $host->id)
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
             ->whereNotNull('volume_name')
             ->select('volume_name');
-        $missingNames = (clone $missingQuery)->whereIn('name', $jobVolumeNames)->pluck('name');
+        $missingNames = (clone $missingQuery)->whereIn('name', clone $jobVolumeNames)->pluck('name');
         $orphanedMissingNames = (clone $missingQuery)->whereNotIn('name', clone $jobVolumeNames)->pluck('name');
 
-        $markedMissing = DockerVolume::whereIn('name', $missingNames)->update(['exists' => false]);
-        $removed = DockerVolume::whereIn('name', $orphanedMissingNames)->delete();
-        $removed += DockerVolume::query()
-            ->where('exists', false)
-            ->whereNotIn('name', clone $jobVolumeNames)
+        $markedMissing = DockerVolume::query()
+            ->where('host_id', $host->id)
+            ->whereIn('name', $missingNames)
+            ->update(['exists' => false]);
+        $removed = DockerVolume::query()
+            ->where('host_id', $host->id)
+            ->whereIn('name', $orphanedMissingNames)
             ->delete();
         $removed += DockerVolume::query()
             ->where('host_id', $host->id)

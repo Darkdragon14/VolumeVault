@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'multi_host_agents' => [
+        'title' => 'Multi-host Docker agents',
+        'description' => 'VolumeVault can now discover Docker volumes from enrolled remote agents while keeping local backup and restore operations isolated. Agent enrollment, command leases, heartbeat status and inventory payloads are hardened against replay, overlap and oversized requests.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Backup group detail page',
         'description' => 'Backup groups now have a read-only detail page, available to every user, that shows the group\'s schedule, members, aggregated run history and last successful backup size. Opening a group from the list, from the dashboard\'s groups-in-error widget, or from a group run\'s back-to-group link now leads to this page instead of the admin-only edit form. Administrators still have the run, pause, resume, edit and delete actions there, and the group run history moved to this page from the edit form, which is now a pure form.',

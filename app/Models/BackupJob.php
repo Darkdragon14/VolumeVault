@@ -102,6 +102,11 @@ class BackupJob extends Model
         return $this->belongsTo(BackupDestination::class, 'backup_destination_id');
     }
 
+    public function host(): BelongsTo
+    {
+        return $this->belongsTo(Host::class);
+    }
+
     public function group(): BelongsTo
     {
         return $this->belongsTo(BackupJobGroup::class, 'backup_job_group_id');

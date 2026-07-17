@@ -29,13 +29,14 @@ const { activeFilterCount: activeAdvancedFilterCount } = useListFilters([statusF
 
 const drivers = computed(() => uniqueSortedOptions(props.volumes, (volume) => volume.driver || t('Unknown')));
 const stacks = computed(() => uniqueSortedOptions(props.volumes, (volume) => volume.stack_name || t('No stack')));
+const showHostFilter = computed(() => props.hosts.length > 1);
 
 const filteredVolumes = computed(() => {
     return props.volumes.filter((volume) => {
         const driver = volume.driver || t('Unknown');
         const stack = volume.stack_name || t('No stack');
 
-        return matchesSearch([volume.name, driver, stack, volume.mountpoint], search.value)
+        return matchesSearch([volume.name, driver, stack, volume.mountpoint, volume.host?.name], search.value)
             && (!statusFilter.value || (statusFilter.value === 'present' ? volume.exists : !volume.exists))
             && (!driverFilter.value || driver === driverFilter.value)
             && (!stackFilter.value || stack === stackFilter.value)
@@ -55,8 +56,10 @@ const backupStateClass = (state: string) => ({
     unprotected: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
 }[state] || 'border-slate-300/20 bg-slate-300/10 text-slate-200');
 
-const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURIComponent(volumeName)}`;
-const sync = () => router.post('/volumes/sync');
+const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volume.name)}${showHostFilter.value ? `&host_id=${encodeURIComponent(volume.host_id)}` : ''}`;
+const createJobHref = (volume: any) => `/backup-jobs/create?volume=${encodeURIComponent(volume.name)}&host_id=${encodeURIComponent(volume.host_id)}`;
+const sync = () => router.post('/volumes/sync', showHostFilter.value ? (hostFilter.value ? { host_id: hostFilter.value } : { all_hosts: true }) : {});
+const applyHostFilter = () => router.get('/volumes', hostFilter.value ? { host_id: hostFilter.value } : {}, { preserveScroll: true });
 </script>
 
 <template>
@@ -64,8 +67,8 @@ const sync = () => router.post('/volumes/sync');
     <AppLayout :title="t('Docker volumes')" :subtitle="t('Inspect discovered Docker volumes and start backup jobs from the volumes that matter.')">
         <template #actions>
             <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-                <div v-if="volumes.length" class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-                    <input v-model="search" class="input sm:w-72" data-list-search :aria-label="t('Search')" :placeholder="t('Search volumes, stacks, drivers, paths')">
+                <div v-if="volumes.length || showHostFilter" class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                    <input v-if="volumes.length" v-model="search" class="input sm:w-72" data-list-search :aria-label="t('Search')" :placeholder="t('Search volumes, stacks, drivers, paths')">
                     <div class="flex items-center gap-3">
                         <p v-if="volumes.length" class="whitespace-nowrap text-sm text-slate-400">{{ t('{count} results', { count: filteredVolumes.length }) }}</p>
                         <button type="button" class="btn-secondary gap-2" :aria-expanded="filtersVisible" :aria-label="filtersVisible ? t('Hide filters') : t('Show filters')" @click="filtersVisible = !filtersVisible">
@@ -79,8 +82,15 @@ const sync = () => router.post('/volumes/sync');
             </div>
         </template>
 
-        <div v-if="volumes.length && filtersVisible" class="card mb-4 p-4">
-            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div v-if="(volumes.length || showHostFilter) && filtersVisible" class="card mb-4 p-4">
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <label v-if="showHostFilter" class="space-y-1">
+                    <span class="label">{{ t('Host') }}</span>
+                    <select v-model="hostFilter" class="input" @change="applyHostFilter">
+                        <option value="">{{ t('All hosts') }}</option>
+                        <option v-for="host in hosts" :key="host.id" :value="host.id">{{ host.name }}</option>
+                    </select>
+                </label>
                 <label class="space-y-1">
                     <span class="label">{{ t('Status') }}</span>
                     <select v-model="statusFilter" class="input">
@@ -139,7 +149,7 @@ const sync = () => router.post('/volumes/sync');
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Last seen') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(volume.last_seen_at) }}</dd></div>
                         </dl>
                         <div class="flex flex-wrap gap-2">
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="createJobHref(volume)" />
+                            <ActionIcon v-if="can.runDockerActions && volume.host?.type === 'local'" :label="t('Create backup job')" icon="archive" :href="createJobHref(volume)" />
                             <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume)" />
                         </div>
                     </article>
@@ -171,8 +181,8 @@ const sync = () => router.post('/volumes/sync');
                                 <td class="px-4 py-3 text-slate-300">{{ formatDate(volume.last_seen_at) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}`" />
-                                        <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume.name)" />
+                                        <ActionIcon v-if="can.runDockerActions && volume.host?.type === 'local'" :label="t('Create backup job')" icon="archive" :href="createJobHref(volume)" />
+                                        <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume)" />
                                     </div>
                                 </td>
                             </tr>

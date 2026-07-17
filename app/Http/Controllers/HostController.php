@@ -6,6 +6,7 @@ use App\Models\Host;
 use App\Services\Hosts\HostEnrollmentTokens;
 use App\Services\Hosts\HostLimitService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -13,8 +14,11 @@ use Inertia\Response;
 
 class HostController extends Controller
 {
-    public function index(HostLimitService $limits): Response
+    public function index(Request $request, HostLimitService $limits): Response
     {
+        Inertia::encryptHistory();
+        $encryptedToken = $request->session()->pull('host_enrollment_token');
+
         return Inertia::render('Hosts/Index', [
             'hosts' => Host::query()
                 ->orderByRaw("case when type = 'local' then 0 else 1 end")
@@ -26,6 +30,7 @@ class HostController extends Controller
                 'active_limit' => $limits->activeLimit(),
                 'can_create_active_host' => $limits->canActivate(),
             ],
+            'enrollmentToken' => is_string($encryptedToken) ? Crypt::decryptString($encryptedToken) : null,
         ]);
     }
 
@@ -51,8 +56,7 @@ class HostController extends Controller
         return redirect()
             ->route('hosts.index')
             ->with('success', 'Host created.')
-            ->with('host_enrollment_token', $token)
-            ->with('host_enrollment_host_id', $host->id);
+            ->with('host_enrollment_token', Crypt::encryptString($token));
     }
 
     public function update(Request $request, Host $host)
@@ -106,7 +110,6 @@ class HostController extends Controller
         return redirect()
             ->route('hosts.index')
             ->with('success', 'Enrollment token regenerated.')
-            ->with('host_enrollment_token', $token)
-            ->with('host_enrollment_host_id', $host->id);
+            ->with('host_enrollment_token', Crypt::encryptString($token));
     }
 }

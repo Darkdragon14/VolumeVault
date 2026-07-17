@@ -35,7 +35,10 @@ class Host extends Model
         'metadata',
         'enrollment_token_hash',
         'enrollment_token_expires_at',
+        'enrollment_request_id',
+        'enrollment_token_consumed_at',
         'agent_token_hash',
+        'active_agent_command_id',
         'enrolled_at',
         'last_error',
     ];
@@ -49,10 +52,12 @@ class Host extends Model
     {
         return [
             'is_active' => 'boolean',
+            'active_agent_command_id' => 'integer',
             'last_seen_at' => 'datetime',
             'capabilities' => 'array',
             'metadata' => 'array',
             'enrollment_token_expires_at' => 'datetime',
+            'enrollment_token_consumed_at' => 'datetime',
             'enrolled_at' => 'datetime',
         ];
     }
