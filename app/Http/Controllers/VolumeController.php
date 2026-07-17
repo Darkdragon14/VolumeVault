@@ -82,7 +82,7 @@ class VolumeController extends Controller
     private function syncTargetHosts(Request $request): array
     {
         if ($request->filled('host_id')) {
-            $host = Host::query()->findOrFail($request->integer('host_id'));
+            $host = Host::query()->active()->findOrFail($request->integer('host_id'));
             $this->authorizeHostAccess($request, $host->id);
 
             return [$host];

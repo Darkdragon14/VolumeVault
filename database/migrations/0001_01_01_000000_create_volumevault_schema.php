@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $tables = [
+        $legacyTables = [
             'users',
             'password_reset_tokens',
             'sessions',
@@ -18,23 +18,28 @@ return new class extends Migration
             'jobs',
             'job_batches',
             'failed_jobs',
-            'hosts',
-            'host_user',
             'docker_volumes',
             'backup_destinations',
             'backup_jobs',
             'backup_runs',
             'restore_runs',
-            'agent_commands',
             'activity_logs',
             'notification_channels',
             'backup_job_notification_channel',
             'personal_access_tokens',
         ];
+        $tables = [
+            ...$legacyTables,
+            'hosts',
+            'host_user',
+            'agent_commands',
+        ];
 
         $existingTables = array_filter($tables, fn (string $table): bool => Schema::hasTable($table));
 
-        if (count($existingTables) === count($tables)) {
+        $existingLegacyTables = array_filter($legacyTables, fn (string $table): bool => Schema::hasTable($table));
+
+        if (count($existingTables) === count($tables) || count($existingLegacyTables) === count($legacyTables)) {
             return;
         }
 

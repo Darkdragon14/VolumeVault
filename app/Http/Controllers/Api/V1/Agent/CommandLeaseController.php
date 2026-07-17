@@ -17,7 +17,7 @@ class CommandLeaseController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         $host = $this->agentHost($request);
-        $leaseMinutes = max(1, min(60, (int) $request->integer('lease_minutes', 5)));
+        $leaseMinutes = max(1, min(60, (int) $request->integer('lease_minutes', 60)));
 
         $leaseToken = Str::random(64);
         $leaseTokenHash = hash('sha256', $leaseToken);

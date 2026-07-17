@@ -12,7 +12,12 @@ use App\Models\User;
 use App\Services\Hosts\HostEnrollmentTokens;
 use App\Services\Hosts\HostAgentTokens;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class HostAccessAndAgentTest extends TestCase
@@ -256,6 +261,133 @@ class HostAccessAndAgentTest extends TestCase
                 'lease_token' => $leaseToken,
             ])
             ->assertJsonValidationErrors('volumes');
+    }
+
+    public function test_agent_command_leases_default_to_sixty_minutes(): void
+    {
+        $this->freezeTime();
+
+        $host = Host::factory()->agent()->create();
+        $agentToken = app(HostAgentTokens::class)->issue($host);
+        $command = AgentCommand::factory()->create([
+            'host_id' => $host->id,
+            'status' => AgentCommand::STATUS_PENDING,
+        ]);
+
+        $this->withToken($agentToken)
+            ->postJson('/api/v1/agent/commands/lease')
+            ->assertOk()
+            ->assertJsonPath('data.id', $command->id);
+
+        $this->assertTrue($command->refresh()->lease_until->equalTo(now()->addMinutes(60)));
+    }
+
+    public function test_expired_agent_heartbeats_are_marked_offline(): void
+    {
+        config(['volumevault.agent.offline_after_seconds' => 120]);
+
+        $expiredHost = Host::factory()->agent()->create([
+            'status' => Host::STATUS_ONLINE,
+            'last_seen_at' => now()->subMinutes(3),
+        ]);
+        $neverSeenHost = Host::factory()->agent()->create([
+            'status' => Host::STATUS_ONLINE,
+            'last_seen_at' => null,
+        ]);
+        $freshHost = Host::factory()->agent()->create([
+            'status' => Host::STATUS_ONLINE,
+            'last_seen_at' => now()->subSeconds(30),
+        ]);
+        $inactiveHost = Host::factory()->agent()->create([
+            'status' => Host::STATUS_ONLINE,
+            'is_active' => false,
+            'last_seen_at' => now()->subMinutes(3),
+        ]);
+        $leasedHost = Host::factory()->agent()->create([
+            'status' => Host::STATUS_ONLINE,
+            'last_seen_at' => now()->subMinutes(3),
+        ]);
+        AgentCommand::factory()->create([
+            'host_id' => $leasedHost->id,
+            'status' => AgentCommand::STATUS_LEASED,
+            'lease_until' => now()->addMinutes(10),
+        ]);
+
+        $this->artisan('volumevault:agents:expire-offline')->assertExitCode(0);
+
+        $this->assertSame(Host::STATUS_OFFLINE, $expiredHost->refresh()->status);
+        $this->assertSame(Host::STATUS_OFFLINE, $neverSeenHost->refresh()->status);
+        $this->assertSame(Host::STATUS_ONLINE, $freshHost->refresh()->status);
+        $this->assertSame(Host::STATUS_ONLINE, $inactiveHost->refresh()->status);
+        $this->assertSame(Host::STATUS_ONLINE, $leasedHost->refresh()->status);
+    }
+
+    public function test_agent_command_loop_does_not_retry_failed_lease_posts(): void
+    {
+        $credentialPath = storage_path('framework/testing/agent-token');
+
+        if (file_exists($credentialPath)) {
+            unlink($credentialPath);
+        }
+
+        config([
+            'volumevault.agent.enabled' => true,
+            'volumevault.agent.central_url' => 'https://volumevault.test',
+            'volumevault.agent.token' => 'bootstrap-token',
+            'volumevault.agent.credential_path' => $credentialPath,
+        ]);
+
+        $leaseRequests = 0;
+
+        Http::fake(function (Request $request) use (&$leaseRequests): Response {
+            if (str_ends_with($request->url(), '/enroll')) {
+                return Http::response(['agent_token' => 'agent-token'], 200);
+            }
+
+            if (str_ends_with($request->url(), '/heartbeat')) {
+                return Http::response(['data' => []], 200);
+            }
+
+            if (str_ends_with($request->url(), '/commands/lease')) {
+                $leaseRequests++;
+
+                return Http::response(['message' => 'temporary failure'], 500);
+            }
+
+            return Http::response([], 404);
+        });
+
+        try {
+            Artisan::call('volumevault:agent', ['--once' => true]);
+        } catch (RequestException) {
+            // Expected: the failed non-idempotent lease request must not be retried.
+        } finally {
+            if (file_exists($credentialPath)) {
+                unlink($credentialPath);
+            }
+        }
+
+        $this->assertSame(1, $leaseRequests);
+    }
+
+    public function test_targeted_sync_rejects_inactive_agent_hosts(): void
+    {
+        $host = Host::factory()->agent()->create(['is_active' => false]);
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('write', ['read', 'write'])->plainTextToken;
+
+        $this->actingAs($admin)
+            ->post('/volumes/sync', ['host_id' => $host->id])
+            ->assertSessionHas('error');
+
+        $this->withToken($token)
+            ->postJson('/api/v1/volumes/sync', ['host_id' => $host->id])
+            ->assertStatus(422);
+
+        $this->assertDatabaseMissing('agent_commands', [
+            'host_id' => $host->id,
+            'type' => AgentCommand::TYPE_SYNC_VOLUMES,
+        ]);
     }
 
     public function test_agents_behind_the_same_ip_have_separate_operational_rate_limits(): void

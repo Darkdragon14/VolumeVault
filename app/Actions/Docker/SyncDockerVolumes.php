@@ -34,6 +34,10 @@ class SyncDockerVolumes
             throw new RuntimeException('Only agent hosts can queue a remote Docker volume sync.');
         }
 
+        if (! $host->is_active) {
+            throw new RuntimeException('Inactive agent hosts cannot queue a remote Docker volume sync.');
+        }
+
         return Cache::lock('volumevault:agent-sync:'.$host->id, 10)->block(5, function () use ($host): bool {
             $hasPendingSync = AgentCommand::query()
                 ->where('host_id', $host->id)

@@ -44,7 +44,7 @@ class VolumeController extends Controller
     {
         $scope = $this->resolveHostScope($request);
         $hosts = $scope['host_id'] !== null
-            ? Host::query()->whereKey($scope['host_id'])->get()
+            ? [Host::query()->active()->findOrFail($scope['host_id'])]
             : Host::query()->whereIn('id', $scope['host_ids'])->active()->get();
         $result = [
             'found' => 0,

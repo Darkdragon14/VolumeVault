@@ -4,7 +4,10 @@ use App\Jobs\DispatchDueBackupGroupsJob;
 use App\Jobs\DispatchDueBackupJobsJob;
 use App\Jobs\RunAlertChecksJob;
 use App\Jobs\SyncDockerVolumesJob;
+use App\Models\AgentCommand;
+use App\Models\Host;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -101,10 +104,11 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
     $clientFor = fn (string $token) => Http::baseUrl($centralUrl.'/api/v1/agent')
         ->withToken($token)
         ->acceptJson()
-        ->timeout(30)
-        ->retry(2, 500, null, false);
+        ->connectTimeout(10)
+        ->timeout(30);
     $enroll = function () use ($clientFor, $bootstrapToken, $metadata, $persistCredential): string {
         $token = (string) $clientFor($bootstrapToken)
+            ->retry(2, 500, null, false)
             ->post('/enroll', $metadata)
             ->throw()
             ->json('agent_token');
@@ -123,18 +127,26 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
     }
 
     $client = $clientFor($agentToken);
-    $heartbeat = $client->post('/heartbeat', $metadata);
+    $sendHeartbeat = function () use (&$agentToken, &$client, $clientFor, $bootstrapToken, $enroll, $metadata): void {
+        $heartbeat = $clientFor($agentToken)
+            ->retry(2, 500, null, false)
+            ->post('/heartbeat', $metadata);
 
-    if ($heartbeat->unauthorized() && $bootstrapToken !== '') {
-        $agentToken = $enroll();
-        $client = $clientFor($agentToken);
-        $heartbeat = $client->post('/heartbeat', $metadata);
-    }
+        if ($heartbeat->unauthorized() && $bootstrapToken !== '') {
+            $agentToken = $enroll();
+            $client = $clientFor($agentToken);
+            $heartbeat = $clientFor($agentToken)
+                ->retry(2, 500, null, false)
+                ->post('/heartbeat', $metadata);
+        }
 
-    $heartbeat->throw();
+        $heartbeat->throw();
+    };
 
     do {
-        $lease = $client->post('/commands/lease')->throw()->json('data');
+        $sendHeartbeat();
+
+        $lease = $client->post('/commands/lease', ['lease_minutes' => 60])->throw()->json('data');
 
         if (! $lease) {
             if ($this->option('once')) {
@@ -173,6 +185,31 @@ Artisan::command('volumevault:agent {--once : Lease at most one command and exit
         }
     } while (true);
 })->purpose('Run the VolumeVault agent command loop');
+
+Artisan::command('volumevault:agents:expire-offline', function () {
+    $expiresBefore = now()->subSeconds(max(60, (int) config('volumevault.agent.offline_after_seconds', 120)));
+
+    $expired = Host::query()
+        ->agents()
+        ->active()
+        ->whereIn('status', [Host::STATUS_ONLINE, Host::STATUS_ERROR])
+        ->whereDoesntHave('agentCommands', function (Builder $query): void {
+            $query->where('status', AgentCommand::STATUS_LEASED)
+                ->where('lease_until', '>=', now());
+        })
+        ->where(function (Builder $query) use ($expiresBefore): void {
+            $query->whereNull('last_seen_at')
+                ->orWhere('last_seen_at', '<', $expiresBefore);
+        })
+        ->update([
+            'status' => Host::STATUS_OFFLINE,
+            'updated_at' => now(),
+        ]);
+
+    $this->info("Marked {$expired} expired agents offline.");
+
+    return 0;
+})->purpose('Mark agents offline when their heartbeat has expired');
 
 Schedule::job(new DispatchDueBackupJobsJob)->everyMinute()->withoutOverlapping();
 Schedule::job(new DispatchDueBackupGroupsJob)->everyMinute()->withoutOverlapping();
