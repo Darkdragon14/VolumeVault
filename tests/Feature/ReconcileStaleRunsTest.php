@@ -4,11 +4,14 @@ namespace Tests\Feature;
 
 use App\Console\Commands\ReconcileStaleRuns;
 use App\Models\BackupDestination;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Support\RunHeartbeatLock;
 use App\Support\VolumeJobLock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -610,6 +613,7 @@ class ReconcileStaleRunsTest extends TestCase
         $run->refresh();
         $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
         $this->assertNull($run->stopped_container_ids);
+        $this->assertFalse($job->hasRunInProgress());
         $this->assertSame([['docker', 'start', 'app-1']], $docker->commands);
     }
 
@@ -680,15 +684,14 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame([], $docker->commands);
     }
 
-    public function test_default_threshold_is_short_now_that_liveness_guards_running_runs(): void
+    public function test_default_threshold_is_short_now_that_heartbeats_guard_running_runs(): void
     {
-        // Liveness checking (not the age threshold) protects genuinely long
-        // running backups, so the threshold can stay short — it only gates
-        // queued runs a worker never picked up.
+        // Heartbeats protect genuinely long running backups, so the threshold can
+        // stay short and recover a worker whose lease has expired.
         $this->assertSame(15, ReconcileStaleRuns::DEFAULT_THRESHOLD_MINUTES);
     }
 
-    public function test_running_run_with_a_live_container_is_never_reconciled(): void
+    public function test_running_run_with_a_live_container_and_fresh_heartbeat_is_not_reconciled(): void
     {
         $this->app->instance(DockerProcess::class, $this->inspectDockerProcess(alive: true));
 
@@ -697,8 +700,9 @@ class ReconcileStaleRunsTest extends TestCase
             'backup_job_id' => $job->id,
             'status' => BackupRun::STATUS_RUNNING,
             'trigger' => BackupRun::TRIGGER_SCHEDULED,
-            // Older than any threshold: only liveness should keep it alive.
+            // The run can be old, but its worker still renews the lease.
             'started_at' => now()->subDays(2),
+            'last_heartbeat_at' => now(),
             'docker_container_id' => 'volumevault-backup-1-abcd1234',
         ]);
 
@@ -707,7 +711,124 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
-    public function test_running_run_with_a_dead_container_is_reconciled_regardless_of_age(): void
+    public function test_live_orphaned_backup_container_is_stopped_before_applications_are_restarted(): void
+    {
+        $docker = $this->inspectDockerProcess(alive: true);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-backup-1-abcd1234',
+            'stopped_container_ids' => ['app-1'],
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $run->refresh();
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
+        $this->assertNull($run->stopped_container_ids);
+
+        $stopIndex = array_search(['docker', 'stop', '--time', '30', 'volumevault-backup-1-abcd1234'], $docker->commands, true);
+        $startIndex = array_search(['docker', 'start', 'app-1'], $docker->commands, true);
+        $this->assertIsInt($stopIndex);
+        $this->assertIsInt($startIndex);
+        $this->assertLessThan($startIndex, $stopIndex);
+    }
+
+    public function test_failed_orphan_stop_keeps_the_run_and_applications_recoverable(): void
+    {
+        $docker = $this->inspectDockerProcess(alive: true, stopSuccessful: false);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-backup-1-abcd1234',
+            'stopped_container_ids' => ['app-1'],
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
+        $this->assertSame(['app-1'], $run->stopped_container_ids);
+        $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
+    }
+
+    public function test_reconciliation_does_not_race_a_worker_renewing_its_heartbeat(): void
+    {
+        $docker = $this->inspectDockerProcess(alive: true);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-backup-1-abcd1234',
+        ]);
+        $heartbeatLock = Cache::lock(RunHeartbeatLock::backup($run->id), 180);
+        $this->assertTrue($heartbeatLock->get());
+
+        try {
+            $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        } finally {
+            $heartbeatLock->release();
+        }
+
+        $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
+        $this->assertNotContains(['docker', 'stop', '--time', '30', 'volumevault-backup-1-abcd1234'], $docker->commands);
+    }
+
+    public function test_orphaned_group_member_and_parent_group_are_reconciled_together(): void
+    {
+        $docker = $this->inspectDockerProcess(alive: true);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $group = BackupJobGroup::create([
+            'name' => 'Applications',
+            'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJobGroup::STATUS_RUNNING,
+        ]);
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $job->forceFill(['backup_job_group_id' => $group->id])->save();
+        $groupRun = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_RUNNING,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+        ]);
+        $memberRun = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'backup_group_run_id' => $groupRun->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-backup-1-abcd1234',
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->refresh()->status);
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $groupRun->refresh()->status);
+        $this->assertSame(BackupJobGroup::STATUS_ERROR, $group->refresh()->status);
+    }
+
+    public function test_recent_run_is_not_reconciled_before_its_recorded_container_can_start(): void
     {
         $this->app->instance(DockerProcess::class, $this->inspectDockerProcess(alive: false));
 
@@ -716,8 +837,29 @@ class ReconcileStaleRunsTest extends TestCase
             'backup_job_id' => $job->id,
             'status' => BackupRun::STATUS_RUNNING,
             'trigger' => BackupRun::TRIGGER_SCHEDULED,
-            // Recent, yet its container is gone: liveness overrides the age gate.
+            // RunBackupContainer persists the name immediately before docker run.
+            // The helper can briefly be absent while the worker is still healthy.
             'started_at' => now()->subMinute(),
+            'last_heartbeat_at' => now()->subMinute(),
+            'docker_container_id' => 'volumevault-backup-1-abcd1234',
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
+    }
+
+    public function test_stale_run_with_a_dead_container_is_reconciled(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->inspectDockerProcess(alive: false));
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHour(),
+            'last_heartbeat_at' => now()->subHour(),
             'docker_container_id' => 'volumevault-backup-1-abcd1234',
         ]);
 
@@ -745,7 +887,7 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
-    public function test_unreachable_docker_still_reconciles_an_old_running_run_via_age(): void
+    public function test_unreachable_docker_keeps_an_old_container_run_recoverable(): void
     {
         $this->app->instance(DockerProcess::class, $this->unreachableDockerProcess());
 
@@ -754,15 +896,15 @@ class ReconcileStaleRunsTest extends TestCase
             'backup_job_id' => $job->id,
             'status' => BackupRun::STATUS_RUNNING,
             'trigger' => BackupRun::TRIGGER_SCHEDULED,
-            // Older than the threshold: even with indeterminate liveness, the age
-            // gate reconciles it.
+            // The lease is stale, but application containers cannot safely be
+            // restarted until Docker confirms the backup helper is gone.
             'started_at' => now()->subDays(2),
             'docker_container_id' => 'volumevault-backup-1-abcd1234',
         ]);
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
+        $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
     private function recordingDockerProcess(bool $successful = true): DockerProcess
@@ -783,14 +925,17 @@ class ReconcileStaleRunsTest extends TestCase
         };
     }
 
-    private function inspectDockerProcess(bool $alive): DockerProcess
+    private function inspectDockerProcess(bool $alive, bool $stopSuccessful = true): DockerProcess
     {
-        return new class($alive) extends DockerProcess
+        return new class($alive, $stopSuccessful) extends DockerProcess
         {
             /** @var array<int, array<int, string>> */
             public array $commands = [];
 
-            public function __construct(private readonly bool $alive) {}
+            public function __construct(
+                private readonly bool $alive,
+                private readonly bool $stopSuccessful,
+            ) {}
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
             {
@@ -803,6 +948,10 @@ class ReconcileStaleRunsTest extends TestCase
                         $this->alive ? "true\n" : '',
                         $this->alive ? '' : 'Error: No such object: '.($command[4] ?? ''),
                     );
+                }
+
+                if (($command[1] ?? null) === 'stop' && ! $this->stopSuccessful) {
+                    return new DockerProcessResult($command, 1, '', 'Docker stop failed.');
                 }
 
                 return new DockerProcessResult($command, 0, '', '');

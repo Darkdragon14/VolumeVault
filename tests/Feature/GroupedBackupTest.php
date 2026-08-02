@@ -1218,10 +1218,10 @@ class GroupedBackupTest extends TestCase
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        // The member run is failed (not skipped as a lock waiter). Once its
-        // finished_at ages past the threshold, a later sweep closes the group run
-        // too — it no longer stays queued forever behind a phantom lock wait.
+        // The member run is failed (not skipped as a lock waiter), and the same
+        // sweep closes its stale parent group instead of waiting another threshold.
         $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->fresh()->status);
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $groupRun->fresh()->status);
     }
 
     public function test_reconciling_a_stale_queued_member_keeps_a_paused_member_job_paused(): void

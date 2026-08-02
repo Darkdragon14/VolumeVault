@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'orphaned_backup_recovery' => [
+        'title' => 'Reliable interrupted backup recovery',
+        'description' => 'VolumeVault now detects backup containers orphaned by an application restart, stops them safely, marks their runs and parent groups as failed, releases their locks, and restarts application containers left stopped by the interrupted backup. Backup jobs and groups no longer remain blocked indefinitely after this failure.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Backup group detail page',
         'description' => 'Backup groups now have a read-only detail page, available to every user, that shows the group\'s schedule, members, aggregated run history and last successful backup size. Opening a group from the list, from the dashboard\'s groups-in-error widget, or from a group run\'s back-to-group link now leads to this page instead of the admin-only edit form. Administrators still have the run, pause, resume, edit and delete actions there, and the group run history moved to this page from the edit form, which is now a pure form.',

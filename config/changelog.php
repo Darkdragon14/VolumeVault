@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'orphaned_backup_recovery',
+        ],
+    ],
     'releases' => [
         'v1.19.0' => [
             'date' => '2026-07-14',

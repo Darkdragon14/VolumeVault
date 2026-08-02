@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'orphaned_backup_recovery' => [
+        'title' => 'Zuverlässige Wiederherstellung unterbrochener Sicherungen',
+        'description' => 'VolumeVault erkennt nun nach einem Neustart verwaiste Sicherungscontainer, stoppt sie sicher, markiert ihre Läufe und übergeordneten Gruppen als fehlgeschlagen, gibt Sperren frei und startet angehaltene Anwendungscontainer neu. Sicherungsaufträge und Gruppen bleiben nach diesem Fehler nicht mehr dauerhaft blockiert.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Detailseite für Sicherungsgruppen',
         'description' => 'Sicherungsgruppen haben jetzt eine schreibgeschützte Detailseite, die für jeden Benutzer verfügbar ist und den Zeitplan der Gruppe, ihre Mitglieder, den zusammengefassten Ausführungsverlauf und die Größe der letzten erfolgreichen Sicherung anzeigt. Das Öffnen einer Gruppe aus der Liste, aus dem Dashboard-Widget für Gruppen mit Fehlern oder über den Zurück-zur-Gruppe-Link eines Gruppenlaufs führt nun zu dieser Seite statt zum nur für Administratoren zugänglichen Bearbeitungsformular. Administratoren behalten dort die Aktionen Ausführen, Pausieren, Fortsetzen, Bearbeiten und Löschen, und der Ausführungsverlauf der Gruppe wurde vom Bearbeitungsformular — jetzt ein reines Formular — auf diese Seite verschoben.',

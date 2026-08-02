@@ -2,13 +2,21 @@
 
 namespace App\Services\Docker;
 
+use Closure;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
+use Throwable;
 
 class DockerProcess
 {
+    private ?Closure $progressCallback = null;
+
+    private int $progressIntervalSeconds = 30;
+
+    private float $lastProgressAt = 0;
+
     private const SECRET_KEYS = [
         'AWS_ACCESS_KEY_ID',
         'AWS_SECRET_ACCESS_KEY',
@@ -35,6 +43,31 @@ class DockerProcess
         $process = new Process($command, null, $this->environment($environment), null, $timeout);
 
         return $this->runProcess($process, $command);
+    }
+
+    /**
+     * Invoke a callback periodically while a command executed by $operation is
+     * running, including when the command produces no output.
+     */
+    public function whileMonitoring(callable $callback, callable $operation, int $intervalSeconds = 30): mixed
+    {
+        $previousCallback = $this->progressCallback;
+        $previousInterval = $this->progressIntervalSeconds;
+        $previousProgressAt = $this->lastProgressAt;
+
+        $this->progressCallback = Closure::fromCallable($callback);
+        $this->progressIntervalSeconds = max(1, $intervalSeconds);
+        $this->lastProgressAt = microtime(true);
+
+        try {
+            ($this->progressCallback)();
+
+            return $operation();
+        } finally {
+            $this->progressCallback = $previousCallback;
+            $this->progressIntervalSeconds = $previousInterval;
+            $this->lastProgressAt = $previousProgressAt;
+        }
     }
 
     public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
@@ -127,7 +160,25 @@ class DockerProcess
     private function runProcess(Process $process, array $command): DockerProcessResult
     {
         try {
-            $process->run();
+            if ($this->progressCallback === null) {
+                $process->run();
+            } else {
+                $process->start();
+
+                while ($process->isRunning()) {
+                    $process->checkTimeout();
+                    $now = microtime(true);
+
+                    if ($now - $this->lastProgressAt >= $this->progressIntervalSeconds) {
+                        $this->lastProgressAt = $now;
+                        ($this->progressCallback)();
+                    }
+
+                    usleep(200000);
+                }
+
+                $process->wait();
+            }
 
             return new DockerProcessResult(
                 command: $this->sanitizeCommand($command),
@@ -135,7 +186,7 @@ class DockerProcess
                 output: $process->getOutput(),
                 errorOutput: $process->getErrorOutput(),
             );
-        } catch (ProcessTimedOutException $exception) {
+        } catch (ProcessTimedOutException) {
             $process->stop(3);
 
             return new DockerProcessResult(
@@ -145,6 +196,12 @@ class DockerProcess
                 errorOutput: 'Docker command timed out.',
                 timedOut: true,
             );
+        } catch (Throwable $exception) {
+            if ($process->isRunning()) {
+                $process->stop(3);
+            }
+
+            throw $exception;
         }
     }
 

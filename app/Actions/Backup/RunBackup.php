@@ -20,6 +20,8 @@ use App\Services\Docker\SelfContainerResolver;
 use App\Services\Logging\AppendRunLog;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Services\Scheduling\BackupScheduleCalculator;
+use App\Support\RunHeartbeatLock;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 use Throwable;
 
@@ -162,7 +164,10 @@ class RunBackup
                 }
             }
 
-            $result = $this->runBackupContainer->handle($run->fresh(['job.destination']));
+            $result = $this->runBackupContainer->handle(
+                $run->fresh(['job.destination']),
+                fn () => $this->heartbeat($run, requiresRunning: true),
+            );
             $this->appendRunLog->handle($run, $result->combinedOutput());
 
             if (! $result->successful()) {
@@ -376,7 +381,7 @@ class RunBackup
      * just-succeeded run. Returns whether it actually transitioned so callers can
      * tell a genuinely-failed stuck run from a no-op on an already-terminal run.
      */
-    public function markFailed(BackupRun $run, Throwable $exception): bool
+    public function markFailed(BackupRun $run, Throwable $exception, ?callable $afterTransition = null): bool
     {
         $run->loadMissing('job.destination');
 
@@ -400,6 +405,10 @@ class RunBackup
         }
 
         $run->refresh();
+
+        if ($afterTransition !== null) {
+            $afterTransition();
+        }
 
         $this->appendRunLog->handle($run, $message);
 
@@ -543,13 +552,20 @@ class RunBackup
      * restart, and the post-success metadata/notification finalization — so
      * stale-run reconciliation does not mistake a slow-but-healthy run for a crash.
      */
-    private function heartbeat(BackupRun $run): void
+    private function heartbeat(BackupRun $run, bool $requiresRunning = false): void
     {
-        BackupRun::query()
-            ->whereKey($run->getKey())
-            ->update(['last_heartbeat_at' => now()]);
+        Cache::lock(RunHeartbeatLock::backup($run->id), 180)->block(150, function () use ($run, $requiresRunning): void {
+            $updated = BackupRun::query()
+                ->whereKey($run->getKey())
+                ->when($requiresRunning, fn ($query) => $query->where('status', BackupRun::STATUS_RUNNING))
+                ->update(['last_heartbeat_at' => now()]);
 
-        $this->touchGroupRunHeartbeat($run);
+            if ($requiresRunning && $updated === 0) {
+                throw new RuntimeException('Backup run is no longer active.');
+            }
+
+            $this->touchGroupRunHeartbeat($run);
+        });
     }
 
     /**

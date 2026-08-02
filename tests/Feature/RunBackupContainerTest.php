@@ -80,6 +80,21 @@ class RunBackupContainerTest extends TestCase
         $this->assertSame('volumevault-app_data-run-'.$run->id.'.tar.gz', $docker->environment['BACKUP_FILENAME']);
     }
 
+    public function test_backup_container_execution_is_monitored_with_a_heartbeat(): void
+    {
+        $heartbeats = 0;
+        $run = $this->backupRun($this->s3Destination(), ['volume_name' => 'app_data']);
+
+        (new RunBackupContainer($this->recordingDocker()))->handle(
+            $run,
+            function () use (&$heartbeats): void {
+                $heartbeats++;
+            },
+        );
+
+        $this->assertSame(1, $heartbeats);
+    }
+
     public function test_custom_filename_template_uses_sanitized_job_name_run_id_and_time_tokens(): void
     {
         Carbon::setTestNow('2026-06-13 14:15:16');

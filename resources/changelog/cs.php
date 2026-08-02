@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'orphaned_backup_recovery' => [
+        'title' => 'Spolehlivá obnova přerušených záloh',
+        'description' => 'VolumeVault nyní po restartu rozpozná osiřelé zálohovací kontejnery, bezpečně je zastaví, označí jejich běhy a nadřazené skupiny jako neúspěšné, uvolní zámky a znovu spustí zastavené aplikační kontejnery. Zálohovací úlohy a skupiny již po této chybě nezůstanou trvale blokované.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Stránka s detailem skupiny záloh',
         'description' => 'Skupiny záloh nyní mají stránku s detailem jen pro čtení, dostupnou všem uživatelům, která zobrazuje plán skupiny, její členy, agregovanou historii běhů a velikost poslední úspěšné zálohy. Otevření skupiny ze seznamu, z widgetu skupin s chybami na přehledu nebo přes odkaz zpět na skupinu u běhu skupiny nyní vede na tuto stránku místo na formulář úprav vyhrazený administrátorům. Administrátoři zde mají i nadále akce spustit, pozastavit, obnovit, upravit a odstranit a historie běhů skupiny byla přesunuta na tuto stránku z formuláře úprav, který je nyní čistě formulářem.',
