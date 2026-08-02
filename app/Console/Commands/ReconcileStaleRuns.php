@@ -5,10 +5,12 @@ namespace App\Console\Commands;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
 use App\Actions\Docker\ContainerIsAlive;
+use App\Actions\Docker\StopDockerContainer;
 use App\Actions\Restore\RunRestore;
 use App\Models\BackupGroupRun;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
+use App\Support\RunHeartbeatLock;
 use App\Support\VolumeJobLock;
 use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
@@ -21,21 +23,20 @@ use Throwable;
 class ReconcileStaleRuns extends Command
 {
     protected $signature = 'volumevault:reconcile-stale-runs
-        {--minutes= : Age threshold in minutes before a queued/running run with no live container is considered stale}';
+        {--minutes= : Age threshold in minutes before a queued/running run with no recent heartbeat is considered stale}';
 
     protected $description = 'Mark backup/restore runs stuck in queued/running as failed after a worker crash, timeout or restart, and restart application containers left stopped by an interrupted backup.';
 
     /**
-     * Age threshold for runs that can't be checked for liveness (queued runs a
-     * worker never picked up, or running runs whose container was never
-     * created). Running runs that DID record a container are reconciled purely
-     * on container liveness, so a legitimately long backup is never failed and
-     * this threshold can stay short.
+     * Age threshold for runs whose worker stops renewing its progress lease.
+     * Restore containers keep their existing direct liveness check.
      */
     public const DEFAULT_THRESHOLD_MINUTES = 15;
 
-    public function __construct(private readonly ContainerIsAlive $containerIsAlive)
-    {
+    public function __construct(
+        private readonly ContainerIsAlive $containerIsAlive,
+        private readonly StopDockerContainer $stopDockerContainer,
+    ) {
         parent::__construct();
     }
 
@@ -51,12 +52,14 @@ class ReconcileStaleRuns extends Command
         $reason = "Run reconciled as failed: stuck in queued/running for more than {$minutes} minute(s) (possible worker crash, timeout or restart).";
 
         $backupCount = 0;
-        $this->staleBackupRuns($cutoff)->each(function (BackupRun $run) use ($runBackup, $reason, &$backupCount): void {
+        $reconciledBackupRunIds = [];
+        $this->staleBackupRuns($cutoff)->each(function (BackupRun $run) use ($runBackup, $reason, $cutoff, &$backupCount, &$reconciledBackupRunIds): void {
             $wasRunning = $run->status === BackupRun::STATUS_RUNNING;
             $volume = $run->job?->volume_name;
             $lockKey = VolumeJobLock::key($volume, 'backup-job-'.$run->backup_job_id);
 
-            if ($runBackup->markFailed($run, new RuntimeException($reason))) {
+            if ($this->markStaleBackupFailed($run, $cutoff, $runBackup, $reason)) {
+                $reconciledBackupRunIds[] = $run->id;
                 // A running holder definitely held the lock. But WithoutOverlapping
                 // acquires the lock *before* RunBackup flips the row to running, so a
                 // worker that crashed in that window (or a group member, which takes
@@ -99,12 +102,11 @@ class ReconcileStaleRuns extends Command
             $restoreCount++;
         });
 
-        // Close backup group runs whose worker crashed. Only once no member run is
-        // still active (a live member is reconciled on its own liveness first, and
-        // the group is closed on a later sweep). markFailed emits the single
-        // aggregated failure notification for the whole group.
+        // Close backup group runs whose worker crashed once no member run is still
+        // active. Members reconciled above do not delay their parent until a later
+        // sweep. markFailed emits the single aggregated failure notification.
         $groupCount = 0;
-        $this->staleGroupRuns($cutoff)->each(function (BackupGroupRun $run) use ($runBackupGroup, $reason, &$groupCount): void {
+        $this->staleGroupRuns($cutoff, $reconciledBackupRunIds)->each(function (BackupGroupRun $run) use ($runBackupGroup, $reason, &$groupCount): void {
             // A crashed group run can leave its shared WithoutOverlapping lock
             // (24h TTL) behind — including a still-"queued" run, because the job
             // acquires the group lock before RunBackupGroup flips the run to
@@ -150,15 +152,18 @@ class ReconcileStaleRuns extends Command
         return self::SUCCESS;
     }
 
-    /** @return Collection<int, BackupGroupRun> */
-    private function staleGroupRuns(CarbonInterface $cutoff): Collection
+    /**
+     * @param  array<int, int>  $reconciledBackupRunIds
+     * @return Collection<int, BackupGroupRun>
+     */
+    private function staleGroupRuns(CarbonInterface $cutoff, array $reconciledBackupRunIds): Collection
     {
         return BackupGroupRun::query()
             ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
             ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, BackupGroupRun::STATUS_RUNNING))
             ->get()
             ->filter(fn (BackupGroupRun $run) => $this->groupRunIsStale($run, $cutoff)
-                && ! $this->groupRunHasActiveMemberRun($run, $cutoff)
+                && ! $this->groupRunHasActiveMemberRun($run, $cutoff, $reconciledBackupRunIds)
                 && ! $this->groupRunIsWaitingForGroupLock($run));
     }
 
@@ -215,12 +220,14 @@ class ReconcileStaleRuns extends Command
      * is reconciled on its own container liveness first; the group is only closed
      * once every member has reached a terminal state, so its aggregated outcome is
      * not declared while a member is still working.
+     *
+     * @param  array<int, int>  $reconciledBackupRunIds
      */
-    private function groupRunHasActiveMemberRun(BackupGroupRun $run, CarbonInterface $cutoff): bool
+    private function groupRunHasActiveMemberRun(BackupGroupRun $run, CarbonInterface $cutoff, array $reconciledBackupRunIds): bool
     {
         return BackupRun::query()
             ->where('backup_group_run_id', $run->id)
-            ->where(function ($query) use ($cutoff): void {
+            ->where(function ($query) use ($cutoff, $reconciledBackupRunIds): void {
                 $query
                     ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
                     // A member that finished after the cutoff means the group
@@ -229,7 +236,10 @@ class ReconcileStaleRuns extends Command
                     // finalizing that member (e.g. recording archive metadata) with
                     // a lagging heartbeat. Treat the group as still progressing so a
                     // long member does not get its live group run reconciled.
-                    ->orWhere(fn ($q) => $q->whereNotNull('finished_at')->where('finished_at', '>=', $cutoff));
+                    ->orWhere(fn ($q) => $q
+                        ->whereNotIn('id', $reconciledBackupRunIds)
+                        ->whereNotNull('finished_at')
+                        ->where('finished_at', '>=', $cutoff));
             })
             ->exists();
     }
@@ -242,8 +252,89 @@ class ReconcileStaleRuns extends Command
             ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, BackupRun::STATUS_RUNNING))
             ->with('job')
             ->get()
-            ->filter(fn (BackupRun $run) => $this->isStale($run, $cutoff, BackupRun::STATUS_RUNNING)
+            ->filter(fn (BackupRun $run) => $this->backupIsStale($run, $cutoff)
                 && ! $this->backupIsWaitingForVolumeLock($run));
+    }
+
+    /**
+     * Stop an Offen helper whose owning worker stopped refreshing its heartbeat.
+     * Application containers must stay stopped until the helper is confirmed gone.
+     */
+    private function markStaleBackupFailed(BackupRun $run, CarbonInterface $cutoff, RunBackup $runBackup, string $reason): bool
+    {
+        if ($run->status !== BackupRun::STATUS_RUNNING) {
+            return $runBackup->markFailed($run, new RuntimeException($reason));
+        }
+
+        $heartbeatLock = Cache::lock(RunHeartbeatLock::backup($run->id), 180);
+
+        if (! $heartbeatLock->get()) {
+            return false;
+        }
+
+        $released = false;
+
+        try {
+            $run->refresh();
+
+            if ($run->status !== BackupRun::STATUS_RUNNING) {
+                return false;
+            }
+
+            $progressedAt = $run->last_heartbeat_at ?? $run->started_at ?? $run->created_at;
+
+            if ($progressedAt === null || ! $progressedAt->lessThan($cutoff)) {
+                return false;
+            }
+
+            if (filled($run->docker_container_id)) {
+                $alive = $this->containerIsAlive->handle($run->docker_container_id);
+
+                if ($alive === null) {
+                    $this->warn("Could not confirm whether backup container {$run->docker_container_id} is still running; recovery for backup run {$run->id} will be retried.");
+
+                    return false;
+                }
+
+                if ($alive === true) {
+                    try {
+                        $this->stopDockerContainer->handle($run->docker_container_id);
+                    } catch (Throwable $exception) {
+                        $this->warn("Failed to stop orphaned backup container {$run->docker_container_id} for backup run {$run->id}: {$exception->getMessage()}");
+
+                        return false;
+                    }
+                }
+            }
+
+            return $runBackup->markFailed(
+                $run,
+                new RuntimeException($reason),
+                function () use ($heartbeatLock, &$released): void {
+                    $heartbeatLock->release();
+                    $released = true;
+                },
+            );
+        } finally {
+            if (! $released) {
+                $heartbeatLock->release();
+            }
+        }
+    }
+
+    /**
+     * The heartbeat is the worker's lease. Docker liveness is checked under the
+     * same lock only after that lease expires.
+     */
+    private function backupIsStale(BackupRun $run, CarbonInterface $cutoff): bool
+    {
+        if ($run->status !== BackupRun::STATUS_RUNNING) {
+            return $run->created_at !== null && $run->created_at->lessThan($cutoff);
+        }
+
+        $progressedAt = $run->last_heartbeat_at ?? $run->started_at ?? $run->created_at;
+
+        return $progressedAt !== null && $progressedAt->lessThan($cutoff);
     }
 
     /** @return Collection<int, RestoreRun> */

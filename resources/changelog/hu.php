@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'orphaned_backup_recovery' => [
+        'title' => 'Megbízható helyreállítás megszakadt mentések után',
+        'description' => 'A VolumeVault mostantól felismeri az újraindítás után árván maradt mentési konténereket, biztonságosan leállítja őket, sikertelennek jelöli a futásokat és csoportokat, feloldja a zárolásokat, majd újraindítja a leállítva maradt alkalmazáskonténereket. A mentési feladatok és csoportok többé nem maradnak végleg blokkolva ilyen hiba után.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Biztonsági mentési csoport részletező oldala',
         'description' => 'A biztonsági mentési csoportoknak mostantól van egy csak olvasható részletező oldaluk, amely minden felhasználó számára elérhető, és megjeleníti a csoport ütemezését, tagjait, az összesített futási előzményeket és az utolsó sikeres mentés méretét. Egy csoport megnyitása a listából, az irányítópult hibás csoportok widgetjéből vagy egy csoportfuttatás vissza a csoporthoz hivatkozásából mostantól erre az oldalra vezet a csak rendszergazdáknak fenntartott szerkesztőűrlap helyett. A rendszergazdák továbbra is elérik itt a futtatás, szüneteltetés, folytatás, szerkesztés és törlés műveleteket, és a csoport futási előzményei erről a szerkesztőűrlapról erre az oldalra kerültek át, így az űrlap immár tisztán űrlap.',

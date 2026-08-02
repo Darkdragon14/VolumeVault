@@ -45,4 +45,46 @@ class DockerProcessTest extends TestCase
             File::delete($inputPath);
         }
     }
+
+    public function test_docker_process_reports_progress_while_a_silent_process_runs(): void
+    {
+        $heartbeats = 0;
+        $dockerProcess = app(DockerProcess::class);
+
+        $result = $dockerProcess->whileMonitoring(
+            function () use (&$heartbeats): void {
+                $heartbeats++;
+            },
+            fn () => $dockerProcess->run([
+                PHP_BINARY,
+                '-r',
+                'usleep(2200000); echo "done";',
+            ], 10),
+            1,
+        );
+
+        $this->assertSame(0, $result->exitCode);
+        $this->assertSame('done', $result->output);
+        $this->assertGreaterThanOrEqual(3, $heartbeats);
+    }
+
+    public function test_monitoring_state_is_restored_when_the_initial_callback_fails(): void
+    {
+        $dockerProcess = app(DockerProcess::class);
+
+        try {
+            $dockerProcess->whileMonitoring(
+                fn () => throw new \RuntimeException('heartbeat failed'),
+                fn () => $this->fail('The operation must not run after a failed heartbeat.'),
+            );
+            $this->fail('The heartbeat exception should be rethrown.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('heartbeat failed', $exception->getMessage());
+        }
+
+        $result = $dockerProcess->run([PHP_BINARY, '-r', 'echo "ok";'], 10);
+
+        $this->assertSame(0, $result->exitCode);
+        $this->assertSame('ok', $result->output);
+    }
 }

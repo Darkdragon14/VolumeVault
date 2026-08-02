@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'orphaned_backup_recovery' => [
+        'title' => 'Recuperación fiable de copias interrumpidas',
+        'description' => 'VolumeVault ahora detecta contenedores de copia huérfanos tras un reinicio, los detiene de forma segura, marca sus ejecuciones y grupos como fallidos, libera sus bloqueos y reinicia los contenedores de aplicaciones que quedaron detenidos. Los trabajos y grupos de copia ya no quedan bloqueados indefinidamente después de este fallo.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Página de detalle del grupo de copia de seguridad',
         'description' => 'Los grupos de copia de seguridad ahora tienen una página de detalle de solo lectura, disponible para todos los usuarios, que muestra la programación del grupo, sus miembros, el historial agregado de ejecuciones y el tamaño de la última copia de seguridad correcta. Abrir un grupo desde la lista, desde el widget de grupos con errores del panel o desde el enlace de volver al grupo de una ejecución lleva ahora a esta página en lugar del formulario de edición reservado a administradores. Los administradores conservan ahí las acciones ejecutar, pausar, reanudar, editar y eliminar, y el historial de ejecuciones del grupo se trasladó a esta página desde el formulario de edición, que ahora es un formulario puro.',

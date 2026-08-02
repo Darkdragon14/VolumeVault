@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'orphaned_backup_recovery' => [
+        'title' => 'Betrouwbaar herstel van onderbroken back-ups',
+        'description' => 'VolumeVault detecteert nu verweesde back-upcontainers na een herstart, stopt ze veilig, markeert hun uitvoeringen en bovenliggende groepen als mislukt, geeft vergrendelingen vrij en herstart achtergebleven applicatiecontainers. Back-uptaken en groepen blijven na deze fout niet langer onbeperkt geblokkeerd.',
+    ],
     'backup_group_detail_page' => [
         'title' => 'Detailpagina voor back-upgroepen',
         'description' => 'Back-upgroepen hebben nu een alleen-lezen detailpagina, beschikbaar voor elke gebruiker, die de planning van de groep, de leden, de samengevoegde uitvoeringsgeschiedenis en de grootte van de laatste geslaagde back-up toont. Een groep openen vanuit de lijst, vanuit de dashboardwidget met groepen met fouten of via de terug-naar-groep-link van een groepsuitvoering leidt nu naar deze pagina in plaats van het bewerkingsformulier dat alleen voor beheerders is. Beheerders houden daar de acties uitvoeren, pauzeren, hervatten, bewerken en verwijderen, en de uitvoeringsgeschiedenis van de groep is naar deze pagina verplaatst vanuit het bewerkingsformulier, dat nu een puur formulier is.',

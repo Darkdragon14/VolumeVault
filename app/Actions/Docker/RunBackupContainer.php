@@ -35,7 +35,7 @@ class RunBackupContainer
         $this->includePathsToExcludeRegexp = $includePathsToExcludeRegexp ?? app(IncludePathsToExcludeRegexp::class);
     }
 
-    public function handle(BackupRun $run): DockerProcessResult
+    public function handle(BackupRun $run, ?callable $heartbeat = null): DockerProcessResult
     {
         $run->loadMissing('job.destination');
 
@@ -74,7 +74,11 @@ class RunBackupContainer
         $run->forceFill(['docker_container_id' => $containerName])->save();
 
         try {
-            return $this->dockerProcess->run($command, 0, $environment);
+            $execute = fn (): DockerProcessResult => $this->dockerProcess->run($command, 0, $environment);
+
+            return $heartbeat === null
+                ? $execute()
+                : $this->dockerProcess->whileMonitoring($heartbeat, $execute);
         } finally {
             foreach ($runtime['cleanup'] as $path) {
                 File::delete($path);
