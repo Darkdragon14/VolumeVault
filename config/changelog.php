@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'orphaned_backup_recovery',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.19.1' => [
+            'date' => '2026-08-02',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.19.1',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'orphaned_backup_recovery',
+                ],
+            ],
+        ],
         'v1.19.0' => [
             'date' => '2026-07-14',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.19.0',
