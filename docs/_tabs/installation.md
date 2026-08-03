@@ -130,7 +130,7 @@ services:
   migrate:
     <<: *volumevault-service
     entrypoint: ["sh", "-lc"]
-    command: "mkdir -p /app/storage/database /app/storage/framework/cache/data /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs /app/bootstrap/cache && touch /app/storage/database/database.sqlite && chown -R www-data:www-data /app/storage /app/bootstrap/cache && /command/s6-setuidgid www-data php artisan migrate --force"
+    command: ["mkdir -p /app/storage/database /app/storage/framework/cache/data /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs /app/bootstrap/cache && touch /app/storage/database/database.sqlite && chown -R www-data:www-data /app/storage /app/bootstrap/cache && /command/s6-setuidgid www-data php artisan migrate --force"]
     restart: "no"
 
   app:
@@ -147,6 +147,8 @@ services:
   queue:
     <<: *volumevault-runtime-service
     command: ["/command/s6-setuidgid", "www-data", "php", "artisan", "queue:work", "--tries=1", "--timeout=0"]
+    healthcheck:
+      disable: true
 
   # Dedicated worker for the "metadata" queue. Completed backups defer their
   # archive-metadata listing (and, for standalone backups, their finish
@@ -156,16 +158,20 @@ services:
   queue-metadata:
     <<: *volumevault-runtime-service
     command: ["/command/s6-setuidgid", "www-data", "php", "artisan", "queue:work", "--queue=metadata", "--tries=1", "--timeout=0"]
+    healthcheck:
+      disable: true
 
   scheduler:
     <<: *volumevault-runtime-service
     command: ["/command/s6-setuidgid", "www-data", "php", "artisan", "schedule:work"]
+    healthcheck:
+      disable: true
 
 volumes:
   volumevault_data:
 ```
 
-This layout is useful when you want separate container lifecycle, logs, and resource limits for runtime concerns. The `app` service keeps the image entrypoint so nginx and PHP-FPM are prepared correctly, but disables migrations because the separate `migrate` service already handles them.
+This layout is useful when you want separate container lifecycle, logs, and resource limits for runtime concerns. The `app` service keeps the image entrypoint so nginx and PHP-FPM are prepared correctly, but disables migrations because the separate `migrate` service already handles them. The runner services disable the image's HTTP healthcheck because they do not run nginx.
 
 The container listens on port `8080`. You can expose any host port by changing the value on the left, for example `9090:8080`, and should set `APP_URL` to the public URL you use.
 
