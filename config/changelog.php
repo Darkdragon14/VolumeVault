@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'docker_tcp_endpoint',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.20.0' => [
+            'date' => '2026-08-04',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.20.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'docker_tcp_endpoint',
+                ],
+            ],
+        ],
         'v1.19.1' => [
             'date' => '2026-08-02',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.19.1',
