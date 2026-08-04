@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_endpoint' => [
+        'title' => 'Podpora TCP endpointu Dockeru',
+        'description' => 'VolumeVault nyní může přes DOCKER_HOST=tcp://host:port používat TCP endpoint Dockeru, například socket proxy před stejným Docker enginem. Příkazy Dockeru i dočasné zálohovací kontejnery Offen používají nakonfigurovaný endpoint. Vzdálené Docker hosty nejsou podporovány a TCP přístup odpovídá oprávněním root, proto musí být omezen na důvěryhodnou privátní síť.',
+    ],
     'orphaned_backup_recovery' => [
         'title' => 'Spolehlivá obnova přerušených záloh',
         'description' => 'VolumeVault nyní po restartu rozpozná osiřelé zálohovací kontejnery, bezpečně je zastaví, označí jejich běhy a nadřazené skupiny jako neúspěšné, uvolní zámky a znovu spustí zastavené aplikační kontejnery. Zálohovací úlohy a skupiny již po této chybě nezůstanou trvale blokované.',

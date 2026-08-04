@@ -10,6 +10,10 @@ Mounting `/var/run/docker.sock` gives this application high privileges on the Do
 
 VolumeVault can start privileged Docker operations through the Docker socket. Treat access to the web UI and write-capable API tokens like access to the Docker host.
 
+The same warning applies when `DOCKER_HOST` points to a TCP endpoint: Docker API access is effectively root access to the Docker host. Never expose an unencrypted endpoint to the internet or an untrusted network. Keep it behind a private network, VPN, firewall, or tightly controlled socket proxy. Filtering Docker API routes reduces exposure but does not remove the risk, because VolumeVault must create containers and mount host filesystems. VolumeVault does not currently manage Docker TLS client certificates or remote Docker hosts.
+
+VolumeVault canonicalizes paths visible in its own filesystem regardless of whether Docker uses a Unix socket or TCP endpoint. Paths unavailable to VolumeVault can only receive lexical allowlist validation before Docker tests the bind mount. Keep `VOLUMEVAULT_HOST_PATH_ALLOWLIST` narrow, protect allowlisted directories from untrusted symlink replacement, and treat changes to it as privileged configuration.
+
 On first launch, VolumeVault requires onboarding and creates the first account as an administrator. Admins can manage users, encrypted destinations, notification channels, restores, and active Docker operations such as volume sync and manual backup runs. Regular users have read-only access to operational screens.
 
 ## HTTPS And Session Cookie
@@ -82,4 +86,4 @@ To migrate an installation, start a fresh VolumeVault instance, choose `Import e
 - For databases, application-consistent backups may require stopping containers or using database-native dumps.
 - Optional job setting `Stop containers before backup` stops containers using the volume before backup and restarts them afterward.
 - Local backup destinations require a filesystem path shared by VolumeVault and the temporary Offen container.
-- Host path backup sources are mounted read-only into the temporary Offen container. `VOLUMEVAULT_HOST_PATH_ALLOWLIST` restricts which host directories admins can select and is fail-closed (empty = nothing allowed). The same allowlist gates local backup destinations, which are bind-mounted read-write, and both are re-validated at run time to defend against a symlink swap (TOCTOU).
+- Host path backup sources are mounted read-only into the temporary Offen container. `VOLUMEVAULT_HOST_PATH_ALLOWLIST` restricts which host directories admins can select and is fail-closed (empty = nothing allowed). The same allowlist gates local backup destinations, which are bind-mounted read-write. At run time, every locally visible path is canonicalized regardless of Docker transport to reject resolvable symlink escapes. Paths unavailable to VolumeVault receive lexical-only validation; protect allowlisted directories from untrusted symlink replacement.

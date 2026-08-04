@@ -44,6 +44,52 @@ The recommended setup runs one container. At startup it prepares storage, runs d
 
 Production defaults are built into VolumeVault. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
 
+## Docker TCP Endpoint
+
+VolumeVault normally connects through `unix:///var/run/docker.sock`. To use a TCP endpoint such as a socket proxy in front of the same Docker engine, remove the socket mount and set the container's `DOCKER_HOST`.
+
+The repository includes a standalone TCP Compose file that does both safely. It uses `VOLUMEVAULT_DOCKER_HOST` for interpolation so the host Docker CLI is not redirected through the proxy:
+
+```bash
+VOLUMEVAULT_DOCKER_HOST=tcp://docker-proxy.example.internal:2375 docker compose -f docker-compose.tcp.yml up -d
+```
+
+Because this is a standalone file rather than a Compose merge override, it does not require a recent Compose version. The base `docker-compose.yml` fixes the container endpoint to the local Unix socket so an ambient `DOCKER_HOST` cannot accidentally select a proxy while the unrestricted socket remains mounted. For a custom Compose file, use the equivalent TCP configuration with no Docker socket mount:
+
+```yaml
+services:
+  volumevault:
+    image: ghcr.io/darkdragon14/volumevault:latest
+    volumes:
+      - volumevault_data:/app/storage
+    environment:
+      APP_KEY: base64:paste-generated-key-here
+      DOCKER_HOST: tcp://docker-proxy.example.internal:2375
+```
+
+This is an instance-wide setting: volume discovery, backups, restores, container stop/start operations, and Docker-volume destinations all use that endpoint. The same endpoint is passed to the temporary Offen backup container. Its hostname or IP must therefore be reachable both from VolumeVault and from containers launched by Docker; a service name that only exists on VolumeVault's Compose network is usually insufficient.
+
+This setting does **not** add support for managing a Docker engine on another host. Bind mounts are resolved by the daemon, while VolumeVault also needs direct access to some local files. In particular, local destinations and uploaded SSH private keys may be unavailable when the endpoint controls another machine. Use a TCP socket proxy for the same Docker engine VolumeVault normally accesses, not a remote-host deployment.
+
+Host-path backup sources refer to paths on the Docker host because bind mounts are resolved by the daemon. `VOLUMEVAULT_HOST_PATH_ALLOWLIST` must contain the permitted paths. VolumeVault canonicalizes paths that are visible in its own filesystem and validates the bind by launching a temporary container. Paths that are not visible to VolumeVault can only be checked lexically, which is another reason remote-host deployments are unsupported.
+
+### TCP access security
+
+Docker API access is effectively root access to the Docker host. Anyone who can reach a write-capable endpoint can create containers and mount host filesystems.
+
+- Never publish an unencrypted Docker TCP endpoint on the internet or an untrusted LAN.
+- Restrict access with a private network, VPN, firewall, or a dedicated Docker socket proxy.
+- A proxy API allowlist reduces unrelated exposure, but VolumeVault legitimately creates containers with bind mounts, so its access remains highly privileged.
+- This version accepts a `tcp://` endpoint through `DOCKER_HOST` but does not manage Docker TLS client certificates or remote Docker hosts. Protect the connection at the network or proxy layer.
+
+The conventional unencrypted Docker port is `2375`. Do not expose it publicly. Modern Docker versions also restrict starting an unauthenticated remotely reachable daemon, so a secured proxy or private tunnel is preferable to binding the daemon directly.
+
+### Docker socket proxy access
+
+VolumeVault directly needs Docker API access to inspect and list containers and volumes, create and remove volumes, create/start/stop temporary containers, attach to or wait for those containers, and inspect or pull their images. A socket proxy must therefore allow at least the equivalent of `INFO`, `CONTAINERS`, `VOLUMES`, `IMAGES`, and write requests for those operations. Restrict the proxy to VolumeVault's network peers even when these routes are filtered.
+
+Offen also connects to the endpoint from inside the backup container. It always reads Docker info and the container list. Additional exec, service, node, task, stop, and start operations depend on Offen labels and Swarm usage. VolumeVault performs its own stop/start orchestration, but proxy permissions should still be reviewed whenever the Offen image or its labels change.
+
 ## Reverse Proxy And HTTPS Termination
 
 When VolumeVault runs behind a reverse proxy such as Pangolin, Caddy, Traefik, or nginx, TLS is usually terminated by the proxy and the container receives plain HTTP traffic on port `8080`. In that setup, configure Laravel to trust your proxy so generated URLs, redirects, and Vite assets use the original HTTPS scheme.
@@ -191,6 +237,7 @@ When `APP_VERSION` is a tagged release, VolumeVault can also check GitHub for a 
 - `APP_TIMEZONE`: timezone used to interpret backup schedules and display date/times, defaults to `UTC`. Use an IANA timezone such as `Europe/Paris`. Each user can choose their regional date format from their profile; this changes the displayed order such as month/day vs day/month without changing the timezone.
 - `APP_URL`: public URL, defaults to `http://localhost:8080`.
 - `TRUSTED_PROXIES`: reverse proxy IP, CIDR, comma-separated list, or `*` when running behind HTTPS termination. Leave empty when exposing VolumeVault directly. If you use `*`, ensure the backend is only reachable through a proxy that overwrites forwarded headers.
+- `DOCKER_HOST`: Docker endpoint used by the entire instance. Defaults to `unix:///var/run/docker.sock`; set a private `tcp://host:port` endpoint to use a socket proxy for the same Docker engine. Remote Docker hosts are not supported.
 - `VOLUMEVAULT_HOST_PATH_ALLOWLIST`: comma-separated list of Docker host path prefixes allowed for host-path backup sources **and local backup destinations**, for example `/srv,/mnt/data`. Fail-closed: when empty, host-path sources and local destinations are refused. Set the prefixes you intend to back up to/from.
 - `DB_CONNECTION`: defaults to `sqlite`.
 - `DB_DATABASE`: defaults to `/app/storage/database/database.sqlite` inside the Docker image.

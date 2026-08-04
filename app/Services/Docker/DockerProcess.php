@@ -209,12 +209,18 @@ class DockerProcess
     {
         $home = storage_path('app/docker-cli/home');
         $config = storage_path('app/docker-cli/config');
+        $dockerHost = (string) config('volumevault.docker_host', 'unix:///var/run/docker.sock');
 
         File::ensureDirectoryExists($home);
         File::ensureDirectoryExists($config);
 
         return array_merge($environment, [
+            'DOCKER_CERT_PATH' => false,
             'DOCKER_CONFIG' => $config,
+            'DOCKER_CONTEXT' => false,
+            'DOCKER_HOST' => $dockerHost,
+            'DOCKER_TLS' => false,
+            'DOCKER_TLS_VERIFY' => false,
             'HOME' => $home,
             'XDG_CONFIG_HOME' => $config,
         ]);

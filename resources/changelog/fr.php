@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_endpoint' => [
+        'title' => 'Prise en charge des endpoints Docker TCP',
+        'description' => 'VolumeVault peut désormais utiliser un endpoint Docker TCP, comme un socket proxy devant le même moteur Docker, via DOCKER_HOST=tcp://hote:port. Les commandes Docker et les conteneurs de sauvegarde Offen temporaires utilisent cet endpoint. Les hôtes Docker distants ne sont pas pris en charge, et l’accès TCP reste équivalent à un accès root et doit être limité à un réseau privé de confiance.',
+    ],
     'orphaned_backup_recovery' => [
         'title' => 'Récupération fiable des sauvegardes interrompues',
         'description' => 'VolumeVault détecte désormais les conteneurs de sauvegarde orphelins après un redémarrage de l’application, les arrête en toute sécurité, marque leurs exécutions et groupes parents en échec, libère leurs verrous et redémarre les conteneurs applicatifs laissés à l’arrêt. Les jobs et groupes de sauvegarde ne restent plus bloqués indéfiniment après cet incident.',

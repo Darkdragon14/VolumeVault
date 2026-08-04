@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_endpoint' => [
+        'title' => 'Compatibilidad con endpoints Docker TCP',
+        'description' => 'VolumeVault ahora puede usar un endpoint Docker TCP, como un socket proxy delante del mismo motor Docker, mediante DOCKER_HOST=tcp://host:port. Los comandos Docker y los contenedores temporales de copia Offen usan el endpoint configurado. Los hosts Docker remotos no son compatibles; el acceso TCP equivale a root y debe limitarse a una red privada de confianza.',
+    ],
     'orphaned_backup_recovery' => [
         'title' => 'Recuperación fiable de copias interrumpidas',
         'description' => 'VolumeVault ahora detecta contenedores de copia huérfanos tras un reinicio, los detiene de forma segura, marca sus ejecuciones y grupos como fallidos, libera sus bloqueos y reinicia los contenedores de aplicaciones que quedaron detenidos. Los trabajos y grupos de copia ya no quedan bloqueados indefinidamente después de este fallo.',

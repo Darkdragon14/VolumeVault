@@ -648,6 +648,7 @@
   "Hide password": "Masquer le mot de passe",
   "Identity file path": "Chemin du fichier d'identite",
   "If provided, VolumeVault mounts it into the Offen container for backup runs.": "Si fourni, VolumeVault le monte dans le conteneur Offen pour les sauvegardes.",
+  "Uploaded private keys are not supported when DOCKER_HOST controls a Docker engine on another machine because the daemon cannot access VolumeVault's local key file. Use password authentication instead.": "Les clés privées téléversées ne sont pas prises en charge lorsque DOCKER_HOST contrôle un moteur Docker sur une autre machine, car le démon ne peut pas accéder au fichier de clé local de VolumeVault. Utilisez plutôt l’authentification par mot de passe.",
   "Impersonate subject": "Sujet a impersonnaliser",
   "Import an existing installation": "Importer une installation existante",
   "Import existing installation": "Importer une installation existante",

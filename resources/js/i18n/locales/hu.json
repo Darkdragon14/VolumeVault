@@ -648,6 +648,7 @@
   "Hide password": "Jelszo elrejtese",
   "Identity file path": "Azonosito fajl utvonala",
   "If provided, VolumeVault mounts it into the Offen container for backup runs.": "Ha meg van adva, a VolumeVault becsatolja az Offen konteberbe a mentesi futasokhoz.",
+  "Uploaded private keys are not supported when DOCKER_HOST controls a Docker engine on another machine because the daemon cannot access VolumeVault's local key file. Use password authentication instead.": "A feltöltött privát kulcsok nem támogatottak, ha a DOCKER_HOST egy másik gépen futó Docker-motort vezérel, mert a démon nem fér hozzá a VolumeVault helyi kulcsfájljához. Használjon helyette jelszavas hitelesítést.",
   "Impersonate subject": "Megszemelyesitendo alany",
   "Import an existing installation": "Meglevo telepites importalasa",
   "Import existing installation": "Meglevo telepites importalasa",

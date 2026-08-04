@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_endpoint' => [
+        'title' => 'Ondersteuning voor Docker-TCP-endpoints',
+        'description' => 'VolumeVault kan nu via DOCKER_HOST=tcp://host:poort een Docker-TCP-endpoint gebruiken, zoals een socketproxy voor dezelfde Docker-engine. Docker-opdrachten en tijdelijke Offen-back-upcontainers gebruiken het ingestelde endpoint. Externe Docker-hosts worden niet ondersteund; TCP-toegang is gelijkwaardig aan root-toegang en moet tot een vertrouwd privénetwerk worden beperkt.',
+    ],
     'orphaned_backup_recovery' => [
         'title' => 'Betrouwbaar herstel van onderbroken back-ups',
         'description' => 'VolumeVault detecteert nu verweesde back-upcontainers na een herstart, stopt ze veilig, markeert hun uitvoeringen en bovenliggende groepen als mislukt, geeft vergrendelingen vrij en herstart achtergebleven applicatiecontainers. Back-uptaken en groepen blijven na deze fout niet langer onbeperkt geblokkeerd.',

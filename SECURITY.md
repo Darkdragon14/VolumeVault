@@ -20,16 +20,18 @@ Please include as much detail as possible, including:
 
 I will try to acknowledge the report as soon as possible and coordinate a fix before public disclosure.
 
-## Trust boundary: the Docker socket
+## Trust boundary: Docker access
 
 VolumeVault is built for a **single-tenant, admin-trusted** deployment: everyone
 who can sign in is assumed to be a full administrator of the host.
 
-To create and run backup/restore containers, VolumeVault bind-mounts the host
-Docker socket (`/var/run/docker.sock`) read-write into its own container, and
-into the backup container it spawns. **Access to the Docker socket is equivalent
-to root on the host** — it allows creating containers with arbitrary bind
-mounts. This is inherent to what the tool does, not a bug.
+To create and run backup/restore containers, VolumeVault either bind-mounts the
+host Docker socket (`/var/run/docker.sock`) read-write into its own container and
+the backup container it spawns, or connects both containers through a configured
+TCP socket proxy. The standalone TCP Compose file omits the Unix socket mount.
+**Either form of Docker API access is equivalent to root on the host** because it
+allows creating containers with arbitrary bind mounts. This is inherent to what
+the tool does, not a bug.
 
 Some consequences worth understanding before exposing VolumeVault:
 
