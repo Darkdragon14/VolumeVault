@@ -64,7 +64,10 @@ class HostPathPolicyTest extends TestCase
         // Only the "allowed" subtree is allowlisted (raw + canonical form, so a
         // legit path inside it would pass); the symlink target is a sibling that
         // escapes it.
-        config(['volumevault.host_path_allowlist' => array_unique([$allowed, realpath($allowed)])]);
+        config([
+            'volumevault.docker_host' => 'tcp://docker-proxy.example.test:2375',
+            'volumevault.host_path_allowlist' => array_unique([$allowed, realpath($allowed)]),
+        ]);
         $policy = new HostPathPolicy;
 
         try {
@@ -79,5 +82,20 @@ class HostPathPolicyTest extends TestCase
             rmdir($allowed);
             rmdir($base);
         }
+    }
+
+    public function test_unavailable_host_path_remains_lexically_valid(): void
+    {
+        $allowed = sys_get_temp_dir().'/volumevault-unavailable-hostpath-'.uniqid();
+        $path = $allowed.'/data';
+
+        config([
+            'volumevault.docker_host' => 'tcp://docker.example.test:2375',
+            'volumevault.host_path_allowlist' => [$allowed],
+        ]);
+
+        $this->assertFalse(realpath($path));
+        (new HostPathPolicy)->assertValidAtRuntime($path);
+        $this->addToAssertionCount(1);
     }
 }

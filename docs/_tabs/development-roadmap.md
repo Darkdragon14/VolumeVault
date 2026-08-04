@@ -36,7 +36,7 @@ docker run --rm -v "$PWD:/app" -w /app composer:2 php artisan test
 ## Current Limitations
 
 - No external identity provider support yet.
-- No remote Docker host support.
+- A Docker TCP endpoint, such as a socket proxy for the local engine, can be configured through `DOCKER_HOST`; remote Docker hosts and Docker TLS client certificates are not supported.
 - No Kubernetes support.
 - Notifications require Docker to pull and run the Shoutrrr CLI image for test and delivery.
 - Backup archive extraction assumes the archive layout produced by the configured `offen/docker-volume-backup` mount path.

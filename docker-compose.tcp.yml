@@ -6,10 +6,9 @@ services:
       - "8080:8080"
     volumes:
       - volumevault_data:/app/storage
-      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       APP_KEY: ${APP_KEY:?Set APP_KEY before starting VolumeVault}
-      DOCKER_HOST: unix:///var/run/docker.sock
+      DOCKER_HOST: ${VOLUMEVAULT_DOCKER_HOST:?Set VOLUMEVAULT_DOCKER_HOST to your private TCP socket proxy endpoint}
     restart: unless-stopped
 
 volumes:

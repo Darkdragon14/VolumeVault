@@ -27,6 +27,44 @@ class DockerProcessTest extends TestCase
         );
     }
 
+    public function test_docker_process_uses_the_configured_docker_host_and_removes_inherited_client_configuration(): void
+    {
+        config(['volumevault.docker_host' => 'tcp://docker.example.test:2375']);
+
+        $dockerClientVariables = [
+            'DOCKER_CONTEXT',
+            'DOCKER_TLS',
+            'DOCKER_TLS_VERIFY',
+            'DOCKER_CERT_PATH',
+        ];
+        $previousEnvironment = [];
+
+        foreach ($dockerClientVariables as $variable) {
+            $previousEnvironment[$variable] = getenv($variable);
+            putenv("{$variable}=inherited");
+        }
+
+        try {
+            $result = app(DockerProcess::class)->run([
+                PHP_BINARY,
+                '-r',
+                'echo getenv("DOCKER_HOST"); foreach (["DOCKER_CONTEXT", "DOCKER_TLS", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"] as $variable) { echo "\n".(getenv($variable) === false ? "unset" : getenv($variable)); }',
+            ], 10, [
+                'DOCKER_HOST' => 'unix:///tmp/ignored.sock',
+            ]);
+
+            $this->assertSame(0, $result->exitCode);
+            $this->assertSame(
+                "tcp://docker.example.test:2375\nunset\nunset\nunset\nunset",
+                $result->output,
+            );
+        } finally {
+            foreach ($previousEnvironment as $variable => $value) {
+                putenv($value === false ? $variable : "{$variable}={$value}");
+            }
+        }
+    }
+
     public function test_docker_process_can_stream_an_input_file_to_stdin(): void
     {
         $inputPath = sys_get_temp_dir().'/volumevault-docker-process-stdin-'.uniqid();

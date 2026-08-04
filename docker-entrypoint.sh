@@ -6,8 +6,14 @@ set -eu
 # run an artisan command directly (queue:work, schedule:work) can still reach
 # Docker. Backups, restores and shoutrrr notifications all shell out to `docker`,
 # and would otherwise fail silently in those containers.
-if [ -S /var/run/docker.sock ]; then
-    docker_gid="$(stat -c '%g' /var/run/docker.sock)"
+docker_socket="${DOCKER_HOST:-unix:///var/run/docker.sock}"
+case "$docker_socket" in
+    unix://*) docker_socket="${docker_socket#unix://}" ;;
+    *) docker_socket="" ;;
+esac
+
+if [ -n "$docker_socket" ] && [ -S "$docker_socket" ]; then
+    docker_gid="$(stat -c '%g' "$docker_socket")"
 
     if ! getent group "$docker_gid" >/dev/null 2>&1; then
         addgroup -g "$docker_gid" docker-socket >/dev/null 2>&1 || true

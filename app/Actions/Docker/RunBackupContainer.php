@@ -42,6 +42,8 @@ class RunBackupContainer
         $containerName = 'volumevault-backup-'.$run->id.'-'.Str::lower(Str::random(8));
         $runtime = $this->runtime($run);
         $environment = $runtime['environment'];
+        $dockerHost = (string) config('volumevault.docker_host', 'unix:///var/run/docker.sock');
+        $environment['DOCKER_HOST'] = $dockerHost;
         $command = [
             'docker',
             'run',
@@ -56,8 +58,14 @@ class RunBackupContainer
             $command[] = $argument;
         }
 
-        $command[] = '-v';
-        $command[] = '/var/run/docker.sock:/var/run/docker.sock:ro';
+        if (str_starts_with($dockerHost, 'unix://')) {
+            $socketPath = substr($dockerHost, strlen('unix://'));
+
+            if ($socketPath !== '') {
+                $command[] = '-v';
+                $command[] = $socketPath.':'.$socketPath.':ro';
+            }
+        }
 
         foreach ($runtime['mounts'] as $mount) {
             $command[] = '-v';
@@ -242,7 +250,7 @@ class RunBackupContainer
         // The local destination is bind-mounted read-write (offen writes the
         // archive into it), so an unrestricted path would let the backup
         // container write anywhere on the host. Re-validate both ends against
-        // the host-path allowlist at run time (fail-closed + TOCTOU guard).
+        // the host-path allowlist at run time; local paths are canonicalized.
         $this->hostPathPolicy->assertValidAtRuntime($archivePath);
         $this->hostPathPolicy->assertValidAtRuntime($mountSource);
 
@@ -350,8 +358,8 @@ class RunBackupContainer
         $target = '/backup/'.$this->sourceMountName($job);
 
         if ($job->isHostPathSource()) {
-            // Re-validate at run time, not just at job creation, to close the
-            // TOCTOU window (e.g. a symlink swapped in after the job was saved).
+            // Re-validate at run time, not just at job creation. Local paths are
+            // also canonicalized to detect a symlink swapped after validation.
             $this->hostPathPolicy->assertValidAtRuntime((string) $job->host_path);
 
             return [

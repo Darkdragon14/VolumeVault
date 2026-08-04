@@ -23,7 +23,10 @@ class RunBackupContainerTest extends TestCase
 
         // Host-path sources are fail-closed without an allowlist; allow the
         // prefixes the happy-path tests in this file rely on.
-        config(['volumevault.host_path_allowlist' => ['/srv']]);
+        config([
+            'volumevault.docker_host' => 'unix:///var/run/docker.sock',
+            'volumevault.host_path_allowlist' => ['/srv'],
+        ]);
     }
 
     protected function tearDown(): void
@@ -61,6 +64,33 @@ class RunBackupContainerTest extends TestCase
         $this->assertSame('s3-secret-key', $docker->environment['AWS_SECRET_ACCESS_KEY'] ?? null);
         $this->assertSame('backups-bucket', $docker->environment['AWS_S3_BUCKET_NAME'] ?? null);
         $this->assertSame('/backup', $docker->environment['BACKUP_SOURCES'] ?? null);
+        $this->assertSame('unix:///var/run/docker.sock', $docker->environment['DOCKER_HOST'] ?? null);
+        $this->assertConsecutive($command, ['--env', 'DOCKER_HOST']);
+    }
+
+    public function test_tcp_docker_host_is_forwarded_without_mounting_a_unix_socket(): void
+    {
+        config(['volumevault.docker_host' => 'tcp://docker.example.test:2375']);
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->s3Destination(), ['volume_name' => 'app_data']);
+
+        (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertSame('tcp://docker.example.test:2375', $docker->environment['DOCKER_HOST'] ?? null);
+        $this->assertConsecutive($docker->command, ['--env', 'DOCKER_HOST']);
+        $this->assertNotContains('/var/run/docker.sock:/var/run/docker.sock:ro', $docker->command);
+    }
+
+    public function test_custom_unix_socket_is_forwarded_and_mounted_read_only(): void
+    {
+        config(['volumevault.docker_host' => 'unix:///run/docker-custom.sock']);
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->s3Destination(), ['volume_name' => 'app_data']);
+
+        (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertSame('unix:///run/docker-custom.sock', $docker->environment['DOCKER_HOST'] ?? null);
+        $this->assertConsecutive($docker->command, ['-v', '/run/docker-custom.sock:/run/docker-custom.sock:ro']);
     }
 
     public function test_container_id_is_persisted_and_filename_is_derived_from_the_source(): void

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_endpoint' => [
+        'title' => 'Docker TCP endpoint support',
+        'description' => 'VolumeVault can now use a Docker TCP endpoint, such as a socket proxy for the same Docker engine, through DOCKER_HOST=tcp://host:port. Docker commands and temporary Offen backup containers use the configured endpoint. Remote Docker hosts are not supported, and TCP access remains root-equivalent and must be kept on a trusted private network.',
+    ],
     'orphaned_backup_recovery' => [
         'title' => 'Reliable interrupted backup recovery',
         'description' => 'VolumeVault now detects backup containers orphaned by an application restart, stops them safely, marks their runs and parent groups as failed, releases their locks, and restarts application containers left stopped by the interrupted backup. Backup jobs and groups no longer remain blocked indefinitely after this failure.',

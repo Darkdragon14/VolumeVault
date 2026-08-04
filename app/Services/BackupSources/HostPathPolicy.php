@@ -30,9 +30,8 @@ class HostPathPolicy
      * Re-validate a path at run time (defence in depth against a symlink swap
      * happening between job/destination creation and the backup run — TOCTOU).
      *
-     * Validates the configured path, then — when the path is visible to the
-     * app and resolves to a different canonical location — re-validates that
-     * real target as well. Throws when either fails the allowlist.
+     * Validates the configured path, then re-validates its canonical target when
+     * visible to the app. Paths unavailable to VolumeVault remain lexical.
      */
     public function assertValidAtRuntime(string $path): void
     {

@@ -52,7 +52,7 @@ Example allowlist:
 VOLUMEVAULT_HOST_PATH_ALLOWLIST=/srv,/mnt/data,/opt/stacks
 ```
 
-Jobs outside those prefixes fail validation when saved (the error is shown on the host path field) and are re-checked at run time, so a path that is later swapped for a symlink pointing outside the allowlist is still refused.
+Jobs outside those prefixes fail validation when saved (the error is shown on the host path field) and are re-checked at run time. VolumeVault canonicalizes every path visible in its own filesystem, regardless of Docker transport, so a resolvable symlink swapped outside the allowlist is refused. Paths unavailable to VolumeVault receive lexical-only validation; keep allowlisted directories protected from untrusted symlink replacement.
 
 > **Upgrading from a version without the fail-closed allowlist?** Earlier releases allowed any host path when `VOLUMEVAULT_HOST_PATH_ALLOWLIST` was empty. After upgrading, existing host-path sources and local destinations are refused until their paths are allowlisted. Run the audit command to get the exact value to add to your `.env`:
 >

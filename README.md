@@ -64,11 +64,13 @@ The container listens on port `8080`; change the host side of the mapping, for e
 
 The single container runs nginx, PHP-FPM, database migrations, queue worker, and scheduler.
 
+To connect through a Docker TCP endpoint, such as a socket proxy in front of the same Docker engine, use the standalone TCP file: `VOLUMEVAULT_DOCKER_HOST=tcp://docker-proxy.example.internal:2375 docker compose -f docker-compose.tcp.yml up -d`. The separate interpolation variable configures the container without redirecting the host Docker CLI, and the TCP file does not mount `/var/run/docker.sock`. The base file is fixed to the local Unix socket so an ambient `DOCKER_HOST` cannot accidentally combine proxy mode with unrestricted socket access. The endpoint applies to the entire VolumeVault instance and must be reachable from both VolumeVault and the temporary Offen backup containers. This does not add support for managing a Docker engine on another host. Docker TCP access is root-equivalent; keep it on a trusted private network and see the installation and security documentation before enabling it.
+
 Defaults are built into the application for a production SQLite setup. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
 
 You can also use `env_file: .env` for overrides, but do not reuse a development `.env` in production without review. Values such as `APP_ENV=local` or `APP_DEBUG=true` override the safe production defaults.
 
-Host path backup jobs **and local backup destinations** are restricted by `VOLUMEVAULT_HOST_PATH_ALLOWLIST`, a comma-separated list of allowed Docker host path prefixes such as `/srv,/mnt/data`. This is **fail-closed**: when the variable is empty, host path sources and local destinations are refused entirely. Configure the prefixes you intend to back up to/from; paths outside them are rejected both when saved and again at run time (defending against a symlink swapped in afterwards).
+Host path backup jobs **and local backup destinations** are restricted by `VOLUMEVAULT_HOST_PATH_ALLOWLIST`, a comma-separated list of allowed Docker host path prefixes such as `/srv,/mnt/data`. This is **fail-closed**: when the variable is empty, host path sources and local destinations are refused entirely. Configure the prefixes you intend to back up to/from; paths outside them are rejected both when saved and again at run time. VolumeVault canonicalizes every path visible in its own filesystem, regardless of Docker transport, so resolvable symlink escapes are refused. Paths unavailable to VolumeVault receive lexical-only validation and must be protected from untrusted symlink replacement.
 
 ### Backup destinations on a private IP (NAS, self-hosted S3/MinIO, LAN SFTP)
 

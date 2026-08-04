@@ -648,6 +648,7 @@
   "Hide password": "Wachtwoord verbergen",
   "Identity file path": "Pad naar identiteitsbestand",
   "If provided, VolumeVault mounts it into the Offen container for backup runs.": "Indien opgegeven, koppelt VolumeVault dit in de Offen-container voor backupruns.",
+  "Uploaded private keys are not supported when DOCKER_HOST controls a Docker engine on another machine because the daemon cannot access VolumeVault's local key file. Use password authentication instead.": "Geüploade privésleutels worden niet ondersteund wanneer DOCKER_HOST een Docker-engine op een andere machine aanstuurt, omdat de daemon geen toegang heeft tot het lokale sleutelbestand van VolumeVault. Gebruik in plaats daarvan wachtwoordauthenticatie.",
   "Impersonate subject": "Subject imiteren",
   "Import an existing installation": "Een bestaande installatie importeren",
   "Import existing installation": "Bestaande installatie importeren",
