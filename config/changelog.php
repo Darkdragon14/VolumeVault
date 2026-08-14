@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'docker_tcp_backup_network',
+        ],
+    ],
     'releases' => [
         'v1.20.0' => [
             'date' => '2026-08-04',

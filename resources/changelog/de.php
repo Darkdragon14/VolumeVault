@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_backup_network' => [
+        'title' => 'Docker-TCP-Proxy-Netzwerk für Backups',
+        'description' => 'Backups können jetzt einen Docker-TCP-Socket-Proxy über seinen Dienstnamen im Docker-Netzwerk erreichen. Setze VOLUMEVAULT_DOCKER_NETWORK auf das für die Engine sichtbare benutzerdefinierte Netzwerk; VolumeVault verbindet die temporären Offen-Backup-Container damit.',
+    ],
     'docker_tcp_endpoint' => [
         'title' => 'Unterstützung für Docker-TCP-Endpunkte',
         'description' => 'VolumeVault kann nun über DOCKER_HOST=tcp://host:port einen Docker-TCP-Endpunkt verwenden, etwa einen Socket-Proxy vor derselben Docker-Engine. Docker-Befehle und temporäre Offen-Backup-Container nutzen den konfigurierten Endpunkt. Entfernte Docker-Hosts werden nicht unterstützt; TCP-Zugriff entspricht Root-Rechten und muss auf ein vertrauenswürdiges privates Netzwerk beschränkt bleiben.',

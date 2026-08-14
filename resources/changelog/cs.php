@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_backup_network' => [
+        'title' => 'Síť Docker TCP proxy pro zálohy',
+        'description' => 'Zálohy nyní mohou dosáhnout na Docker TCP socket proxy pomocí názvu služby v síti Docker. Nastavte VOLUMEVAULT_DOCKER_NETWORK na uživatelskou síť viditelnou pro engine a VolumeVault k ní připojí dočasné zálohovací kontejnery Offen.',
+    ],
     'docker_tcp_endpoint' => [
         'title' => 'Podpora TCP endpointu Dockeru',
         'description' => 'VolumeVault nyní může přes DOCKER_HOST=tcp://host:port používat TCP endpoint Dockeru, například socket proxy před stejným Docker enginem. Příkazy Dockeru i dočasné zálohovací kontejnery Offen používají nakonfigurovaný endpoint. Vzdálené Docker hosty nejsou podporovány a TCP přístup odpovídá oprávněním root, proto musí být omezen na důvěryhodnou privátní síť.',

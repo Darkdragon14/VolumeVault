@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_backup_network' => [
+        'title' => 'Docker TCP proxyhálózat a mentésekhez',
+        'description' => 'A mentések mostantól a Docker-hálózati szolgáltatásnevén keresztül is elérhetik a Docker TCP socket proxyt. Állítsa a VOLUMEVAULT_DOCKER_NETWORK értékét az engine számára látható egyéni hálózatra; a VolumeVault ehhez csatlakoztatja az ideiglenes Offen mentési konténereket.',
+    ],
     'docker_tcp_endpoint' => [
         'title' => 'Docker TCP-végpont támogatása',
         'description' => 'A VolumeVault mostantól Docker TCP-végpontot használhat a DOCKER_HOST=tcp://host:port beállítással, például ugyanazon Docker-motor előtt működő socket proxyt. A Docker-parancsok és az ideiglenes Offen mentési konténerek a beállított végpontot használják. Távoli Docker-hosztok nem támogatottak; a TCP-hozzáférés root jogosultsággal egyenértékű, ezért megbízható privát hálózatra kell korlátozni.',

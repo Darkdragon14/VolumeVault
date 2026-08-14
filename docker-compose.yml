@@ -10,6 +10,7 @@ services:
     environment:
       APP_KEY: ${APP_KEY:?Set APP_KEY before starting VolumeVault}
       DOCKER_HOST: unix:///var/run/docker.sock
+      VOLUMEVAULT_DOCKER_NETWORK: ${VOLUMEVAULT_DOCKER_NETWORK:-}
     restart: unless-stopped
 
 volumes:

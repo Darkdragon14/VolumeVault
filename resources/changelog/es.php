@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_backup_network' => [
+        'title' => 'Red del proxy Docker TCP para copias de seguridad',
+        'description' => 'Las copias de seguridad ahora pueden acceder a un proxy de socket Docker TCP mediante su nombre de servicio en la red Docker. Define VOLUMEVAULT_DOCKER_NETWORK con la red personalizada visible para el motor y VolumeVault conectará a ella los contenedores temporales de Offen.',
+    ],
     'docker_tcp_endpoint' => [
         'title' => 'Compatibilidad con endpoints Docker TCP',
         'description' => 'VolumeVault ahora puede usar un endpoint Docker TCP, como un socket proxy delante del mismo motor Docker, mediante DOCKER_HOST=tcp://host:port. Los comandos Docker y los contenedores temporales de copia Offen usan el endpoint configurado. Los hosts Docker remotos no son compatibles; el acceso TCP equivale a root y debe limitarse a una red privada de confianza.',
