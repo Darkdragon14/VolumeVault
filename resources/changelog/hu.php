@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_destination_update_fix' => [
+        'title' => 'SFTP-célok megbízható frissítése',
+        'description' => 'A meglévő SFTP-célok mostantól akkor is frissíthetők, ha az SSH-gazdagép állomásnévvel vagy IP-címmel van megadva. Az SFTP-beállítások és hitelesítő adatok ellenőrzési hibái az érintett mezők mellett is megjelennek.',
+    ],
     'docker_tcp_backup_network' => [
         'title' => 'Docker TCP proxyhálózat a mentésekhez',
         'description' => 'A mentések mostantól a Docker-hálózati szolgáltatásnevén keresztül is elérhetik a Docker TCP socket proxyt. Állítsa a VOLUMEVAULT_DOCKER_NETWORK értékét az engine számára látható egyéni hálózatra; a VolumeVault ehhez csatlakoztatja az ideiglenes Offen mentési konténereket.',

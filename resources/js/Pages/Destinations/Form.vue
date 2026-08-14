@@ -221,40 +221,48 @@ const fetchHostKey = async () => {
                 <label class="space-y-2">
                     <span class="label">{{ t('SSH host') }}</span>
                     <input v-model="form.settings.host" class="input" required placeholder="server.local">
+                    <span v-if="error('settings.host')" class="text-sm text-rose-300">{{ error('settings.host') }}</span>
                 </label>
                 <label class="space-y-2">
                     <span class="label">{{ t('Port') }}</span>
                     <input v-model="form.settings.port" class="input" type="number" min="1" max="65535">
+                    <span v-if="error('settings.port')" class="text-sm text-rose-300">{{ error('settings.port') }}</span>
                 </label>
                 <label class="space-y-2 sm:col-span-2">
                     <span class="label">{{ t('Remote path') }}</span>
                     <input v-model="form.settings.remote_path" class="input" required placeholder="/home/user/backups">
+                    <span v-if="error('settings.remote_path')" class="text-sm text-rose-300">{{ error('settings.remote_path') }}</span>
                 </label>
                 <label class="space-y-2">
                     <span class="label">{{ t('Username') }}</span>
                     <input v-model="form.secrets.user" class="input" :required="!editing || !hasSecret('user')" autocomplete="off">
                     <span class="text-xs text-slate-400">{{ secretHint('user') }}</span>
+                    <span v-if="error('secrets.user')" class="text-sm text-rose-300">{{ error('secrets.user') }}</span>
                 </label>
                 <label class="space-y-2">
                     <span class="label">{{ t('Password') }}</span>
                     <PasswordInput v-model="form.secrets.password" autocomplete="new-password" />
                     <span class="text-xs text-slate-400">{{ secretHint('password') }}</span>
+                    <span v-if="error('secrets.password')" class="text-sm text-rose-300">{{ error('secrets.password') }}</span>
                 </label>
                 <label class="space-y-2 sm:col-span-2">
                     <span class="label">{{ t('Private key') }}</span>
                     <textarea v-model="form.secrets.private_key" class="input min-h-32" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
                     <span class="text-xs text-slate-400">{{ secretHint('private_key') || t('If provided, VolumeVault mounts it into the Offen container for backup runs.') }}</span>
                     <span class="block text-xs text-amber-300">{{ t("Uploaded private keys are not supported when DOCKER_HOST controls a Docker engine on another machine because the daemon cannot access VolumeVault's local key file. Use password authentication instead.") }}</span>
+                    <span v-if="error('secrets.private_key')" class="block text-sm text-rose-300">{{ error('secrets.private_key') }}</span>
                 </label>
                 <label class="space-y-2">
                     <span class="label">{{ t('Private key passphrase') }}</span>
                     <PasswordInput v-model="form.secrets.private_key_passphrase" autocomplete="new-password" />
                     <span class="text-xs text-slate-400">{{ secretHint('private_key_passphrase') }}</span>
+                    <span v-if="error('secrets.private_key_passphrase')" class="text-sm text-rose-300">{{ error('secrets.private_key_passphrase') }}</span>
                 </label>
                 <label class="space-y-2">
                     <span class="label">{{ t('Identity file path') }}</span>
                     <input v-model="form.settings.identity_file" class="input" placeholder="/root/.ssh/id_rsa">
                     <span class="text-xs text-slate-400">{{ t('Advanced: path already available inside the Offen container.') }}</span>
+                    <span v-if="error('settings.identity_file')" class="text-sm text-rose-300">{{ error('settings.identity_file') }}</span>
                 </label>
                 <div class="space-y-2 sm:col-span-2">
                     <div class="flex items-center justify-between gap-2">
@@ -264,6 +272,7 @@ const fetchHostKey = async () => {
                         </button>
                     </div>
                     <textarea v-model="form.settings.host_key" class="input min-h-20" placeholder="ssh-ed25519 AAAAC3Nza... or SHA256:abc123..."></textarea>
+                    <span v-if="error('settings.host_key')" class="block text-sm text-rose-300">{{ error('settings.host_key') }}</span>
                     <span v-if="hostKeyProbe.fingerprint" class="block text-xs text-emerald-400">{{ t('Server key trusted (fingerprint {fingerprint}). Compare it with the server before saving to rule out a first-contact attack.', { fingerprint: hostKeyProbe.fingerprint }) }}</span>
                     <span v-if="hostKeyProbe.error" class="block text-xs text-rose-400">{{ hostKeyProbe.error }}</span>
                     <span class="text-xs text-slate-400">{{ t('Optional but recommended. Use the button to trust the current server key, or paste a host key (e.g. from ssh-keyscan) or its SHA256 fingerprint. Blocks man-in-the-middle attacks on the SFTP operations performed by VolumeVault; the backup container cannot verify host keys.') }}</span>

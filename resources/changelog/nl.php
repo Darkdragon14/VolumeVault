@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_destination_update_fix' => [
+        'title' => 'Betrouwbare updates van SFTP-bestemmingen',
+        'description' => 'Bestaande SFTP-bestemmingen kunnen nu worden bijgewerkt wanneer hun SSH-host een hostnaam of IP-adres is. Validatiefouten voor SFTP-instellingen en aanmeldgegevens worden ook naast de betreffende velden weergegeven.',
+    ],
     'docker_tcp_backup_network' => [
         'title' => 'Docker TCP-proxynetwerk voor back-ups',
         'description' => 'Back-ups kunnen nu een Docker TCP-socketproxy bereiken via de servicenaam op het Docker-netwerk. Stel VOLUMEVAULT_DOCKER_NETWORK in op het door de engine zichtbare gebruikersnetwerk; VolumeVault koppelt de tijdelijke Offen-back-upcontainers eraan.',

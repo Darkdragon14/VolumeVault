@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'ssh_destination_update_fix',
+        ],
+    ],
     'releases' => [
         'v1.20.1' => [
             'date' => '2026-08-14',
