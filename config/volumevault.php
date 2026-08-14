@@ -2,6 +2,7 @@
 
 return [
     'docker_host' => env('DOCKER_HOST', 'unix:///var/run/docker.sock'),
+    'docker_network' => trim((string) env('VOLUMEVAULT_DOCKER_NETWORK', '')),
 
     'host_path_allowlist' => array_values(array_filter(array_map(
         fn (string $path): string => trim($path),

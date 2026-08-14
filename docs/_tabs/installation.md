@@ -67,7 +67,29 @@ services:
       DOCKER_HOST: tcp://docker-proxy.example.internal:2375
 ```
 
-This is an instance-wide setting: volume discovery, backups, restores, container stop/start operations, and Docker-volume destinations all use that endpoint. The same endpoint is passed to the temporary Offen backup container. Its hostname or IP must therefore be reachable both from VolumeVault and from containers launched by Docker; a service name that only exists on VolumeVault's Compose network is usually insufficient.
+This is an instance-wide setting: volume discovery, backups, restores, container stop/start operations, and Docker-volume destinations all use that endpoint. The same endpoint is passed to the temporary Offen backup container. Its hostname or IP must therefore be reachable both from VolumeVault and from containers launched by Docker.
+
+When the endpoint uses a Compose service name such as `socket-proxy`, set `VOLUMEVAULT_DOCKER_NETWORK` to the engine-visible user-defined network containing that service. VolumeVault passes the network to `docker run`, allowing the temporary Offen container to resolve and reach the proxy. Compose normally prefixes network names with the project name; assigning an explicit `name` avoids that ambiguity:
+
+```yaml
+services:
+  socket-proxy:
+    networks:
+      - proxy-net
+
+  volumevault:
+    environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
+      VOLUMEVAULT_DOCKER_NETWORK: volumevault-proxy
+    networks:
+      - proxy-net
+
+networks:
+  proxy-net:
+    name: volumevault-proxy
+```
+
+Leave `VOLUMEVAULT_DOCKER_NETWORK` empty when the endpoint is already reachable without a specific Docker network. VolumeVault does not guess a network because its container may be attached to more than one.
 
 This setting does **not** add support for managing a Docker engine on another host. Bind mounts are resolved by the daemon, while VolumeVault also needs direct access to some local files. In particular, local destinations and uploaded SSH private keys may be unavailable when the endpoint controls another machine. Use a TCP socket proxy for the same Docker engine VolumeVault normally accesses, not a remote-host deployment.
 
@@ -238,6 +260,7 @@ When `APP_VERSION` is a tagged release, VolumeVault can also check GitHub for a 
 - `APP_URL`: public URL, defaults to `http://localhost:8080`.
 - `TRUSTED_PROXIES`: reverse proxy IP, CIDR, comma-separated list, or `*` when running behind HTTPS termination. Leave empty when exposing VolumeVault directly. If you use `*`, ensure the backend is only reachable through a proxy that overwrites forwarded headers.
 - `DOCKER_HOST`: Docker endpoint used by the entire instance. Defaults to `unix:///var/run/docker.sock`; set a private `tcp://host:port` endpoint to use a socket proxy for the same Docker engine. Remote Docker hosts are not supported.
+- `VOLUMEVAULT_DOCKER_NETWORK`: optional engine-visible user-defined network attached to temporary Offen backup containers. Set it when a TCP socket proxy hostname is only reachable on that network. Compose-generated network names are commonly prefixed with the project name unless the network has an explicit `name`.
 - `VOLUMEVAULT_HOST_PATH_ALLOWLIST`: comma-separated list of Docker host path prefixes allowed for host-path backup sources **and local backup destinations**, for example `/srv,/mnt/data`. Fail-closed: when empty, host-path sources and local destinations are refused. Set the prefixes you intend to back up to/from.
 - `DB_CONNECTION`: defaults to `sqlite`.
 - `DB_DATABASE`: defaults to `/app/storage/database/database.sqlite` inside the Docker image.

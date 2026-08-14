@@ -43,6 +43,7 @@ class RunBackupContainer
         $runtime = $this->runtime($run);
         $environment = $runtime['environment'];
         $dockerHost = (string) config('volumevault.docker_host', 'unix:///var/run/docker.sock');
+        $dockerNetwork = trim((string) config('volumevault.docker_network', ''));
         $environment['DOCKER_HOST'] = $dockerHost;
         $command = [
             'docker',
@@ -53,6 +54,11 @@ class RunBackupContainer
             '--entrypoint',
             '/usr/bin/backup',
         ];
+
+        if ($dockerNetwork !== '') {
+            $command[] = '--network';
+            $command[] = $dockerNetwork;
+        }
 
         foreach ($this->sourceMountArguments($run->job) as $argument) {
             $command[] = $argument;

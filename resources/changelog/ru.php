@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'docker_tcp_backup_network' => [
+        'title' => 'Сеть Docker TCP-прокси для резервных копий',
+        'description' => 'Резервные копии теперь могут обращаться к Docker TCP socket proxy по имени сервиса в сети Docker. Укажите в VOLUMEVAULT_DOCKER_NETWORK пользовательскую сеть, видимую движку, и VolumeVault подключит к ней временные контейнеры резервного копирования Offen.',
+    ],
     'docker_tcp_endpoint' => [
         'title' => 'Поддержка TCP-эндпоинтов Docker',
         'description' => 'VolumeVault теперь может использовать TCP-эндпоинт Docker через DOCKER_HOST=tcp://host:port, например socket proxy перед тем же движком Docker. Команды Docker и временные контейнеры резервного копирования Offen используют настроенный эндпоинт. Удалённые Docker-хосты не поддерживаются; TCP-доступ эквивалентен root-доступу и должен быть ограничен доверенной частной сетью.',

@@ -9,6 +9,7 @@ services:
     environment:
       APP_KEY: ${APP_KEY:?Set APP_KEY before starting VolumeVault}
       DOCKER_HOST: ${VOLUMEVAULT_DOCKER_HOST:?Set VOLUMEVAULT_DOCKER_HOST to your private TCP socket proxy endpoint}
+      VOLUMEVAULT_DOCKER_NETWORK: ${VOLUMEVAULT_DOCKER_NETWORK:-}
     restart: unless-stopped
 
 volumes:

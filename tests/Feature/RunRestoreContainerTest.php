@@ -18,6 +18,7 @@ class RunRestoreContainerTest extends TestCase
 
     public function test_restore_command_mounts_volume_streams_archive_and_strips_components(): void
     {
+        config(['volumevault.docker_network' => 'volumevault_proxy-net']);
         $docker = $this->recordingDocker();
         $run = $this->restoreRun();
         $archivePath = '/var/lib/restore/backup.tar.gz';
@@ -30,6 +31,7 @@ class RunRestoreContainerTest extends TestCase
         // The target volume is writable; the archive is streamed over stdin so
         // containerized deployments do not depend on host-visible app paths.
         $this->assertContains('-i', $command);
+        $this->assertNotContains('--network', $command);
         $this->assertContains('app_data_restored:/restore', $command);
         $this->assertSame($archivePath, $docker->inputPath);
         $this->assertNotContains($archivePath.':/archive/backup.tar.gz:ro', $command);

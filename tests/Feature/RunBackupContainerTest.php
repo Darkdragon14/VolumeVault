@@ -25,6 +25,7 @@ class RunBackupContainerTest extends TestCase
         // prefixes the happy-path tests in this file rely on.
         config([
             'volumevault.docker_host' => 'unix:///var/run/docker.sock',
+            'volumevault.docker_network' => '',
             'volumevault.host_path_allowlist' => ['/srv'],
         ]);
     }
@@ -79,6 +80,36 @@ class RunBackupContainerTest extends TestCase
         $this->assertSame('tcp://docker.example.test:2375', $docker->environment['DOCKER_HOST'] ?? null);
         $this->assertConsecutive($docker->command, ['--env', 'DOCKER_HOST']);
         $this->assertNotContains('/var/run/docker.sock:/var/run/docker.sock:ro', $docker->command);
+    }
+
+    public function test_configured_docker_network_is_used_for_the_backup_container(): void
+    {
+        config([
+            'volumevault.docker_host' => 'tcp://socket-proxy:2375',
+            'volumevault.docker_network' => 'volumevault_proxy-net',
+        ]);
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->s3Destination(), ['volume_name' => 'app_data']);
+
+        (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertConsecutive($docker->command, ['--network', 'volumevault_proxy-net']);
+        $networkIndex = array_search('--network', $docker->command, true);
+        $imageIndex = array_search(RunBackupContainer::IMAGE, $docker->command, true);
+        $this->assertIsInt($networkIndex);
+        $this->assertIsInt($imageIndex);
+        $this->assertLessThan($imageIndex, $networkIndex);
+    }
+
+    public function test_blank_docker_network_is_ignored(): void
+    {
+        config(['volumevault.docker_network' => '   ']);
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->s3Destination(), ['volume_name' => 'app_data']);
+
+        (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertNotContains('--network', $docker->command);
     }
 
     public function test_custom_unix_socket_is_forwarded_and_mounted_read_only(): void
