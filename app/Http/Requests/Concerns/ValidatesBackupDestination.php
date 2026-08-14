@@ -20,7 +20,7 @@ trait ValidatesBackupDestination
         return [
             'name' => ['required', 'string', 'max:255'],
             'provider' => ['required', 'string', Rule::in(BackupDestination::PROVIDERS)],
-            'endpoint' => ['nullable', 'url', 'max:2048'],
+            'endpoint' => ['nullable', 'string', 'max:2048'],
             'region' => ['nullable', 'string', 'max:255'],
             'bucket' => ['nullable', 'string', 'max:255'],
             'path_prefix' => ['nullable', 'string', 'max:255'],

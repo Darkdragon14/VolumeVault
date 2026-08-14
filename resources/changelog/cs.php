@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_destination_update_fix' => [
+        'title' => 'Spolehlivá aktualizace cílů SFTP',
+        'description' => 'Existující cíle SFTP lze nyní aktualizovat, pokud je jejich SSH hostitel zadán názvem hostitele nebo IP adresou. Chyby ověření nastavení a přihlašovacích údajů SFTP se také zobrazují u příslušných polí.',
+    ],
     'docker_tcp_backup_network' => [
         'title' => 'Síť Docker TCP proxy pro zálohy',
         'description' => 'Zálohy nyní mohou dosáhnout na Docker TCP socket proxy pomocí názvu služby v síti Docker. Nastavte VOLUMEVAULT_DOCKER_NETWORK na uživatelskou síť viditelnou pro engine a VolumeVault k ní připojí dočasné zálohovací kontejnery Offen.',

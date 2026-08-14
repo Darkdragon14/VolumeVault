@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_destination_update_fix' => [
+        'title' => 'Mise à jour fiable des destinations SFTP',
+        'description' => 'Les destinations SFTP existantes peuvent désormais être mises à jour lorsque leur hôte SSH est un nom d’hôte ou une adresse IP. Les erreurs de validation des paramètres et identifiants SFTP sont aussi affichées à côté des champs concernés.',
+    ],
     'docker_tcp_backup_network' => [
         'title' => 'Réseau du socket proxy Docker TCP pour les sauvegardes',
         'description' => 'Les sauvegardes peuvent désormais joindre un socket proxy Docker TCP désigné par son nom de service sur un réseau Docker. Définissez VOLUMEVAULT_DOCKER_NETWORK avec le nom du réseau utilisateur visible par le moteur, et VolumeVault y connectera les conteneurs de sauvegarde Offen temporaires.',
