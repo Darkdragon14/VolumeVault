@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'docker_tcp_backup_network',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.20.1' => [
+            'date' => '2026-08-14',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.20.1',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'docker_tcp_backup_network',
+                ],
+            ],
+        ],
         'v1.20.0' => [
             'date' => '2026-08-04',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.20.0',
