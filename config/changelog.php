@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'ssh_destination_update_fix',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.20.2' => [
+            'date' => '2026-08-14',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.20.2',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'ssh_destination_update_fix',
+                ],
+            ],
+        ],
         'v1.20.1' => [
             'date' => '2026-08-14',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.20.1',
