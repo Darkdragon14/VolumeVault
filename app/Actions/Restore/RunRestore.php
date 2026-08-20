@@ -15,6 +15,8 @@ use App\Models\RestoreRun;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Logging\AppendRunLog;
 use App\Services\Notifications\SendShoutrrrNotification;
+use App\Support\RunHeartbeatLock;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -68,7 +70,7 @@ class RunRestore
         // No Docker container exists yet, so the heartbeat is the only liveness
         // signal; refresh it per channel so slow start notifications don't get this
         // live restore reconciled as stale (which would release its lock).
-        $this->notify($run, fn () => $this->heartbeat($run));
+        $this->notify($run, fn () => $this->heartbeat($run, requiresRunning: true));
 
         try {
             // Read-only precondition check first, so an invalid target (missing
@@ -88,10 +90,10 @@ class RunRestore
             File::ensureDirectoryExists(dirname($archivePath));
 
             $this->appendRunLog->handle($run, 'Downloading selected backup object from backup destination.');
-            $this->heartbeat($run);
+            $this->heartbeat($run, requiresRunning: true);
             $this->storage->download($run->destination, $run->selected_backup_key, $archivePath);
             $this->verifyArchive($run, $archivePath);
-            $this->heartbeat($run);
+            $this->heartbeat($run, requiresRunning: true);
 
             // Optional safety net for the destructive in-place modes: back up the
             // source volume's current contents before anything wipes it. Runs after
@@ -100,37 +102,37 @@ class RunRestore
             // volume is untouched ($prepared stays false → no cleanup, no clear).
             if ($run->backup_before_overwrite && in_array($run->mode, [RestoreRun::MODE_INPLACE, RestoreRun::MODE_SAFE_INPLACE], true)) {
                 $this->runPreRestoreBackup->handle($run);
-                $this->heartbeat($run);
+                $this->heartbeat($run, requiresRunning: true);
             }
 
-            // Re-read the run immediately before the destructive step. If stale-run
-            // reconciliation (or any out-of-band actor) finalized it while we were
-            // downloading, verifying or running the safety backup, abort now rather
-            // than wipe a volume for a run already marked failed. Sync the model
-            // first so the catch's markFailed sees the terminal state and no-ops
-            // (no duplicate failure notification).
-            if ($run->fresh()->status !== RestoreRun::STATUS_RUNNING) {
-                $run->refresh();
-
-                throw new RuntimeException('Restore was finalized out of band before the target was prepared; aborting to avoid an unexpected volume change.');
-            }
+            // Renew the worker lease immediately before the destructive step under
+            // the same lock reconciliation uses for its final stale decision. If an
+            // out-of-band actor already finalized the run, the conditional update
+            // fails and no clear/extract can start.
+            $this->heartbeat($run, requiresRunning: true);
 
             // prepareTarget may stop containers and/or create/clear a volume. It
             // runs only after the archive is downloaded and verified; the
             // $prepared flag gates cleanupAfterFailure so we never remove a
             // volume that already existed (prepareTarget threw on its guard).
-            $handler->prepareTarget($run);
+            $handler->prepareTarget($run, fn () => $this->heartbeat($run, requiresRunning: true));
             $prepared = true;
 
             // The in-place clear container (--rm) recorded as docker_container_id is
             // gone now; drop the dead reference and refresh the heartbeat so the gap
             // before the extraction container starts is covered by the heartbeat
             // instead of a stale container id a sweep would read as dead.
-            $run->forceFill(['docker_container_id' => null, 'last_heartbeat_at' => now()])->save();
+            $run->forceFill(['docker_container_id' => null])->save();
+            $this->heartbeat($run, requiresRunning: true);
 
             $this->appendRunLog->handle($run, 'Extracting backup archive into target volume.');
-            $result = $this->runRestoreContainer->handle($run->fresh(), $archivePath);
+            $result = $this->runRestoreContainer->handle(
+                $run->fresh(),
+                $archivePath,
+                fn () => $this->heartbeat($run, requiresRunning: true),
+            );
             $this->appendRunLog->handle($run, $result->combinedOutput());
+            $this->heartbeat($run, requiresRunning: true);
 
             if (! $result->successful()) {
                 throw new RuntimeException($result->combinedOutput() ?: 'Restore container failed.');
@@ -183,7 +185,7 @@ class RunRestore
      * so callers know if a stuck run was genuinely failed (and e.g. its lock can
      * be released) versus the call being a no-op on an already-terminal run.
      */
-    public function markFailed(RestoreRun $run, Throwable $exception): bool
+    public function markFailed(RestoreRun $run, Throwable $exception, ?callable $afterTransition = null): bool
     {
         $finishedAt = now();
         $startedAt = $run->started_at ?? $finishedAt;
@@ -204,6 +206,10 @@ class RunRestore
         }
 
         $run->refresh();
+
+        if ($afterTransition !== null) {
+            $afterTransition();
+        }
 
         $this->appendRunLog->handle($run, $message);
 
@@ -291,9 +297,18 @@ class RunRestore
      * for liveness, so stale-run reconciliation falls back to this timestamp to
      * avoid failing a healthy-but-slow restore (see ReconcileStaleRuns::isStale).
      */
-    private function heartbeat(RestoreRun $run): void
+    private function heartbeat(RestoreRun $run, bool $requiresRunning = false): void
     {
-        $run->forceFill(['last_heartbeat_at' => now()])->save();
+        Cache::lock(RunHeartbeatLock::restore($run->id), 180)->block(150, function () use ($run, $requiresRunning): void {
+            $updated = RestoreRun::query()
+                ->whereKey($run->getKey())
+                ->when($requiresRunning, fn ($query) => $query->where('status', RestoreRun::STATUS_RUNNING))
+                ->update(['last_heartbeat_at' => now()]);
+
+            if ($requiresRunning && $updated === 0) {
+                throw new RuntimeException('Restore run is no longer active.');
+            }
+        });
     }
 
     /**
@@ -318,12 +333,17 @@ class RunRestore
         $containerName = 'volumevault-verify-'.$run->id.'-'.Str::lower(Str::random(8));
         $run->forceFill(['docker_container_id' => $containerName])->save();
 
-        $result = $this->verifyRestoreArchive->handle($archivePath, $containerName);
+        $result = $this->verifyRestoreArchive->handle(
+            $archivePath,
+            $containerName,
+            fn () => $this->heartbeat($run, requiresRunning: true),
+        );
 
         // The verify container is gone (--rm); drop the now-dead reference and
         // refresh the heartbeat so liveness falls back to the heartbeat until the
         // next container (clear/extract) starts.
-        $run->forceFill(['docker_container_id' => null, 'last_heartbeat_at' => now()])->save();
+        $run->forceFill(['docker_container_id' => null])->save();
+        $this->heartbeat($run, requiresRunning: true);
 
         if (! $result->successful()) {
             throw new RuntimeException(

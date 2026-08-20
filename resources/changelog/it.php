@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_private_key_backup_fix' => [
+        'title' => 'Backup SFTP con chiavi private',
+        'description' => 'I backup SFTP possono ora autenticarsi senza password con una chiave privata SSH caricata. VolumeVault copia la chiave in modo sicuro nel container Offen temporaneo e la rimuove al termine del backup.',
+    ],
     'ssh_destination_update_fix' => [
         'title' => 'Aggiornamenti affidabili delle destinazioni SFTP',
         'description' => 'Le destinazioni SFTP esistenti possono ora essere aggiornate quando l’host SSH è un nome host o un indirizzo IP. Gli errori di convalida delle impostazioni e delle credenziali SFTP vengono inoltre mostrati accanto ai campi interessati.',

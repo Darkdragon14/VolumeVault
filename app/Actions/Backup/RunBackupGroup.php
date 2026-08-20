@@ -452,7 +452,7 @@ class RunBackupGroup
         $backupBusy = BackupRun::query()
             ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
             ->whereKeyNot($exceptBackupRunId)
-            ->where(fn ($query) => $this->stillWorking($query))
+            ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
 
         $restoreBusy = RestoreRun::query()
@@ -474,15 +474,19 @@ class RunBackupGroup
         return BackupRun::query()
             ->where('backup_job_id', $jobId)
             ->whereKeyNot($exceptBackupRunId)
-            ->where(fn ($query) => $this->stillWorking($query))
+            ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
     }
 
-    private function stillWorking($query): void
+    private function stillWorking($query, bool $includeBackupCleanup = false): void
     {
         $query
             ->where('status', BackupRun::STATUS_RUNNING)
             ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
+
+        if ($includeBackupCleanup) {
+            $query->orWhere('docker_container_cleanup_pending', true);
+        }
     }
 
     /**

@@ -32,7 +32,7 @@ interface RestoreModeHandler
      * is NOT called in that case — this method must never leave a volume this run
      * created behind without surfacing it through cleanupAfterFailure().
      */
-    public function prepareTarget(RestoreRun $run): void;
+    public function prepareTarget(RestoreRun $run, ?callable $heartbeat = null): void;
 
     /**
      * Compensating cleanup for a failure that occurred *after* prepareTarget()

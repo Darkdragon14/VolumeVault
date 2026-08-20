@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_private_key_backup_fix' => [
+        'title' => 'Sauvegardes SFTP avec une cle privee',
+        'description' => 'Les sauvegardes SFTP peuvent desormais utiliser une cle privee SSH televersee sans mot de passe. VolumeVault copie la cle de maniere securisee dans le conteneur de sauvegarde Offen temporaire, puis la supprime apres execution.',
+    ],
     'ssh_destination_update_fix' => [
         'title' => 'Mise à jour fiable des destinations SFTP',
         'description' => 'Les destinations SFTP existantes peuvent désormais être mises à jour lorsque leur hôte SSH est un nom d’hôte ou une adresse IP. Les erreurs de validation des paramètres et identifiants SFTP sont aussi affichées à côté des champs concernés.',

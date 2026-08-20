@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_private_key_backup_fix' => [
+        'title' => 'SFTP-Backups mit privaten Schluesseln',
+        'description' => 'SFTP-Backups koennen sich jetzt ohne Passwort mit einem hochgeladenen privaten SSH-Schluessel authentifizieren. VolumeVault kopiert den Schluessel sicher in den temporaeren Offen-Backup-Container und entfernt ihn nach dem Lauf.',
+    ],
     'ssh_destination_update_fix' => [
         'title' => 'Zuverlässige Aktualisierung von SFTP-Zielen',
         'description' => 'Bestehende SFTP-Ziele können jetzt aktualisiert werden, wenn ihr SSH-Host ein Hostname oder eine IP-Adresse ist. Validierungsfehler für SFTP-Einstellungen und Zugangsdaten werden außerdem direkt an den betroffenen Feldern angezeigt.',

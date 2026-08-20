@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_private_key_backup_fix' => [
+        'title' => 'SFTP mentesek privat kulccsal',
+        'description' => 'Az SFTP mentesek mostantol jelszo nelkul, feltoltott SSH privat kulccsal is hitelesithetok. A VolumeVault biztonsagosan az ideiglenes Offen mentest vegzo kontenerbe masolja a kulcsot, majd a futas utan eltavolitja.',
+    ],
     'ssh_destination_update_fix' => [
         'title' => 'SFTP-célok megbízható frissítése',
         'description' => 'A meglévő SFTP-célok mostantól akkor is frissíthetők, ha az SSH-gazdagép állomásnévvel vagy IP-címmel van megadva. Az SFTP-beállítások és hitelesítő adatok ellenőrzési hibái az érintett mezők mellett is megjelennek.',

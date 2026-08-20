@@ -29,7 +29,7 @@ class NewVolumeRestore implements RestoreModeHandler
         }
     }
 
-    public function prepareTarget(RestoreRun $run): void
+    public function prepareTarget(RestoreRun $run, ?callable $heartbeat = null): void
     {
         $this->appendRunLog->handle($run, 'Creating target Docker volume '.$run->target_volume_name.'.');
         $this->createDockerVolume->handle($run->target_volume_name);

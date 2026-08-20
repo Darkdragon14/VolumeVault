@@ -10,6 +10,7 @@ use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
@@ -207,7 +208,7 @@ class RunBackupContainerTest extends TestCase
         $this->assertArrayNotHasKey('BACKUP_RETENTION_COUNT', $docker->environment);
     }
 
-    public function test_ssh_private_key_is_written_mounted_and_cleaned_up(): void
+    public function test_ssh_private_key_is_copied_into_the_created_container_and_cleaned_up(): void
     {
         $docker = $this->recordingDocker();
         $destination = BackupDestination::create([
@@ -217,22 +218,202 @@ class RunBackupContainerTest extends TestCase
             'access_key_id' => '',
             'secret_access_key' => '',
             'settings' => ['host' => 'ssh.example.com', 'port' => 2222, 'remote_path' => '/backups'],
-            'secrets' => ['user' => 'backup', 'private_key' => "-----BEGIN KEY-----\nabc\n-----END KEY-----"],
+            'secrets' => [
+                'user' => 'backup',
+                'private_key' => "-----BEGIN KEY-----\nabc\n-----END KEY-----",
+                'private_key_passphrase' => 'key-passphrase',
+            ],
+        ]);
+        $run = $this->backupRun($destination, ['volume_name' => 'app_data']);
+        $docker->backupRun = $run;
+        $heartbeats = 0;
+
+        $result = (new RunBackupContainer($docker))->handle($run, function () use (&$heartbeats): void {
+            $heartbeats++;
+        });
+
+        $containerName = $run->fresh()->docker_container_id;
+        $this->assertTrue($result->successful());
+        $this->assertFalse($run->fresh()->docker_container_cleanup_pending);
+        $this->assertTrue($docker->cleanupPendingWhenCreateRan);
+        $this->assertSame(1, $heartbeats);
+        $this->assertSame(0, $docker->monitoringCommandCountAtStart);
+        $this->assertSame(['create', 'cp', 'start', 'rm'], array_map(fn (array $command) => $command[1], $docker->commands));
+        $this->assertSame([300, 300, 0, 60], $docker->timeouts);
+        $this->assertSame(['docker', 'start', '--attach', $containerName], $docker->commands[2]);
+        $this->assertSame(['docker', 'rm', '--force', $containerName], $docker->commands[3]);
+
+        $createCommand = $docker->commands[0];
+        $createEnvironment = $docker->environments[0];
+        $this->assertSame(['docker', 'create', '--name'], array_slice($createCommand, 0, 3));
+        $this->assertNotContains('--rm', $createCommand);
+        $this->assertSame('/tmp/volumevault_ssh_key', $createEnvironment['SSH_IDENTITY_FILE'] ?? null);
+        $this->assertSame('key-passphrase', $createEnvironment['SSH_IDENTITY_PASSPHRASE'] ?? null);
+        $this->assertSame('ssh.example.com', $createEnvironment['SSH_HOST_NAME'] ?? null);
+        $this->assertSame('2222', $createEnvironment['SSH_PORT'] ?? null);
+        $this->assertFalse(collect($createCommand)->contains(fn (string $argument) => str_contains($argument, 'volumevault_ssh_key')));
+
+        $this->assertSame($containerName.':/tmp/volumevault_ssh_key', $docker->commands[1][3]);
+        $this->assertSame("-----BEGIN KEY-----\nabc\n-----END KEY-----", $docker->copiedFileContents);
+        $this->assertSame(0600, $docker->copiedFilePermissions);
+        $this->assertFileDoesNotExist($docker->copiedFilePath);
+        $this->assertFalse(collect($docker->commands)->flatten()->contains("-----BEGIN KEY-----\nabc\n-----END KEY-----"));
+    }
+
+    public function test_ssh_private_key_create_failure_attempts_idempotent_removal_and_cleans_up(): void
+    {
+        Exceptions::fake();
+        $docker = $this->recordingDocker();
+        $docker->operationResults['create'] = new DockerProcessResult([], 1, '', 'create failed');
+        $docker->operationResults['rm'] = new DockerProcessResult([], 1, '', 'Error: No such container: backup');
+        $run = $this->backupRun($this->sshKeyDestination(), ['volume_name' => 'app_data']);
+
+        $result = (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertSame(1, $result->exitCode);
+        $this->assertSame(['create', 'rm'], array_map(fn (array $command) => $command[1], $docker->commands));
+        Exceptions::assertNothingReported();
+        $this->assertFalse($run->fresh()->docker_container_cleanup_pending);
+        $this->assertSame([], File::files(storage_path('app/docker-secrets')));
+    }
+
+    public function test_ssh_private_key_creation_restricts_the_directory_and_restores_the_umask(): void
+    {
+        $previousUmask = umask(0000);
+
+        try {
+            $docker = $this->recordingDocker();
+            $run = $this->backupRun($this->sshKeyDestination(), ['volume_name' => 'app_data']);
+
+            (new RunBackupContainer($docker))->handle($run);
+
+            $currentUmask = umask();
+            umask($currentUmask);
+
+            $this->assertSame(0000, $currentUmask);
+            $this->assertSame(0700, fileperms(storage_path('app/docker-secrets')) & 0777);
+            $this->assertSame(0600, $docker->copiedFilePermissions);
+        } finally {
+            umask($previousUmask);
+        }
+    }
+
+    public function test_ssh_private_key_removal_failure_is_reported_without_masking_the_create_failure(): void
+    {
+        Exceptions::fake();
+        $docker = $this->recordingDocker();
+        $docker->operationResults['create'] = new DockerProcessResult([], 1, '', 'create failed');
+        $docker->operationResults['rm'] = new DockerProcessResult([], 1, '', 'removal denied');
+        $run = $this->backupRun($this->sshKeyDestination(), ['volume_name' => 'app_data']);
+
+        $result = (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertSame('create failed', $result->errorOutput);
+        $this->assertSame(['create', 'rm'], array_map(fn (array $command) => $command[1], $docker->commands));
+        Exceptions::assertReported(fn (\RuntimeException $exception): bool => $exception->getMessage() === 'removal denied');
+        $this->assertTrue($run->fresh()->docker_container_cleanup_pending);
+        $this->assertSame([], File::files(storage_path('app/docker-secrets')));
+    }
+
+    public function test_ssh_private_key_copy_failure_stops_before_starting_and_cleans_up(): void
+    {
+        $docker = $this->recordingDocker();
+        $docker->operationResults['cp'] = new DockerProcessResult([], 1, '', 'copy failed');
+        $run = $this->backupRun($this->sshKeyDestination(), ['volume_name' => 'app_data']);
+
+        $result = (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertSame(1, $result->exitCode);
+        $this->assertSame(['create', 'cp', 'rm'], array_map(fn (array $command) => $command[1], $docker->commands));
+        $this->assertFileDoesNotExist($docker->copiedFilePath);
+    }
+
+    public function test_ssh_private_key_start_failure_is_returned_and_cleans_up(): void
+    {
+        $docker = $this->recordingDocker();
+        $docker->operationResults['start'] = new DockerProcessResult([], 1, '', 'backup failed');
+        $run = $this->backupRun($this->sshKeyDestination(), ['volume_name' => 'app_data']);
+
+        $result = (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertSame(1, $result->exitCode);
+        $this->assertSame('backup failed', $result->errorOutput);
+        $this->assertSame(['create', 'cp', 'start', 'rm'], array_map(fn (array $command) => $command[1], $docker->commands));
+        $this->assertFileDoesNotExist($docker->copiedFilePath);
+    }
+
+    public function test_ssh_private_key_copy_works_with_a_tcp_docker_host(): void
+    {
+        config(['volumevault.docker_host' => 'tcp://docker.example.test:2375']);
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->sshKeyDestination(), ['volume_name' => 'app_data']);
+
+        (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertSame(['create', 'cp', 'start', 'rm'], array_map(fn (array $command) => $command[1], $docker->commands));
+        $this->assertSame('tcp://docker.example.test:2375', $docker->environments[0]['DOCKER_HOST'] ?? null);
+        $this->assertNotContains('/var/run/docker.sock:/var/run/docker.sock:ro', $docker->commands[0]);
+    }
+
+    public function test_ssh_private_key_cleanup_runs_when_the_heartbeat_throws(): void
+    {
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->sshKeyDestination(), ['volume_name' => 'app_data']);
+
+        try {
+            (new RunBackupContainer($docker))->handle($run, function (): void {
+                throw new \RuntimeException('heartbeat failed');
+            });
+
+            $this->fail('The heartbeat exception should be rethrown.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('heartbeat failed', $exception->getMessage());
+        }
+
+        $this->assertSame([], $docker->commands);
+        $this->assertFalse($run->fresh()->docker_container_cleanup_pending);
+        $this->assertSame([], File::files(storage_path('app/docker-secrets')));
+    }
+
+    public function test_ssh_password_authentication_keeps_the_single_run_command(): void
+    {
+        $docker = $this->recordingDocker();
+        $destination = BackupDestination::create([
+            'name' => 'SFTP',
+            'provider' => BackupDestination::PROVIDER_SSH,
+            'bucket' => 'unused',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['host' => 'ssh.example.com', 'port' => 22, 'remote_path' => '/backups'],
+            'secrets' => ['user' => 'backup', 'password' => 'secret'],
         ]);
         $run = $this->backupRun($destination, ['volume_name' => 'app_data']);
 
         (new RunBackupContainer($docker))->handle($run);
 
-        $this->assertSame('/run/secrets/volumevault_ssh_key', $docker->environment['SSH_IDENTITY_FILE'] ?? null);
-        $this->assertSame('ssh.example.com', $docker->environment['SSH_HOST_NAME'] ?? null);
-        $this->assertSame('2222', $docker->environment['SSH_PORT'] ?? null);
+        $this->assertSame(['run'], array_map(fn (array $command) => $command[1], $docker->commands));
+    }
 
-        $keyMount = collect($docker->command)->first(fn (string $arg) => str_ends_with($arg, ':/run/secrets/volumevault_ssh_key:ro'));
-        $this->assertNotNull($keyMount, 'The private key file should be mounted into the container.');
+    public function test_ssh_private_key_is_cleaned_up_when_source_mount_validation_fails(): void
+    {
+        config(['volumevault.host_path_allowlist' => ['/srv']]);
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->sshKeyDestination(), [
+            'source_type' => BackupJob::SOURCE_TYPE_HOST_PATH,
+            'host_path' => '/etc',
+            'volume_name' => null,
+        ]);
 
-        // The host-side key file must be deleted once the container has run.
-        $keyPath = explode(':', $keyMount)[0];
-        $this->assertFileDoesNotExist($keyPath);
+        try {
+            (new RunBackupContainer($docker))->handle($run);
+
+            $this->fail('The disallowed source mount should be rejected.');
+        } catch (\InvalidArgumentException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->assertSame([], $docker->commands);
+        $this->assertSame([], File::files(storage_path('app/docker-secrets')));
     }
 
     public function test_host_path_source_outside_the_allowlist_is_refused_at_runtime(): void
@@ -317,6 +498,19 @@ class RunBackupContainerTest extends TestCase
         ]);
     }
 
+    private function sshKeyDestination(): BackupDestination
+    {
+        return BackupDestination::create([
+            'name' => 'SFTP',
+            'provider' => BackupDestination::PROVIDER_SSH,
+            'bucket' => 'unused',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['host' => 'ssh.example.com', 'port' => 22, 'remote_path' => '/backups'],
+            'secrets' => ['user' => 'backup', 'private_key' => "-----BEGIN KEY-----\nabc\n-----END KEY-----"],
+        ]);
+    }
+
     private function backupRun(BackupDestination $destination, array $jobOverrides = []): BackupRun
     {
         $job = BackupJob::create(array_merge([
@@ -342,14 +536,54 @@ class RunBackupContainerTest extends TestCase
         {
             public array $command = [];
 
+            public array $commands = [];
+
             public array $environment = [];
+
+            public array $environments = [];
+
+            public array $operationResults = [];
+
+            public array $timeouts = [];
+
+            public ?int $monitoringCommandCountAtStart = null;
+
+            public ?BackupRun $backupRun = null;
+
+            public ?bool $cleanupPendingWhenCreateRan = null;
+
+            public ?string $copiedFileContents = null;
+
+            public ?int $copiedFilePermissions = null;
+
+            public ?string $copiedFilePath = null;
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
             {
                 $this->command = $command;
+                $this->commands[] = $command;
                 $this->environment = $environment;
+                $this->environments[] = $environment;
+                $this->timeouts[] = $timeout;
 
-                return new DockerProcessResult($command, 0, 'ok', '');
+                if (($command[1] ?? null) === 'create' && $this->backupRun !== null) {
+                    $this->cleanupPendingWhenCreateRan = $this->backupRun->fresh()->docker_container_cleanup_pending;
+                }
+
+                if (($command[1] ?? null) === 'cp') {
+                    $this->copiedFilePath = $command[2];
+                    $this->copiedFileContents = File::get($command[2]);
+                    $this->copiedFilePermissions = fileperms($command[2]) & 0777;
+                }
+
+                return $this->operationResults[$command[1] ?? ''] ?? new DockerProcessResult($command, 0, 'ok', '');
+            }
+
+            public function whileMonitoring(callable $callback, callable $operation, int $intervalSeconds = 30): mixed
+            {
+                $this->monitoringCommandCountAtStart = count($this->commands);
+
+                return parent::whileMonitoring($callback, $operation, $intervalSeconds);
             }
         };
     }

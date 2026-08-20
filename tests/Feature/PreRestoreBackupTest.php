@@ -97,6 +97,61 @@ class PreRestoreBackupTest extends TestCase
         $this->assertNotNull($run->pre_restore_backup_run_id);
     }
 
+    public function test_safety_backup_with_pending_helper_cleanup_aborts_before_touching_the_volume(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+        $this->app->instance(RunBackup::class, $this->fakeRunBackup(BackupRun::STATUS_SUCCESS, cleanupPending: true));
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+            'backup_before_overwrite' => true,
+        ]);
+
+        app(RunRestore::class)->handle($run);
+
+        $run->refresh();
+        $backup = BackupRun::findOrFail($run->pre_restore_backup_run_id);
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('helper cleanup is still pending', $run->error_message);
+        $this->assertFalse($docker->ranClear);
+        $this->assertFalse($docker->ranRestore);
+        $this->assertTrue($backup->docker_container_cleanup_pending);
+        $this->assertSame(['app-1'], $backup->stopped_container_ids);
+        $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
+    }
+
+    public function test_safety_backup_with_stopped_applications_aborts_before_touching_the_volume(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+        $this->app->instance(RunBackup::class, $this->fakeRunBackup(
+            BackupRun::STATUS_SUCCESS,
+            stoppedContainerIds: ['app-1'],
+        ));
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+            'backup_before_overwrite' => true,
+        ]);
+
+        app(RunRestore::class)->handle($run);
+
+        $run->refresh();
+        $backup = BackupRun::findOrFail($run->pre_restore_backup_run_id);
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('application containers are still stopped', $run->error_message);
+        $this->assertFalse($docker->ranClear);
+        $this->assertFalse($docker->ranRestore);
+        $this->assertFalse($backup->docker_container_cleanup_pending);
+        $this->assertSame(['app-1'], $backup->stopped_container_ids);
+        $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
+    }
+
     public function test_safety_backup_aborts_when_the_job_volume_no_longer_matches(): void
     {
         $docker = $this->docker(volumeExists: true);
@@ -197,10 +252,16 @@ class PreRestoreBackupTest extends TestCase
         $this->assertTrue($inPlace->backup_before_overwrite);
     }
 
-    private function fakeRunBackup(string $resultStatus, ?callable $onHandle = null): RunBackup
+    /** @param array<int, string>|null $stoppedContainerIds */
+    private function fakeRunBackup(
+        string $resultStatus,
+        ?callable $onHandle = null,
+        bool $cleanupPending = false,
+        ?array $stoppedContainerIds = null,
+    ): RunBackup
     {
         $mock = Mockery::mock(RunBackup::class);
-        $mock->shouldReceive('handle')->andReturnUsing(function (BackupRun $run) use ($resultStatus, $onHandle): void {
+        $mock->shouldReceive('handle')->andReturnUsing(function (BackupRun $run) use ($resultStatus, $onHandle, $cleanupPending, $stoppedContainerIds): void {
             if ($onHandle) {
                 $onHandle();
             }
@@ -209,6 +270,8 @@ class PreRestoreBackupTest extends TestCase
                 'status' => $resultStatus,
                 'error_message' => $resultStatus === BackupRun::STATUS_FAILED ? 'disk full' : null,
                 'backup_key' => $resultStatus === BackupRun::STATUS_SUCCESS ? 'safety-backup.tar.gz' : null,
+                'docker_container_cleanup_pending' => $cleanupPending,
+                'stopped_container_ids' => $stoppedContainerIds ?? ($cleanupPending ? ['app-1'] : null),
             ])->save();
         });
 
@@ -272,10 +335,13 @@ class PreRestoreBackupTest extends TestCase
 
             public bool $ranRestore = false;
 
+            public array $commands = [];
+
             public function __construct(private readonly bool $volumeExists, private readonly array $containers) {}
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
             {
+                $this->commands[] = $command;
                 $verb = $command[1] ?? null;
 
                 if ($verb === 'volume') {
@@ -306,7 +372,11 @@ class PreRestoreBackupTest extends TestCase
 
             public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
             {
-                $this->ranRestore = true;
+                $this->commands[] = $command;
+
+                if (in_array('-xzf', $command, true)) {
+                    $this->ranRestore = true;
+                }
 
                 return new DockerProcessResult($command, 0, 'restore complete', '');
             }

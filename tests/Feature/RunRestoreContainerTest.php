@@ -62,6 +62,22 @@ class RunRestoreContainerTest extends TestCase
         $this->assertContains($containerName, $docker->command);
     }
 
+    public function test_restore_extraction_is_monitored_with_a_heartbeat(): void
+    {
+        $docker = $this->recordingDocker();
+        $heartbeats = 0;
+
+        (new RunRestoreContainer($docker))->handle(
+            $this->restoreRun(),
+            '/tmp/backup.tar.gz',
+            function () use (&$heartbeats): void {
+                $heartbeats++;
+            },
+        );
+
+        $this->assertSame(1, $heartbeats);
+    }
+
     private function restoreRun(): RestoreRun
     {
         $destination = BackupDestination::create([

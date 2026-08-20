@@ -27,7 +27,7 @@ class VerifyRestoreArchive
      *                                      docker_container_id, so stale-run reconciliation can confirm a long verify
      *                                      (a huge, many-file archive) is still alive instead of failing the restore.
      */
-    public function handle(string $archivePath, ?string $containerName = null): DockerProcessResult
+    public function handle(string $archivePath, ?string $containerName = null, ?callable $heartbeat = null): DockerProcessResult
     {
         // Discard the file listing tar -tzf writes to stdout — DockerProcess buffers
         // stdout in memory, and an archive with millions of entries would otherwise
@@ -46,6 +46,10 @@ class VerifyRestoreArchive
             'tar -tzf - > /dev/null',
         ]);
 
-        return $this->dockerProcess->runWithInputFile($command, $archivePath, 0);
+        $execute = fn (): DockerProcessResult => $this->dockerProcess->runWithInputFile($command, $archivePath, 0);
+
+        return $heartbeat === null
+            ? $execute()
+            : $this->dockerProcess->whileMonitoring($heartbeat, $execute);
     }
 }

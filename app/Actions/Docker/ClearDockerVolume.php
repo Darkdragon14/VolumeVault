@@ -3,6 +3,7 @@
 namespace App\Actions\Docker;
 
 use App\Services\Docker\DockerProcess;
+use App\Services\Docker\DockerProcessResult;
 use RuntimeException;
 
 /**
@@ -24,8 +25,9 @@ class ClearDockerVolume
      *                                      docker_container_id, so stale-run reconciliation can confirm the clear is
      *                                      still alive on a large volume instead of failing the restore (and
      *                                      restarting stopped containers) mid-delete.
+     * @param  callable|null  $heartbeat  Periodic worker lease renewal while the clear container runs.
      */
-    public function handle(string $volumeName, ?string $containerName = null): void
+    public function handle(string $volumeName, ?string $containerName = null, ?callable $heartbeat = null): void
     {
         $command = array_merge([
             'docker',
@@ -48,7 +50,10 @@ class ClearDockerVolume
         // wiped AND aborting before the restore extracts — the worst outcome. A
         // hung delete is instead caught by stale-run reconciliation, like the
         // restore/backup containers which also run uncapped.
-        $result = $this->dockerProcess->run($command, 0);
+        $execute = fn (): DockerProcessResult => $this->dockerProcess->run($command, 0);
+        $result = $heartbeat === null
+            ? $execute()
+            : $this->dockerProcess->whileMonitoring($heartbeat, $execute);
 
         if (! $result->successful()) {
             throw new RuntimeException($result->combinedOutput() ?: "Unable to clear Docker volume {$volumeName}.");

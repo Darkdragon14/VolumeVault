@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_private_key_backup_fix' => [
+        'title' => 'SFTP zalohy se soukromymi klici',
+        'description' => 'SFTP zalohy se nyni mohou overit nahranym soukromym klicem SSH bez hesla. VolumeVault klic bezpecne zkopiruje do docasneho zalohovaciho kontejneru Offen a po behu jej odstrani.',
+    ],
     'ssh_destination_update_fix' => [
         'title' => 'Spolehlivá aktualizace cílů SFTP',
         'description' => 'Existující cíle SFTP lze nyní aktualizovat, pokud je jejich SSH hostitel zadán názvem hostitele nebo IP adresou. Chyby ověření nastavení a přihlašovacích údajů SFTP se také zobrazují u příslušných polí.',

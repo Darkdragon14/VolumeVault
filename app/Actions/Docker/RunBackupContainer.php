@@ -13,6 +13,7 @@ use App\Services\Docker\DockerProcessResult;
 use App\Services\Docker\DockerVolumeName;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Throwable;
 
 class RunBackupContainer
 {
@@ -24,15 +25,23 @@ class RunBackupContainer
 
     private readonly IncludePathsToExcludeRegexp $includePathsToExcludeRegexp;
 
+    private readonly RemoveDockerContainer $removeDockerContainer;
+
+    private readonly CleanupBackupRunSecretFiles $cleanupBackupRunSecretFiles;
+
     public function __construct(
         private readonly DockerProcess $dockerProcess,
         ?RenderBackupFilename $renderBackupFilename = null,
         ?HostPathPolicy $hostPathPolicy = null,
         ?IncludePathsToExcludeRegexp $includePathsToExcludeRegexp = null,
+        ?RemoveDockerContainer $removeDockerContainer = null,
+        ?CleanupBackupRunSecretFiles $cleanupBackupRunSecretFiles = null,
     ) {
         $this->renderBackupFilename = $renderBackupFilename ?? app(RenderBackupFilename::class);
         $this->hostPathPolicy = $hostPathPolicy ?? app(HostPathPolicy::class);
         $this->includePathsToExcludeRegexp = $includePathsToExcludeRegexp ?? app(IncludePathsToExcludeRegexp::class);
+        $this->removeDockerContainer = $removeDockerContainer ?? new RemoveDockerContainer($dockerProcess);
+        $this->cleanupBackupRunSecretFiles = $cleanupBackupRunSecretFiles ?? new CleanupBackupRunSecretFiles;
     }
 
     public function handle(BackupRun $run, ?callable $heartbeat = null): DockerProcessResult
@@ -40,62 +49,130 @@ class RunBackupContainer
         $run->loadMissing('job.destination');
 
         $containerName = 'volumevault-backup-'.$run->id.'-'.Str::lower(Str::random(8));
-        $runtime = $this->runtime($run);
-        $environment = $runtime['environment'];
-        $dockerHost = (string) config('volumevault.docker_host', 'unix:///var/run/docker.sock');
-        $dockerNetwork = trim((string) config('volumevault.docker_network', ''));
-        $environment['DOCKER_HOST'] = $dockerHost;
-        $command = [
-            'docker',
-            'run',
-            '--rm',
-            '--name',
-            $containerName,
-            '--entrypoint',
-            '/usr/bin/backup',
-        ];
-
-        if ($dockerNetwork !== '') {
-            $command[] = '--network';
-            $command[] = $dockerNetwork;
-        }
-
-        foreach ($this->sourceMountArguments($run->job) as $argument) {
-            $command[] = $argument;
-        }
-
-        if (str_starts_with($dockerHost, 'unix://')) {
-            $socketPath = substr($dockerHost, strlen('unix://'));
-
-            if ($socketPath !== '') {
-                $command[] = '-v';
-                $command[] = $socketPath.':'.$socketPath.':ro';
-            }
-        }
-
-        foreach ($runtime['mounts'] as $mount) {
-            $command[] = '-v';
-            $command[] = $mount;
-        }
-
-        foreach (array_keys($environment) as $key) {
-            $command[] = '--env';
-            $command[] = $key;
-        }
-
-        $command[] = self::IMAGE;
-
-        $run->forceFill(['docker_container_id' => $containerName])->save();
+        $containerCreationIssued = false;
 
         try {
+            $runtime = $this->runtime($run);
+            $environment = $runtime['environment'];
+            $dockerHost = (string) config('volumevault.docker_host', 'unix:///var/run/docker.sock');
+            $dockerNetwork = trim((string) config('volumevault.docker_network', ''));
+            $environment['DOCKER_HOST'] = $dockerHost;
+            $copies = $runtime['copies'];
+            $command = [
+                'docker',
+                $copies === [] ? 'run' : 'create',
+            ];
+
+            if ($copies === []) {
+                $command[] = '--rm';
+            }
+
+            array_push($command,
+                '--name',
+                $containerName,
+                '--entrypoint',
+                '/usr/bin/backup',
+            );
+
+            if ($dockerNetwork !== '') {
+                $command[] = '--network';
+                $command[] = $dockerNetwork;
+            }
+
+            foreach ($this->sourceMountArguments($run->job) as $argument) {
+                $command[] = $argument;
+            }
+
+            if (str_starts_with($dockerHost, 'unix://')) {
+                $socketPath = substr($dockerHost, strlen('unix://'));
+
+                if ($socketPath !== '') {
+                    $command[] = '-v';
+                    $command[] = $socketPath.':'.$socketPath.':ro';
+                }
+            }
+
+            foreach ($runtime['mounts'] as $mount) {
+                $command[] = '-v';
+                $command[] = $mount;
+            }
+
+            foreach (array_keys($environment) as $key) {
+                $command[] = '--env';
+                $command[] = $key;
+            }
+
+            $command[] = self::IMAGE;
+
+            $run->forceFill(['docker_container_id' => $containerName])->save();
+
+            if ($copies !== []) {
+                $execute = function () use ($command, $environment, $copies, $containerName, &$containerCreationIssued): DockerProcessResult {
+                    $containerCreationIssued = true;
+                    $createResult = $this->dockerProcess->run($command, 300, $environment);
+
+                    if (! $createResult->successful()) {
+                        return $createResult;
+                    }
+
+                    foreach ($copies as $source => $destination) {
+                        $copyResult = $this->dockerProcess->run([
+                            'docker',
+                            'cp',
+                            $source,
+                            $containerName.':'.$destination,
+                        ]);
+
+                        if (! $copyResult->successful()) {
+                            return $copyResult;
+                        }
+                    }
+
+                    return $this->dockerProcess->run([
+                        'docker',
+                        'start',
+                        '--attach',
+                        $containerName,
+                    ], 0);
+                };
+
+                return $heartbeat === null
+                    ? $execute()
+                    : $this->dockerProcess->whileMonitoring($heartbeat, $execute);
+            }
+
             $execute = fn (): DockerProcessResult => $this->dockerProcess->run($command, 0, $environment);
 
             return $heartbeat === null
                 ? $execute()
                 : $this->dockerProcess->whileMonitoring($heartbeat, $execute);
         } finally {
-            foreach ($runtime['cleanup'] as $path) {
-                File::delete($path);
+            $containerCleaned = ! $containerCreationIssued;
+
+            if ($containerCreationIssued) {
+                try {
+                    $this->removeDockerContainer->handle($containerName);
+                    $containerCleaned = true;
+                } catch (Throwable $exception) {
+                    report($exception);
+                }
+            }
+
+            $secretFilesCleaned = false;
+
+            try {
+                $this->cleanupBackupRunSecretFiles->handle($run);
+                $secretFilesCleaned = true;
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+
+            if ($containerCleaned && $secretFilesCleaned && $run->docker_container_cleanup_pending) {
+                try {
+                    $run->forceFill(['docker_container_cleanup_pending' => false])->save();
+                } catch (Throwable $exception) {
+                    report($exception);
+                }
             }
         }
     }
@@ -141,13 +218,13 @@ class RunBackupContainer
         return [
             'environment' => array_merge($environment, $runtime['environment']),
             'mounts' => $runtime['mounts'],
-            'cleanup' => $runtime['cleanup'],
+            'copies' => $runtime['copies'] ?? [],
         ];
     }
 
     private function destinationRuntime(BackupDestination $destination, BackupRun $run): array
     {
-        $runtime = ['environment' => [], 'mounts' => [], 'cleanup' => []];
+        $runtime = ['environment' => [], 'mounts' => [], 'copies' => []];
 
         match ($destination->provider) {
             BackupDestination::PROVIDER_AWS_S3,
@@ -200,18 +277,17 @@ class RunBackupContainer
         ], fn (mixed $value) => filled($value));
 
         $mounts = [];
-        $cleanup = [];
+        $copies = [];
 
         if (filled($destination->secret('private_key'))) {
             $keyPath = $this->writeSecretFile($run, 'ssh-key', (string) $destination->secret('private_key'));
-            $environment['SSH_IDENTITY_FILE'] = '/run/secrets/volumevault_ssh_key';
-            $mounts[] = $keyPath.':/run/secrets/volumevault_ssh_key:ro';
-            $cleanup[] = $keyPath;
+            $environment['SSH_IDENTITY_FILE'] = '/tmp/volumevault_ssh_key';
+            $copies[$keyPath] = '/tmp/volumevault_ssh_key';
         } elseif (filled($destination->setting('identity_file'))) {
             $environment['SSH_IDENTITY_FILE'] = $destination->setting('identity_file');
         }
 
-        return compact('environment', 'mounts', 'cleanup');
+        return compact('environment', 'mounts', 'copies');
     }
 
     private function azureEnvironment(BackupDestination $destination): array
@@ -263,7 +339,6 @@ class RunBackupContainer
         return [
             'environment' => ['BACKUP_ARCHIVE' => $archivePath],
             'mounts' => [$mountSource.':'.$archivePath],
-            'cleanup' => [],
         ];
     }
 
@@ -288,7 +363,6 @@ class RunBackupContainer
         return [
             'environment' => ['BACKUP_ARCHIVE' => $archivePath],
             'mounts' => [$volume.':'.DockerVolumeName::MOUNT_POINT],
-            'cleanup' => [],
         ];
     }
 
@@ -324,10 +398,55 @@ class RunBackupContainer
     private function writeSecretFile(BackupRun $run, string $name, string $contents): string
     {
         $directory = storage_path('app/docker-secrets');
-        File::ensureDirectoryExists($directory);
+        File::ensureDirectoryExists($directory, 0700);
+
+        if (! chmod($directory, 0700)) {
+            throw new \RuntimeException("Unable to restrict temporary secret directory permissions for backup run {$run->id}.");
+        }
+
         $path = $directory.'/backup-'.$run->id.'-'.$name.'-'.Str::lower(Str::random(8));
-        File::put($path, $contents);
-        chmod($path, 0600);
+        $run->forceFill(['docker_container_cleanup_pending' => true])->save();
+        $previousUmask = umask(0077);
+
+        try {
+            $file = @fopen($path, 'xb');
+        } finally {
+            umask($previousUmask);
+        }
+
+        if ($file === false) {
+            throw new \RuntimeException("Unable to create temporary secret file for backup run {$run->id}.");
+        }
+
+        $complete = false;
+
+        try {
+            if (! chmod($path, 0600)) {
+                throw new \RuntimeException("Unable to restrict temporary secret file permissions for backup run {$run->id}.");
+            }
+
+            for ($offset = 0, $length = strlen($contents); $offset < $length;) {
+                $written = fwrite($file, substr($contents, $offset));
+
+                if ($written === false || $written === 0) {
+                    throw new \RuntimeException("Unable to write temporary secret file for backup run {$run->id}.");
+                }
+
+                $offset += $written;
+            }
+
+            if (! fflush($file)) {
+                throw new \RuntimeException("Unable to flush temporary secret file for backup run {$run->id}.");
+            }
+
+            $complete = true;
+        } finally {
+            fclose($file);
+
+            if (! $complete) {
+                File::delete($path);
+            }
+        }
 
         return $path;
     }

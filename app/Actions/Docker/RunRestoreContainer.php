@@ -11,7 +11,7 @@ class RunRestoreContainer
 {
     public function __construct(private readonly DockerProcess $dockerProcess) {}
 
-    public function handle(RestoreRun $run, string $archivePath): DockerProcessResult
+    public function handle(RestoreRun $run, string $archivePath, ?callable $heartbeat = null): DockerProcessResult
     {
         $containerName = 'volumevault-restore-'.$run->id.'-'.Str::lower(Str::random(8));
 
@@ -37,6 +37,10 @@ class RunRestoreContainer
 
         $run->forceFill(['docker_container_id' => $containerName])->save();
 
-        return $this->dockerProcess->runWithInputFile($command, $archivePath, 0);
+        $execute = fn (): DockerProcessResult => $this->dockerProcess->runWithInputFile($command, $archivePath, 0);
+
+        return $heartbeat === null
+            ? $execute()
+            : $this->dockerProcess->whileMonitoring($heartbeat, $execute);
     }
 }

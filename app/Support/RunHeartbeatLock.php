@@ -8,4 +8,9 @@ class RunHeartbeatLock
     {
         return 'backup-run-heartbeat-'.$runId;
     }
+
+    public static function restore(int $runId): string
+    {
+        return 'restore-run-heartbeat-'.$runId;
+    }
 }

@@ -19,7 +19,7 @@ VolumeVault is not S3-only. It supports the destination families exposed by the 
 
 Each destination can be tested from the UI. Destination testing, listing, upload, download, and restore download behavior is centralized in `app/Services/BackupDestinations/DestinationStorage.php`.
 
-Uploaded SSH private keys are mounted from VolumeVault into the temporary Offen backup container. They are not supported when `DOCKER_HOST` controls a Docker engine on another machine because that daemon cannot access VolumeVault's local key file. Use password authentication in that unsupported topology.
+Uploaded SSH private keys are written to a temporary file with restricted permissions and copied through the Docker API into the temporary Offen backup container before it starts. The local key file and temporary container are removed after the backup attempt, including when setup or execution fails.
 
 Local destinations require special care in Docker deployments. The configured archive path must be readable by VolumeVault for listing/restores and mounted into the temporary Offen backup container for writes.
 

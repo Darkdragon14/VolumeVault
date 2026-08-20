@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'ssh_private_key_backup_fix',
+        ],
+    ],
     'releases' => [
         'v1.20.2' => [
             'date' => '2026-08-14',

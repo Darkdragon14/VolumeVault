@@ -15,6 +15,7 @@ use App\Support\RunHeartbeatLock;
 use App\Support\VolumeJobLock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
@@ -189,7 +190,8 @@ class ReconcileStaleRunsTest extends TestCase
             'target_volume_name' => 'app_data',
             'mode' => RestoreRun::MODE_INPLACE,
             'status' => RestoreRun::STATUS_RUNNING,
-            'started_at' => now()->subMinute(),
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
             'docker_container_id' => 'volumevault-extract-1-deadbeef',
         ]);
 
@@ -536,6 +538,37 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_QUEUED, $waiter->refresh()->status);
     }
 
+    public function test_queued_restore_is_not_swept_while_backup_container_cleanup_is_pending(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->recordingDockerProcess());
+
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $holder = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'finished_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-backup-prior',
+            'docker_container_cleanup_pending' => true,
+        ]);
+        $waiter = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+        $waiter->forceFill(['created_at' => now()->subDays(2)])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $waiter->refresh()->status);
+        $this->assertFalse($holder->refresh()->docker_container_cleanup_pending);
+    }
+
     public function test_queued_restore_is_not_swept_just_after_its_lock_holder_finishes(): void
     {
         $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
@@ -591,6 +624,120 @@ class ReconcileStaleRunsTest extends TestCase
             ['docker', 'start', 'app-1'],
             ['docker', 'start', 'app-2'],
         ], $docker->commands);
+        $this->assertNull($run->refresh()->stopped_container_ids);
+    }
+
+    public function test_container_recovery_rechecks_a_run_loaded_before_the_worker_cleared_its_ids(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ERROR);
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subDays(2),
+            'finished_at' => now()->subDays(2),
+            'stopped_container_ids' => ['barrier'],
+        ]);
+        $staleSnapshot = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subDays(2),
+            'finished_at' => now()->subDays(2),
+            'stopped_container_ids' => ['already-restarted'],
+        ]);
+
+        $docker = new class($staleSnapshot->id) extends DockerProcess
+        {
+            /** @var array<int, array<int, string>> */
+            public array $commands = [];
+
+            public function __construct(private readonly int $staleRunId) {}
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                $this->commands[] = $command;
+
+                if (($command[1] ?? null) === 'start' && ($command[2] ?? null) === 'barrier') {
+                    // Both runs were already loaded by the reconciliation query.
+                    // Simulate the worker clearing the second run before its stale
+                    // model reaches the restart callback.
+                    BackupRun::whereKey($this->staleRunId)->update(['stopped_container_ids' => null]);
+                }
+
+                return new DockerProcessResult($command, 0, '', '');
+            }
+        };
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertContains(['docker', 'start', 'barrier'], $docker->commands);
+        $this->assertNotContains(['docker', 'start', 'already-restarted'], $docker->commands);
+        $this->assertNull($staleSnapshot->refresh()->stopped_container_ids);
+    }
+
+    public function test_container_recovery_does_not_start_while_the_restore_holds_the_volume_lock(): void
+    {
+        $docker = $this->recordingDockerProcess();
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_ERROR);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subDays(2),
+            'finished_at' => now()->subDays(2),
+            'stopped_container_ids' => ['app-1'],
+        ]);
+        $volumeLock = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
+        $this->assertTrue($volumeLock->get());
+
+        try {
+            $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        } finally {
+            $volumeLock->release();
+        }
+
+        $this->assertSame(['app-1'], $run->refresh()->stopped_container_ids);
+        $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
+    }
+
+    public function test_container_recovery_holds_the_volume_lock_during_docker_start(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ERROR);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subDays(2),
+            'finished_at' => now()->subDays(2),
+            'stopped_container_ids' => ['app-1'],
+        ]);
+        $docker = new class extends DockerProcess
+        {
+            public ?bool $acquiredVolumeLockDuringStart = null;
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                if (($command[1] ?? null) === 'start') {
+                    $competingLock = Cache::lock(VolumeJobLock::cacheKey('app_data'), 10);
+                    $this->acquiredVolumeLockDuringStart = $competingLock->get();
+
+                    if ($this->acquiredVolumeLockDuringStart) {
+                        $competingLock->release();
+                    }
+                }
+
+                return new DockerProcessResult($command, 0, '', '');
+            }
+        };
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertFalse($docker->acquiredVolumeLockDuringStart);
         $this->assertNull($run->refresh()->stopped_container_ids);
     }
 
@@ -724,20 +871,174 @@ class ReconcileStaleRunsTest extends TestCase
             'started_at' => now()->subHours(2),
             'last_heartbeat_at' => now()->subHours(2),
             'docker_container_id' => 'volumevault-backup-1-abcd1234',
+            'docker_container_cleanup_pending' => true,
+            'stopped_container_ids' => ['app-1'],
+        ]);
+        $secretPath = $this->createCrashedSecretFile($run);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $run->refresh();
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
+        $this->assertFalse($run->docker_container_cleanup_pending);
+        $this->assertNull($run->stopped_container_ids);
+        $this->assertFileDoesNotExist($secretPath);
+
+        $stopIndex = array_search(['docker', 'stop', '--time', '30', 'volumevault-backup-1-abcd1234'], $docker->commands, true);
+        $removeIndex = array_search(['docker', 'rm', '--force', 'volumevault-backup-1-abcd1234'], $docker->commands, true);
+        $startIndex = array_search(['docker', 'start', 'app-1'], $docker->commands, true);
+        $this->assertIsInt($stopIndex);
+        $this->assertIsInt($removeIndex);
+        $this->assertIsInt($startIndex);
+        $this->assertLessThan($removeIndex, $stopIndex);
+        $this->assertLessThan($startIndex, $removeIndex);
+    }
+
+    public function test_stopped_orphaned_backup_container_is_removed_before_applications_are_restarted(): void
+    {
+        $docker = $this->inspectDockerProcess(alive: false, containerExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-backup-1-secret',
+            'docker_container_cleanup_pending' => true,
+            'stopped_container_ids' => ['app-1'],
+        ]);
+        $secretPath = $this->createCrashedSecretFile($run);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $run->refresh();
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
+        $this->assertFalse($run->docker_container_cleanup_pending);
+        $this->assertFileDoesNotExist($secretPath);
+        $this->assertNotContains(['docker', 'stop', '--time', '30', 'volumevault-backup-1-secret'], $docker->commands);
+        $removeIndex = array_search(['docker', 'rm', '--force', 'volumevault-backup-1-secret'], $docker->commands, true);
+        $startIndex = array_search(['docker', 'start', 'app-1'], $docker->commands, true);
+        $this->assertIsInt($removeIndex);
+        $this->assertIsInt($startIndex);
+        $this->assertLessThan($startIndex, $removeIndex);
+    }
+
+    public function test_failed_orphan_removal_keeps_the_run_and_applications_recoverable(): void
+    {
+        $docker = $this->inspectDockerProcess(alive: false, containerExists: true, removeSuccessful: false);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-backup-1-secret',
+            'docker_container_cleanup_pending' => true,
+            'stopped_container_ids' => ['app-1'],
+        ]);
+        $secretPath = $this->createCrashedSecretFile($run);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
+        $this->assertTrue($run->docker_container_cleanup_pending);
+        $this->assertSame(['app-1'], $run->stopped_container_ids);
+        $this->assertFileDoesNotExist($secretPath);
+        $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
+    }
+
+    public function test_absent_orphaned_backup_container_still_cleans_local_secret_before_restart(): void
+    {
+        $docker = $this->inspectDockerProcess(alive: false, containerExists: false);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-backup-1-secret',
+            'docker_container_cleanup_pending' => true,
+            'stopped_container_ids' => ['app-1'],
+        ]);
+        $secretPath = $this->createCrashedSecretFile($run);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $run->refresh();
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
+        $this->assertFalse($run->docker_container_cleanup_pending);
+        $this->assertNull($run->stopped_container_ids);
+        $this->assertFileDoesNotExist($secretPath);
+        $removeIndex = array_search(['docker', 'rm', '--force', 'volumevault-backup-1-secret'], $docker->commands, true);
+        $startIndex = array_search(['docker', 'start', 'app-1'], $docker->commands, true);
+        $this->assertIsInt($removeIndex);
+        $this->assertIsInt($startIndex);
+        $this->assertLessThan($startIndex, $removeIndex);
+    }
+
+    public function test_terminal_run_with_pending_container_cleanup_is_retried(): void
+    {
+        $docker = $this->recordingDockerProcess();
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_ERROR);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHour(),
+            'finished_at' => now()->subHour(),
+            'docker_container_id' => 'volumevault-backup-1-secret',
+            'docker_container_cleanup_pending' => true,
+            'stopped_container_ids' => ['app-1'],
+        ]);
+        $directory = storage_path('app/docker-secrets');
+        File::ensureDirectoryExists($directory);
+        $secretPath = $directory.'/backup-'.$run->id.'-ssh-key-crashed';
+        File::put($secretPath, 'private key');
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertFalse($run->refresh()->docker_container_cleanup_pending);
+        $this->assertFileDoesNotExist($secretPath);
+        $this->assertContains(['docker', 'rm', '--force', 'volumevault-backup-1-secret'], $docker->commands);
+        $this->assertContains(['docker', 'start', 'app-1'], $docker->commands);
+    }
+
+    public function test_failed_terminal_container_cleanup_keeps_applications_stopped_and_is_reported(): void
+    {
+        Exceptions::fake();
+        $docker = $this->inspectDockerProcess(alive: false, containerExists: true, removeSuccessful: false);
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_ERROR);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subHour(),
+            'finished_at' => now()->subHour(),
+            'docker_container_id' => 'volumevault-backup-1-secret',
+            'docker_container_cleanup_pending' => true,
             'stopped_container_ids' => ['app-1'],
         ]);
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $run->refresh();
-        $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
-        $this->assertNull($run->stopped_container_ids);
-
-        $stopIndex = array_search(['docker', 'stop', '--time', '30', 'volumevault-backup-1-abcd1234'], $docker->commands, true);
-        $startIndex = array_search(['docker', 'start', 'app-1'], $docker->commands, true);
-        $this->assertIsInt($stopIndex);
-        $this->assertIsInt($startIndex);
-        $this->assertLessThan($startIndex, $stopIndex);
+        $this->assertTrue($run->docker_container_cleanup_pending);
+        $this->assertSame(['app-1'], $run->stopped_container_ids);
+        $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
+        Exceptions::assertReported(fn (\RuntimeException $exception): bool => $exception->getMessage() === 'Docker remove failed.');
     }
 
     public function test_failed_orphan_stop_keeps_the_run_and_applications_recoverable(): void
@@ -788,6 +1089,104 @@ class ReconcileStaleRunsTest extends TestCase
 
         $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
         $this->assertNotContains(['docker', 'stop', '--time', '30', 'volumevault-backup-1-abcd1234'], $docker->commands);
+    }
+
+    public function test_restore_heartbeat_renewed_after_stale_selection_wins_before_mark_failed(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+            'docker_container_id' => 'volumevault-clear-1-barrier',
+        ]);
+        $docker = new class($run->id) extends DockerProcess
+        {
+            public int $inspectCount = 0;
+
+            public function __construct(private readonly int $restoreRunId) {}
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                if (($command[1] ?? null) === 'inspect') {
+                    $this->inspectCount++;
+                    RestoreRun::whereKey($this->restoreRunId)->update(['last_heartbeat_at' => now()]);
+
+                    return new DockerProcessResult($command, 1, '', 'Error: No such object');
+                }
+
+                return new DockerProcessResult($command, 0, '', '');
+            }
+        };
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(1, $docker->inspectCount);
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
+        $this->assertNull($run->finished_at);
+    }
+
+    public function test_reconciliation_does_not_finalize_a_restore_while_its_worker_renews_the_lease(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+        ]);
+        $heartbeatLock = Cache::lock(RunHeartbeatLock::restore($run->id), 180);
+        $this->assertTrue($heartbeatLock->get());
+
+        try {
+            $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        } finally {
+            $heartbeatLock->release();
+        }
+
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
+        $this->assertNull($run->finished_at);
+    }
+
+    public function test_recently_finished_safety_backup_bridges_parent_restore_heartbeat_handoff(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $safetyBackup = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_PRE_RESTORE,
+            'started_at' => now()->subHours(2),
+            'finished_at' => now(),
+        ]);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'backup_before_overwrite' => true,
+            'pre_restore_backup_run_id' => $safetyBackup->id,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now()->subHours(2),
+            'last_heartbeat_at' => now()->subHours(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
     public function test_orphaned_group_member_and_parent_group_are_reconciled_together(): void
@@ -925,9 +1324,14 @@ class ReconcileStaleRunsTest extends TestCase
         };
     }
 
-    private function inspectDockerProcess(bool $alive, bool $stopSuccessful = true): DockerProcess
+    private function inspectDockerProcess(
+        bool $alive,
+        bool $stopSuccessful = true,
+        ?bool $containerExists = null,
+        bool $removeSuccessful = true,
+    ): DockerProcess
     {
-        return new class($alive, $stopSuccessful) extends DockerProcess
+        return new class($alive, $stopSuccessful, $containerExists ?? $alive, $removeSuccessful) extends DockerProcess
         {
             /** @var array<int, array<int, string>> */
             public array $commands = [];
@@ -935,6 +1339,8 @@ class ReconcileStaleRunsTest extends TestCase
             public function __construct(
                 private readonly bool $alive,
                 private readonly bool $stopSuccessful,
+                private readonly bool $containerExists,
+                private readonly bool $removeSuccessful,
             ) {}
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
@@ -942,6 +1348,10 @@ class ReconcileStaleRunsTest extends TestCase
                 $this->commands[] = $command;
 
                 if (($command[1] ?? null) === 'inspect') {
+                    if (! $this->alive && $this->containerExists) {
+                        return new DockerProcessResult($command, 0, "false\n", '');
+                    }
+
                     return new DockerProcessResult(
                         $command,
                         $this->alive ? 0 : 1,
@@ -952,6 +1362,10 @@ class ReconcileStaleRunsTest extends TestCase
 
                 if (($command[1] ?? null) === 'stop' && ! $this->stopSuccessful) {
                     return new DockerProcessResult($command, 1, '', 'Docker stop failed.');
+                }
+
+                if (($command[1] ?? null) === 'rm' && ! $this->removeSuccessful) {
+                    return new DockerProcessResult($command, 1, '', 'Docker remove failed.');
                 }
 
                 return new DockerProcessResult($command, 0, '', '');
@@ -999,5 +1413,15 @@ class ReconcileStaleRunsTest extends TestCase
             'cron_expression' => '0 2 * * *',
             'status' => $status,
         ]);
+    }
+
+    private function createCrashedSecretFile(BackupRun $run): string
+    {
+        $directory = storage_path('app/docker-secrets');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.'/backup-'.$run->id.'-ssh-key-crashed';
+        File::put($path, 'private key');
+
+        return $path;
     }
 }
