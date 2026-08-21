@@ -93,6 +93,28 @@ class BackupJobMutationGuardTest extends TestCase
         $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
     }
 
+    public function test_deleting_a_job_is_blocked_while_terminal_container_cleanup_is_pending(): void
+    {
+        $job = $this->job('vol_a');
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subMinute(),
+            'finished_at' => now(),
+            'docker_container_id' => 'volumevault-backup-1-secret',
+            'docker_container_cleanup_pending' => true,
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('backup-jobs.index'))
+            ->delete(route('backup-jobs.destroy', $job))
+            ->assertRedirect(route('backup-jobs.index'))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
+    }
+
     public function test_deleting_a_job_is_blocked_while_a_restore_run_holds_stopped_containers(): void
     {
         $job = $this->job('vol_a');
@@ -129,6 +151,21 @@ class BackupJobMutationGuardTest extends TestCase
             ->assertSessionHas('error');
 
         // Deleting the destination would cascade the job and its in-flight run.
+        $this->assertDatabaseHas('backup_destinations', ['id' => $job->backup_destination_id]);
+        $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
+    }
+
+    public function test_deleting_a_destination_is_blocked_while_terminal_container_cleanup_is_pending(): void
+    {
+        $job = $this->job('vol_a');
+        $this->pendingContainerCleanupRun($job);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->from(route('destinations.index'))
+            ->delete(route('destinations.destroy', $job->backup_destination_id))
+            ->assertRedirect(route('destinations.index'))
+            ->assertSessionHas('error');
+
         $this->assertDatabaseHas('backup_destinations', ['id' => $job->backup_destination_id]);
         $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
     }
@@ -226,6 +263,23 @@ class BackupJobMutationGuardTest extends TestCase
         $this->assertDatabaseHas('backup_destinations', ['id' => $job->backup_destination_id]);
     }
 
+    public function test_api_deletions_are_blocked_while_terminal_container_cleanup_is_pending(): void
+    {
+        $job = $this->job('vol_a');
+        $this->pendingContainerCleanupRun($job);
+        $token = User::factory()->admin()->create()->createToken('vv', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->deleteJson("/api/v1/backup-jobs/{$job->id}")
+            ->assertStatus(422);
+        $this->withToken($token)
+            ->deleteJson("/api/v1/destinations/{$job->backup_destination_id}")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('backup_destinations', ['id' => $job->backup_destination_id]);
+        $this->assertDatabaseHas('backup_jobs', ['id' => $job->id]);
+    }
+
     private function job(string $volume): BackupJob
     {
         return BackupJob::create([
@@ -237,6 +291,19 @@ class BackupJobMutationGuardTest extends TestCase
             'schedule_config' => ['time' => '02:00'],
             'cron_expression' => '0 2 * * *',
             'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+    }
+
+    private function pendingContainerCleanupRun(BackupJob $job): BackupRun
+    {
+        return BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subMinute(),
+            'finished_at' => now(),
+            'docker_container_id' => 'volumevault-backup-1-secret',
+            'docker_container_cleanup_pending' => true,
         ]);
     }
 

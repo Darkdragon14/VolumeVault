@@ -75,6 +75,20 @@ class RunPreRestoreBackup
             );
         }
 
+        if ($backup->docker_container_cleanup_pending) {
+            throw new RuntimeException(
+                'Safety backup completed but its credential-bearing helper cleanup is still pending; '.
+                'aborting restore before overwriting the volume.'
+            );
+        }
+
+        if ($backup->stopped_container_ids) {
+            throw new RuntimeException(
+                'Safety backup completed but its application containers are still stopped; '.
+                'aborting restore before overwriting the volume.'
+            );
+        }
+
         // Re-verify after the backup: RunBackup re-reads the (mutable) job and backs
         // up its CURRENT volume, so a job edited while the backup ran could have
         // captured a different volume than the one we are about to wipe. The check

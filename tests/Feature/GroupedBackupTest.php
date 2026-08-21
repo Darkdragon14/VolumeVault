@@ -304,6 +304,30 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
     }
 
+    public function test_a_member_is_skipped_while_prior_backup_container_cleanup_is_pending(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+
+        $group = $this->group();
+        $member = $this->member($group, 'vol_a');
+        BackupRun::create([
+            'backup_job_id' => $member->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'finished_at' => now(),
+            'docker_container_id' => 'volumevault-backup-prior',
+            'docker_container_cleanup_pending' => true,
+        ]);
+
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        app(RunBackupGroup::class)->handle($run);
+
+        $memberRun = BackupRun::where('backup_group_run_id', $run->id)->firstOrFail();
+        $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->status);
+        $this->assertStringContainsString('not ready', (string) $memberRun->error_message);
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
+    }
+
     public function test_reconciliation_releases_an_orphaned_group_lock(): void
     {
         $group = $this->group();

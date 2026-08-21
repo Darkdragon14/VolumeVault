@@ -91,7 +91,7 @@ networks:
 
 Leave `VOLUMEVAULT_DOCKER_NETWORK` empty when the endpoint is already reachable without a specific Docker network. VolumeVault does not guess a network because its container may be attached to more than one.
 
-This setting does **not** add support for managing a Docker engine on another host. Bind mounts are resolved by the daemon, while VolumeVault also needs direct access to some local files. In particular, local destinations and uploaded SSH private keys may be unavailable when the endpoint controls another machine. Use a TCP socket proxy for the same Docker engine VolumeVault normally accesses, not a remote-host deployment.
+This setting does **not** add support for managing a Docker engine on another host. Bind mounts are resolved by the daemon, while VolumeVault also needs direct access to some local files. In particular, local destinations may be unavailable when the endpoint controls another machine. Uploaded SSH private keys do not rely on a bind mount: VolumeVault copies them into the temporary backup container through the Docker API. Use a TCP socket proxy for the same Docker engine VolumeVault normally accesses, not a remote-host deployment.
 
 Host-path backup sources refer to paths on the Docker host because bind mounts are resolved by the daemon. `VOLUMEVAULT_HOST_PATH_ALLOWLIST` must contain the permitted paths. VolumeVault canonicalizes paths that are visible in its own filesystem and validates the bind by launching a temporary container. Paths that are not visible to VolumeVault can only be checked lexically, which is another reason remote-host deployments are unsupported.
 

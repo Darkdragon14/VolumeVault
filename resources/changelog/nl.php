@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_private_key_backup_fix' => [
+        'title' => 'SFTP-back-ups met privesleutels',
+        'description' => 'SFTP-back-ups kunnen zich nu zonder wachtwoord aanmelden met een geuploade SSH-privesleutel. VolumeVault kopieert de sleutel veilig naar de tijdelijke Offen-back-upcontainer en verwijdert deze na afloop.',
+    ],
     'ssh_destination_update_fix' => [
         'title' => 'Betrouwbare updates van SFTP-bestemmingen',
         'description' => 'Bestaande SFTP-bestemmingen kunnen nu worden bijgewerkt wanneer hun SSH-host een hostnaam of IP-adres is. Validatiefouten voor SFTP-instellingen en aanmeldgegevens worden ook naast de betreffende velden weergegeven.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_private_key_backup_fix' => [
+        'title' => 'SFTP backups with private keys',
+        'description' => 'SFTP backups can now authenticate with an uploaded SSH private key and no password. VolumeVault securely copies the key into the temporary Offen backup container and removes it after the run.',
+    ],
     'ssh_destination_update_fix' => [
         'title' => 'Reliable SFTP destination updates',
         'description' => 'Existing SFTP destinations can now be updated when their SSH host is a hostname or IP address. Validation errors for SFTP settings and credentials are also shown beside the affected fields.',

@@ -10,6 +10,7 @@ use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Mockery;
 use Tests\TestCase;
@@ -294,6 +295,93 @@ class RunRestoreTest extends TestCase
         // alive on a large volume instead of failing the restore mid-delete.
         $this->assertContains('--name', $docker->clearCommand);
         $this->assertNotEmpty(array_filter($docker->clearCommand, fn ($arg) => str_starts_with((string) $arg, 'volumevault-clear-')));
+    }
+
+    public function test_reconciliation_after_monitored_container_exits_observes_the_fresh_lease(): void
+    {
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+        ]);
+        $docker = new class($run->id) extends DockerProcess
+        {
+            /** @var array<string, string> */
+            public array $statusesDuringReconciliation = [];
+
+            public int $monitoredOperations = 0;
+
+            private bool $clearFinished = false;
+
+            private bool $extractionFinished = false;
+
+            private bool $verificationFinished = false;
+
+            /** @var array<string, bool> */
+            private array $reconciled = [];
+
+            public function __construct(private readonly int $restoreRunId) {}
+
+            public function whileMonitoring(callable $callback, callable $operation, int $intervalSeconds = 30): mixed
+            {
+                $this->monitoredOperations++;
+                $callback();
+                $result = $operation();
+
+                foreach ([
+                    'verification' => $this->verificationFinished,
+                    'clear' => $this->clearFinished,
+                    'extraction' => $this->extractionFinished,
+                ] as $phase => $finished) {
+                    if ($finished && ! ($this->reconciled[$phase] ?? false)) {
+                        $this->reconciled[$phase] = true;
+                        Artisan::call('volumevault:reconcile-stale-runs');
+                        $this->statusesDuringReconciliation[$phase] = RestoreRun::findOrFail($this->restoreRunId)->status;
+                    }
+                }
+
+                return $result;
+            }
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                if (($command[1] ?? null) === 'volume' && ($command[2] ?? null) === 'inspect') {
+                    return new DockerProcessResult($command, 0, '[{"Name":"app_data"}]', '');
+                }
+
+                if (($command[1] ?? null) === 'inspect') {
+                    return new DockerProcessResult($command, 1, '', 'Error: No such object');
+                }
+
+                if (($command[1] ?? null) === 'run' && in_array('find', $command, true)) {
+                    $this->clearFinished = true;
+                }
+
+                return new DockerProcessResult($command, 0, '', '');
+            }
+
+            public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                if (collect($command)->contains(fn (string $argument): bool => str_contains($argument, 'tzf'))) {
+                    $this->verificationFinished = true;
+                } else {
+                    $this->extractionFinished = true;
+                }
+
+                return new DockerProcessResult($command, 0, 'restore complete', '');
+            }
+        };
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+
+        app(RunRestore::class)->handle($run);
+
+        $this->assertSame([
+            'verification' => RestoreRun::STATUS_RUNNING,
+            'clear' => RestoreRun::STATUS_RUNNING,
+            'extraction' => RestoreRun::STATUS_RUNNING,
+        ], $docker->statusesDuringReconciliation);
+        $this->assertSame(3, $docker->monitoredOperations, 'Verify, clear and extraction must all renew the restore lease.');
+        $this->assertSame(RestoreRun::STATUS_SUCCESS, $run->refresh()->status);
     }
 
     public function test_archive_verification_discards_the_listing_output(): void

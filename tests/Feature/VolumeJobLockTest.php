@@ -161,6 +161,28 @@ class VolumeJobLockTest extends TestCase
         $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
     }
 
+    public function test_backup_job_requeues_while_prior_backup_container_cleanup_is_pending(): void
+    {
+        $job = $this->backupJob();
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'finished_at' => now(),
+            'docker_container_id' => 'volumevault-backup-prior',
+            'docker_container_cleanup_pending' => true,
+        ]);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+
+        (new RunBackupJob($run->id))->handle(app(RunBackup::class));
+
+        $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
+    }
+
     public function test_backup_job_requeues_instead_of_overlapping_a_busy_host_path_job(): void
     {
         $job = $this->hostPathJob();
@@ -214,6 +236,32 @@ class VolumeJobLockTest extends TestCase
 
         // The restore must not clear/extract the volume while the backup is still
         // mid-restart of containers mounting it — it requeues instead.
+        (new RunRestoreJob($run->id))->handle(app(RunRestore::class));
+
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $run->refresh()->status);
+    }
+
+    public function test_restore_job_requeues_while_backup_container_cleanup_is_pending(): void
+    {
+        $job = $this->backupJob();
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'finished_at' => now(),
+            'docker_container_id' => 'volumevault-backup-prior',
+            'docker_container_cleanup_pending' => true,
+        ]);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_SAFE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+
         (new RunRestoreJob($run->id))->handle(app(RunRestore::class));
 
         $this->assertSame(RestoreRun::STATUS_QUEUED, $run->refresh()->status);

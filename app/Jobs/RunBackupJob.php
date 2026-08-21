@@ -91,14 +91,14 @@ class RunBackupJob implements ShouldQueue
             return BackupRun::query()
                 ->where('backup_job_id', $run->backup_job_id)
                 ->whereKeyNot($run->getKey())
-                ->where(fn ($query) => $this->stillWorking($query))
+                ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
                 ->exists();
         }
 
         $backupActive = BackupRun::query()
             ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
             ->whereKeyNot($run->getKey())
-            ->where(fn ($query) => $this->stillWorking($query))
+            ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
 
         $restoreActive = RestoreRun::query()
@@ -110,14 +110,18 @@ class RunBackupJob implements ShouldQueue
     }
 
     /**
-     * Constrain to runs that are running, or terminal but still owning stopped
-     * containers their finally has not restarted yet.
+     * Constrain to runs that are running, terminal but still owning stopped
+     * containers, or backup runs whose credential-bearing helper still needs cleanup.
      */
-    private function stillWorking($query): void
+    private function stillWorking($query, bool $includeBackupCleanup = false): void
     {
         $query
             ->where('status', BackupRun::STATUS_RUNNING)
             ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
+
+        if ($includeBackupCleanup) {
+            $query->orWhere('docker_container_cleanup_pending', true);
+        }
     }
 
     /**

@@ -214,20 +214,26 @@ class RunBackup
             $this->markFailed($run, $exception);
         } finally {
             if ($stoppedContainers) {
-                try {
-                    // Restarting containers happens after the run is already
-                    // terminal, but this job still holds its overlap lock and a
-                    // member run must keep its group run alive. docker start is 120s
-                    // each and sequential, so refresh the heartbeat up front and
-                    // after each container to keep a live run/group from being
-                    // falsely closed during a slow multi-container restart.
-                    $this->heartbeat($run);
-                    $this->startDockerContainers->handle($stoppedContainers, fn () => $this->heartbeat($run));
-                    $run->forceFill(['stopped_container_ids' => null])->save();
-                    $this->appendRunLog->handle($run->fresh(), 'Restarted containers: '.implode(', ', $stoppedContainers));
-                } catch (Throwable $exception) {
-                    // Leave stopped_container_ids set so reconciliation can retry.
-                    $this->appendRunLog->handle($run->fresh(), 'Failed to restart containers: '.$exception->getMessage());
+                $run->refresh();
+
+                if ($run->docker_container_cleanup_pending) {
+                    $this->appendRunLog->handle($run, 'Backup helper cleanup is still pending; application containers remain stopped until reconciliation removes it.');
+                } else {
+                    try {
+                        // Restarting containers happens after the run is already
+                        // terminal, but this job still holds its overlap lock and a
+                        // member run must keep its group run alive. docker start is 120s
+                        // each and sequential, so refresh the heartbeat up front and
+                        // after each container to keep a live run/group from being
+                        // falsely closed during a slow multi-container restart.
+                        $this->heartbeat($run);
+                        $this->startDockerContainers->handle($stoppedContainers, fn () => $this->heartbeat($run));
+                        $run->forceFill(['stopped_container_ids' => null])->save();
+                        $this->appendRunLog->handle($run->fresh(), 'Restarted containers: '.implode(', ', $stoppedContainers));
+                    } catch (Throwable $exception) {
+                        // Leave stopped_container_ids set so reconciliation can retry.
+                        $this->appendRunLog->handle($run->fresh(), 'Failed to restart containers: '.$exception->getMessage());
+                    }
                 }
             }
         }

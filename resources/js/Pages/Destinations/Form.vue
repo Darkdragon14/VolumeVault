@@ -248,8 +248,7 @@ const fetchHostKey = async () => {
                 <label class="space-y-2 sm:col-span-2">
                     <span class="label">{{ t('Private key') }}</span>
                     <textarea v-model="form.secrets.private_key" class="input min-h-32" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
-                    <span class="text-xs text-slate-400">{{ secretHint('private_key') || t('If provided, VolumeVault mounts it into the Offen container for backup runs.') }}</span>
-                    <span class="block text-xs text-amber-300">{{ t("Uploaded private keys are not supported when DOCKER_HOST controls a Docker engine on another machine because the daemon cannot access VolumeVault's local key file. Use password authentication instead.") }}</span>
+                    <span class="text-xs text-slate-400">{{ secretHint('private_key') || t('If provided, VolumeVault securely copies it into the temporary Offen container for backup runs.') }}</span>
                     <span v-if="error('secrets.private_key')" class="block text-sm text-rose-300">{{ error('secrets.private_key') }}</span>
                 </label>
                 <label class="space-y-2">

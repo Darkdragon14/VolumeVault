@@ -40,6 +40,23 @@ class ClearDockerVolumeTest extends TestCase
         (new ClearDockerVolume($docker))->handle('app_data');
     }
 
+    public function test_it_monitors_the_clear_with_a_heartbeat(): void
+    {
+        $docker = $this->recordingDocker(successful: true);
+        $heartbeats = 0;
+
+        (new ClearDockerVolume($docker))->handle(
+            'app_data',
+            'volumevault-clear-1-test',
+            function () use (&$heartbeats): void {
+                $heartbeats++;
+            },
+        );
+
+        $this->assertSame(1, $heartbeats);
+        $this->assertContains('volumevault-clear-1-test', $docker->command);
+    }
+
     private function recordingDocker(bool $successful): DockerProcess
     {
         return new class($successful) extends DockerProcess

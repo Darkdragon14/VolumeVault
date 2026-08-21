@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'ssh_private_key_backup_fix' => [
+        'title' => 'Copias SFTP con claves privadas',
+        'description' => 'Las copias SFTP ahora pueden autenticarse sin contrasena mediante una clave privada SSH cargada. VolumeVault copia la clave de forma segura en el contenedor temporal de Offen y la elimina despues de la ejecucion.',
+    ],
     'ssh_destination_update_fix' => [
         'title' => 'Actualizaciones fiables de destinos SFTP',
         'description' => 'Ahora se pueden actualizar los destinos SFTP existentes cuando su host SSH es un nombre de host o una dirección IP. Los errores de validación de la configuración y las credenciales SFTP también se muestran junto a los campos afectados.',

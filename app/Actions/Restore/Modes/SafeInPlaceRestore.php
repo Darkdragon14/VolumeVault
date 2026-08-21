@@ -37,9 +37,9 @@ class SafeInPlaceRestore implements RestoreModeHandler
         $this->requireExistingVolume($run);
     }
 
-    public function prepareTarget(RestoreRun $run): void
+    public function prepareTarget(RestoreRun $run, ?callable $heartbeat = null): void
     {
-        $this->stopAffectedContainers($run);
+        $this->stopAffectedContainers($run, $heartbeat);
 
         // Stopping many (or slow) containers can take a while with no Docker
         // container of our own to check for liveness; reconciliation could have
@@ -56,7 +56,7 @@ class SafeInPlaceRestore implements RestoreModeHandler
         $run->forceFill(['docker_container_id' => $containerName])->save();
 
         $this->appendRunLog->handle($run, 'Clearing existing contents of volume '.$run->target_volume_name.' before in-place restore.');
-        $this->clearDockerVolume->handle($run->target_volume_name, $containerName);
+        $this->clearDockerVolume->handle($run->target_volume_name, $containerName, $heartbeat);
     }
 
     public function cleanupAfterFailure(RestoreRun $run): void
@@ -77,7 +77,7 @@ class SafeInPlaceRestore implements RestoreModeHandler
      * restore must not be started afterwards by the restart step. The VolumeVault
      * container is never stopped — doing so would kill this restore.
      */
-    private function stopAffectedContainers(RestoreRun $run): void
+    private function stopAffectedContainers(RestoreRun $run, ?callable $heartbeat): void
     {
         $containers = $this->findContainersUsingVolume->handle($run->target_volume_name);
 
@@ -105,7 +105,7 @@ class SafeInPlaceRestore implements RestoreModeHandler
             // run looking alive to reconciliation (no container id exists yet).
             $this->stopDockerContainers->handle(
                 $stopped,
-                fn () => $run->forceFill(['last_heartbeat_at' => now()])->save(),
+                $heartbeat,
             );
         }
     }
@@ -129,4 +129,5 @@ class SafeInPlaceRestore implements RestoreModeHandler
             throw new RuntimeException('Restore was finalized out of band before the volume was cleared; aborting the in-place wipe.');
         }
     }
+
 }

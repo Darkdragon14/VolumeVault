@@ -40,6 +40,7 @@ class BackupRun extends Model
         'logs',
         'error_message',
         'docker_container_id',
+        'docker_container_cleanup_pending',
         'stopped_container_ids',
         'backup_key',
         'backup_size_bytes',
@@ -52,6 +53,7 @@ class BackupRun extends Model
             'last_heartbeat_at' => 'datetime',
             'finished_at' => 'datetime',
             'duration_seconds' => 'integer',
+            'docker_container_cleanup_pending' => 'boolean',
             'stopped_container_ids' => 'array',
             'backup_size_bytes' => 'integer',
         ];
@@ -83,9 +85,9 @@ class BackupRun extends Model
     }
 
     /**
-     * A run that still matters for crash recovery: queued/running, or terminal but
-     * still owning containers it stopped and has not restarted yet (a worker can
-     * mark a run SUCCESS then crash in its finally before restarting them).
+     * A run that still matters for crash recovery: queued/running, terminal but
+     * still owning containers it stopped, or still awaiting removal of its backup
+     * helper (which can contain copied credentials after a worker interruption).
      * Deleting the job/destination behind such a run cascade-drops the row
      * ReconcileStaleRuns needs to restart those containers, so deletion is refused
      * while any exists.
@@ -96,7 +98,8 @@ class BackupRun extends Model
             $q->whereIn('status', [self::STATUS_QUEUED, self::STATUS_RUNNING])
                 ->orWhere(fn (Builder $inner) => $inner
                     ->whereNotNull('stopped_container_ids')
-                    ->where('stopped_container_ids', '!=', '[]'));
+                    ->where('stopped_container_ids', '!=', '[]'))
+                ->orWhere('docker_container_cleanup_pending', true);
         });
     }
 }

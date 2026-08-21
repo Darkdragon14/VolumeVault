@@ -30,7 +30,7 @@ class InPlaceRestore implements RestoreModeHandler
         $this->requireExistingVolume($run);
     }
 
-    public function prepareTarget(RestoreRun $run): void
+    public function prepareTarget(RestoreRun $run, ?callable $heartbeat = null): void
     {
         // Guard the destructive clear: if reconciliation (or any out-of-band actor)
         // finalized this run since RunRestore's pre-prepare check, abort before
@@ -46,7 +46,7 @@ class InPlaceRestore implements RestoreModeHandler
         $run->forceFill(['docker_container_id' => $containerName])->save();
 
         $this->appendRunLog->handle($run, 'Clearing existing contents of volume '.$run->target_volume_name.' before in-place restore.');
-        $this->clearDockerVolume->handle($run->target_volume_name, $containerName);
+        $this->clearDockerVolume->handle($run->target_volume_name, $containerName, $heartbeat);
     }
 
     public function cleanupAfterFailure(RestoreRun $run): void
