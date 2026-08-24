@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage, usePoll } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
+import { computed } from 'vue';
 
 const props = defineProps<{ run: any }>();
 
@@ -11,7 +12,9 @@ const { t, formatDate } = useI18n();
 const page = usePage();
 const can = page.props.can as { runDockerActions?: boolean };
 
-const restoreHref = `/backup-jobs/${props.run.job.id}/restore?backup=${encodeURIComponent(props.run.backup_key ?? '')}`;
+const restoreHref = computed(() => `/backup-jobs/${props.run.job.id}/restore?backup=${encodeURIComponent(props.run.backup_key ?? '')}`);
+
+usePoll(2000, { only: ['run'] }, { mode: 'rest' });
 </script>
 
 <template>

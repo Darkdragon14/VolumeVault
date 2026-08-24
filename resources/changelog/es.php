@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_run_live_updates' => [
+        'title' => 'Actualizaciones en directo de las copias',
+        'description' => 'Las páginas de detalle de las ejecuciones de copia ahora se actualizan automáticamente mientras permanecen abiertas, manteniendo al día el estado, los tiempos, los errores, los registros y los datos del archivo sin recargar la página manualmente.',
+    ],
     'ssh_private_key_backup_fix' => [
         'title' => 'Copias SFTP con claves privadas',
         'description' => 'Las copias SFTP ahora pueden autenticarse sin contrasena mediante una clave privada SSH cargada. VolumeVault copia la clave de forma segura en el contenedor temporal de Offen y la elimina despues de la ejecucion.',

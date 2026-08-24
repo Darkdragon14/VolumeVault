@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_run_live_updates' => [
+        'title' => 'Průběžné aktualizace zálohování',
+        'description' => 'Stránky s podrobnostmi spuštěné zálohy se nyní automaticky obnovují, dokud zůstávají otevřené. Stav, časy, chyby, protokoly a údaje o archivu tak zůstávají aktuální bez ručního načtení stránky.',
+    ],
     'ssh_private_key_backup_fix' => [
         'title' => 'SFTP zalohy se soukromymi klici',
         'description' => 'SFTP zalohy se nyni mohou overit nahranym soukromym klicem SSH bez hesla. VolumeVault klic bezpecne zkopiruje do docasneho zalohovaciho kontejneru Offen a po behu jej odstrani.',

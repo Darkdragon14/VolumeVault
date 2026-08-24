@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_run_live_updates' => [
+        'title' => 'Live-updates voor back-ups',
+        'description' => 'Detailpagina’s van back-upruns worden nu automatisch bijgewerkt zolang ze open blijven. Status, timing, fouten, logboeken en archiefgegevens blijven zo actueel zonder de pagina handmatig te vernieuwen.',
+    ],
     'ssh_private_key_backup_fix' => [
         'title' => 'SFTP-back-ups met privesleutels',
         'description' => 'SFTP-back-ups kunnen zich nu zonder wachtwoord aanmelden met een geuploade SSH-privesleutel. VolumeVault kopieert de sleutel veilig naar de tijdelijke Offen-back-upcontainer en verwijdert deze na afloop.',
