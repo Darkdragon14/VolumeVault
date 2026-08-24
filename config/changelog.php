@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'feature',
-            'key' => 'backup_run_live_updates',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.21.0' => [
+            'date' => '2026-08-24',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.21.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'backup_run_live_updates',
+                ],
+            ],
+        ],
         'v1.20.3' => [
             'date' => '2026-08-21',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.20.3',
