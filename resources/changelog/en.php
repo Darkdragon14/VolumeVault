@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_run_live_updates' => [
+        'title' => 'Live backup run updates',
+        'description' => 'Backup run detail pages now refresh automatically while they remain open, keeping status, timing, errors, logs and archive details up to date without a manual page reload.',
+    ],
     'ssh_private_key_backup_fix' => [
         'title' => 'SFTP backups with private keys',
         'description' => 'SFTP backups can now authenticate with an uploaded SSH private key and no password. VolumeVault securely copies the key into the temporary Offen backup container and removes it after the run.',

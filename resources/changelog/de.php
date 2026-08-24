@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_run_live_updates' => [
+        'title' => 'Laufende Aktualisierung von Backups',
+        'description' => 'Detailseiten von Backup-Läufen werden jetzt automatisch aktualisiert, solange sie geöffnet sind. Status, Laufzeit, Fehler, Protokolle und Archivdetails bleiben dadurch ohne manuelles Neuladen aktuell.',
+    ],
     'ssh_private_key_backup_fix' => [
         'title' => 'SFTP-Backups mit privaten Schluesseln',
         'description' => 'SFTP-Backups koennen sich jetzt ohne Passwort mit einem hochgeladenen privaten SSH-Schluessel authentifizieren. VolumeVault kopiert den Schluessel sicher in den temporaeren Offen-Backup-Container und entfernt ihn nach dem Lauf.',

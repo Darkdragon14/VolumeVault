@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_run_live_updates' => [
+        'title' => 'Aggiornamenti in tempo reale dei backup',
+        'description' => 'Le pagine di dettaglio delle esecuzioni di backup ora si aggiornano automaticamente mentre restano aperte, mantenendo aggiornati stato, tempi, errori, log e dettagli dell’archivio senza ricaricare manualmente la pagina.',
+    ],
     'ssh_private_key_backup_fix' => [
         'title' => 'Backup SFTP con chiavi private',
         'description' => 'I backup SFTP possono ora autenticarsi senza password con una chiave privata SSH caricata. VolumeVault copia la chiave in modo sicuro nel container Offen temporaneo e la rimuove al termine del backup.',

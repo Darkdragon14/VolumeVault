@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_run_live_updates' => [
+        'title' => 'Biztonsági mentések élő frissítése',
+        'description' => 'A biztonsági mentések futási részletei mostantól automatikusan frissülnek, amíg az oldal nyitva van, így az állapot, az időzítés, a hibák, a naplók és az archívum adatai kézi újratöltés nélkül is naprakészek maradnak.',
+    ],
     'ssh_private_key_backup_fix' => [
         'title' => 'SFTP mentesek privat kulccsal',
         'description' => 'Az SFTP mentesek mostantol jelszo nelkul, feltoltott SSH privat kulccsal is hitelesithetok. A VolumeVault biztonsagosan az ideiglenes Offen mentest vegzo kontenerbe masolja a kulcsot, majd a futas utan eltavolitja.',

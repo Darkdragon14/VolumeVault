@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_run_live_updates' => [
+        'title' => 'Suivi en direct des sauvegardes',
+        'description' => 'Les pages de détail des sauvegardes s’actualisent désormais automatiquement tant qu’elles restent ouvertes, afin de maintenir à jour le statut, la durée, les erreurs, les journaux et les informations de l’archive sans rechargement manuel.',
+    ],
     'ssh_private_key_backup_fix' => [
         'title' => 'Sauvegardes SFTP avec une cle privee',
         'description' => 'Les sauvegardes SFTP peuvent desormais utiliser une cle privee SSH televersee sans mot de passe. VolumeVault copie la cle de maniere securisee dans le conteneur de sauvegarde Offen temporaire, puis la supprime apres execution.',
