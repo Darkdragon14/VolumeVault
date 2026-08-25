@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_job_sorting' => [
+        'title' => 'Tareas de copia ordenables',
+        'description' => 'Las tareas de copia de seguridad ahora se pueden ordenar en ambos sentidos por nombre, próxima ejecución programada o última ejecución. El orden se aplica a toda la lista paginada, permanece en la URL y también está disponible mediante la API.',
+    ],
     'backup_run_live_updates' => [
         'title' => 'Actualizaciones en directo de las copias',
         'description' => 'Las páginas de detalle de las ejecuciones de copia ahora se actualizan automáticamente mientras permanecen abiertas, manteniendo al día el estado, los tiempos, los errores, los registros y los datos del archivo sin recargar la página manualmente.',

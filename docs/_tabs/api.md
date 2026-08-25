@@ -29,6 +29,8 @@ Token abilities:
 
 Write operations still require an admin user, and secrets are never returned in plaintext by the API. Responses only include masked indicators such as `has_access_key_id`, `has_secret_access_key`, and `masked_*` fields.
 
+`GET /api/v1/backup-jobs` accepts `sort=created_at|name|next_run_at|last_run_at` and `direction=asc|desc`. Date sorts always place jobs without a date last and use the job name as a stable tie-breaker.
+
 When restoring, `selected_backup_key` must be one of the keys returned by `GET /api/v1/backup-jobs/{id}/backups` - it is checked against the destination listing, so arbitrary or path-traversal keys are rejected. Volume names (`volume_name`, `target_volume_name`) must match `^[A-Za-z0-9_.-]+$`.
 
 `POST /api/v1/backup-jobs/{id}/restore` accepts these restore modes:

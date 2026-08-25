@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_job_sorting' => [
+        'title' => 'Rendezhető biztonsági mentési feladatok',
+        'description' => 'A biztonsági mentési feladatok mostantól mindkét irányban rendezhetők név, következő ütemezett futás vagy utolsó futás szerint. A rendezés a teljes lapozott listára vonatkozik, megmarad az URL-ben, és az API-n keresztül is elérhető.',
+    ],
     'backup_run_live_updates' => [
         'title' => 'Biztonsági mentések élő frissítése',
         'description' => 'A biztonsági mentések futási részletei mostantól automatikusan frissülnek, amíg az oldal nyitva van, így az állapot, az időzítés, a hibák, a naplók és az archívum adatai kézi újratöltés nélkül is naprakészek maradnak.',

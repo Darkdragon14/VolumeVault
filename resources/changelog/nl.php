@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_job_sorting' => [
+        'title' => 'Sorteerbare back-uptaken',
+        'description' => 'Back-uptaken kunnen nu in beide richtingen worden gesorteerd op naam, volgende geplande uitvoering of laatste uitvoering. De sortering geldt voor de volledige gepagineerde lijst, blijft in de URL staan en is ook beschikbaar via de API.',
+    ],
     'backup_run_live_updates' => [
         'title' => 'Live-updates voor back-ups',
         'description' => 'Detailpagina’s van back-upruns worden nu automatisch bijgewerkt zolang ze open blijven. Status, timing, fouten, logboeken en archiefgegevens blijven zo actueel zonder de pagina handmatig te vernieuwen.',

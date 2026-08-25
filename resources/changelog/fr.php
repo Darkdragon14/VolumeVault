@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_job_sorting' => [
+        'title' => 'Tri des tâches de sauvegarde',
+        'description' => 'Les tâches de sauvegarde peuvent désormais être triées par nom, prochaine exécution planifiée ou dernière exécution, dans les deux sens. Le tri couvre toute la liste paginée, reste dans l’URL et est également disponible via l’API.',
+    ],
     'backup_run_live_updates' => [
         'title' => 'Suivi en direct des sauvegardes',
         'description' => 'Les pages de détail des sauvegardes s’actualisent désormais automatiquement tant qu’elles restent ouvertes, afin de maintenir à jour le statut, la durée, les erreurs, les journaux et les informations de l’archive sans rechargement manuel.',

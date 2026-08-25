@@ -24,9 +24,19 @@ const { t, formatDate, timezone } = useI18n();
 const search = ref('');
 const statusFilter = ref('');
 const destinationFilter = ref('');
+const sort = ref('created_at');
+const direction = ref('desc');
 const filtersVisible = ref(false);
 
-readFiltersFromUrl({ search, status: statusFilter, destination: destinationFilter });
+readFiltersFromUrl({ search, status: statusFilter, destination: destinationFilter, sort, direction });
+
+const sortFields = ['created_at', 'name', 'next_run_at', 'last_run_at'];
+if (!sortFields.includes(sort.value)) {
+    sort.value = 'created_at';
+    direction.value = 'desc';
+} else if (!['asc', 'desc'].includes(direction.value)) {
+    direction.value = 'desc';
+}
 
 const statuses = ['active', 'paused', 'error', 'running'];
 const sourceLabel = (job: any) => job.source_label || job.host_path || job.volume_name || t('Unknown');
@@ -36,6 +46,8 @@ const applyFilters = () => {
         search: search.value || undefined,
         status: statusFilter.value || undefined,
         destination: destinationFilter.value || undefined,
+        sort: sort.value,
+        direction: direction.value,
         per_page: props.jobs.meta.per_page === 0 ? 'all' : props.jobs.meta.per_page,
     }, { preserveState: true, replace: true });
 };
@@ -52,6 +64,19 @@ const resetFilters = () => {
     destinationFilter.value = '';
     applyFilters();
 };
+
+const sortBy = (field: string) => {
+    if (sort.value === field) {
+        direction.value = direction.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        sort.value = field;
+        direction.value = field === 'last_run_at' ? 'desc' : 'asc';
+    }
+
+    applyFilters();
+};
+
+const ariaSort = (field: string) => sort.value === field ? (direction.value === 'asc' ? 'ascending' : 'descending') : undefined;
 
 const destroyJob = (id: number) => confirm(t('Delete this backup job and its run history?')) && router.delete(`/backup-jobs/${id}`);
 const runNow = (id: number) => router.post(`/backup-jobs/${id}/run`);
@@ -117,6 +142,24 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
 
         <div class="card overflow-hidden">
             <div v-if="jobs.data.length">
+                <div class="grid grid-cols-2 gap-3 border-b border-white/10 p-4 md:hidden">
+                    <label class="space-y-1">
+                        <span class="label">{{ t('Sort by') }}</span>
+                        <select v-model="sort" class="input" @change="applyFilters">
+                            <option value="created_at">{{ t('Recently created') }}</option>
+                            <option value="name">{{ t('Name') }}</option>
+                            <option value="next_run_at">{{ t('Next run') }}</option>
+                            <option value="last_run_at">{{ t('Last run') }}</option>
+                        </select>
+                    </label>
+                    <label class="space-y-1">
+                        <span class="label">{{ t('Direction') }}</span>
+                        <select v-model="direction" class="input" @change="applyFilters">
+                            <option value="asc">{{ t('Ascending') }}</option>
+                            <option value="desc">{{ t('Descending') }}</option>
+                        </select>
+                    </label>
+                </div>
                 <div class="divide-y divide-white/10 md:hidden">
                     <article v-for="job in jobs.data" :key="job.id" class="space-y-4 p-4 cursor-pointer transition hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewJob(job.id)" @keydown="onJobKeydown($event, job.id)">
                         <div class="flex items-start justify-between gap-3">
@@ -148,13 +191,28 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                     <table class="min-w-full divide-y divide-white/10 text-sm">
                         <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
                             <tr>
-                                <th class="px-4 py-3">{{ t('Name') }}</th>
+                                <th class="px-4 py-3" :aria-sort="ariaSort('name')">
+                                    <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('name')">
+                                        <span>{{ t('Name') }}</span>
+                                        <svg v-if="sort === 'name'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
+                                    </button>
+                                </th>
                                 <th class="px-4 py-3">{{ t('Source') }}</th>
                                 <th class="px-4 py-3">{{ t('Destination') }}</th>
                                 <th class="px-4 py-3">{{ t('Schedule') }}</th>
                                 <th class="px-4 py-3">{{ t('Status') }}</th>
-                                <th class="px-4 py-3">{{ t('Last run') }}</th>
-                                <th class="px-4 py-3">{{ t('Next run') }}</th>
+                                <th class="px-4 py-3" :aria-sort="ariaSort('last_run_at')">
+                                    <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('last_run_at')">
+                                        <span>{{ t('Last run') }}</span>
+                                        <svg v-if="sort === 'last_run_at'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
+                                    </button>
+                                </th>
+                                <th class="px-4 py-3" :aria-sort="ariaSort('next_run_at')">
+                                    <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('next_run_at')">
+                                        <span>{{ t('Next run') }}</span>
+                                        <svg v-if="sort === 'next_run_at'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
+                                    </button>
+                                </th>
                                 <th class="px-4 py-3">{{ t('Actions') }}</th>
                             </tr>
                         </thead>
@@ -181,7 +239,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         </tbody>
                     </table>
                 </div>
-                <Pagination :data="jobs" base-url="/backup-jobs" :extra-params="{ search: search || undefined, status: statusFilter || undefined, destination: destinationFilter || undefined }" />
+                <Pagination :data="jobs" base-url="/backup-jobs" :extra-params="{ search: search || undefined, status: statusFilter || undefined, destination: destinationFilter || undefined, sort, direction }" />
             </div>
             <div v-else class="p-10 text-center">
                 <p class="text-lg font-semibold">{{ t('No backup jobs yet.') }}</p>

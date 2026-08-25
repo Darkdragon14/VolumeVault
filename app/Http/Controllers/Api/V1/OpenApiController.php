@@ -49,7 +49,18 @@ class OpenApiController extends Controller
             '/volumes/sync' => ['post' => $this->operation('Synchronize Docker volumes from the host.', ['write'], null, false, true)],
             '/stacks/backup' => ['post' => $this->operation('Back up a whole stack at once. For every Docker volume in the stack that has no backup job yet, a job is created using the given destination and schedule; then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, omit destination/schedule to just queue a run for every job. Volumes whose job belongs to a backup group are reported under "grouped" and are not run here — they back up on their group\'s own schedule. The 202 response is { data: { created, queued, skipped, grouped } }.', ['write'], ['$ref' => '#/components/schemas/StackBackupRequest'], false, true, 202)],
             '/backup-jobs' => [
-                'get' => $this->operation('List backup jobs.', ['read']),
+                'get' => $this->operation('List backup jobs.', ['read'], queryParameters: [
+                    [
+                        'name' => 'sort',
+                        'in' => 'query',
+                        'schema' => ['type' => 'string', 'enum' => ['created_at', 'name', 'next_run_at', 'last_run_at'], 'default' => 'created_at'],
+                    ],
+                    [
+                        'name' => 'direction',
+                        'in' => 'query',
+                        'schema' => ['type' => 'string', 'enum' => ['asc', 'desc'], 'default' => 'desc'],
+                    ],
+                ]),
                 'post' => $this->operation('Create a backup job.', ['write'], ['$ref' => '#/components/schemas/BackupJobRequest'], false, true, 201),
             ],
             '/backup-jobs/{id}' => [
@@ -101,7 +112,7 @@ class OpenApiController extends Controller
         ];
     }
 
-    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true): array
+    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true, array $queryParameters = []): array
     {
         $operation = [
             'summary' => $summary,
@@ -125,13 +136,19 @@ class OpenApiController extends Controller
             ];
         }
 
+        $parameters = $queryParameters;
+
         if ($id) {
-            $operation['parameters'] = [[
+            $parameters[] = [
                 'name' => 'id',
                 'in' => 'path',
                 'required' => true,
                 'schema' => ['type' => 'integer'],
-            ]];
+            ];
+        }
+
+        if ($parameters !== []) {
+            $operation['parameters'] = $parameters;
         }
 
         if ($body) {

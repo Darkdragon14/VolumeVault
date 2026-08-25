@@ -788,5 +788,10 @@
   "Group info": "Group info",
   "Failure policy": "Failure policy",
   "Members": "Members",
-  "Last success": "Last success"
+  "Last success": "Last success",
+  "Sort by": "Sort by",
+  "Recently created": "Recently created",
+  "Direction": "Direction",
+  "Ascending": "Ascending",
+  "Descending": "Descending"
 }

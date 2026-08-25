@@ -788,5 +788,10 @@
   "Group info": "Informace o skupině",
   "Failure policy": "Zásady při selhání",
   "Members": "Členové",
-  "Last success": "Poslední úspěch"
+  "Last success": "Poslední úspěch",
+  "Sort by": "Seřadit podle",
+  "Recently created": "Nedávno vytvořené",
+  "Direction": "Směr",
+  "Ascending": "Vzestupně",
+  "Descending": "Sestupně"
 }

@@ -788,5 +788,10 @@
   "Group info": "Groepsinfo",
   "Failure policy": "Foutbeleid",
   "Members": "Leden",
-  "Last success": "Laatste succes"
+  "Last success": "Laatste succes",
+  "Sort by": "Sorteren op",
+  "Recently created": "Recent aangemaakt",
+  "Direction": "Richting",
+  "Ascending": "Oplopend",
+  "Descending": "Aflopend"
 }

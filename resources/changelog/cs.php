@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_job_sorting' => [
+        'title' => 'Řazení úloh zálohování',
+        'description' => 'Úlohy zálohování lze nyní řadit oběma směry podle názvu, příštího plánovaného spuštění nebo posledního spuštění. Řazení platí pro celý stránkovaný seznam, zůstává v URL a je dostupné také přes API.',
+    ],
     'backup_run_live_updates' => [
         'title' => 'Průběžné aktualizace zálohování',
         'description' => 'Stránky s podrobnostmi spuštěné zálohy se nyní automaticky obnovují, dokud zůstávají otevřené. Stav, časy, chyby, protokoly a údaje o archivu tak zůstávají aktuální bez ručního načtení stránky.',

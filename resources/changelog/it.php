@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_job_sorting' => [
+        'title' => 'Processi di backup ordinabili',
+        'description' => 'I processi di backup possono ora essere ordinati in entrambe le direzioni per nome, prossima esecuzione pianificata o ultima esecuzione. L’ordinamento si applica all’intero elenco paginato, rimane nell’URL ed è disponibile anche tramite API.',
+    ],
     'backup_run_live_updates' => [
         'title' => 'Aggiornamenti in tempo reale dei backup',
         'description' => 'Le pagine di dettaglio delle esecuzioni di backup ora si aggiornano automaticamente mentre restano aperte, mantenendo aggiornati stato, tempi, errori, log e dettagli dell’archivio senza ricaricare manualmente la pagina.',
