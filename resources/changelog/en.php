@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_job_sorting' => [
+        'title' => 'Sortable backup jobs',
+        'description' => 'Backup jobs can now be sorted by name, next scheduled run, or last run in either direction. Sorting works across the full paginated list, remains in the URL, and is also available through the API.',
+    ],
     'backup_run_live_updates' => [
         'title' => 'Live backup run updates',
         'description' => 'Backup run detail pages now refresh automatically while they remain open, keeping status, timing, errors, logs and archive details up to date without a manual page reload.',

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Alerts\EnsureAlertRules;
+use App\Actions\Backup\ApplyBackupJobSort;
 use App\Actions\Backup\CreateBackupRun;
 use App\Actions\Docker\ListDockerContainers;
 use App\Concerns\PaginateWithPreference;
@@ -30,6 +31,7 @@ class BackupJobController extends Controller
     public function __construct(
         private readonly BackupScheduleCalculator $scheduleCalculator,
         private readonly EnsureAlertRules $ensureAlertRules,
+        private readonly ApplyBackupJobSort $applyBackupJobSort,
     ) {}
 
     public function index(Request $request): Response
@@ -53,7 +55,7 @@ class BackupJobController extends Controller
             $query->whereHas('destination', fn ($q) => $q->where('name', $destination));
         }
 
-        $query->latest();
+        ($this->applyBackupJobSort)($query, $request->query('sort'), $request->query('direction'));
 
         return Inertia::render('BackupJobs/Index', [
             'jobs' => $this->paginateForInertia($query, $perPage, fn (BackupJob $job): array => $this->serializeJob($job)),

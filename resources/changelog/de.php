@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'backup_job_sorting' => [
+        'title' => 'Sortierbare Backup-Aufträge',
+        'description' => 'Backup-Aufträge können jetzt in beide Richtungen nach Name, nächster geplanter Ausführung oder letzter Ausführung sortiert werden. Die Sortierung gilt für die gesamte paginierte Liste, bleibt in der URL erhalten und ist auch über die API verfügbar.',
+    ],
     'backup_run_live_updates' => [
         'title' => 'Laufende Aktualisierung von Backups',
         'description' => 'Detailseiten von Backup-Läufen werden jetzt automatisch aktualisiert, solange sie geöffnet sind. Status, Laufzeit, Fehler, Protokolle und Archivdetails bleiben dadurch ohne manuelles Neuladen aktuell.',

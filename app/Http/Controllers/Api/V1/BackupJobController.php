@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Backup\ApplyBackupJobSort;
 use App\Actions\Backup\CreateBackupRun;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\BackupJobRequest;
@@ -19,13 +20,18 @@ use Illuminate\Validation\ValidationException;
 
 class BackupJobController extends Controller
 {
-    public function __construct(private readonly BackupScheduleCalculator $scheduleCalculator) {}
+    public function __construct(
+        private readonly BackupScheduleCalculator $scheduleCalculator,
+        private readonly ApplyBackupJobSort $applyBackupJobSort,
+    ) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $query = BackupJob::with(['destination', 'notificationChannels']);
+        ($this->applyBackupJobSort)($query, $request->query('sort'), $request->query('direction'));
+
         return response()->json([
-            'data' => BackupJob::with(['destination', 'notificationChannels'])
-                ->latest()
+            'data' => $query
                 ->get()
                 ->map(fn (BackupJob $job) => $this->serializeJob($job)),
         ]);

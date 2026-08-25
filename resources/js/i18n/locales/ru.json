@@ -788,5 +788,10 @@
   "Group info": "Информация о группе",
   "Failure policy": "Политика при сбоях",
   "Members": "Участники",
-  "Last success": "Последний успех"
+  "Last success": "Последний успех",
+  "Sort by": "Сортировать по",
+  "Recently created": "Недавно созданные",
+  "Direction": "Направление",
+  "Ascending": "По возрастанию",
+  "Descending": "По убыванию"
 }

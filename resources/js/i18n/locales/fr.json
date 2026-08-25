@@ -788,5 +788,10 @@
   "Group info": "Infos du groupe",
   "Failure policy": "Politique d'échec",
   "Members": "Membres",
-  "Last success": "Dernier succès"
+  "Last success": "Dernier succès",
+  "Sort by": "Trier par",
+  "Recently created": "Création récente",
+  "Direction": "Sens",
+  "Ascending": "Croissant",
+  "Descending": "Décroissant"
 }

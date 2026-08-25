@@ -788,5 +788,10 @@
   "Group info": "Csoport információ",
   "Failure policy": "Hibakezelési szabály",
   "Members": "Tagok",
-  "Last success": "Utolsó siker"
+  "Last success": "Utolsó siker",
+  "Sort by": "Rendezés",
+  "Recently created": "Legutóbb létrehozott",
+  "Direction": "Irány",
+  "Ascending": "Növekvő",
+  "Descending": "Csökkenő"
 }
