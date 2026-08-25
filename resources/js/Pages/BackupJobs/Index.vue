@@ -195,6 +195,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                                     <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('name')">
                                         <span>{{ t('Name') }}</span>
                                         <svg v-if="sort === 'name'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
+                                        <svg v-else class="h-3 w-3 opacity-60" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4 3-3 3 3M6 1v10m-3-3 3 3 3-3" /></svg>
                                     </button>
                                 </th>
                                 <th class="px-4 py-3">{{ t('Source') }}</th>
@@ -205,12 +206,14 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                                     <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('last_run_at')">
                                         <span>{{ t('Last run') }}</span>
                                         <svg v-if="sort === 'last_run_at'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
+                                        <svg v-else class="h-3 w-3 opacity-60" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4 3-3 3 3M6 1v10m-3-3 3 3 3-3" /></svg>
                                     </button>
                                 </th>
                                 <th class="px-4 py-3" :aria-sort="ariaSort('next_run_at')">
                                     <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('next_run_at')">
                                         <span>{{ t('Next run') }}</span>
                                         <svg v-if="sort === 'next_run_at'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
+                                        <svg v-else class="h-3 w-3 opacity-60" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4 3-3 3 3M6 1v10m-3-3 3 3 3-3" /></svg>
                                     </button>
                                 </th>
                                 <th class="px-4 py-3">{{ t('Actions') }}</th>
