@@ -44,10 +44,10 @@ class NormalizeDestinationData
             'region' => $legacy['region'],
             'bucket' => $this->limitLegacyString($legacy['bucket'] ?: $data['name']),
             'path_prefix' => $legacy['path_prefix'],
-            'use_path_style_endpoint' => (bool) ($settings['use_path_style_endpoint'] ?? $data['use_path_style_endpoint'] ?? false),
+            'use_path_style_endpoint' => (bool) ($settings['use_path_style_endpoint'] ?? $data['use_path_style_endpoint'] ?? $destination?->use_path_style_endpoint ?? false),
             'settings' => $settings ?: null,
             'secrets' => $secrets ?: null,
-            'is_active' => (bool) ($data['is_active'] ?? true),
+            'is_active' => (bool) ($data['is_active'] ?? $destination?->is_active ?? true),
         ];
 
         if (in_array($provider, BackupDestination::S3_PROVIDERS, true)) {

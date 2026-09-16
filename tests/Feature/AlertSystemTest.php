@@ -14,6 +14,7 @@ use App\Models\AlertRule;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerVolume;
 use App\Models\JobAlertConfig;
 use App\Models\NotificationChannel;
 use App\Models\User;
@@ -29,6 +30,13 @@ use Tests\TestCase;
 class AlertSystemTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['volumevault.host_path_allowlist' => [sys_get_temp_dir()]]);
+    }
 
     public function test_alert_rules_are_initialized_disabled_by_default(): void
     {
@@ -776,6 +784,85 @@ class AlertSystemTest extends TestCase
         $this->assertSame(14, JobAlertConfig::where('backup_job_id', $job->id)->where('alert_rule_id', $rule->id)->firstOrFail()->config['backup_too_old_days']);
     }
 
+    public function test_job_update_with_empty_alert_configs_deletes_all_overrides(): void
+    {
+        app(EnsureAlertRules::class)->handle();
+        $job = $this->backupJob(['use_custom_alert_settings' => true]);
+        $rule = AlertRule::where('type', AlertType::BackupTooOld->value)->firstOrFail();
+        JobAlertConfig::create([
+            'backup_job_id' => $job->id,
+            'alert_rule_id' => $rule->id,
+            'enabled' => true,
+            'config' => ['backup_too_old_days' => 14],
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->put('/backup-jobs/'.$job->id, [
+                'name' => $job->name,
+                'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                'volume_name' => $job->volume_name,
+                'backup_destination_id' => $job->backup_destination_id,
+                'schedule_type' => $job->schedule_type,
+                'schedule_config' => $job->schedule_config,
+                'notifications_enabled' => true,
+                'notification_channel_ids' => [],
+                'alert_notifications_enabled' => true,
+                'alert_configs' => [],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('backup-jobs.index'));
+
+        $this->assertTrue($job->fresh()->use_custom_alert_settings);
+        $this->assertSame(0, JobAlertConfig::where('backup_job_id', $job->id)->count());
+    }
+
+    public function test_job_update_with_reduced_alert_configs_replaces_existing_overrides(): void
+    {
+        app(EnsureAlertRules::class)->handle();
+        $job = $this->backupJob(['use_custom_alert_settings' => true]);
+        $keptRule = AlertRule::where('type', AlertType::BackupTooOld->value)->firstOrFail();
+        $omittedRule = AlertRule::where('type', AlertType::JobInErrorTooLong->value)->firstOrFail();
+        JobAlertConfig::create([
+            'backup_job_id' => $job->id,
+            'alert_rule_id' => $keptRule->id,
+            'enabled' => true,
+            'config' => ['backup_too_old_days' => 14],
+        ]);
+        JobAlertConfig::create([
+            'backup_job_id' => $job->id,
+            'alert_rule_id' => $omittedRule->id,
+            'enabled' => true,
+            'config' => ['job_in_error_days' => 3],
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->put('/backup-jobs/'.$job->id, [
+                'name' => $job->name,
+                'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                'volume_name' => $job->volume_name,
+                'backup_destination_id' => $job->backup_destination_id,
+                'schedule_type' => $job->schedule_type,
+                'schedule_config' => $job->schedule_config,
+                'notifications_enabled' => true,
+                'notification_channel_ids' => [],
+                'alert_notifications_enabled' => true,
+                'alert_configs' => [[
+                    'alert_rule_id' => $keptRule->id,
+                    'enabled' => false,
+                    'config' => ['backup_too_old_days' => 30],
+                ]],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('backup-jobs.index'));
+
+        $configs = JobAlertConfig::where('backup_job_id', $job->id)->get();
+
+        $this->assertCount(1, $configs);
+        $this->assertSame($keptRule->id, $configs->first()->alert_rule_id);
+        $this->assertFalse($configs->first()->enabled);
+        $this->assertSame(30, $configs->first()->config['backup_too_old_days']);
+    }
+
     public function test_disabled_custom_alert_settings_ignore_invalid_alert_configs(): void
     {
         app(EnsureAlertRules::class)->handle();
@@ -867,6 +954,10 @@ class AlertSystemTest extends TestCase
 
     private function backupJob(array $attributes = []): BackupJob
     {
+        DockerVolume::firstOrCreate([
+            'name' => $attributes['volume_name'] ?? 'app_data',
+        ], ['exists' => true]);
+
         return BackupJob::create([
             'name' => $attributes['name'] ?? 'Nightly',
             'volume_name' => $attributes['volume_name'] ?? 'app_data',

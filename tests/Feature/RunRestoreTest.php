@@ -2,17 +2,24 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\ApplyPendingDockerLabelReconciliation;
 use App\Actions\Restore\RunRestore;
+use App\Actions\Runs\ProcessRunFinalization;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
+use App\Models\BackupJob as ManagedBackupJob;
+use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Services\Notifications\SendShoutrrrNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Mockery;
+use RuntimeException;
 use Tests\TestCase;
 
 class RunRestoreTest extends TestCase
@@ -54,6 +61,60 @@ class RunRestoreTest extends TestCase
 
         $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
         $this->assertStringContainsString('Target Docker volume already exists', $run->error_message);
+    }
+
+    public function test_restore_without_stopped_containers_applies_pending_label_state(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->docker(volumeExists: false));
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+        $run = $this->restoreRun();
+        $job = $run->job;
+        $job->update([
+            'configuration_source' => ManagedBackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'restore-pending'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
+
+        app(RunRestore::class)->handle($run);
+
+        $this->assertSame(ManagedBackupJob::STATUS_ERROR, $job->refresh()->status);
+        $this->assertNull($job->pending_label_reconciliation);
+        $this->assertSame('Definition removed.', $job->label_reconciliation_error);
+    }
+
+    public function test_reconciliation_exception_records_an_error_for_the_same_pending_revision(): void
+    {
+        $run = $this->terminalManagedRestoreRun();
+        $reconciliation = Mockery::mock(ApplyPendingDockerLabelReconciliation::class);
+        $reconciliation->shouldReceive('handle')->once()->andThrow(new RuntimeException('reconciliation failed'));
+        $this->app->instance(ApplyPendingDockerLabelReconciliation::class, $reconciliation);
+
+        $this->assertFalse(app(RunRestore::class)->applyPendingLabelReconciliationIfReady($run));
+
+        $job = $run->job()->firstOrFail();
+        $this->assertSame('Definition removed.', $job->pending_label_reconciliation['message']);
+        $this->assertSame('reconciliation failed', $job->label_reconciliation_error);
+    }
+
+    public function test_reconciliation_exception_does_not_annotate_a_newer_pending_revision(): void
+    {
+        $run = $this->terminalManagedRestoreRun();
+        $reconciliation = Mockery::mock(ApplyPendingDockerLabelReconciliation::class);
+        $reconciliation->shouldReceive('handle')->once()->andReturnUsing(function (BackupJob $job): never {
+            $job->update([
+                'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Newer definition removed.'],
+                'label_reconciliation_error' => null,
+            ]);
+
+            throw new RuntimeException('stale reconciliation failure');
+        });
+        $this->app->instance(ApplyPendingDockerLabelReconciliation::class, $reconciliation);
+
+        $this->assertFalse(app(RunRestore::class)->applyPendingLabelReconciliationIfReady($run));
+
+        $job = $run->job()->firstOrFail();
+        $this->assertSame('Newer definition removed.', $job->pending_label_reconciliation['message']);
+        $this->assertNull($job->label_reconciliation_error);
     }
 
     public function test_in_place_restore_clears_then_extracts_into_the_source_volume(): void
@@ -206,7 +267,7 @@ class RunRestoreTest extends TestCase
         $this->app->instance(DockerProcess::class, $docker);
 
         $storage = Mockery::mock(DestinationStorage::class);
-        $storage->shouldReceive('download')->andThrow(new \RuntimeException('network down'));
+        $storage->shouldReceive('download')->andThrow(new RuntimeException('network down'));
         $this->app->instance(DestinationStorage::class, $storage);
 
         $run = $this->restoreRun([
@@ -404,7 +465,7 @@ class RunRestoreTest extends TestCase
     {
         $run = $this->restoreRun(['status' => RestoreRun::STATUS_SUCCESS, 'finished_at' => now()->subHour()]);
 
-        app(RunRestore::class)->markFailed($run, new \RuntimeException('late failure'));
+        app(RunRestore::class)->markFailed($run, new RuntimeException('late failure'));
         $run->refresh();
 
         // A run that already succeeded must not be flipped to FAILED by a late failed() hook.
@@ -484,10 +545,37 @@ class RunRestoreTest extends TestCase
         // already finished. The conditional transition must lose this race.
         $run->forceFill(['status' => RestoreRun::STATUS_RUNNING]); // in-memory only, not saved
 
-        $failed = app(RunRestore::class)->markFailed($run, new \RuntimeException('stale sweep'));
+        $failed = app(RunRestore::class)->markFailed($run, new RuntimeException('stale sweep'));
 
         $this->assertFalse($failed, 'markFailed must report no transition for an already-terminal run.');
         $this->assertSame(RestoreRun::STATUS_SUCCESS, RestoreRun::findOrFail($run->id)->status);
+    }
+
+    public function test_stale_failure_wins_before_worker_success_without_success_notification(): void
+    {
+        $this->app->instance(DockerProcess::class, $this->docker(volumeExists: false));
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+        $run = $this->restoreRun();
+        $notifiedStatuses = [];
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldReceive('sendRestoreRun')->once()->andReturnUsing(function (RestoreRun $notifiedRun) use (&$notifiedStatuses): void {
+            $notifiedStatuses[] = $notifiedRun->status;
+        });
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+        $finalization = Mockery::mock(ProcessRunFinalization::class);
+        $finalization->shouldReceive('dispatch')->once();
+        $this->app->instance(ProcessRunFinalization::class, $finalization);
+
+        Event::listen('eloquent.saved: '.DockerVolume::class, function () use ($run): void {
+            app(RunRestore::class)->markFailed($run->fresh(), new RuntimeException('stale reconciliation won'));
+        });
+
+        app(RunRestore::class)->handle($run);
+
+        $run->refresh();
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertSame('stale reconciliation won', $run->error_message);
+        $this->assertSame([RestoreRun::STATUS_RUNNING], $notifiedStatuses);
     }
 
     private function restoreRun(array $overrides = []): RestoreRun
@@ -520,6 +608,21 @@ class RunRestoreTest extends TestCase
             'mode' => RestoreRun::MODE_NEW_VOLUME,
             'status' => RestoreRun::STATUS_QUEUED,
         ], $overrides));
+    }
+
+    private function terminalManagedRestoreRun(): RestoreRun
+    {
+        $run = $this->restoreRun([
+            'status' => RestoreRun::STATUS_SUCCESS,
+            'finished_at' => now(),
+        ]);
+        $run->job()->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'restore-pending-revision'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
+
+        return $run->fresh('job');
     }
 
     private function storageThatDownloads(): DestinationStorage

@@ -7,9 +7,6 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJobGroup;
 use App\Models\User;
 use App\Services\Scheduling\BackupScheduleCalculator;
-use Illuminate\Contracts\Cache\LockTimeoutException;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -21,80 +18,99 @@ use Illuminate\Validation\ValidationException;
  */
 class CreateBackupGroupRun
 {
-    public function __construct(private readonly BackupScheduleCalculator $scheduleCalculator) {}
+    public function __construct(
+        private readonly BackupScheduleCalculator $scheduleCalculator,
+        private readonly WithBackupGroupMutationLocks $withGroupLocks,
+    ) {}
 
-    public function handle(BackupJobGroup $group, string $trigger, ?User $initiatedBy = null): BackupGroupRun
+    public function handle(BackupJobGroup $group, string $trigger, ?User $initiatedBy = null): ?BackupGroupRun
     {
-        if ($group->status !== BackupJobGroup::STATUS_ACTIVE) {
-            throw ValidationException::withMessages([
-                'group' => 'Only active backup groups can run.',
-            ]);
-        }
+        return $this->withGroupLocks->handle([$group->id], function ($groups) use ($group, $trigger, $initiatedBy): ?BackupGroupRun {
+            $lockedGroup = $groups->get($group->id);
 
-        if ($group->runnableMembers()->count() === 0) {
-            throw ValidationException::withMessages([
-                'group' => 'This backup group has no runnable member jobs (all are paused or it has none).',
-            ]);
-        }
+            if ($lockedGroup === null || $lockedGroup->status !== BackupJobGroup::STATUS_ACTIVE) {
+                throw ValidationException::withMessages([
+                    'group' => 'Only active backup groups can run.',
+                ]);
+            }
 
-        // Serialize creation per group so two concurrent requests (e.g. the
-        // scheduler racing a manual "run now") cannot both pass the
-        // already-running check and create duplicate group runs that would then
-        // run one after the other with doubled backups and notifications.
-        try {
-            return Cache::lock('backup-group-create-'.$group->id, 10)->block(5, function () use ($group, $trigger, $initiatedBy): BackupGroupRun {
-                $alreadyRunning = BackupGroupRun::query()
-                    ->where('backup_job_group_id', $group->id)
-                    ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
-                    ->exists();
+            $alreadyRunning = BackupGroupRun::query()
+                ->where('backup_job_group_id', $lockedGroup->id)
+                ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
+                ->exists();
 
-                if ($alreadyRunning) {
-                    throw ValidationException::withMessages([
-                        'group' => 'A run is already queued or running for this backup group.',
-                    ]);
+            if ($alreadyRunning) {
+                if ($trigger === BackupGroupRun::TRIGGER_SCHEDULED) {
+                    return null;
                 }
 
-                return $this->createRun($group, $trigger, $initiatedBy);
-            });
-        } catch (LockTimeoutException) {
-            throw ValidationException::withMessages([
-                'group' => 'A run is already queued or running for this backup group.',
-            ]);
-        }
+                throw ValidationException::withMessages([
+                    'group' => 'A run is already queued or running for this backup group.',
+                ]);
+            }
+
+            if ($lockedGroup->runnableMembers()->doesntExist()) {
+                if ($trigger === BackupGroupRun::TRIGGER_SCHEDULED) {
+                    $this->advanceSkippedSchedule($lockedGroup);
+
+                    return null;
+                }
+
+                throw ValidationException::withMessages([
+                    'group' => 'This backup group has no runnable member jobs (all are paused or it has none).',
+                ]);
+            }
+
+            return $this->createRun($lockedGroup, $trigger, $initiatedBy);
+        });
     }
 
     private function createRun(BackupJobGroup $group, string $trigger, ?User $initiatedBy): BackupGroupRun
     {
-        return DB::transaction(function () use ($group, $trigger, $initiatedBy): BackupGroupRun {
-            $run = BackupGroupRun::create([
-                'backup_job_group_id' => $group->id,
-                'initiated_by_user_id' => $initiatedBy?->getKey(),
-                'status' => BackupGroupRun::STATUS_QUEUED,
-                'trigger' => $trigger,
-            ]);
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'initiated_by_user_id' => $initiatedBy?->getKey(),
+            'status' => BackupGroupRun::STATUS_QUEUED,
+            'trigger' => $trigger,
+            'scheduled_for' => $trigger === BackupGroupRun::TRIGGER_SCHEDULED ? $group->next_run_at : null,
+        ]);
 
-            // Anchor the next slot on the theoretical occurrence we are about to
-            // service (see CreateBackupRun): keeps the schedule on its grid and
-            // prevents drift when the worker dispatches late.
-            $anchor = $group->next_run_at;
+        $anchor = $group->next_run_at;
 
-            $group->forceFill([
-                'next_run_at' => $this->scheduleCalculator->nextRunAt(
-                    $group->schedule_type,
-                    $group->schedule_config ?? [],
-                    $anchor && $anchor->isPast() ? $anchor : null,
-                    $group->timezone,
-                ),
-                'last_error' => null,
-                'last_error_at' => null,
-            ])->save();
+        $group->forceFill([
+            'next_run_at' => $this->scheduleCalculator->nextRunAt(
+                $group->schedule_type,
+                $group->schedule_config ?? [],
+                $anchor && $anchor->isPast() ? $anchor : null,
+                $group->timezone,
+            ),
+            'last_error' => null,
+            'last_error_at' => null,
+        ])->save();
 
-            ActivityLog::record('backup_group_run_queued', 'Backup group run queued.', $run, [
-                'backup_job_group_id' => $group->id,
-                'trigger' => $trigger,
-            ]);
+        ActivityLog::record('backup_group_run_queued', 'Backup group run queued.', $run, [
+            'backup_job_group_id' => $group->id,
+            'trigger' => $trigger,
+        ]);
 
-            return $run;
-        });
+        return $run;
+    }
+
+    private function advanceSkippedSchedule(BackupJobGroup $group): void
+    {
+        $anchor = $group->next_run_at;
+
+        $group->forceFill([
+            'next_run_at' => $this->scheduleCalculator->nextRunAt(
+                $group->schedule_type,
+                $group->schedule_config ?? [],
+                $anchor && $anchor->isPast() ? $anchor : null,
+                $group->timezone,
+            ),
+            'last_error' => 'Skipped: the group has no runnable member jobs.',
+            'last_error_at' => now(),
+        ])->save();
+
+        ActivityLog::record('backup_group_run_skipped', 'Backup group run skipped: no runnable member jobs.', $group);
     }
 }

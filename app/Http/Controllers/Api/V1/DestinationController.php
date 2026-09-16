@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Actions\Destinations\NormalizeDestinationData;
+use App\Actions\Destinations\DestinationMutationBlocked;
+use App\Actions\Destinations\MutateDestination;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDestinationRequest;
 use App\Http\Requests\UpdateDestinationRequest;
@@ -23,15 +24,13 @@ class DestinationController extends Controller
         ]);
     }
 
-    public function store(StoreDestinationRequest $request, NormalizeDestinationData $normalizeDestinationData): JsonResponse
+    public function store(StoreDestinationRequest $request, MutateDestination $mutateDestination): JsonResponse
     {
-        $data = $normalizeDestinationData->handle([
+        $destination = $mutateDestination->create([
             ...$request->validated(),
             'use_path_style_endpoint' => $request->boolean('use_path_style_endpoint'),
             'is_active' => $request->boolean('is_active', true),
         ]);
-
-        $destination = BackupDestination::create($data);
 
         ActivityLog::record('backup_destination_created', 'Backup destination created via API.', $destination, [
             'created_by' => $request->user()->id,
@@ -45,31 +44,32 @@ class DestinationController extends Controller
         return response()->json(['data' => $destination->safeForFrontend()]);
     }
 
-    public function update(UpdateDestinationRequest $request, BackupDestination $destination, NormalizeDestinationData $normalizeDestinationData): JsonResponse
+    public function update(UpdateDestinationRequest $request, BackupDestination $destination, MutateDestination $mutateDestination): JsonResponse
     {
-        $data = $normalizeDestinationData->handle([
-            ...$request->validated(),
-            'use_path_style_endpoint' => $request->boolean('use_path_style_endpoint'),
-            'is_active' => $request->boolean('is_active'),
-        ], $destination);
+        $data = $request->validated();
 
-        $destination->update($data);
+        foreach (['use_path_style_endpoint', 'is_active'] as $field) {
+            if ($request->has($field)) {
+                $data[$field] = $request->boolean($field);
+            }
+        }
+
+        try {
+            $mutateDestination->update($destination, $data);
+        } catch (DestinationMutationBlocked $exception) {
+            throw ValidationException::withMessages(['is_active' => $exception->getMessage()]);
+        }
 
         return response()->json(['data' => $destination->fresh()->safeForFrontend()]);
     }
 
-    public function destroy(BackupDestination $destination): JsonResponse
+    public function destroy(BackupDestination $destination, MutateDestination $mutateDestination): JsonResponse
     {
-        // Deleting a destination cascades its jobs and their runs, bypassing the
-        // per-job delete guard — refuse while any is in flight or holds stopped
-        // containers so reconciliation keeps the row it needs.
-        if ($destination->hasRunInProgress()) {
-            throw ValidationException::withMessages([
-                'destination' => 'A backup or restore using this destination is in progress. Wait for it to finish before deleting it.',
-            ]);
+        try {
+            $mutateDestination->delete($destination);
+        } catch (DestinationMutationBlocked $exception) {
+            throw ValidationException::withMessages(['destination' => $exception->getMessage()]);
         }
-
-        $destination->delete();
 
         return response()->json(status: 204);
     }

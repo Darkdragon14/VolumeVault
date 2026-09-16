@@ -2,32 +2,46 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Alerts\SyncBackupJobAlertSettings;
 use App\Actions\Backup\ApplyBackupJobSort;
+use App\Actions\Backup\BackupJobDeletionRejected;
 use App\Actions\Backup\CreateBackupRun;
+use App\Actions\Backup\CreateInlineBackupGroup;
+use App\Actions\Backup\DeleteBackupJob;
+use App\Actions\Backup\GuardManualBackupJobMutation;
+use App\Actions\Backup\ResumeBackupJob;
+use App\Actions\Backup\RetryDockerLabelMutation;
+use App\Actions\Restore\ResolveRestoreDestination;
+use App\Actions\Runs\DispatchQueuedRun;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\BackupJobRequest;
-use App\Jobs\RunBackupJob;
 use App\Models\ActivityLog;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\JobAlertConfig;
 use App\Models\NotificationChannel;
 use App\Services\BackupDestinations\ListBackupObjects;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class BackupJobController extends Controller
 {
     public function __construct(
         private readonly BackupScheduleCalculator $scheduleCalculator,
         private readonly ApplyBackupJobSort $applyBackupJobSort,
+        private readonly GuardManualBackupJobMutation $guardManualMutation,
+        private readonly SyncBackupJobAlertSettings $syncAlertSettings,
+        private readonly CreateInlineBackupGroup $createInlineBackupGroup,
+        private readonly DeleteBackupJob $deleteBackupJob,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
-        $query = BackupJob::with(['destination', 'notificationChannels']);
+        $query = BackupJob::with(['destination', 'notificationChannels', 'alertConfigs']);
         ($this->applyBackupJobSort)($query, $request->query('sort'), $request->query('direction'));
 
         return response()->json([
@@ -39,23 +53,52 @@ class BackupJobController extends Controller
 
     public function store(BackupJobRequest $request): JsonResponse
     {
-        $group = $this->resolveGroup($request);
-        $job = BackupJob::create($this->payload($request, BackupJob::STATUS_ACTIVE, null, $group));
+        $group = $this->resolveExistingGroup($request);
+        $newGroup = $request->isNewGroupMode() ? (array) $request->input('new_group', []) : null;
+        $volumeNames = $request->input('source_type') === BackupJob::SOURCE_TYPE_DOCKER_VOLUME ? [$request->input('volume_name')] : [];
+        $channelIds = ($group || $newGroup) ? [] : ($request->has('notification_channel_ids')
+            ? $this->notificationChannelIds($request)
+            : $this->defaultNotificationChannelIds());
+        $inlineGroupChannelIds = $newGroup ? $this->createInlineBackupGroup->notificationChannelIds($newGroup) : [];
+        $job = $this->guardManualMutation->handle(
+            [$request->integer('backup_destination_id')],
+            $volumeNames,
+            $request->integer('backup_destination_id'),
+            $volumeNames[0] ?? null,
+            [...$channelIds, ...$inlineGroupChannelIds],
+            function ($destinations, $settings, $managedJobs, $volumes, $channels, $groups) use ($group, $newGroup, $channelIds, $request): BackupJob {
+                if ($group !== null) {
+                    $group = $groups->get($group->id);
 
-        if (! $group) {
-            $this->syncNotificationChannels($job, $request, true);
-        }
+                    if ($group === null) {
+                        throw ValidationException::withMessages(['backup_job_group_id' => 'The selected backup group no longer exists.']);
+                    }
+                }
 
-        ActivityLog::record('backup_job_created', 'Backup job created via API.', $job, [
-            'created_by' => $request->user()->id,
-        ]);
+                $this->guardManualMutation->guardGroupMembershipChange(null, $group?->id, $newGroup !== null, $groups);
 
-        return response()->json(['data' => $this->serializeJob($job->load(['destination', 'notificationChannels']))], 201);
+                $group = $newGroup
+                    ? $this->createInlineBackupGroup->handle($newGroup, 'Backup group created via API.')
+                    : $group;
+                $payload = $this->payload($request, BackupJob::STATUS_ACTIVE, null, $group);
+                $job = BackupJob::create($payload);
+                $job->notificationChannels()->sync($channelIds);
+                $this->syncAlertSettings->handle($job, $request);
+                ActivityLog::record('backup_job_created', 'Backup job created via API.', $job, [
+                    'created_by' => $request->user()->id,
+                ]);
+
+                return $job;
+            },
+            $group !== null ? [$group->id] : [],
+        );
+
+        return response()->json(['data' => $this->serializeJob($job->load(['destination', 'notificationChannels', 'alertConfigs']))], 201);
     }
 
     public function show(BackupJob $backupJob): JsonResponse
     {
-        $backupJob->load(['destination', 'notificationChannels']);
+        $backupJob->load(['destination', 'notificationChannels', 'alertConfigs']);
 
         return response()->json([
             'data' => [
@@ -67,39 +110,125 @@ class BackupJobController extends Controller
 
     public function update(BackupJobRequest $request, BackupJob $backupJob): JsonResponse
     {
-        if ($this->changesSource($request, $backupJob) && $backupJob->hasRunInProgress()) {
-            throw ValidationException::withMessages([
-                'source_type' => 'This job has a backup run in progress; wait for it to finish before changing its source.',
-            ]);
+        if ($this->guardManualMutation->isReadOnly($backupJob)) {
+            throw ValidationException::withMessages(['job' => 'Docker label managed jobs are read-only.']);
         }
 
-        $group = $this->resolveGroup($request);
-        $backupJob->update($this->payload($request, $backupJob->status, $backupJob, $group));
+        $group = $this->resolveExistingGroup($request);
+        $newGroup = $request->isNewGroupMode() ? (array) $request->input('new_group', []) : null;
+        $channelIds = ! $group && ! $newGroup && $request->has('notification_channel_ids') ? $this->notificationChannelIds($request) : [];
+        $inlineGroupChannelIds = $newGroup ? $this->createInlineBackupGroup->notificationChannelIds($newGroup) : [];
 
-        if (! $group) {
-            $this->syncNotificationChannels($backupJob, $request, false);
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $current = BackupJob::query()->findOrFail($backupJob->id);
+
+            if ($this->guardManualMutation->isReadOnly($current)) {
+                throw ValidationException::withMessages(['job' => 'Docker label managed jobs are read-only.']);
+            }
+
+            $destinationIds = [$current->backup_destination_id, $request->integer('backup_destination_id')];
+            $newVolumeName = $request->input('source_type') === BackupJob::SOURCE_TYPE_DOCKER_VOLUME ? $request->input('volume_name') : null;
+            $volumeNames = collect([$current->volume_name, $newVolumeName])->filter()->all();
+            $references = [
+                'destination_id' => (int) $current->backup_destination_id,
+                'backup_job_group_id' => $current->backup_job_group_id !== null ? (int) $current->backup_job_group_id : null,
+                'source_type' => $current->sourceType(),
+                'volume_name' => $current->volume_name,
+                'host_path' => $current->host_path,
+            ];
+
+            try {
+                $backupJob = $this->guardManualMutation->handle(
+                    $destinationIds,
+                    $volumeNames,
+                    $request->integer('backup_destination_id'),
+                    $newVolumeName,
+                    [...$channelIds, ...$inlineGroupChannelIds],
+                    function ($destinations, $settings, $managedJobs, $volumes, $channels, $groups, $explicitJobs) use ($backupJob, $request, $group, $newGroup, $channelIds, $references): BackupJob {
+                        $lockedJob = $explicitJobs->get($backupJob->id);
+
+                        if ($lockedJob === null) {
+                            abort(404);
+                        }
+                        $lockedReferences = [
+                            'destination_id' => (int) $lockedJob->backup_destination_id,
+                            'backup_job_group_id' => $lockedJob->backup_job_group_id !== null ? (int) $lockedJob->backup_job_group_id : null,
+                            'source_type' => $lockedJob->sourceType(),
+                            'volume_name' => $lockedJob->volume_name,
+                            'host_path' => $lockedJob->host_path,
+                        ];
+
+                        if ($this->guardManualMutation->isReadOnly($lockedJob)) {
+                            throw ValidationException::withMessages(['job' => 'Docker label managed jobs are read-only.']);
+                        }
+
+                        if ($lockedReferences !== $references) {
+                            throw new RetryDockerLabelMutation('Backup job references changed before they were locked.');
+                        }
+
+                        if ($this->changesSource($request, $lockedJob) && ($lockedJob->hasRunInProgress() || $lockedJob->hasOutstandingFinalizations())) {
+                            throw ValidationException::withMessages([
+                                'source_type' => 'This job has a backup run in progress; wait for it to finish before changing its source.',
+                            ]);
+                        }
+
+                        if ($group !== null) {
+                            $group = $groups->get($group->id);
+
+                            if ($group === null) {
+                                throw ValidationException::withMessages(['backup_job_group_id' => 'The selected backup group no longer exists.']);
+                            }
+                        }
+
+                        $this->guardManualMutation->guardGroupMembershipChange(
+                            $lockedJob,
+                            $group?->id,
+                            $newGroup !== null,
+                            $groups,
+                        );
+
+                        $group = $newGroup
+                            ? $this->createInlineBackupGroup->handle($newGroup, 'Backup group created via API.')
+                            : $group;
+                        $lockedJob->update($this->payload($request, $lockedJob->status, $lockedJob, $group));
+
+                        if (! $group && $request->has('notification_channel_ids')) {
+                            $lockedJob->notificationChannels()->sync($channelIds);
+                        }
+
+                        $this->syncAlertSettings->handle($lockedJob, $request);
+
+                        return $lockedJob;
+                    },
+                    [$references['backup_job_group_id'], $group?->id],
+                    [$backupJob->id],
+                );
+                break;
+            } catch (RetryDockerLabelMutation) {
+                if ($attempt === 2) {
+                    throw new RetryDockerLabelMutation('Backup job references kept changing concurrently.');
+                }
+            }
         }
 
-        return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
+        return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels', 'alertConfigs']))]);
     }
 
     public function destroy(BackupJob $backupJob): JsonResponse
     {
-        if ($backupJob->hasRunInProgress()) {
-            throw ValidationException::withMessages([
-                'job' => 'This job has a backup run in progress. Wait for it to finish before deleting it.',
-            ]);
+        try {
+            $this->deleteBackupJob->handle($backupJob);
+        } catch (BackupJobDeletionRejected $exception) {
+            throw ValidationException::withMessages(['job' => $exception->getMessage()]);
         }
-
-        $backupJob->delete();
 
         return response()->json(status: 204);
     }
 
-    public function runNow(Request $request, BackupJob $backupJob, CreateBackupRun $createBackupRun): JsonResponse
+    public function runNow(Request $request, BackupJob $backupJob, CreateBackupRun $createBackupRun, DispatchQueuedRun $dispatchQueuedRun): JsonResponse
     {
         $run = $createBackupRun->handle($backupJob, BackupRun::TRIGGER_MANUAL, $request->user());
-        RunBackupJob::dispatch($run->id);
+        $dispatchQueuedRun->handle($run);
 
         return response()->json(['data' => $run], 202);
     }
@@ -124,61 +253,36 @@ class BackupJobController extends Controller
         return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
     }
 
-    public function resume(BackupJob $backupJob): JsonResponse
+    public function resume(BackupJob $backupJob, ResumeBackupJob $resumeBackupJob): JsonResponse
     {
-        // Atomic conditional update so a worker flipping the job to running between
-        // a stale read and the save cannot be overwritten with active (which would
-        // then let a pause slip in mid-run). A group member keeps next_run_at null.
-        $resumed = BackupJob::query()
-            ->whereKey($backupJob->id)
-            ->where('status', '!=', BackupJob::STATUS_RUNNING)
-            ->update([
-                'status' => BackupJob::STATUS_ACTIVE,
-                'pause_reason' => null,
-                'last_error' => null,
-                'last_error_at' => null,
-                'next_run_at' => $backupJob->isGroupMember()
-                    ? null
-                    : $this->scheduleCalculator->nextRunAt($backupJob->schedule_type, $backupJob->schedule_config ?? [], null, $backupJob->timezone),
-            ]);
-
-        if ($resumed === 0) {
-            throw ValidationException::withMessages([
-                'job' => 'This job is currently running. Wait for the run to finish before resuming it.',
-            ]);
-        }
-
-        // A group member is only dispatched while its group is active. If a member
-        // failed and left the group in error, resuming the member alone would leave
-        // the group unscheduled — bring the group back to active too, recomputing
-        // next_run_at (like a direct group resume) so an overdue slot does not fire
-        // immediately. A paused group is left untouched.
-        $group = $backupJob->isGroupMember() ? $backupJob->group : null;
-
-        if ($group) {
-            // Atomic: only flip from error so a pause landing between the read and
-            // the save is not overwritten. Recompute next_run_at like a direct resume.
-            BackupJobGroup::query()
-                ->whereKey($group->id)
-                ->where('status', BackupJobGroup::STATUS_ERROR)
-                ->update([
-                    'status' => BackupJobGroup::STATUS_ACTIVE,
-                    'last_error' => null,
-                    'last_error_at' => null,
-                    'next_run_at' => $this->scheduleCalculator->nextRunAt($group->schedule_type, $group->schedule_config ?? [], null, $group->timezone),
-                ]);
-        }
+        $resumeBackupJob->handle($backupJob);
 
         return response()->json(['data' => $this->serializeJob($backupJob->fresh(['destination', 'notificationChannels']))]);
     }
 
-    public function backups(BackupJob $backupJob, ListBackupObjects $listBackupObjects): JsonResponse
+    public function backups(Request $request, BackupJob $backupJob, ListBackupObjects $listBackupObjects, ResolveRestoreDestination $resolveRestoreDestination): JsonResponse
     {
-        $backupJob->load('destination');
+        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer']]);
+        $destination = $resolveRestoreDestination->handle(
+            $backupJob,
+            isset($validated['backup_run_id']) ? (int) $validated['backup_run_id'] : null,
+        );
+        $run = $resolveRestoreDestination->backupRun(
+            $backupJob,
+            isset($validated['backup_run_id']) ? (int) $validated['backup_run_id'] : null,
+        );
 
-        return response()->json([
-            'data' => $listBackupObjects->handle($backupJob->destination),
-        ]);
+        if (ListBackupObjects::isRunUnverifiable($destination, $run)) {
+            return response()->json(['message' => ListBackupObjects::UNVERIFIABLE_RUN_MESSAGE], 422);
+        }
+
+        try {
+            $backups = $listBackupObjects->handleForRun($destination, $run);
+        } catch (Throwable) {
+            return response()->json(['message' => 'Unable to list backups from this destination.'], 502);
+        }
+
+        return response()->json(['data' => $backups]);
     }
 
     /**
@@ -197,49 +301,13 @@ class BackupJobController extends Controller
             || (string) $request->input('host_path') !== (string) $job->host_path;
     }
 
-    private function resolveGroup(BackupJobRequest $request): ?BackupJobGroup
+    private function resolveExistingGroup(BackupJobRequest $request): ?BackupJobGroup
     {
-        if (! $request->isGroupMode()) {
+        if (! $request->isGroupMode() || $request->isNewGroupMode()) {
             return null;
         }
 
-        if ($request->isNewGroupMode()) {
-            return $this->createGroupFromRequest($request);
-        }
-
         return BackupJobGroup::find($request->integer('backup_job_group_id'));
-    }
-
-    private function createGroupFromRequest(BackupJobRequest $request): BackupJobGroup
-    {
-        $newGroup = (array) $request->input('new_group', []);
-        $scheduleType = $newGroup['schedule_type'] ?? BackupJobGroup::SCHEDULE_DAILY;
-        $scheduleConfig = $this->scheduleCalculator->normalize($scheduleType, (array) ($newGroup['schedule_config'] ?? []));
-        $timezone = ! empty($newGroup['timezone']) ? $newGroup['timezone'] : null;
-
-        $group = BackupJobGroup::create([
-            'name' => $newGroup['name'] ?? 'Backup group',
-            'schedule_type' => $scheduleType,
-            'schedule_config' => $scheduleConfig,
-            'cron_expression' => $this->scheduleCalculator->cronExpression($scheduleType, $scheduleConfig),
-            'timezone' => $timezone,
-            'status' => BackupJobGroup::STATUS_ACTIVE,
-            'failure_policy' => $newGroup['failure_policy'] ?? BackupJobGroup::FAILURE_POLICY_CONTINUE,
-            'notifications_enabled' => array_key_exists('notifications_enabled', $newGroup) ? (bool) $newGroup['notifications_enabled'] : true,
-            'next_run_at' => $this->scheduleCalculator->nextRunAt($scheduleType, $scheduleConfig, null, $timezone),
-        ]);
-
-        $group->notificationChannels()->sync(
-            collect($newGroup['notification_channel_ids'] ?? [])
-                ->map(fn ($id): int => (int) $id)
-                ->unique()
-                ->values()
-                ->all(),
-        );
-
-        ActivityLog::record('backup_group_created', 'Backup group created via API.', $group);
-
-        return $group;
     }
 
     private function payload(BackupJobRequest $request, ?string $status = BackupJob::STATUS_ACTIVE, ?BackupJob $job = null, ?BackupJobGroup $group = null): array
@@ -260,6 +328,7 @@ class BackupJobController extends Controller
             'host_path' => $isHostPath ? $request->input('host_path') : null,
             'backup_destination_id' => $request->integer('backup_destination_id'),
             'status' => $status ?: BackupJob::STATUS_ACTIVE,
+            ...$this->syncAlertSettings->payload($request, $job),
             'retention_days' => $request->input('retention_days'),
             'retention_count' => $request->input('retention_count'),
             'backup_exclude_regexp' => $backupExcludeRegexp !== '' ? $backupExcludeRegexp : null,
@@ -304,12 +373,17 @@ class BackupJobController extends Controller
 
     private function serializeJob(BackupJob $job): array
     {
-        $job->loadMissing('notificationChannels');
+        $job->loadMissing('notificationChannels', 'alertConfigs');
 
         return [
             ...$job->toArray(),
             'destination' => $job->destination?->safeForFrontend(),
             'notification_channel_ids' => $job->notificationChannels->pluck('id')->values()->all(),
+            'alert_configs' => $job->alertConfigs->map(fn (JobAlertConfig $config): array => [
+                'alert_rule_id' => $config->alert_rule_id,
+                'enabled' => $config->enabled,
+                'config' => $config->config ?? [],
+            ])->values()->all(),
             'schedule_summary' => $this->scheduleCalculator->summary($job->schedule_type, $job->schedule_config ?? []),
         ];
     }

@@ -43,10 +43,64 @@ class SftpHostKeyVerificationTest extends TestCase
         $this->assertTrue(DestinationStorage::hostKeyMatches(explode(' ', self::PUBKEY)[1], self::PUBKEY));
     }
 
+    public function test_rsa_sha2_declarations_match_an_ssh_rsa_wire_blob(): void
+    {
+        $blob = base64_encode(pack('N', 7).'ssh-rsa'.pack('N', 3)."\x01\x00\x01".pack('N', 9).'rsa-bytes');
+        $pinned = 'ssh-rsa '.$blob;
+
+        foreach (['rsa-sha2-256', 'rsa-sha2-512'] as $algorithm) {
+            $presented = $algorithm.' '.$blob;
+
+            $this->assertNotSame('', DestinationStorage::hostKeyFingerprint($presented));
+            $this->assertSame(DestinationStorage::hostKeyFingerprint($pinned), DestinationStorage::hostKeyFingerprint($presented));
+            $this->assertTrue(DestinationStorage::hostKeyMatches($pinned, $presented));
+        }
+    }
+
     public function test_matches_rejects_a_different_key(): void
     {
         $this->assertFalse(DestinationStorage::hostKeyMatches(self::PUBKEY, self::OTHER_PUBKEY));
         $this->assertFalse(DestinationStorage::hostKeyMatches(self::FINGERPRINT, self::OTHER_PUBKEY));
+    }
+
+    public function test_malformed_key_line_does_not_use_a_base64_comment_as_the_key(): void
+    {
+        $blob = explode(' ', self::PUBKEY)[1];
+
+        $this->assertSame('', DestinationStorage::hostKeyFingerprint('ssh-ed25519 not-base64 '.$blob));
+        $this->assertSame('', DestinationStorage::hostKeyFingerprint('invalid-key-type '.$blob));
+        $this->assertSame('', DestinationStorage::hostKeyFingerprint('ssh-rsa '.$blob));
+        $this->assertFalse(DestinationStorage::hostKeyMatches('ssh-ed25519 not-base64 '.$blob, self::PUBKEY));
+        $this->assertFalse(DestinationStorage::hostKeyMatches('ssh-rsa '.$blob, self::PUBKEY));
+    }
+
+    public function test_destination_fingerprint_uses_the_canonical_pinned_host_key(): void
+    {
+        $destination = $this->destination(self::PUBKEY.' first-comment');
+        $fingerprint = $destination->locatorFingerprint();
+        $destination->update(['settings' => [
+            ...$destination->settings,
+            'host_key' => self::PUBKEY.' changed-comment',
+        ]]);
+        $this->assertSame($fingerprint, $destination->fresh()->locatorFingerprint());
+
+        $destination->update(['settings' => [
+            ...$destination->settings,
+            'host_key' => self::OTHER_PUBKEY,
+        ]]);
+        $this->assertNotSame($fingerprint, $destination->fresh()->locatorFingerprint());
+    }
+
+    public function test_destination_fingerprint_tracks_a_pinned_fingerprint_value(): void
+    {
+        $destination = $this->destination(self::FINGERPRINT);
+        $fingerprint = $destination->locatorFingerprint();
+        $destination->update(['settings' => [
+            ...$destination->settings,
+            'host_key' => DestinationStorage::hostKeyFingerprint(self::OTHER_PUBKEY),
+        ]]);
+
+        $this->assertNotSame($fingerprint, $destination->fresh()->locatorFingerprint());
     }
 
     public function test_verify_passes_when_server_key_matches_the_pin(): void

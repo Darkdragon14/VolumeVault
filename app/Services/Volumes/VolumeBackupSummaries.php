@@ -33,6 +33,7 @@ class VolumeBackupSummaries
         $jobsByVolume = $volumeNames->isEmpty()
             ? collect()
             : BackupJob::query()
+                ->reservingDockerVolumes()
                 ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
                 ->whereIn('volume_name', $volumeNames->all())
                 ->get(['id', 'name', 'volume_name', 'status'])
@@ -41,10 +42,24 @@ class VolumeBackupSummaries
         $runsByVolume = $volumeNames->isEmpty()
             ? collect()
             : BackupRun::query()
-                ->select('backup_runs.*', 'backup_jobs.volume_name as summary_volume_name')
+                ->select('backup_runs.*')
+                ->selectRaw('COALESCE(backup_runs.source_volume_name, backup_jobs.volume_name) as summary_volume_name')
                 ->join('backup_jobs', 'backup_jobs.id', '=', 'backup_runs.backup_job_id')
-                ->where('backup_jobs.source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
-                ->whereIn('backup_jobs.volume_name', $volumeNames->all())
+                ->where(function ($query) use ($volumeNames): void {
+                    $query->where(function ($query) use ($volumeNames): void {
+                        $query->where('backup_runs.source_type_snapshot', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
+                            ->whereIn('backup_runs.source_volume_name', $volumeNames->all());
+                    })->orWhere(function ($query) use ($volumeNames): void {
+                        $query->whereNull('backup_runs.source_type_snapshot')
+                            ->where('backup_jobs.source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
+                            ->whereIn('backup_jobs.volume_name', $volumeNames->all())
+                            ->where(function ($query): void {
+                                $query->where('backup_jobs.configuration_source', '!=', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)
+                                    ->orWhereNull('backup_jobs.configuration_source')
+                                    ->orWhereNull('backup_jobs.label_reconciliation_error');
+                            });
+                    });
+                })
                 ->where('backup_runs.status', BackupRun::STATUS_SUCCESS)
                 ->orderByDesc('backup_runs.finished_at')
                 ->orderByDesc('backup_runs.created_at')

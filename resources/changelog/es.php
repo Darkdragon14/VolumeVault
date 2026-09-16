@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'Rechazo anticipado de copias de seguridad previas en Dropbox',
+        'description' => 'Las restauraciones en el mismo volumen rechazan la copia de seguridad previa solicitada antes de entrar en cola si el destino actual es Dropbox. El formulario explica la limitación y conserva tu elección hasta que la cambies explícitamente.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Restauraciones de Dropbox más seguras y orden de archivos corregido',
+        'description' => 'Las subidas de Offen no proporcionan a VolumeVault un ID exacto y verificable del archivo de Dropbox. El procesamiento asíncrono de metadatos nunca determina la identidad por el nombre del archivo, ya que este podría haber sido reemplazado. Incluso las nuevas copias de seguridad de Dropbox completadas correctamente sin un ID de archivo demostrado siguen sin poder verificarse para su restauración desde el historial de ejecuciones. Los archivos en destinos de tipo volumen Docker ahora se muestran correctamente del más reciente al más antiguo.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Lectura más segura de archivos locales',
+        'description' => 'Las descargas de archivos locales para restauraciones ahora fijan la raíz del archivo, rechazan el recorrido mediante enlaces simbólicos y publican los archivos completos de forma atómica sin eliminar los destinos existentes si se produce un fallo.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Despacho fiable de ejecuciones en cola',
+        'description' => 'Las copias de seguridad, restauraciones y grupos en cola ahora usan una concesión de despacho persistente y se vuelven a despachar automáticamente si se pierde la entrega inicial, sin duplicar una ejecución ya reclamada por un trabajador. Se requiere una conexión de cola asíncrona; el controlador sync se rechaza porque no puede volver a poner en cola de forma duradera los trabajos que esperan un bloqueo.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Notificaciones de finalizacion duraderas',
+        'description' => 'Las notificaciones finales de copias, restauraciones y grupos ahora se reintentan por canal, evitando perder resultados por fallos temporales.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Historial fiable de ejecuciones de copia',
+        'description' => 'Las ejecuciones conservan ahora su origen, destino y nombre de archivo originales, para que la ejecucion, los metadatos, el historial y las restauraciones desde ejecuciones anteriores sigan siendo correctos tras editar la tarea.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Tareas de copia ordenables',
         'description' => 'Las tareas de copia de seguridad ahora se pueden ordenar en ambos sentidos por nombre, próxima ejecución programada o última ejecución. El orden se aplica a toda la lista paginada, permanece en la URL y también está disponible mediante la API.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Red del proxy Docker TCP para copias de seguridad',
         'description' => 'Las copias de seguridad ahora pueden acceder a un proxy de socket Docker TCP mediante su nombre de servicio en la red Docker. Define VOLUMEVAULT_DOCKER_NETWORK con la red personalizada visible para el motor y VolumeVault conectará a ella los contenedores temporales de Offen.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Docker label managed backups',
+        'description' => 'Running containers can now declare scheduled volume backups through Docker labels. Administrators configure trusted defaults in VolumeVault, while generated jobs stay read-only and are safely disabled when their declaration disappears or conflicts.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Compatibilidad con endpoints Docker TCP',

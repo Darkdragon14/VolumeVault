@@ -1,0 +1,69 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Actions\Runs\DispatchQueuedRun;
+use App\Models\BackupGroupRun;
+use App\Models\BackupRun;
+use App\Models\RestoreRun;
+use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Builder;
+use Throwable;
+
+class DispatchQueuedRuns extends Command
+{
+    protected $signature = 'volumevault:dispatch-queued-runs';
+
+    protected $description = 'Dispatch top-level queued runs whose dispatch lease is missing or stale';
+
+    public function handle(DispatchQueuedRun $dispatchQueuedRun): int
+    {
+        $dispatched = 0;
+
+        $this->eligible(BackupRun::query()
+            ->whereNull('backup_group_run_id')
+            ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE))
+            ->each(fn (BackupRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
+
+        $this->eligible(RestoreRun::query())
+            ->each(fn (RestoreRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
+
+        $this->eligible(BackupGroupRun::query())
+            ->each(fn (BackupGroupRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
+
+        $this->info("Dispatched {$dispatched} queued run(s).");
+
+        return self::SUCCESS;
+    }
+
+    private function eligible(Builder $query): Builder
+    {
+        return $query
+            ->where('status', BackupRun::STATUS_QUEUED)
+            ->where(function (Builder $query): void {
+                $query->where(function (Builder $query): void {
+                    $query->whereNull('dispatch_published_at')
+                        ->where(function (Builder $query): void {
+                            $query->whereNull('dispatch_attempted_at')
+                                ->orWhere('dispatch_attempted_at', '<=', now()->subMinutes(DispatchQueuedRun::LEASE_MINUTES));
+                        });
+                })->orWhere(function (Builder $query): void {
+                    $query->where('dispatch_published_at', '<=', now()->subMinutes(DispatchQueuedRun::LEASE_MINUTES))
+                        ->whereColumn('dispatch_attempted_at', '<=', 'dispatch_published_at');
+                });
+            })
+            ->orderBy('id');
+    }
+
+    private function dispatch(BackupRun|RestoreRun|BackupGroupRun $run, DispatchQueuedRun $dispatchQueuedRun, int &$dispatched): void
+    {
+        try {
+            if ($dispatchQueuedRun->handle($run)) {
+                $dispatched++;
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->warn('Failed to dispatch '.$run::class." {$run->getKey()}: {$exception->getMessage()}");
+        }
+    }
+}

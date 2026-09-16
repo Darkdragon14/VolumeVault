@@ -2,24 +2,26 @@
 
 namespace App\Http\Requests;
 
+use App\Actions\Restore\CreateRestoreRun;
+use App\Models\BackupDestination;
 use App\Models\BackupJob;
+use App\Models\BackupRun;
 use App\Models\RestoreRun;
-use App\Services\BackupDestinations\ListBackupObjects;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
-use Throwable;
 
 class StoreRestoreRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return (bool) $this->user()?->isAdmin();
     }
 
     public function rules(): array
     {
         return [
+            'backup_run_id' => ['nullable', 'integer'],
             'selected_backup_key' => ['required', 'string', 'max:2048'],
             'mode' => ['required', 'string', Rule::in([
                 RestoreRun::MODE_NEW_VOLUME,
@@ -35,10 +37,6 @@ class StoreRestoreRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            if (! $validator->errors()->has('selected_backup_key')) {
-                $this->validateSelectedBackupKey($validator);
-            }
-
             $this->validateInPlaceMode($validator);
         });
     }
@@ -68,61 +66,35 @@ class StoreRestoreRequest extends FormRequest
             return;
         }
 
-        if (! $backupJob->isDockerVolumeSource()) {
+        if ($this->boolean('backup_before_overwrite') && $backupJob->destination?->provider === BackupDestination::PROVIDER_DROPBOX) {
+            $validator->errors()->add('backup_before_overwrite', CreateRestoreRun::DROPBOX_SAFETY_BACKUP_MESSAGE);
+        }
+
+        $backupRun = BackupRun::query()
+            ->whereKey($this->integer('backup_run_id'))
+            ->where('backup_job_id', $backupJob->id)
+            ->where('status', BackupRun::STATUS_SUCCESS)
+            ->whereNotNull('backup_key')
+            ->first();
+        $backupRun?->setRelation('job', $backupJob);
+
+        if ($backupRun !== null && $backupRun->source_type_snapshot === null) {
+            $validator->errors()->add('mode', 'This historical backup does not contain a source snapshot and cannot be restored in place.');
+
+            return;
+        }
+
+        $sourceType = $backupRun?->sourceType() ?? $backupJob->sourceType();
+        $sourceVolumeName = $backupRun?->sourceVolumeName() ?? $backupJob->volume_name;
+
+        if ($sourceType !== BackupJob::SOURCE_TYPE_DOCKER_VOLUME) {
             $validator->errors()->add('mode', 'In-place restore is only available for Docker volume sources.');
 
             return;
         }
 
-        if ((string) $this->input('confirmation_text', '') !== (string) $backupJob->volume_name) {
+        if ((string) $this->input('confirmation_text', '') !== (string) $sourceVolumeName) {
             $validator->errors()->add('confirmation_text', 'Type the exact volume name to confirm this in-place restore.');
-        }
-    }
-
-    /**
-     * Confirm the requested backup key is one the destination actually exposes.
-     *
-     * The key is the *source* of a host-side file copy on local destinations, so
-     * it must be validated as an allow-list against the real listing (fail-closed)
-     * rather than trusted as a free-form string. `..` is rejected up front as
-     * defense in depth against path traversal.
-     */
-    private function validateSelectedBackupKey(Validator $validator): void
-    {
-        $key = (string) $this->input('selected_backup_key', '');
-
-        if ($key === '') {
-            return;
-        }
-
-        if (str_contains($key, '..') || str_starts_with($key, '/')) {
-            $validator->errors()->add('selected_backup_key', 'The selected backup key is invalid.');
-
-            return;
-        }
-
-        $backupJob = $this->route('backupJob');
-
-        if (! $backupJob instanceof BackupJob) {
-            $validator->errors()->add('selected_backup_key', 'Unable to resolve the backup job for this restore.');
-
-            return;
-        }
-
-        $backupJob->loadMissing('destination');
-
-        try {
-            $objects = app(ListBackupObjects::class)->handle($backupJob->destination);
-        } catch (Throwable) {
-            $validator->errors()->add('selected_backup_key', 'Unable to verify the selected backup against the destination listing.');
-
-            return;
-        }
-
-        $allowedKeys = collect($objects)->pluck('key')->filter()->all();
-
-        if (! in_array($key, $allowedKeys, true)) {
-            $validator->errors()->add('selected_backup_key', 'The selected backup is not available on the destination.');
         }
     }
 }

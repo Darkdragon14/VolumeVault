@@ -2,6 +2,7 @@
 
 namespace App\Actions\Restore;
 
+use App\Actions\Backup\CreateBackupRunRecord;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Restore\Modes\InPlaceRestore;
 use App\Actions\Restore\Modes\SafeInPlaceRestore;
@@ -32,33 +33,29 @@ class RunPreRestoreBackup
     public function __construct(
         private readonly RunBackup $runBackup,
         private readonly AppendRunLog $appendRunLog,
+        private readonly CreateBackupRunRecord $createBackupRunRecord,
     ) {}
 
     public function handle(RestoreRun $run): void
     {
-        // The restore froze target_volume_name at creation, but RunBackup backs up
-        // the job's CURRENT volume_name. If the job was edited (volume changed, or
-        // switched to a host-path source) while this in-place restore waited or
-        // downloaded, the safety backup would capture the wrong volume — giving a
-        // false safety net before the frozen volume is wiped. Abort instead.
         $run->loadMissing('job');
         $job = $run->job;
 
-        if (! $job?->isDockerVolumeSource() || $job->volume_name !== $run->target_volume_name) {
-            throw new RuntimeException(
-                'The backup job no longer targets the volume being restored ('.$run->target_volume_name.'); '.
-                'aborting before the safety backup to avoid backing up the wrong volume.'
-            );
+        if (! $job) {
+            throw new RuntimeException('The backup job for this restore no longer exists.');
         }
 
         $this->appendRunLog->handle($run, 'Creating a safety backup of volume '.$run->target_volume_name.' before overwriting it.');
 
-        $backup = BackupRun::create([
-            'backup_job_id' => $run->backup_job_id,
-            'initiated_by_user_id' => $run->initiated_by_user_id,
-            'status' => BackupRun::STATUS_QUEUED,
-            'trigger' => BackupRun::TRIGGER_PRE_RESTORE,
-        ]);
+        $backup = $this->createBackupRunRecord->handle(
+            $job,
+            [
+                'initiated_by_user_id' => $run->initiated_by_user_id,
+                'status' => BackupRun::STATUS_QUEUED,
+                'trigger' => BackupRun::TRIGGER_PRE_RESTORE,
+            ],
+            sourceVolumeName: $run->target_volume_name,
+        );
 
         // Link before running so the restore detail can surface the safety backup
         // even if it fails.
@@ -75,6 +72,12 @@ class RunPreRestoreBackup
             );
         }
 
+        if (blank($backup->backup_key)) {
+            throw new RuntimeException(
+                'Safety backup completed without a confirmed archive key; aborting restore before overwriting the volume.'
+            );
+        }
+
         if ($backup->docker_container_cleanup_pending) {
             throw new RuntimeException(
                 'Safety backup completed but its credential-bearing helper cleanup is still pending; '.
@@ -86,20 +89,6 @@ class RunPreRestoreBackup
             throw new RuntimeException(
                 'Safety backup completed but its application containers are still stopped; '.
                 'aborting restore before overwriting the volume.'
-            );
-        }
-
-        // Re-verify after the backup: RunBackup re-reads the (mutable) job and backs
-        // up its CURRENT volume, so a job edited while the backup ran could have
-        // captured a different volume than the one we are about to wipe. The check
-        // before the backup catches a pre-existing mismatch; this one catches a
-        // change during the backup. Abort rather than wipe with a useless backup.
-        $job = $run->load('job')->job;
-
-        if (! $job?->isDockerVolumeSource() || $job->volume_name !== $run->target_volume_name) {
-            throw new RuntimeException(
-                'The backup job changed its volume during the safety backup; aborting before overwriting ['.
-                $run->target_volume_name.'] to avoid relying on a safety backup of a different volume.'
             );
         }
 

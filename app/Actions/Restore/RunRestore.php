@@ -2,6 +2,7 @@
 
 namespace App\Actions\Restore;
 
+use App\Actions\Backup\ApplyPendingDockerLabelReconciliation;
 use App\Actions\Docker\RunRestoreContainer;
 use App\Actions\Docker\StartDockerContainers;
 use App\Actions\Docker\VerifyRestoreArchive;
@@ -9,14 +10,20 @@ use App\Actions\Restore\Modes\InPlaceRestore;
 use App\Actions\Restore\Modes\NewVolumeRestore;
 use App\Actions\Restore\Modes\RestoreModeHandler;
 use App\Actions\Restore\Modes\SafeInPlaceRestore;
+use App\Actions\Runs\CreateRunFinalizations;
+use App\Actions\Runs\ProcessRunFinalization;
 use App\Models\ActivityLog;
+use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Logging\AppendRunLog;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\RunHeartbeatLock;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -35,6 +42,7 @@ class RunRestore
         private readonly SafeInPlaceRestore $safeInPlaceRestore,
         private readonly SendShoutrrrNotification $sendShoutrrrNotification,
         private readonly RunPreRestoreBackup $runPreRestoreBackup,
+        private readonly CreateRunFinalizations $createFinalizations,
     ) {}
 
     public function handle(RestoreRun $run): void
@@ -91,7 +99,12 @@ class RunRestore
 
             $this->appendRunLog->handle($run, 'Downloading selected backup object from backup destination.');
             $this->heartbeat($run, requiresRunning: true);
-            $this->storage->download($run->destination, $run->selected_backup_key, $archivePath);
+            $this->storage->download(
+                $run->destination,
+                $run->selected_backup_key,
+                $archivePath,
+                fn () => $this->heartbeat($run, requiresRunning: true),
+            );
             $this->verifyArchive($run, $archivePath);
             $this->heartbeat($run, requiresRunning: true);
 
@@ -144,29 +157,30 @@ class RunRestore
             ]);
 
             $finishedAt = now();
-            $run->forceFill([
-                'status' => RestoreRun::STATUS_SUCCESS,
-                'finished_at' => $finishedAt,
-                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
-            ])->save();
+            if (! $this->markSuccessful($run, $finishedAt)) {
+                return;
+            }
 
-            // The run is terminal but the queue job still holds the overlap lock
-            // through these notifications. Refresh the heartbeat up front and after
-            // each channel (each can take ~60s) so a legitimately-waiting same-volume
-            // run is not reconciled as stale while this holder finishes notifying.
-            $this->heartbeat($run);
-            $this->notify($run, fn () => $this->heartbeat($run));
         } catch (Throwable $exception) {
             if ($prepared) {
                 $handler->cleanupAfterFailure($run);
             }
 
-            $this->markFailed($run, $exception);
+            $this->markFailed($run, $exception, RestoreRun::STATUS_RUNNING);
         } finally {
-            $this->restartStoppedContainersQuietly($run->fresh());
+            try {
+                $freshRun = $run->fresh();
 
-            if (File::exists($archivePath)) {
-                File::delete($archivePath);
+                if ($freshRun) {
+                    $this->restartStoppedContainersQuietly($freshRun);
+                    $this->applyPendingLabelReconciliationIfReady($freshRun);
+                }
+            } catch (Throwable $exception) {
+                report($exception);
+            } finally {
+                if (File::exists($archivePath)) {
+                    File::delete($archivePath);
+                }
             }
         }
     }
@@ -174,34 +188,70 @@ class RunRestore
     /**
      * Force a restore run into the FAILED state.
      *
-     * Shared by the in-process catch block, the queue job's failed() hook
-     * (worker timeout / restart) and the stale-run reconciliation command.
+     * Shared by the in-process catch block and stale-run reconciliation.
      *
      * The transition is a conditional UPDATE (non-terminal → failed), not an
      * in-memory check + save: the reconciliation command holds models it
      * materialized earlier, and the worker may finish a run between that snapshot
      * and this call. The condition makes the write lose that race instead of
      * overwriting a just-succeeded run. Returns whether it actually transitioned,
-     * so callers know if a stuck run was genuinely failed (and e.g. its lock can
-     * be released) versus the call being a no-op on an already-terminal run.
+     * so callers know if a stuck run was genuinely failed versus the call being a
+     * no-op on an already-terminal run.
      */
-    public function markFailed(RestoreRun $run, Throwable $exception, ?callable $afterTransition = null): bool
-    {
+    public function markFailed(
+        RestoreRun $run,
+        Throwable $exception,
+        ?string $expectedStatus = null,
+        ?CarbonInterface $heartbeatCutoff = null,
+        ?callable $afterTransition = null,
+        ?string $expectedDispatchToken = null,
+    ): bool {
         $finishedAt = now();
-        $startedAt = $run->started_at ?? $finishedAt;
         $message = str($exception->getMessage() ?: 'Restore failed.')->limit(1000)->toString();
+        $finalizationIds = [];
 
-        $transitioned = RestoreRun::query()
-            ->whereKey($run->getKey())
-            ->whereNotIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
-            ->update([
+        $transitioned = DB::transaction(function () use ($run, $finishedAt, $message, $expectedStatus, $heartbeatCutoff, $expectedDispatchToken, &$finalizationIds): bool {
+            $this->lockRestoreGroup($run->backup_job_id);
+            $job = BackupJob::query()->lockForUpdate()->find($run->backup_job_id);
+            $lockedRun = RestoreRun::query()->lockForUpdate()->find($run->id);
+
+            if ($job === null || $lockedRun === null || in_array($lockedRun->status, [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED], true)) {
+                return false;
+            }
+
+            if ($expectedStatus !== null && $lockedRun->status !== $expectedStatus) {
+                return false;
+            }
+
+            if ($expectedDispatchToken !== null) {
+                if ($lockedRun->dispatch_token !== $expectedDispatchToken
+                    || $lockedRun->dispatch_attempted_at === null
+                    || $lockedRun->dispatch_published_at === null
+                    || ! $lockedRun->dispatch_attempted_at->isAfter($lockedRun->dispatch_published_at)
+                    || $heartbeatCutoff === null
+                    || ! $lockedRun->dispatch_attempted_at->lessThan($heartbeatCutoff)) {
+                    return false;
+                }
+            } else {
+                $progressedAt = $lockedRun->last_heartbeat_at ?? $lockedRun->started_at ?? $lockedRun->created_at;
+
+                if ($heartbeatCutoff !== null && ($progressedAt === null || ! $progressedAt->lessThan($heartbeatCutoff))) {
+                    return false;
+                }
+            }
+
+            $lockedRun->forceFill([
                 'status' => RestoreRun::STATUS_FAILED,
                 'finished_at' => $finishedAt,
-                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
+                'duration_seconds' => ($lockedRun->started_at ?? $finishedAt)->diffInSeconds($finishedAt),
                 'error_message' => $message,
-            ]);
+            ])->save();
+            $finalizationIds = $this->createFinalizations->createRestoreNotifications($lockedRun, $job);
 
-        if ($transitioned === 0) {
+            return true;
+        });
+
+        if (! $transitioned) {
             return false;
         }
 
@@ -213,14 +263,7 @@ class RunRestore
 
         $this->appendRunLog->handle($run, $message);
 
-        // Central failure notification: markFailed is reached from the in-process
-        // catch block, the queue job's failed() hook and stale-run reconciliation,
-        // so every failure path notifies. The conditional transition above keeps it
-        // to a single send. Refresh the heartbeat up front and after each channel
-        // (each ~60s) so a terminal restore still holding the overlap lock through
-        // slow notifications is not reconciled as stale.
-        $this->heartbeat($run);
-        $this->notify($run, fn () => $this->heartbeat($run));
+        app(ProcessRunFinalization::class)->dispatch($finalizationIds);
 
         return true;
     }
@@ -260,6 +303,7 @@ class RunRestore
         $this->startDockerContainers->handle($containerIds);
 
         $run->forceFill(['stopped_container_ids' => null])->save();
+        $this->applyPendingLabelReconciliationIfReady($run);
 
         $message = 'Restarted containers left stopped after an interrupted restore: '.implode(', ', $containerIds);
         $this->appendRunLog->handle($run, $message);
@@ -288,6 +332,77 @@ class RunRestore
             $this->appendRunLog->handle($run->fresh(), 'Restarted containers: '.implode(', ', $containerIds));
         } catch (Throwable $exception) {
             $this->appendRunLog->handle($run->fresh(), 'Failed to restart containers: '.$exception->getMessage());
+        }
+    }
+
+    public function applyPendingLabelReconciliationIfReady(RestoreRun $run): bool
+    {
+        $freshRun = RestoreRun::with('job')->find($run->id);
+
+        if ($freshRun === null
+            || ! in_array($freshRun->status, [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED], true)
+            || $freshRun->stopped_container_ids
+            || ! $freshRun->job?->isDockerLabelManaged()) {
+            return false;
+        }
+
+        $pending = $freshRun->job->pending_label_reconciliation;
+
+        try {
+            return app(ApplyPendingDockerLabelReconciliation::class)->handle($freshRun->job);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            DB::transaction(function () use ($freshRun, $pending, $exception): void {
+                $job = BackupJob::query()->lockForUpdate()->find($freshRun->backup_job_id);
+
+                if ($job?->pending_label_reconciliation === $pending && is_array($pending)) {
+                    $job->update(['label_reconciliation_error' => str($exception->getMessage())->limit(1000)->toString()]);
+                }
+            });
+
+            return false;
+        }
+    }
+
+    private function markSuccessful(RestoreRun $run, CarbonInterface $finishedAt): bool
+    {
+        $finalizationIds = [];
+        $transitioned = DB::transaction(function () use ($run, $finishedAt, &$finalizationIds): bool {
+            $this->lockRestoreGroup($run->backup_job_id);
+            $job = BackupJob::query()->lockForUpdate()->find($run->backup_job_id);
+            $lockedRun = RestoreRun::query()->lockForUpdate()->find($run->id);
+
+            if ($job === null || $lockedRun?->status !== RestoreRun::STATUS_RUNNING) {
+                return false;
+            }
+
+            $lockedRun->forceFill([
+                'status' => RestoreRun::STATUS_SUCCESS,
+                'finished_at' => $finishedAt,
+                'duration_seconds' => ($lockedRun->started_at ?? $finishedAt)->diffInSeconds($finishedAt),
+            ])->save();
+            $finalizationIds = $this->createFinalizations->createRestoreNotifications($lockedRun, $job);
+
+            return true;
+        });
+
+        if (! $transitioned) {
+            return false;
+        }
+
+        $run->refresh();
+        app(ProcessRunFinalization::class)->dispatch($finalizationIds);
+
+        return true;
+    }
+
+    private function lockRestoreGroup(int $backupJobId): void
+    {
+        $groupId = BackupJob::query()->whereKey($backupJobId)->value('backup_job_group_id');
+
+        if ($groupId !== null) {
+            BackupJobGroup::query()->lockForUpdate()->find($groupId);
         }
     }
 

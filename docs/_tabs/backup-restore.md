@@ -34,6 +34,28 @@ In the web form, creating a job defaults to the simple include mode, while exist
 
 Backup jobs can also define an archive name template without the extension. Supported tokens are `{name}`, `{source}`, `{id}`, `{run}`, `{year}`, `{month}`, `{day}`, `{time}`, `{hour}`, `{minute}`, and `{second}`. `{name}` is the job name sanitized for filenames, `{source}` is the Docker volume or host path source, and `{id}` / `{run}` is the backup run ID. VolumeVault appends `.tar.gz` automatically. Include a uniqueness token such as `{id}` or `{time}` to avoid overwriting earlier archives with the same generated name.
 
+## Docker Label Backups
+
+Administrators can enable declarative backups under `Settings > Docker label backups`. Choose an active default destination, schedule, retention, filtering, and notification settings first. VolumeVault then inspects containers during the existing five-minute volume synchronization. For a Compose service, running replicas are authoritative; stopped replicas are considered only when no replica is running, so a container temporarily stopped by VolumeVault remains configured during its backup.
+
+A container must opt in with `dev.darkdragon14.volumevault.enable=true`. A named backup uses labels under `dev.darkdragon14.volumevault.backup.<name>.*`; the name becomes the backup job name. For a single backup, omit `<name>` and use the shortcut `dev.darkdragon14.volumevault.backup.*`. Each definition must select exactly one named volume by its actual Docker name (`volume`) or its container mount path (`mount`).
+
+```yaml
+services:
+  db:
+    volumes:
+      - database:/var/lib/postgresql/data
+    labels:
+      dev.darkdragon14.volumevault.enable: "true"
+      dev.darkdragon14.volumevault.backup.database.mount: "/var/lib/postgresql/data"
+      dev.darkdragon14.volumevault.backup.database.schedule: "daily"
+      dev.darkdragon14.volumevault.backup.database.time: "03:30"
+```
+
+Supported override fields are `destination`, `schedule`, `time`, `day`, `every-hours`, `cron`, `timezone`, `retention-days`, `retention-count`, `filter-mode`, `include-paths`, `exclude-regexp`, `filename-template`, `notifications`, `notification-channels`, `alert-notifications`, and `stop-containers`. Destination and notification channel values are existing names; they must each match unambiguously. Credentials, secrets, host paths, and backup groups cannot be configured through labels.
+
+Label-managed jobs are standalone and read-only in VolumeVault, but can still be run, paused, resumed, and restored. A manual job for the same volume always wins while the declaration is active. Conflicting replica declarations or a removed declaration disable the generated job without deleting its run history; once the declaration disappears, its retained history does not prevent creating a manual job for that volume. Adding a label creates the schedule only; it does not run an immediate backup.
+
 ## Host Path Sources
 
 Host path backup jobs mount an existing directory from the Docker host into the temporary Offen container with a read-only Docker bind mount. The path is passed to Docker, while Offen only sees the mounted directory under `/backup`.
@@ -70,6 +92,7 @@ VolumeVault uses Laravel Scheduler and the database queue:
 - The scheduler runs `DispatchDueBackupJobsJob` every minute.
 - It finds active jobs whose `next_run_at` is due.
 - It creates a queued backup run and dispatches `RunBackupJob`.
+- A separate minute-by-minute sweep redispatches top-level queued backup, restore, and group runs when their persisted dispatch lease is missing or stale.
 - A separate scheduled job syncs Docker volumes every five minutes.
 
 For non-Docker local development, run:
@@ -133,7 +156,11 @@ In-place modes are destructive. They are restricted to Docker volume backup jobs
 
 For both in-place modes, you can optionally back up the current contents of the source volume before it is overwritten. This pre-restore safety backup uses the backup job's configured destination, is linked from the restore details, and aborts the restore before any wipe if it fails.
 
-The restore wizard lists backup objects from the selected job's destination, lets you filter by archive name or displayed date, marks the latest archive, and can be opened directly from a backup run through `Restore this backup`.
+If the job's current destination is Dropbox, requesting this safety backup is rejected before a restore is created or queued: newly uploaded Dropbox backups cannot provide a verified archive identity for this safety check. This restriction uses the current job destination, not the historical archive destination. Choose another job destination or explicitly disable the optional safety backup. Restoring an exact, verified Dropbox file ID without a safety backup remains supported; safe in-place mode still stops and restarts affected containers.
+
+The restore wizard lists backup objects from the selected job's destination, lets you filter by archive name or displayed date, and marks the latest archive. When opened from a historical backup run through `Restore this backup`, it uses that run's snapshotted destination even if the job has since moved to another destination. If the historical destination was deleted or disabled, the restore is refused rather than falling back to the current destination.
+
+For Dropbox, restoration from run history also requires a proven exact file ID recorded for that run. Offen uploads do not expose a verifiable exact Dropbox file ID to VolumeVault. `RunBackup` only retains an exact ID already captured for the run; asynchronous metadata processing never resolves it by filename because a same-name file may have replaced the uploaded archive. A backup can therefore succeed while its archive identity remains unverifiable and restoration from that run is refused. This applies to newly completed backups as well as older runs, not just legacy records that stored a path.
 
 ## Notifications
 
@@ -153,7 +180,7 @@ Notification levels:
 - `Errors only`: sends notifications only for failed backup and restore runs.
 - `Every backup and restore run`: sends notifications for successful backup runs and restore start/success events, in addition to failures.
 
-Restore failures are sent to every selected channel, including channels configured as `Errors only`. Restore start and success messages are sent only to channels configured for every run. Notification delivery errors are logged but never interrupt the backup or restore itself.
+Restore failures are sent to every selected channel, including channels configured as `Errors only`. Restore start and success messages are sent only to channels configured for every run. Start notifications are immediate; completion recipients are frozen when a backup, restore, or group run becomes terminal and each channel is retried independently by the metadata worker. Notification delivery errors never interrupt the backup or restore itself.
 
 Per-job notification configuration:
 

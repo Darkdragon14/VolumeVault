@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\Backup\CreateBackupRun;
+use App\Actions\Backup\CreateBackupRunRecord;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Restore\RunPreRestoreBackup;
 use App\Models\BackupDestination;
@@ -62,6 +63,12 @@ class BackupRunAttributionTest extends TestCase
         $run = app(CreateBackupRun::class)->handle($job, BackupRun::TRIGGER_SCHEDULED);
 
         $this->assertSame(BackupRun::TRIGGER_SCHEDULED, $run->trigger);
+        $this->assertSame(BackupJob::SOURCE_TYPE_DOCKER_VOLUME, $run->source_type_snapshot);
+        $this->assertSame('app_data', $run->source_volume_name);
+        $this->assertSame($job->backup_destination_id, $run->backup_destination_id_snapshot);
+        $this->assertSame('Local', $run->backup_destination_name);
+        $this->assertSame($job->destination->locatorFingerprint(), $run->backup_destination_locator_fingerprint);
+        $this->assertSame('volumevault-app_data-run-'.$run->id.'.tar.gz', $run->backup_filename);
         // Scheduled runs have no logged-in user; the initiator stays null and the
         // UI shows it as "—", mirroring automated restores.
         $this->assertNull($run->initiated_by_user_id);
@@ -88,14 +95,20 @@ class BackupRunAttributionTest extends TestCase
         $runBackup = Mockery::mock(RunBackup::class);
         $runBackup->shouldReceive('handle')
             ->once()
-            ->andReturnUsing(fn (BackupRun $backup) => $backup->forceFill(['status' => BackupRun::STATUS_SUCCESS])->save());
+            ->andReturnUsing(fn (BackupRun $backup) => $backup->forceFill([
+                'status' => BackupRun::STATUS_SUCCESS,
+                'backup_key' => 'safety-backup.tar.gz',
+            ])->save());
 
-        $action = new RunPreRestoreBackup($runBackup, app(AppendRunLog::class));
+        $action = new RunPreRestoreBackup($runBackup, app(AppendRunLog::class), app(CreateBackupRunRecord::class));
         $action->handle($restore);
 
         $backup = BackupRun::where('trigger', BackupRun::TRIGGER_PRE_RESTORE)->first();
         $this->assertNotNull($backup);
         $this->assertSame($user->id, $backup->initiated_by_user_id);
+        $this->assertSame('app_data', $backup->source_volume_name);
+        $this->assertSame($job->backup_destination_id, $backup->backup_destination_id_snapshot);
+        $this->assertSame('volumevault-app_data-run-'.$backup->id.'.tar.gz', $backup->backup_filename);
     }
 
     private function backupJob(): BackupJob

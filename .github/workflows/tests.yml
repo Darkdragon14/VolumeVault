@@ -32,6 +32,9 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Build secure local archive reader
+        run: sudo cc -O2 -Wall -Wextra -Werror docker/local-archive-reader.c -o /usr/local/bin/volumevault-local-archive-reader
+
       - name: Run frontend tests
         run: npm test
 
@@ -43,3 +46,112 @@ jobs:
 
       - name: Run tests
         run: php artisan test
+
+  mysql-migration-recovery:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: volumevault_test
+          MYSQL_ROOT_PASSWORD: secret
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_mysql
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare test environment
+        run: touch .env
+
+      - name: Migrate MySQL schema
+        run: php artisan migrate:fresh --force
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: volumevault_test
+          DB_USERNAME: root
+          DB_PASSWORD: secret
+
+      - name: Test MySQL migration recovery
+        run: php artisan test --compact tests/Feature/DatabaseMigrationRecoveryTest.php
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: volumevault_test
+          DB_USERNAME: root
+          DB_PASSWORD: secret
+
+  postgresql-migration-recovery:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: volumevault_test
+          POSTGRES_USER: volumevault
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U volumevault -d volumevault_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_pgsql
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare test environment
+        run: touch .env
+
+      - name: Migrate PostgreSQL schema
+        run: php artisan migrate:fresh --force
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: volumevault_test
+          DB_USERNAME: volumevault
+          DB_PASSWORD: secret
+
+      - name: Test PostgreSQL migration recovery
+        run: php artisan test --compact tests/Feature/DatabaseMigrationRecoveryTest.php
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: volumevault_test
+          DB_USERNAME: volumevault
+          DB_PASSWORD: secret

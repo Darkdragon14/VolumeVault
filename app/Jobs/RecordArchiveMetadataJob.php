@@ -2,22 +2,20 @@
 
 namespace App\Jobs;
 
-use App\Actions\Backup\RunBackup;
+use App\Actions\Runs\CreateRunFinalizations;
+use App\Actions\Runs\ProcessRunFinalization;
+use App\Models\BackupJob;
+use App\Models\BackupRun;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Record a completed backup run's archive metadata (key + size) off the run's
- * critical path, and — for a standalone run — send its finished notification. The
- * destination listing can be slow (WebDAV Depth: infinity, recursive SFTP, slow
- * NFS); running it inline would block the backup's queue job while it holds the
- * volume lock, so it is deferred here. Runs on a dedicated "metadata" queue with
- * its own worker so a slow listing cannot block the main worker and starve a
- * same-volume backup/restore into a false stale-reconciliation on the packaged
- * single-worker image. Best-effort: RunBackup swallows listing errors.
+ * Compatibility handler for jobs serialized before finalizations used separate
+ * durable outbox rows. Keep its constructor properties stable across upgrades.
  */
 class RecordArchiveMetadataJob implements ShouldQueue
 {
@@ -32,8 +30,30 @@ class RecordArchiveMetadataJob implements ShouldQueue
         $this->onQueue('metadata');
     }
 
-    public function handle(RunBackup $runBackup): void
+    public function handle(ProcessRunFinalization $processFinalization, CreateRunFinalizations $createFinalizations): void
     {
-        $runBackup->recordArchiveMetadata($this->backupRunId, $this->sendFinishedNotification);
+        $finalizationIds = DB::transaction(function () use ($createFinalizations): array {
+            $job = BackupJob::query()
+                ->whereKey(BackupRun::query()->select('backup_job_id')->whereKey($this->backupRunId))
+                ->lockForUpdate()
+                ->first();
+            $run = BackupRun::query()->lockForUpdate()->find($this->backupRunId);
+
+            if ($job === null || $run === null) {
+                return [];
+            }
+
+            $ids = [$createFinalizations->createMetadata($run)->id];
+
+            if ($this->sendFinishedNotification) {
+                array_push($ids, ...$createFinalizations->createBackupNotifications($run, $job));
+            }
+
+            return $ids;
+        });
+
+        foreach ($finalizationIds as $finalizationId) {
+            $processFinalization->handle($finalizationId);
+        }
     }
 }

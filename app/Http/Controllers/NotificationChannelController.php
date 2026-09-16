@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Notifications\DeleteNotificationChannel;
+use App\Actions\Notifications\MutateNotificationChannel;
+use App\Actions\Notifications\NotificationChannelMutationBlocked;
 use App\Concerns\PaginateWithPreference;
 use App\Concerns\PersistsNotificationChannel;
 use App\Models\ActivityLog;
@@ -40,13 +43,12 @@ class NotificationChannelController extends Controller
         ]);
     }
 
-    public function store(Request $request, ShoutrrrUrlBuilder $urlBuilder)
+    public function store(Request $request, ShoutrrrUrlBuilder $urlBuilder, MutateNotificationChannel $mutateNotificationChannel)
     {
         $data = $this->validated($request);
         $data['url'] = $this->buildUrl($urlBuilder, $data['service'], $this->configFromRequest($request));
 
-        $channel = NotificationChannel::create($this->payload($data, $request));
-        $this->keepSingleDefaultChannel($channel);
+        $channel = $mutateNotificationChannel->create($this->payload($data, $request));
 
         ActivityLog::record('notification_channel_created', 'Notification channel created.', $channel);
 
@@ -63,39 +65,47 @@ class NotificationChannelController extends Controller
         ]);
     }
 
-    public function update(Request $request, NotificationChannel $notification, ShoutrrrUrlBuilder $urlBuilder)
+    public function update(Request $request, NotificationChannel $notification, ShoutrrrUrlBuilder $urlBuilder, MutateNotificationChannel $mutateNotificationChannel)
     {
         $data = $this->validated($request);
         $config = $this->configFromRequest($request);
-        $shouldReplaceUrl = $data['service'] !== $notification->service || $this->hasFilledConfig($config);
 
-        if ($shouldReplaceUrl) {
-            $existing = $this->existingWebhookMap($notification, $data['service']);
-            $data['url'] = $this->buildUrl($urlBuilder, $data['service'], $config, $existing);
+        try {
+            $notification = $mutateNotificationChannel->update(
+                $notification,
+                fn (NotificationChannel $locked): array => $this->payloadForLockedUpdate($locked, $data, $request, $urlBuilder, $config),
+            );
+        } catch (NotificationChannelMutationBlocked $exception) {
+            return back()->with('error', $exception->getMessage());
         }
-
-        $notification->update($this->payload($data, $request));
-        $this->keepSingleDefaultChannel($notification);
 
         return redirect()->route('notifications.index')->with('success', 'Notification channel updated.');
     }
 
-    public function destroy(NotificationChannel $notification)
+    public function destroy(NotificationChannel $notification, DeleteNotificationChannel $deleteNotificationChannel)
     {
-        $notification->delete();
+        try {
+            $deleteNotificationChannel->handle($notification);
+        } catch (NotificationChannelMutationBlocked $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return redirect()->route('notifications.index')->with('success', 'Notification channel deleted.');
     }
 
-    public function updateActive(Request $request, NotificationChannel $notification)
+    public function updateActive(Request $request, NotificationChannel $notification, MutateNotificationChannel $mutateNotificationChannel)
     {
         $request->validate([
             'is_active' => ['required', 'boolean'],
         ]);
 
-        $notification->forceFill([
-            'is_active' => $request->boolean('is_active'),
-        ])->save();
+        try {
+            $notification = $mutateNotificationChannel->update($notification, [
+                'is_active' => $request->boolean('is_active'),
+            ]);
+        } catch (NotificationChannelMutationBlocked $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', $notification->is_active ? 'Notification channel enabled.' : 'Notification channel disabled.');
     }

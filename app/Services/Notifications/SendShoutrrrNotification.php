@@ -17,6 +17,7 @@ use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Support\FormatBytes;
 use Illuminate\Database\Eloquent\Collection;
+use RuntimeException;
 
 class SendShoutrrrNotification
 {
@@ -27,9 +28,16 @@ class SendShoutrrrNotification
         private readonly ResolveNotificationChannels $resolveNotificationChannels,
     ) {}
 
-    public function sendBackupRunFinished(BackupRun $run, ?callable $afterEach = null): void
-    {
-        $run->loadMissing('job.destination', 'initiatedBy');
+    /**
+     * @param  array<int, int>  $deliveredChannelIds
+     */
+    public function sendBackupRunFinished(
+        BackupRun $run,
+        ?callable $afterEach = null,
+        array $deliveredChannelIds = [],
+        ?callable $afterDelivered = null,
+    ): void {
+        $run->loadMissing('job.destination', 'snapshotDestination', 'initiatedBy');
         $failed = $run->status === BackupRun::STATUS_FAILED;
         $event = $failed ? NotificationEvent::Fail : NotificationEvent::Success;
 
@@ -38,9 +46,23 @@ class SendShoutrrrNotification
                 continue;
             }
 
+            if (in_array($channel->id, $deliveredChannelIds, true)) {
+                continue;
+            }
+
             $title = $this->backupRunTitle($run, $channel);
             $message = $this->backupRunMessage($run, $channel);
-            $this->send($channel, $title, $message, $event);
+            $result = $this->send($channel, $title, $message, $event);
+
+            if ($afterDelivered !== null) {
+                if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+                    throw new RuntimeException('Backup notification delivery failed.');
+                }
+
+                if ($result->successful()) {
+                    $afterDelivered($channel->id);
+                }
+            }
 
             // Each shoutrrr send can take ~60s; let the caller refresh the run's
             // heartbeat between channels so a terminal run still holding the overlap
@@ -51,6 +73,22 @@ class SendShoutrrrNotification
         }
     }
 
+    public function sendBackupRunFinishedToChannel(BackupRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('job.destination', 'snapshotDestination', 'initiatedBy');
+        $event = $run->status === BackupRun::STATUS_FAILED ? NotificationEvent::Fail : NotificationEvent::Success;
+        $result = $this->send(
+            $channel,
+            $this->backupRunTitle($run, $channel),
+            $this->backupRunMessage($run, $channel),
+            $event,
+        );
+
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Backup notification delivery failed.');
+        }
+    }
+
     /**
      * Notify the backup job's channels that a run has started. Info-level only
      * (a start is not a failure), mirroring restore start. Webhook channels ping
@@ -58,7 +96,7 @@ class SendShoutrrrNotification
      */
     public function sendBackupRunStarted(BackupRun $run, ?callable $afterEach = null): void
     {
-        $run->loadMissing('job.destination', 'initiatedBy');
+        $run->loadMissing('job.destination', 'snapshotDestination', 'initiatedBy');
 
         foreach ($this->resolveNotificationChannels->forJob($run->job) as $channel) {
             if ($channel->notification_level !== NotificationChannel::LEVEL_INFO) {
@@ -109,8 +147,10 @@ class SendShoutrrrNotification
      * (all members succeeded) is info-level; a failure (any member failed, or the
      * stop-on-first-failure policy tripped) reaches every channel. This is the
      * single success/fail ping the whole group resolves to.
+     *
+     * @param  Collection<int, NotificationChannel>|null  $channels
      */
-    public function sendGroupRunFinished(BackupGroupRun $run, ?callable $afterEach = null): void
+    public function sendGroupRunFinished(BackupGroupRun $run, ?callable $afterEach = null, ?Collection $channels = null): void
     {
         $run->loadMissing('group', 'initiatedBy');
 
@@ -121,19 +161,31 @@ class SendShoutrrrNotification
         $failed = $run->status === BackupGroupRun::STATUS_FAILED;
         $event = $failed ? NotificationEvent::Fail : NotificationEvent::Success;
 
-        foreach ($this->resolveNotificationChannels->forGroup($run->group) as $channel) {
+        $channels ??= $this->resolveNotificationChannels->forGroup($run->group);
+
+        foreach ($channels as $channel) {
             if (! $failed && $channel->notification_level !== NotificationChannel::LEVEL_INFO) {
                 continue;
             }
 
             $this->send($channel, $this->groupRunTitle($run), $this->groupRunMessage($run), $event);
 
-            // The terminal group run still holds the backup-group lock through these
-            // sends; refresh its heartbeat between channels so a next queued run of
-            // the same group waiting on that lock is not reconciled as stale.
+            // Refresh the heartbeat between channels so a queued run waiting on
+            // group serialization is not reconciled as stale during slow sends.
             if ($afterEach !== null) {
                 $afterEach();
             }
+        }
+    }
+
+    public function sendGroupRunFinishedToChannel(BackupGroupRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('group', 'initiatedBy');
+        $event = $run->status === BackupGroupRun::STATUS_FAILED ? NotificationEvent::Fail : NotificationEvent::Success;
+        $result = $this->send($channel, $this->groupRunTitle($run), $this->groupRunMessage($run), $event);
+
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Backup group notification delivery failed.');
         }
     }
 
@@ -179,6 +231,22 @@ class SendShoutrrrNotification
             if ($afterEach !== null) {
                 $afterEach();
             }
+        }
+    }
+
+    public function sendRestoreRunFinishedToChannel(RestoreRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('job.destination', 'initiatedBy');
+        $event = $run->status === RestoreRun::STATUS_FAILED ? NotificationEvent::Fail : NotificationEvent::Success;
+        $result = $this->send(
+            $channel,
+            $this->restoreRunTitle($run, $channel),
+            $this->restoreRunMessage($run, $channel),
+            $event,
+        );
+
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Restore notification delivery failed.');
         }
     }
 
@@ -314,9 +382,21 @@ class SendShoutrrrNotification
             $message,
         ];
 
-        return $this->dockerProcess->run($command, 60, [
+        $result = $this->dockerProcess->run($command, 60, [
             'SHOUTRRR_URL' => $url,
         ]);
+
+        if ($result->successful()) {
+            return $result;
+        }
+
+        return new DockerProcessResult(
+            command: $result->command,
+            exitCode: $result->exitCode,
+            output: '',
+            errorOutput: 'Notification delivery failed.',
+            timedOut: $result->timedOut,
+        );
     }
 
     private function resolveUrl(NotificationChannel $channel, NotificationEvent $event): ?string
@@ -476,8 +556,8 @@ class SendShoutrrrNotification
         $job = $run->job;
         $lines = [
             'Job: '.$job->name,
-            'Source: '.$job->sourceName(),
-            'Destination: '.($job->destination?->name ?? 'Unknown'),
+            'Source: '.$run->sourceName(),
+            'Destination: '.$run->destinationName(),
             'Status: '.$run->status,
             'Trigger: '.$run->trigger,
             'Initiated by: '.($run->initiatedBy?->name ?? 'Unknown'),
@@ -541,9 +621,9 @@ class SendShoutrrrNotification
 
         return $this->applyTokens($template, [
             'job' => $job->name,
-            'volume' => $job->sourceName(),
-            'source' => $job->sourceName(),
-            'destination' => $job->destination?->name ?? 'Unknown',
+            'volume' => $run->sourceName(),
+            'source' => $run->sourceName(),
+            'destination' => $run->destinationName(),
             'status' => $run->status,
             'trigger' => $run->trigger,
             'user' => $run->initiatedBy?->name ?? '',

@@ -106,6 +106,54 @@ class DockerProcessTest extends TestCase
         $this->assertGreaterThanOrEqual(3, $heartbeats);
     }
 
+    public function test_output_file_process_reports_progress_while_silent(): void
+    {
+        $heartbeats = 0;
+        $outputPath = sys_get_temp_dir().'/volumevault-docker-output-'.uniqid();
+        $dockerProcess = app(DockerProcess::class);
+
+        try {
+            $result = $dockerProcess->whileMonitoring(
+                function () use (&$heartbeats): void {
+                    $heartbeats++;
+                },
+                fn () => $dockerProcess->runWithOutputFile([
+                    PHP_BINARY,
+                    '-r',
+                    'usleep(2200000); echo "archive";',
+                ], $outputPath, 10),
+                1,
+            );
+
+            $this->assertTrue($result->successful());
+            $this->assertSame('archive', File::get($outputPath));
+            $this->assertGreaterThanOrEqual(3, $heartbeats);
+        } finally {
+            File::delete($outputPath);
+        }
+    }
+
+    public function test_output_file_process_rejects_a_zero_byte_write(): void
+    {
+        $outputPath = sys_get_temp_dir().'/volumevault-docker-zero-write-'.uniqid();
+        $dockerProcess = new class extends DockerProcess
+        {
+            protected function writeOutput(mixed $output, string $buffer): int|false
+            {
+                return 0;
+            }
+        };
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessage('Unable to write Docker output to file');
+
+            $dockerProcess->runWithOutputFile([PHP_BINARY, '-r', 'echo "archive";'], $outputPath, 10);
+        } finally {
+            File::delete($outputPath);
+        }
+    }
+
     public function test_monitoring_state_is_restored_when_the_initial_callback_fails(): void
     {
         $dockerProcess = app(DockerProcess::class);
@@ -124,5 +172,37 @@ class DockerProcessTest extends TestCase
 
         $this->assertSame(0, $result->exitCode);
         $this->assertSame('ok', $result->output);
+    }
+
+    public function test_secret_environment_values_are_redacted_from_process_output(): void
+    {
+        $secret = 'discord://super-secret-token@example';
+        $result = app(DockerProcess::class)->run([
+            PHP_BINARY,
+            '-r',
+            'fwrite(STDOUT, getenv("SHOUTRRR_URL")); fwrite(STDERR, getenv("SHOUTRRR_URL"));',
+        ], 10, ['SHOUTRRR_URL' => $secret]);
+
+        $this->assertSame(0, $result->exitCode);
+        $this->assertSame('********', $result->output);
+        $this->assertSame('********', $result->errorOutput);
+        $this->assertStringNotContainsString($secret, serialize($result));
+    }
+
+    public function test_overlapping_secret_values_are_redacted_longest_first(): void
+    {
+        $shortSecret = 'shared-secret';
+        $longSecret = 'shared-secret-with-suffix';
+        $result = app(DockerProcess::class)->run([
+            PHP_BINARY,
+            '-r',
+            'fwrite(STDERR, getenv("TOKEN"));',
+        ], 10, [
+            'SECRET' => $shortSecret,
+            'TOKEN' => $longSecret,
+        ]);
+
+        $this->assertSame('********', $result->errorOutput);
+        $this->assertStringNotContainsString('with-suffix', serialize($result));
     }
 }

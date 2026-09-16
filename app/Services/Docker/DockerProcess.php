@@ -42,7 +42,7 @@ class DockerProcess
     {
         $process = new Process($command, null, $this->environment($environment), null, $timeout);
 
-        return $this->runProcess($process, $command);
+        return $this->runProcess($process, $command, $environment);
     }
 
     /**
@@ -81,7 +81,7 @@ class DockerProcess
         try {
             $process = new Process($command, null, $this->environment($environment), $input, $timeout);
 
-            return $this->runProcess($process, $command);
+            return $this->runProcess($process, $command, $environment);
         } finally {
             if (is_resource($input)) {
                 fclose($input);
@@ -108,7 +108,7 @@ class DockerProcess
         $errorOutput = '';
 
         try {
-            $process->run(function (string $type, string $buffer) use ($output, $outputPath, &$errorOutput, $process): void {
+            $write = function (string $type, string $buffer) use ($output, $outputPath, &$errorOutput, $process): void {
                 if ($type !== Process::OUT) {
                     $errorOutput .= $buffer;
                     // stderr stays tiny, but clear it too so nothing accumulates.
@@ -119,9 +119,9 @@ class DockerProcess
 
                 // fwrite can do a short write; loop until the whole chunk lands.
                 for ($offset = 0, $length = strlen($buffer); $offset < $length;) {
-                    $written = fwrite($output, substr($buffer, $offset));
+                    $written = $this->writeOutput($output, substr($buffer, $offset));
 
-                    if ($written === false) {
+                    if ($written === false || $written === 0) {
                         throw new RuntimeException('Unable to write Docker output to file: '.$outputPath);
                     }
 
@@ -132,13 +132,41 @@ class DockerProcess
                 // callback streams it; clear it after each chunk so a multi-GB
                 // archive is never duplicated into memory (or the temp spool).
                 $process->clearOutput();
-            });
+            };
+
+            if ($this->progressCallback === null) {
+                $process->run($write);
+            } else {
+                $process->start();
+
+                do {
+                    $isRunning = $process->isRunning();
+                    $stdout = $process->getOutput();
+                    $stderr = $process->getErrorOutput();
+
+                    if ($stdout !== '') {
+                        $write(Process::OUT, $stdout);
+                    }
+                    if ($stderr !== '') {
+                        $write(Process::ERR, $stderr);
+                    }
+
+                    $this->reportProgressIfDue();
+
+                    if ($isRunning) {
+                        $process->checkTimeout();
+                        usleep(200000);
+                    }
+                } while ($isRunning);
+
+                $process->wait();
+            }
 
             return new DockerProcessResult(
                 command: $this->sanitizeCommand($command),
                 exitCode: $process->getExitCode() ?? 1,
                 output: '',
-                errorOutput: $errorOutput,
+                errorOutput: $this->sanitizeOutput($errorOutput, $environment),
             );
         } catch (ProcessTimedOutException) {
             $process->stop(3);
@@ -150,6 +178,12 @@ class DockerProcess
                 errorOutput: 'Docker command timed out.',
                 timedOut: true,
             );
+        } catch (Throwable $exception) {
+            if ($process->isRunning()) {
+                $process->stop(3);
+            }
+
+            throw $exception;
         } finally {
             if (is_resource($output)) {
                 fclose($output);
@@ -157,7 +191,7 @@ class DockerProcess
         }
     }
 
-    private function runProcess(Process $process, array $command): DockerProcessResult
+    private function runProcess(Process $process, array $command, array $environment = []): DockerProcessResult
     {
         try {
             if ($this->progressCallback === null) {
@@ -167,12 +201,7 @@ class DockerProcess
 
                 while ($process->isRunning()) {
                     $process->checkTimeout();
-                    $now = microtime(true);
-
-                    if ($now - $this->lastProgressAt >= $this->progressIntervalSeconds) {
-                        $this->lastProgressAt = $now;
-                        ($this->progressCallback)();
-                    }
+                    $this->reportProgressIfDue();
 
                     usleep(200000);
                 }
@@ -183,8 +212,8 @@ class DockerProcess
             return new DockerProcessResult(
                 command: $this->sanitizeCommand($command),
                 exitCode: $process->getExitCode() ?? 1,
-                output: $process->getOutput(),
-                errorOutput: $process->getErrorOutput(),
+                output: $this->sanitizeOutput($process->getOutput(), $environment),
+                errorOutput: $this->sanitizeOutput($process->getErrorOutput(), $environment),
             );
         } catch (ProcessTimedOutException) {
             $process->stop(3);
@@ -192,7 +221,7 @@ class DockerProcess
             return new DockerProcessResult(
                 command: $this->sanitizeCommand($command),
                 exitCode: 124,
-                output: $process->getOutput(),
+                output: $this->sanitizeOutput($process->getOutput(), $environment),
                 errorOutput: 'Docker command timed out.',
                 timedOut: true,
             );
@@ -203,6 +232,11 @@ class DockerProcess
 
             throw $exception;
         }
+    }
+
+    protected function writeOutput(mixed $output, string $buffer): int|false
+    {
+        return fwrite($output, $buffer);
     }
 
     private function environment(array $environment): array
@@ -241,5 +275,38 @@ class DockerProcess
 
             return $argument;
         }, $command);
+    }
+
+    private function sanitizeOutput(string $output, array $environment): string
+    {
+        $secretValues = [];
+
+        foreach ($environment as $key => $value) {
+            if (! is_string($value) || $value === '' || ! in_array(strtoupper((string) $key), self::SECRET_KEYS, true)) {
+                continue;
+            }
+
+            $secretValues[$value] = $value;
+        }
+
+        usort($secretValues, fn (string $left, string $right): int => strlen($right) <=> strlen($left));
+
+        return str_replace($secretValues, '********', $output);
+    }
+
+    private function reportProgressIfDue(): void
+    {
+        if ($this->progressCallback === null) {
+            return;
+        }
+
+        $now = microtime(true);
+
+        if ($now - $this->lastProgressAt < $this->progressIntervalSeconds) {
+            return;
+        }
+
+        $this->lastProgressAt = $now;
+        ($this->progressCallback)();
     }
 }

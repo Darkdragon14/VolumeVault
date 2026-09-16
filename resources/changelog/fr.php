@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'Refus anticipé des sauvegardes de sécurité Dropbox non prises en charge',
+        'description' => 'Les restaurations sur place refusent désormais une sauvegarde de sécurité demandée avant la mise en file si la destination actuelle de la tâche est Dropbox. Le formulaire explique cette limite et conserve votre choix jusqu’à sa modification explicite.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Restaurations Dropbox plus sûres et ordre des archives corrigé',
+        'description' => 'Les envois via Offen ne fournissent pas à VolumeVault d’identifiant exact et vérifiable du fichier Dropbox. Le traitement asynchrone des métadonnées ne détermine jamais l’identité à partir du nom du fichier, car celui-ci peut avoir été remplacé. Même les nouvelles sauvegardes Dropbox réussies sans identifiant de fichier prouvé restent invérifiables pour une restauration depuis l’historique des exécutions. Les archives des destinations de type volume Docker sont désormais correctement affichées de la plus récente à la plus ancienne.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Lecture plus sûre des archives locales',
+        'description' => 'Les téléchargements d’archives locales pour les restaurations verrouillent désormais la racine de l’archive, refusent la traversée des liens symboliques et publient les fichiers complets de manière atomique sans supprimer les cibles existantes en cas d’échec.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Distribution fiable des exécutions en attente',
+        'description' => 'Les sauvegardes, restaurations et groupes en attente disposent désormais d’un bail de distribution persistant et sont automatiquement redistribués si la remise initiale à la file est perdue, sans dupliquer une exécution déjà prise en charge par un worker. Une file asynchrone est requise ; le driver sync est refusé car il ne peut pas remettre durablement en file les jobs qui attendent un verrou.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Notifications de fin fiables',
+        'description' => 'Les notifications finales des sauvegardes, restaurations et groupes sont desormais retentees independamment par canal afin qu\'une erreur temporaire ne perde plus le resultat.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Historique fiable des sauvegardes',
+        'description' => 'Les sauvegardes conservent desormais leur source, leur destination et leur nom d’archive d’origine afin que l’execution, les metadonnees, l’historique et les restaurations d’anciennes executions restent corrects apres la modification d’une tache.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Tri des tâches de sauvegarde',
         'description' => 'Les tâches de sauvegarde peuvent désormais être triées par nom, prochaine exécution planifiée ou dernière exécution, dans les deux sens. Le tri couvre toute la liste paginée, reste dans l’URL et est également disponible via l’API.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Réseau du socket proxy Docker TCP pour les sauvegardes',
         'description' => 'Les sauvegardes peuvent désormais joindre un socket proxy Docker TCP désigné par son nom de service sur un réseau Docker. Définissez VOLUMEVAULT_DOCKER_NETWORK avec le nom du réseau utilisateur visible par le moteur, et VolumeVault y connectera les conteneurs de sauvegarde Offen temporaires.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Sauvegardes gerees par labels Docker',
+        'description' => 'Les conteneurs actifs peuvent desormais declarer une ou plusieurs sauvegardes planifiees de volumes avec des labels Docker. Les administrateurs configurent des valeurs par defaut de confiance dans VolumeVault, tandis que les labels peuvent remplacer les parametres non secrets. Les jobs generes restent visibles et utilisables mais en lecture seule, et sont desactives en securite si leur declaration disparait ou entre en conflit avec une configuration manuelle.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Prise en charge des endpoints Docker TCP',

@@ -45,7 +45,7 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertNotNull($job->next_run_at);
     }
 
-    public function test_stale_queued_backup_run_is_marked_failed(): void
+    public function test_stale_top_level_queued_backup_run_is_left_for_dispatch_recovery(): void
     {
         $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
         $run = BackupRun::create([
@@ -58,7 +58,134 @@ class ReconcileStaleRunsTest extends TestCase
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
+        $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
+    }
+
+    public function test_queued_backup_with_two_stale_unclaimed_publications_is_marked_failed(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+        ]);
+        $run->forceFill([
+            'dispatch_token' => 'second-publication',
+            'dispatch_published_at' => now()->subHours(2),
+            'dispatch_attempted_at' => now()->subHour(),
+        ])->save();
+
+        $this->assertTrue($run->dispatch_attempted_at->isAfter($run->dispatch_published_at));
+        $this->assertTrue($run->dispatch_attempted_at->isBefore(now()->subMinutes(ReconcileStaleRuns::DEFAULT_THRESHOLD_MINUTES)));
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $run->refresh();
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('both queue publication attempts remained unclaimed', $run->error_message);
+    }
+
+    public function test_exhausted_publication_waiting_on_an_active_volume_holder_is_not_failed(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => $job->volume_name,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+        $waiter = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => $job->volume_name,
+        ]);
+        $waiter->forceFill([
+            'dispatch_token' => 'second-publication',
+            'dispatch_published_at' => now()->subHours(2),
+            'dispatch_attempted_at' => now()->subHour(),
+        ])->save();
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_QUEUED, $waiter->refresh()->status);
+    }
+
+    public function test_exhausted_publication_is_not_failed_while_its_overlap_lock_is_held(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => $job->volume_name,
+        ]);
+        $run->forceFill([
+            'dispatch_token' => 'second-publication',
+            'dispatch_published_at' => now()->subHours(2),
+            'dispatch_attempted_at' => now()->subHour(),
+        ])->save();
+        $holder = Cache::lock(VolumeJobLock::cacheKey($job->volume_name), 86400);
+        $this->assertTrue($holder->get());
+
+        try {
+            $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+            $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
+        } finally {
+            $holder->release();
+        }
+    }
+
+    public function test_stale_backup_without_stopped_containers_applies_pending_label_reconciliation(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $job->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'stale-backup'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'started_at' => now()->subDays(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertNull($job->refresh()->pending_label_reconciliation);
+        $this->assertSame('Definition removed.', $job->label_reconciliation_error);
+    }
+
+    public function test_stale_restore_without_stopped_containers_applies_pending_label_reconciliation(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $job->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'stale-restore'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
+        RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now()->subDays(2),
+        ]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertNull($job->refresh()->pending_label_reconciliation);
+        $this->assertSame('Definition removed.', $job->label_reconciliation_error);
     }
 
     public function test_recent_running_backup_run_is_not_swept(): void
@@ -208,7 +335,7 @@ class ReconcileStaleRunsTest extends TestCase
         File::deleteDirectory($storagePath);
     }
 
-    public function test_running_restore_with_an_in_progress_download_is_not_swept(): void
+    public function test_a_final_archive_does_not_hide_a_restore_with_a_stale_heartbeat(): void
     {
         $storagePath = sys_get_temp_dir().'/vv-reconcile-'.uniqid();
         File::ensureDirectoryExists($storagePath);
@@ -228,14 +355,15 @@ class ReconcileStaleRunsTest extends TestCase
             'last_heartbeat_at' => now()->subHours(2),
         ]);
 
-        // The worker is mid-download: the temp archive exists and was just written.
+        // The final archive can remain after the download. It is not a liveness
+        // signal because active downloads publish through a random staging path.
         $archive = $storagePath.'/app/restore-runs/'.$run->id.'/backup.tar.gz';
         File::ensureDirectoryExists(dirname($archive));
         File::put($archive, 'partial-download');
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
 
         File::deleteDirectory($storagePath);
     }
@@ -339,7 +467,7 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_QUEUED, $waiter->refresh()->status);
     }
 
-    public function test_failing_a_running_holder_releases_its_orphaned_volume_lock(): void
+    public function test_failing_a_running_holder_leaves_its_orphaned_volume_lock_to_expire(): void
     {
         // Simulate a crashed worker that holds the volume lock but never released it.
         $orphaned = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
@@ -361,12 +489,11 @@ class ReconcileStaleRunsTest extends TestCase
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
-        // The lock was force-released, so a fresh acquisition succeeds instead of
-        // waiting out the 24h expiry.
-        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get());
+        $this->assertFalse(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get());
+        $orphaned->release();
     }
 
-    public function test_failing_a_running_host_path_backup_releases_its_orphaned_job_lock(): void
+    public function test_failing_a_running_host_path_backup_leaves_its_orphaned_job_lock_to_expire(): void
     {
         $destination = BackupDestination::create([
             'name' => 'Local',
@@ -389,7 +516,8 @@ class ReconcileStaleRunsTest extends TestCase
 
         // Host-path jobs have no volume, so they lock on the backup-job fallback key.
         $lockKey = 'backup-job-'.$job->id;
-        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400)->get());
+        $orphaned = Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400);
+        $this->assertTrue($orphaned->get());
 
         $run = BackupRun::create([
             'backup_job_id' => $job->id,
@@ -401,10 +529,11 @@ class ReconcileStaleRunsTest extends TestCase
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
-        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400)->get());
+        $this->assertFalse(Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400)->get());
+        $orphaned->release();
     }
 
-    public function test_failing_a_queued_standalone_backup_releases_its_orphaned_volume_lock(): void
+    public function test_a_queued_standalone_backup_and_its_orphaned_lock_are_left_for_recovery(): void
     {
         // WithoutOverlapping acquires the lock before RunBackup flips the run to
         // running; simulate a worker that crashed in that window.
@@ -421,13 +550,35 @@ class ReconcileStaleRunsTest extends TestCase
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
-        // No other run holds the lock, so the orphan is released rather than left
-        // to block same-volume work for the 24h TTL.
-        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get(), 'the orphaned lock should be released');
+        $this->assertSame(BackupRun::STATUS_QUEUED, $run->refresh()->status);
+        $this->assertFalse(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get());
+        $orphaned->release();
     }
 
-    public function test_failing_a_queued_restore_releases_its_orphaned_volume_lock(): void
+    public function test_stale_snapshot_run_leaves_its_original_volume_lock_to_expire_after_job_retarget(): void
+    {
+        $orphaned = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
+        $this->assertTrue($orphaned->get());
+
+        $job = $this->backupJob(BackupJob::STATUS_RUNNING);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'app_data',
+            'started_at' => now()->subDays(2),
+        ]);
+        $job->update(['volume_name' => 'retargeted_data']);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
+        $this->assertFalse(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get());
+        $orphaned->release();
+    }
+
+    public function test_a_queued_restore_and_its_orphaned_lock_are_left_for_recovery(): void
     {
         $orphaned = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
         $this->assertTrue($orphaned->get());
@@ -446,10 +597,9 @@ class ReconcileStaleRunsTest extends TestCase
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
-        // Like backups, a queued restore that held the lock (crash before running)
-        // has its orphan released rather than blocking same-volume work for 24h.
-        $this->assertTrue(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get(), 'the orphaned restore lock should be released');
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $run->refresh()->status);
+        $this->assertFalse(Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400)->get());
+        $orphaned->release();
     }
 
     public function test_a_running_backup_with_a_fresh_heartbeat_is_not_reconciled(): void
@@ -500,6 +650,35 @@ class ReconcileStaleRunsTest extends TestCase
 
         // The holder is still finalizing (fresh heartbeat), so the waiter is
         // legitimately pending and must not be failed.
+        $this->assertSame(BackupRun::STATUS_QUEUED, $waiter->refresh()->status);
+    }
+
+    public function test_snapshotted_backup_waiter_uses_its_original_volume_after_job_retarget(): void
+    {
+        $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => now(),
+            'last_heartbeat_at' => now(),
+        ]);
+        $waiter = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'app_data',
+        ]);
+        $waiter->forceFill(['created_at' => now()->subHour()])->save();
+        $job->update(['volume_name' => 'retargeted_data']);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
         $this->assertSame(BackupRun::STATUS_QUEUED, $waiter->refresh()->status);
     }
 
@@ -609,6 +788,11 @@ class ReconcileStaleRunsTest extends TestCase
         $this->app->instance(DockerProcess::class, $docker);
 
         $job = $this->backupJob(BackupJob::STATUS_ERROR);
+        $job->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'recovery-backup'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
         $run = BackupRun::create([
             'backup_job_id' => $job->id,
             'status' => BackupRun::STATUS_FAILED,
@@ -625,6 +809,8 @@ class ReconcileStaleRunsTest extends TestCase
             ['docker', 'start', 'app-2'],
         ], $docker->commands);
         $this->assertNull($run->refresh()->stopped_container_ids);
+        $this->assertNull($job->refresh()->pending_label_reconciliation);
+        $this->assertSame('Definition removed.', $job->label_reconciliation_error);
     }
 
     public function test_container_recovery_rechecks_a_run_loaded_before_the_worker_cleared_its_ids(): void
@@ -704,6 +890,35 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
     }
 
+    public function test_snapshot_container_recovery_locks_the_original_volume_after_job_retarget(): void
+    {
+        $docker = $this->recordingDockerProcess();
+        $this->app->instance(DockerProcess::class, $docker);
+
+        $job = $this->backupJob(BackupJob::STATUS_ERROR);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_FAILED,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'app_data',
+            'finished_at' => now()->subHour(),
+            'stopped_container_ids' => ['app-1'],
+        ]);
+        $job->update(['volume_name' => 'retargeted_data']);
+        $originalVolumeLock = Cache::lock(VolumeJobLock::cacheKey('app_data'), 86400);
+        $this->assertTrue($originalVolumeLock->get());
+
+        try {
+            $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        } finally {
+            $originalVolumeLock->release();
+        }
+
+        $this->assertSame(['app-1'], $run->refresh()->stopped_container_ids);
+        $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
+    }
+
     public function test_container_recovery_holds_the_volume_lock_during_docker_start(): void
     {
         $job = $this->backupJob(BackupJob::STATUS_ERROR);
@@ -764,12 +979,17 @@ class ReconcileStaleRunsTest extends TestCase
         $this->assertSame([['docker', 'start', 'app-1']], $docker->commands);
     }
 
-    public function test_restart_failure_keeps_stopped_container_ids_for_retry(): void
+    public function test_restart_failure_defers_pending_label_reconciliation_until_recovery(): void
     {
         $docker = $this->recordingDockerProcess(successful: false);
         $this->app->instance(DockerProcess::class, $docker);
 
         $job = $this->backupJob(BackupJob::STATUS_ERROR);
+        $job->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'restart-recovery'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
         $run = BackupRun::create([
             'backup_job_id' => $job->id,
             'status' => BackupRun::STATUS_FAILED,
@@ -782,6 +1002,14 @@ class ReconcileStaleRunsTest extends TestCase
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(['app-1'], $run->refresh()->stopped_container_ids);
+        $this->assertNotNull($job->refresh()->pending_label_reconciliation);
+
+        $this->app->instance(DockerProcess::class, $this->recordingDockerProcess());
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $this->assertNull($run->refresh()->stopped_container_ids);
+        $this->assertNull($job->refresh()->pending_label_reconciliation);
+        $this->assertSame('Definition removed.', $job->label_reconciliation_error);
     }
 
     public function test_terminal_restore_run_with_stopped_containers_is_restarted(): void
@@ -790,6 +1018,11 @@ class ReconcileStaleRunsTest extends TestCase
         $this->app->instance(DockerProcess::class, $docker);
 
         $job = $this->backupJob(BackupJob::STATUS_ACTIVE);
+        $job->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'recovery-restore'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
         $run = RestoreRun::create([
             'backup_job_id' => $job->id,
             'backup_destination_id' => $job->backup_destination_id,
@@ -810,6 +1043,8 @@ class ReconcileStaleRunsTest extends TestCase
             ['docker', 'start', 'app-2'],
         ], $docker->commands);
         $this->assertNull($run->refresh()->stopped_container_ids);
+        $this->assertNull($job->refresh()->pending_label_reconciliation);
+        $this->assertSame('Definition removed.', $job->label_reconciliation_error);
     }
 
     public function test_terminal_run_without_stopped_containers_is_left_untouched(): void
@@ -1329,8 +1564,7 @@ class ReconcileStaleRunsTest extends TestCase
         bool $stopSuccessful = true,
         ?bool $containerExists = null,
         bool $removeSuccessful = true,
-    ): DockerProcess
-    {
+    ): DockerProcess {
         return new class($alive, $stopSuccessful, $containerExists ?? $alive, $removeSuccessful) extends DockerProcess
         {
             /** @var array<int, array<int, string>> */

@@ -136,6 +136,33 @@ class VolumeJobLockTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_QUEUED, $run->refresh()->status);
     }
 
+    public function test_restore_job_detects_an_active_backup_by_its_source_snapshot_after_job_retargeting(): void
+    {
+        $job = $this->backupJob();
+        BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_RUNNING,
+            'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'app_data',
+            'started_at' => now(),
+        ]);
+        $job->update(['volume_name' => 'retargeted_data']);
+        $run = RestoreRun::create([
+            'backup_job_id' => $job->id,
+            'backup_destination_id' => $job->backup_destination_id,
+            'selected_backup_key' => 'backup.tar.gz',
+            'source_volume_name' => 'app_data',
+            'target_volume_name' => 'app_data',
+            'mode' => RestoreRun::MODE_INPLACE,
+            'status' => RestoreRun::STATUS_QUEUED,
+        ]);
+
+        (new RunRestoreJob($run->id))->handle(app(RunRestore::class));
+
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $run->refresh()->status);
+    }
+
     public function test_backup_job_requeues_instead_of_overlapping_a_busy_volume(): void
     {
         $job = $this->backupJob();
@@ -343,9 +370,14 @@ class VolumeJobLockTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
-    public function test_restore_failed_hook_fails_a_queued_run(): void
+    public function test_restore_failed_hook_leaves_a_queued_run_for_dispatch_recovery(): void
     {
         $job = $this->backupJob();
+        $job->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'queued-restore'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
         $run = RestoreRun::create([
             'backup_job_id' => $job->id,
             'backup_destination_id' => $job->backup_destination_id,
@@ -354,11 +386,17 @@ class VolumeJobLockTest extends TestCase
             'target_volume_name' => 'app_data',
             'mode' => RestoreRun::MODE_INPLACE,
             'status' => RestoreRun::STATUS_QUEUED,
+            'dispatch_attempted_at' => now(),
+            'dispatch_published_at' => now(),
         ]);
 
         (new RunRestoreJob($run->id))->failed(new \RuntimeException('boom'));
 
-        $this->assertSame(RestoreRun::STATUS_FAILED, $run->refresh()->status);
+        $run->refresh();
+        $this->assertSame(RestoreRun::STATUS_QUEUED, $run->status);
+        $this->assertNull($run->dispatch_attempted_at);
+        $this->assertNull($run->dispatch_published_at);
+        $this->assertNotNull($job->refresh()->pending_label_reconciliation);
     }
 
     public function test_run_backup_does_not_re_execute_an_already_running_run(): void
@@ -398,19 +436,30 @@ class VolumeJobLockTest extends TestCase
         $this->assertSame(BackupRun::STATUS_RUNNING, $run->refresh()->status);
     }
 
-    public function test_failed_hook_fails_a_queued_standalone_run(): void
+    public function test_failed_hook_leaves_a_queued_standalone_run_for_dispatch_recovery(): void
     {
         $job = $this->backupJob();
+        $job->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'queued-backup'),
+            'pending_label_reconciliation' => ['action' => 'disable', 'message' => 'Definition removed.'],
+        ]);
         $run = BackupRun::create([
             'backup_job_id' => $job->id,
             'status' => BackupRun::STATUS_QUEUED,
             'trigger' => BackupRun::TRIGGER_SCHEDULED,
+            'dispatch_attempted_at' => now(),
+            'dispatch_published_at' => now(),
         ]);
 
-        // A run the queue never started is safe to fail from the hook.
+        // A duplicate payload may fail while another payload is about to claim it.
         (new RunBackupJob($run->id))->failed(new \RuntimeException('boom'));
 
-        $this->assertSame(BackupRun::STATUS_FAILED, $run->refresh()->status);
+        $run->refresh();
+        $this->assertSame(BackupRun::STATUS_QUEUED, $run->status);
+        $this->assertNull($run->dispatch_attempted_at);
+        $this->assertNull($run->dispatch_published_at);
+        $this->assertNotNull($job->refresh()->pending_label_reconciliation);
     }
 
     private function hostPathJob(): BackupJob

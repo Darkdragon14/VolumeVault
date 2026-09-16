@@ -29,7 +29,7 @@ class BackupGroupRunController extends Controller
                         'id' => $run->id,
                         'status' => $run->status,
                         'job_name' => $run->job?->name,
-                        'source_label' => $run->job?->sourceName(),
+                        'source_label' => $run->sourceName(),
                         'started_at' => $run->started_at,
                         'finished_at' => $run->finished_at,
                         'duration_seconds' => $run->duration_seconds,

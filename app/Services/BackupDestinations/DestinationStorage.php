@@ -4,10 +4,12 @@ namespace App\Services\BackupDestinations;
 
 use App\Actions\Docker\RunBackupContainer;
 use App\Models\BackupDestination;
+use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerVolumeName;
 use App\Services\S3\S3ClientFactory;
 use App\Services\Security\OutboundHostGuard;
+use App\Support\SshHostKey;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -16,23 +18,35 @@ use Illuminate\Support\Str;
 use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Net\SFTP;
 use RuntimeException;
+use Throwable;
 
 class DestinationStorage
 {
     /** phpseclib's NET_SFTP_TYPE_DIRECTORY — only defined once an SFTP instance is constructed, so we mirror it here. */
     private const SFTP_TYPE_DIRECTORY = 2;
 
+    /** phpseclib's NET_SFTP_TYPE_REGULAR. */
+    private const SFTP_TYPE_REGULAR = 1;
+
     private readonly OutboundHostGuard $outboundHostGuard;
 
     private readonly DockerProcess $dockerProcess;
+
+    private readonly SecureLocalArchiveReader $secureLocalArchiveReader;
+
+    private readonly HostPathPolicy $hostPathPolicy;
 
     public function __construct(
         private readonly S3ClientFactory $s3ClientFactory,
         ?OutboundHostGuard $outboundHostGuard = null,
         ?DockerProcess $dockerProcess = null,
+        ?SecureLocalArchiveReader $secureLocalArchiveReader = null,
+        ?HostPathPolicy $hostPathPolicy = null,
     ) {
         $this->outboundHostGuard = $outboundHostGuard ?? new OutboundHostGuard;
         $this->dockerProcess = $dockerProcess ?? new DockerProcess;
+        $this->secureLocalArchiveReader = $secureLocalArchiveReader ?? new SecureLocalArchiveReader;
+        $this->hostPathPolicy = $hostPathPolicy ?? new HostPathPolicy;
     }
 
     public function test(BackupDestination $destination): void
@@ -77,6 +91,76 @@ class DestinationStorage
             ->sortByDesc('last_modified')
             ->values()
             ->all();
+    }
+
+    public function hasBackupObject(BackupDestination $destination, string $key): bool
+    {
+        $this->guardOutbound($destination);
+
+        return match ($destination->provider) {
+            BackupDestination::PROVIDER_AWS_S3,
+            BackupDestination::PROVIDER_CLOUDFLARE_R2,
+            BackupDestination::PROVIDER_CUSTOM_S3 => $this->hasS3Object($destination, $key),
+            BackupDestination::PROVIDER_WEBDAV => $this->hasWebDavObject($destination, $key),
+            BackupDestination::PROVIDER_SSH => $this->hasSftpObject($destination, $key),
+            BackupDestination::PROVIDER_AZURE_BLOB => $this->hasAzureObject($destination, $key),
+            BackupDestination::PROVIDER_DROPBOX => $this->hasDropboxObject($destination, $key),
+            BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->hasGoogleDriveObject($destination, $key),
+            BackupDestination::PROVIDER_LOCAL => $this->hasLocalObject($destination, $key),
+            BackupDestination::PROVIDER_DOCKER_VOLUME => $this->hasDockerVolumeObject($destination, $key),
+            default => throw new RuntimeException('Unsupported backup destination provider.'),
+        };
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findBackupObjectByFilename(BackupDestination $destination, string $filename): ?array
+    {
+        $this->guardOutbound($destination);
+
+        if (! $this->plausibleBackupKey($filename)) {
+            return null;
+        }
+
+        if ($destination->provider === BackupDestination::PROVIDER_GOOGLE_DRIVE) {
+            return $this->findGoogleDriveObjectByFilename($destination, $filename);
+        }
+
+        $key = match ($destination->provider) {
+            BackupDestination::PROVIDER_AWS_S3,
+            BackupDestination::PROVIDER_CLOUDFLARE_R2,
+            BackupDestination::PROVIDER_CUSTOM_S3 => $this->joinRelative($destination->setting('path_prefix'), $filename),
+            BackupDestination::PROVIDER_DROPBOX => $this->dropboxPath($destination, filename: $filename),
+            default => $filename,
+        };
+
+        $listed = collect($this->listBackupObjects($destination))->first(function (array $object) use ($destination, $filename, $key): bool {
+            if (($object['key'] ?? null) === $key) {
+                return true;
+            }
+
+            return $destination->provider === BackupDestination::PROVIDER_DROPBOX
+                && ($object['display_name'] ?? null) === $filename;
+        });
+
+        if ($listed !== null) {
+            return $listed;
+        }
+
+        $resolved = $this->findBackupObjectByKey($destination, $key);
+
+        return $resolved === null ? null : [...$resolved, 'display_name' => $resolved['display_name'] ?? $filename];
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findBackupObjectByKey(BackupDestination $destination, string $key): ?array
+    {
+        $this->guardOutbound($destination);
+
+        if ($destination->provider === BackupDestination::PROVIDER_DROPBOX) {
+            return $this->dropboxObjectMetadata($destination, $key);
+        }
+
+        return $this->hasBackupObject($destination, $key) ? ['key' => $key] : null;
     }
 
     /** @return array{used_bytes: int, object_count: int} */
@@ -143,22 +227,44 @@ class DestinationStorage
         };
     }
 
-    public function download(BackupDestination $destination, string $key, string $targetPath): void
+    public function download(BackupDestination $destination, string $key, string $targetPath, ?callable $progress = null): void
     {
         $this->guardOutbound($destination);
+        $progress = $this->downloadProgress($progress);
 
         match ($destination->provider) {
             BackupDestination::PROVIDER_AWS_S3,
             BackupDestination::PROVIDER_CLOUDFLARE_R2,
-            BackupDestination::PROVIDER_CUSTOM_S3 => $this->downloadS3($destination, $key, $targetPath),
-            BackupDestination::PROVIDER_WEBDAV => $this->downloadWebDav($destination, $key, $targetPath),
-            BackupDestination::PROVIDER_SSH => $this->downloadSftp($destination, $key, $targetPath),
-            BackupDestination::PROVIDER_AZURE_BLOB => $this->downloadAzure($destination, $key, $targetPath),
-            BackupDestination::PROVIDER_DROPBOX => $this->downloadDropbox($destination, $key, $targetPath),
-            BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->downloadGoogleDrive($destination, $key, $targetPath),
-            BackupDestination::PROVIDER_LOCAL => $this->downloadLocal($destination, $key, $targetPath),
-            BackupDestination::PROVIDER_DOCKER_VOLUME => $this->downloadDockerVolume($destination, $key, $targetPath),
+            BackupDestination::PROVIDER_CUSTOM_S3 => $this->downloadS3($destination, $key, $targetPath, $progress),
+            BackupDestination::PROVIDER_WEBDAV => $this->downloadWebDav($destination, $key, $targetPath, $progress),
+            BackupDestination::PROVIDER_SSH => $this->downloadSftp($destination, $key, $targetPath, $progress),
+            BackupDestination::PROVIDER_AZURE_BLOB => $this->downloadAzure($destination, $key, $targetPath, $progress),
+            BackupDestination::PROVIDER_DROPBOX => $this->downloadDropbox($destination, $key, $targetPath, $progress),
+            BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->downloadGoogleDrive($destination, $key, $targetPath, $progress),
+            BackupDestination::PROVIDER_LOCAL => $this->downloadLocal($destination, $key, $targetPath, $progress),
+            BackupDestination::PROVIDER_DOCKER_VOLUME => $this->downloadDockerVolume($destination, $key, $targetPath, $progress),
             default => throw new RuntimeException('Unsupported backup destination provider.'),
+        };
+    }
+
+    private function downloadProgress(?callable $progress): ?callable
+    {
+        if ($progress === null) {
+            return null;
+        }
+
+        $lastProgressAt = microtime(true);
+        $progress();
+
+        return function () use ($progress, &$lastProgressAt): void {
+            $now = microtime(true);
+
+            if ($now - $lastProgressAt < 30) {
+                return;
+            }
+
+            $lastProgressAt = $now;
+            $progress();
         };
     }
 
@@ -244,18 +350,42 @@ class DestinationStorage
         return $key;
     }
 
-    private function downloadS3(BackupDestination $destination, string $key, string $targetPath): void
+    private function downloadS3(BackupDestination $destination, string $key, string $targetPath, ?callable $progress): void
     {
-        $this->s3ClientFactory->make($destination)->getObject([
+        $options = [
             'Bucket' => $destination->setting('bucket'),
             'Key' => $key,
             'SaveAs' => $targetPath,
-        ]);
+        ];
+
+        if ($progress !== null) {
+            $options['@http'] = ['progress' => $progress];
+        }
+
+        $this->s3ClientFactory->make($destination)->getObject($options);
+    }
+
+    private function hasS3Object(BackupDestination $destination, string $key): bool
+    {
+        try {
+            $this->s3ClientFactory->make($destination)->headObject([
+                'Bucket' => $destination->setting('bucket'),
+                'Key' => $key,
+            ]);
+
+            return true;
+        } catch (Throwable $exception) {
+            if (method_exists($exception, 'getStatusCode') && $exception->getStatusCode() === 404) {
+                return false;
+            }
+
+            throw $exception;
+        }
     }
 
     private function listWebDav(BackupDestination $destination, int $limit = 1000): array
     {
-        $basePath = trim((string) $destination->setting('path'), '/');
+        $basePath = $this->configuredWebDavPath($destination);
         $baseUrl = $this->webDavUrl($destination, $basePath);
         $response = $this->webDavRequest($destination, 'PROPFIND', $baseUrl, [
             'headers' => ['Depth' => 'infinity', 'Content-Type' => 'application/xml; charset=utf-8'],
@@ -269,19 +399,27 @@ class DestinationStorage
         }
 
         $objects = [];
-        $baseUrlPath = rtrim(urldecode((string) parse_url($baseUrl, PHP_URL_PATH)), '/');
+        $baseUrlPath = rtrim($this->decodeWebDavUrlPath((string) parse_url($baseUrl, PHP_URL_PATH)), '/');
 
         foreach ($xml->children('DAV:')->response as $entry) {
-            if (count($objects) >= $limit) {
-                break;
+            $dav = $entry->children('DAV:');
+            $hrefUrlPath = (string) parse_url((string) $dav->href, PHP_URL_PATH);
+
+            try {
+                $hrefPath = $this->decodeWebDavUrlPath($hrefUrlPath);
+                $prefix = $baseUrlPath === '' ? '/' : $baseUrlPath.'/';
+
+                if (! str_starts_with($hrefPath, $prefix)) {
+                    continue;
+                }
+
+                $relative = $this->assertWebDavKey(substr($hrefPath, strlen($prefix)));
+            } catch (RuntimeException) {
+                continue;
             }
 
-            $dav = $entry->children('DAV:');
-            $hrefPath = urldecode((string) parse_url((string) $dav->href, PHP_URL_PATH));
-            $relative = ltrim(Str::after($hrefPath, $baseUrlPath), '/');
-
-            if ($relative === '') {
-                continue;
+            if (count($objects) >= $limit) {
+                break;
             }
 
             $props = null;
@@ -308,9 +446,9 @@ class DestinationStorage
 
     private function uploadWebDav(BackupDestination $destination, string $sourcePath, string $filename, ?string $directory): string
     {
-        $key = $this->joinRelative($directory, $filename);
-        $remotePath = $this->joinRelative($destination->setting('path'), $key);
-        $this->ensureWebDavDirectory($destination, dirname($remotePath));
+        $key = $this->assertWebDavKey($this->joinRelative($directory, $filename));
+        $this->ensureWebDavDirectory($destination, dirname($key));
+        $remotePath = $this->joinRelative($this->configuredWebDavPath($destination), $key);
         $this->webDavRequest($destination, 'PUT', $this->webDavUrl($destination, $remotePath), [
             'headers' => ['Content-Type' => 'application/octet-stream'],
             'body' => File::get($sourcePath),
@@ -319,10 +457,26 @@ class DestinationStorage
         return $key;
     }
 
-    private function downloadWebDav(BackupDestination $destination, string $key, string $targetPath): void
+    private function downloadWebDav(BackupDestination $destination, string $key, string $targetPath, ?callable $progress): void
     {
-        $remotePath = $this->joinRelative($destination->setting('path'), $key);
-        $this->webDavRequest($destination, 'GET', $this->webDavUrl($destination, $remotePath), ['sink' => $targetPath]);
+        $remotePath = $this->joinRelative($this->configuredWebDavPath($destination), $this->assertWebDavKey($key));
+        $options = ['sink' => $targetPath];
+
+        if ($progress !== null) {
+            $options['progress'] = $progress;
+        }
+
+        $this->webDavRequest($destination, 'GET', $this->webDavUrl($destination, $remotePath), $options);
+    }
+
+    private function hasWebDavObject(BackupDestination $destination, string $key): bool
+    {
+        $remotePath = $this->joinRelative($this->configuredWebDavPath($destination), $this->assertWebDavKey($key));
+        $response = $this->webDavRequest($destination, 'HEAD', $this->webDavUrl($destination, $remotePath), [
+            'allowed_statuses' => [404],
+        ]);
+
+        return $response->status() !== 404;
     }
 
     private function webDavRequest(BackupDestination $destination, string $method, string $url, array $options = []): Response
@@ -347,7 +501,8 @@ class DestinationStorage
 
     private function ensureWebDavDirectory(BackupDestination $destination, string $path): void
     {
-        $path = trim($path, '/.');
+        $path = $path === '.' ? '' : trim($path, '/');
+        $path = $this->joinRelative($this->configuredWebDavPath($destination), $path);
 
         if ($path === '') {
             return;
@@ -368,7 +523,74 @@ class DestinationStorage
 
     private function webDavUrl(BackupDestination $destination, string $path = ''): string
     {
-        return rtrim((string) $destination->setting('url'), '/').'/'.ltrim($path, '/');
+        $encodedPath = collect(explode('/', trim($path, '/')))
+            ->filter(fn (string $segment): bool => $segment !== '')
+            ->map(fn (string $segment): string => rawurlencode($segment))
+            ->implode('/');
+
+        return rtrim((string) $destination->setting('url'), '/').($encodedPath === '' ? '' : '/'.$encodedPath);
+    }
+
+    private function configuredWebDavPath(BackupDestination $destination): string
+    {
+        $path = trim((string) $destination->setting('path'), '/');
+
+        if ($path === '') {
+            return '';
+        }
+
+        return collect(explode('/', $path))
+            ->map(function (string $segment): string {
+                if (
+                    $segment === ''
+                    || $segment === '.'
+                    || $segment === '..'
+                    || strlen($segment) > 255
+                    || str_contains($segment, '\\')
+                    || preg_match('/[\x00-\x1F\x7F]/', $segment) === 1
+                ) {
+                    throw new RuntimeException('Invalid WebDAV destination path.');
+                }
+
+                return $segment;
+            })
+            ->implode('/');
+    }
+
+    private function decodeWebDavUrlPath(string $path): string
+    {
+        if (str_contains($path, "\0") || preg_match('/%(?:2f|5c|00)/i', $path) === 1) {
+            throw new RuntimeException('Ambiguous WebDAV URL path.');
+        }
+
+        $decoded = rawurldecode($path);
+
+        if (str_contains($decoded, "\0") || str_contains($decoded, '\\')) {
+            throw new RuntimeException('Ambiguous WebDAV URL path.');
+        }
+
+        return $decoded;
+    }
+
+    private function assertWebDavKey(string $key): string
+    {
+        if (
+            $key === ''
+            || strlen($key) > 1024
+            || str_starts_with($key, '/')
+            || str_contains($key, '\\')
+            || preg_match('/[\x00-\x1F\x7F]/', $key) === 1
+        ) {
+            throw new RuntimeException('Invalid WebDAV object key.');
+        }
+
+        foreach (explode('/', $key) as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..' || strlen($segment) > 255) {
+                throw new RuntimeException('Invalid WebDAV object key.');
+            }
+        }
+
+        return $key;
     }
 
     private function listSftp(BackupDestination $destination, int $limit = 1000): array
@@ -390,6 +612,11 @@ class DestinationStorage
 
         try {
             $base = (string) $destination->setting('remote_path', '/');
+
+            if (! $this->sftpRootIsDirectory($sftp, $base)) {
+                throw new RuntimeException('SFTP backup root must be a regular directory.');
+            }
+
             $count = 0;
             $this->collectSftpFiles($sftp, $base, '', $onObject, $limit, $count);
         } finally {
@@ -411,14 +638,80 @@ class DestinationStorage
         return $key;
     }
 
-    private function downloadSftp(BackupDestination $destination, string $key, string $targetPath): void
+    private function downloadSftp(BackupDestination $destination, string $key, string $targetPath, ?callable $progress): void
+    {
+        $key = $this->assertLocalKey($key);
+        $sftp = $this->sftp($destination);
+
+        try {
+            $remotePath = $this->joinAbsolute((string) $destination->setting('remote_path', '/'), $key);
+
+            if (! $this->sftpObjectIsRegularFile($sftp, $destination, $key)) {
+                throw new RuntimeException('SFTP backup path must contain only regular directories and a regular file.');
+            }
+
+            $downloaded = $progress === null
+                ? $sftp->get($remotePath, $targetPath)
+                : $sftp->get($remotePath, $targetPath, 0, -1, $progress);
+
+            if (! $downloaded) {
+                throw new RuntimeException('Unable to download file over SFTP.');
+            }
+        } finally {
+            $sftp->disconnect();
+        }
+    }
+
+    private function hasSftpObject(BackupDestination $destination, string $key): bool
     {
         $sftp = $this->sftp($destination);
-        $remotePath = $this->joinAbsolute((string) $destination->setting('remote_path', '/'), $key);
 
-        if (! $sftp->get($remotePath, $targetPath)) {
-            throw new RuntimeException('Unable to download file over SFTP.');
+        try {
+            return $this->sftpObjectIsRegularFile($sftp, $destination, $this->assertLocalKey($key));
+        } finally {
+            $sftp->disconnect();
         }
+    }
+
+    private function sftpObjectIsRegularFile(SFTP $sftp, BackupDestination $destination, string $key): bool
+    {
+        $segments = explode('/', $key);
+        $remotePath = rtrim((string) $destination->setting('remote_path', '/'), '/');
+
+        if (! $this->sftpRootIsDirectory($sftp, $remotePath)) {
+            return false;
+        }
+
+        foreach ($segments as $index => $segment) {
+            $remotePath = $this->joinAbsolute($remotePath, $segment);
+            $attributes = $sftp->lstat($remotePath);
+
+            if (! is_array($attributes) || ! isset($attributes['type'])) {
+                return false;
+            }
+
+            $type = (int) $attributes['type'];
+            $isTarget = $index === array_key_last($segments);
+
+            if ($isTarget) {
+                return $type === self::SFTP_TYPE_REGULAR;
+            }
+
+            if ($type !== self::SFTP_TYPE_DIRECTORY) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private function sftpRootIsDirectory(SFTP $sftp, string $path): bool
+    {
+        $attributes = $sftp->lstat(rtrim($path, '/') ?: '/');
+
+        return is_array($attributes)
+            && isset($attributes['type'])
+            && (int) $attributes['type'] === self::SFTP_TYPE_DIRECTORY;
     }
 
     /**
@@ -510,23 +803,7 @@ class DestinationStorage
      */
     public static function hostKeyMatches(string $pinned, string $presented): bool
     {
-        $pinned = trim($pinned);
-        $presentedBlob = self::hostKeyBlob($presented);
-
-        if ($presentedBlob === '') {
-            return false;
-        }
-
-        if (preg_match('/^sha256:/i', $pinned)) {
-            $pinnedDigest = trim(substr($pinned, strlen('SHA256:')));
-            $presentedDigest = substr(self::hostKeyFingerprint($presented), strlen('SHA256:'));
-
-            return $pinnedDigest !== '' && hash_equals($presentedDigest, $pinnedDigest);
-        }
-
-        $pinnedBlob = self::hostKeyBlob($pinned);
-
-        return $pinnedBlob !== '' && hash_equals($pinnedBlob, $presentedBlob);
+        return SshHostKey::matches($pinned, $presented);
     }
 
     /**
@@ -535,32 +812,7 @@ class DestinationStorage
      */
     public static function hostKeyFingerprint(string $key): string
     {
-        $blob = self::hostKeyBlob($key);
-
-        if ($blob === '') {
-            return '';
-        }
-
-        return 'SHA256:'.rtrim(base64_encode(hash('sha256', $blob, true)), '=');
-    }
-
-    /**
-     * Extract the raw (base64-decoded) key blob from an OpenSSH key line or a
-     * bare base64 string. The key type ("ssh-rsa") and any comment are not
-     * valid base64 in strict mode, so we keep the first part that decodes to a
-     * plausible key.
-     */
-    private static function hostKeyBlob(string $key): string
-    {
-        foreach (preg_split('/\s+/', trim($key)) ?: [] as $part) {
-            $decoded = base64_decode($part, true);
-
-            if ($decoded !== false && strlen($decoded) > 8) {
-                return $decoded;
-            }
-        }
-
-        return '';
+        return SshHostKey::fingerprint($key);
     }
 
     private function collectSftpFiles(SFTP $sftp, string $directory, string $prefix, callable $onObject, int $limit, int &$count): void
@@ -576,12 +828,25 @@ class DestinationStorage
                 continue;
             }
 
-            $path = $this->joinAbsolute($directory, $name);
             $key = $this->joinRelative($prefix, $name);
 
-            if ($this->sftpEntryIsDirectory($sftp, $path, $attributes)) {
+            try {
+                $key = $this->assertLocalKey($key);
+            } catch (RuntimeException) {
+                continue;
+            }
+
+            $path = $this->joinAbsolute($directory, $name);
+
+            $type = isset($attributes['type']) ? (int) $attributes['type'] : null;
+
+            if ($type === self::SFTP_TYPE_DIRECTORY) {
                 $this->collectSftpFiles($sftp, $path, $key, $onObject, $limit, $count);
 
+                continue;
+            }
+
+            if ($type !== self::SFTP_TYPE_REGULAR) {
                 continue;
             }
 
@@ -593,18 +858,6 @@ class DestinationStorage
             ]);
             $count++;
         }
-    }
-
-    /**
-     * Prefer the type carried by rawlist over a per-entry network is_dir() round-trip.
-     */
-    private function sftpEntryIsDirectory(SFTP $sftp, string $path, array $attributes): bool
-    {
-        if (isset($attributes['type'])) {
-            return (int) $attributes['type'] === self::SFTP_TYPE_DIRECTORY;
-        }
-
-        return $sftp->is_dir($path);
     }
 
     private function listAzure(BackupDestination $destination, int $limit = 1000): array
@@ -623,7 +876,7 @@ class DestinationStorage
                 $query['marker'] = $marker;
             }
 
-            $response = $this->azureRequest($destination, 'GET', '', $query);
+            $response = $this->azureContainerRequest($destination, 'GET', $query);
             $xml = simplexml_load_string($response->body());
 
             if ($xml === false) {
@@ -651,7 +904,7 @@ class DestinationStorage
 
     private function uploadAzure(BackupDestination $destination, string $sourcePath, string $filename): string
     {
-        $this->azureRequest($destination, 'PUT', $filename, [], [
+        $this->azureBlobRequest($destination, 'PUT', $filename, [], [
             'x-ms-blob-type' => 'BlockBlob',
             'Content-Type' => 'application/octet-stream',
         ], File::get($sourcePath));
@@ -659,16 +912,41 @@ class DestinationStorage
         return $filename;
     }
 
-    private function downloadAzure(BackupDestination $destination, string $key, string $targetPath): void
+    private function downloadAzure(BackupDestination $destination, string $key, string $targetPath, ?callable $progress): void
     {
-        $this->azureRequest($destination, 'GET', $key, [], [], null, $targetPath);
+        $this->azureBlobRequest($destination, 'GET', $key, [], [], null, $targetPath, [], $progress);
     }
 
-    private function azureRequest(BackupDestination $destination, string $method, string $path = '', array $query = [], array $headers = [], ?string $body = null, ?string $sink = null): Response
+    private function hasAzureObject(BackupDestination $destination, string $key): bool
+    {
+        return $this->azureBlobRequest($destination, 'HEAD', $key, allowedStatuses: [404])->status() !== 404;
+    }
+
+    private function azureContainerRequest(BackupDestination $destination, string $method, array $query = []): Response
+    {
+        return $this->azureRequest($destination, $method, '', '', $query);
+    }
+
+    private function azureBlobRequest(BackupDestination $destination, string $method, string $key, array $query = [], array $headers = [], ?string $body = null, ?string $sink = null, array $allowedStatuses = [], ?callable $progress = null): Response
+    {
+        return $this->azureRequest(
+            $destination,
+            $method,
+            '/'.$key,
+            '/'.$this->encodeAzureBlobKey($key),
+            $query,
+            $headers,
+            $body,
+            $sink,
+            $allowedStatuses,
+            $progress,
+        );
+    }
+
+    private function azureRequest(BackupDestination $destination, string $method, string $canonicalPath, string $encodedPath, array $query = [], array $headers = [], ?string $body = null, ?string $sink = null, array $allowedStatuses = [], ?callable $progress = null): Response
     {
         $config = $this->azureConfig($destination);
-        $path = ltrim($path, '/');
-        $url = rtrim($config['endpoint'], '/').'/'.$config['container'].($path !== '' ? '/'.str_replace('%2F', '/', rawurlencode($path)) : '');
+        $url = rtrim($config['endpoint'], '/').'/'.$config['container'].$encodedPath;
 
         if ($query) {
             $url .= '?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986);
@@ -688,7 +966,7 @@ class DestinationStorage
         }
 
         if (! $config['sas']) {
-            $headers['Authorization'] = $this->azureAuthorization($method, $config, $path, $query, $headers, $body);
+            $headers['Authorization'] = $this->azureAuthorization($method, $config, $canonicalPath, $query, $headers, $body);
         }
 
         $options = [];
@@ -698,17 +976,20 @@ class DestinationStorage
         if ($sink) {
             $options['sink'] = $sink;
         }
+        if ($progress !== null) {
+            $options['progress'] = $progress;
+        }
 
         $response = Http::withHeaders($headers)->send($method, $url, $options);
 
-        if ($response->failed()) {
+        if ($response->failed() && ! in_array($response->status(), $allowedStatuses, true)) {
             throw new RuntimeException('Azure Blob request failed with HTTP '.$response->status().'.');
         }
 
         return $response;
     }
 
-    private function azureAuthorization(string $method, array $config, string $path, array $query, array $headers, ?string $body): string
+    private function azureAuthorization(string $method, array $config, string $canonicalPath, array $query, array $headers, ?string $body): string
     {
         $canonicalHeaders = collect($headers)
             ->filter(fn (mixed $value, string $key) => str_starts_with(strtolower($key), 'x-ms-'))
@@ -717,7 +998,7 @@ class DestinationStorage
             ->map(fn (string $value, string $key) => $key.':'.$value."\n")
             ->implode('');
 
-        $canonicalResource = '/'.$config['account'].'/'.$config['container'].($path !== '' ? '/'.$path : '');
+        $canonicalResource = '/'.$config['account'].'/'.$config['container'].$canonicalPath;
         foreach (collect($query)->mapWithKeys(fn (mixed $value, string $key) => [strtolower($key) => $value])->sortKeys() as $key => $value) {
             $canonicalResource .= "\n".$key.':'.$value;
         }
@@ -742,6 +1023,19 @@ class DestinationStorage
         $signature = base64_encode(hash_hmac('sha256', $stringToSign, base64_decode($config['key'], true) ?: '', true));
 
         return 'SharedKey '.$config['account'].':'.$signature;
+    }
+
+    private function encodeAzureBlobKey(string $key): string
+    {
+        return collect(explode('/', $key))
+            ->map(function (string $segment): string {
+                if ($segment === '.' || $segment === '..') {
+                    return str_repeat('%2E', strlen($segment));
+                }
+
+                return rawurlencode($segment);
+            })
+            ->implode('/');
     }
 
     private function azureConfig(BackupDestination $destination): array
@@ -789,6 +1083,7 @@ class DestinationStorage
         $token = $this->dropboxToken($destination);
         $path = $this->dropboxPath($destination);
         $objects = [];
+        $seenIds = [];
         $response = Http::withToken($token)->post('https://api.dropboxapi.com/2/files/list_folder', [
             'path' => $path,
             'recursive' => true,
@@ -808,9 +1103,27 @@ class DestinationStorage
                     continue;
                 }
 
+                $id = $entry['id'] ?? null;
+
+                if (! is_string($id) || ! str_starts_with($id, 'id:')) {
+                    continue;
+                }
+
+                if (isset($seenIds[$id])) {
+                    continue;
+                }
+
+                $displayName = $this->dropboxDisplayName($destination, $entry);
+
+                if ($displayName === null) {
+                    continue;
+                }
+
+                $seenIds[$id] = true;
+
                 $objects[] = [
-                    'key' => $entry['path_display'],
-                    'display_name' => ltrim(Str::after($entry['path_display'], $path ?: '/'), '/'),
+                    'key' => $id,
+                    'display_name' => $displayName,
                     'size' => (int) ($entry['size'] ?? 0),
                     'last_modified' => isset($entry['server_modified']) ? date(DATE_ATOM, strtotime($entry['server_modified'])) : null,
                 ];
@@ -843,16 +1156,81 @@ class DestinationStorage
 
         $this->ensureDropboxOk($response);
 
-        return (string) ($response->json('path_display') ?: $path);
+        $id = $response->json('id');
+
+        if (! is_string($id) || ! str_starts_with($id, 'id:')) {
+            throw new RuntimeException('Dropbox upload response did not include a file ID.');
+        }
+
+        return $id;
     }
 
-    private function downloadDropbox(BackupDestination $destination, string $key, string $targetPath): void
+    private function downloadDropbox(BackupDestination $destination, string $key, string $targetPath, ?callable $progress): void
     {
+        $options = ['sink' => $targetPath];
+
+        if ($progress !== null) {
+            $options['progress'] = $progress;
+        }
+
         $response = Http::withToken($this->dropboxToken($destination))
             ->withHeaders(['Dropbox-API-Arg' => json_encode(['path' => $key])])
-            ->send('POST', 'https://content.dropboxapi.com/2/files/download', ['sink' => $targetPath]);
+            ->send('POST', 'https://content.dropboxapi.com/2/files/download', $options);
 
         $this->ensureDropboxOk($response);
+    }
+
+    private function hasDropboxObject(BackupDestination $destination, string $key): bool
+    {
+        return $this->dropboxObjectMetadata($destination, $key) !== null;
+    }
+
+    /** @return array<string, mixed>|null */
+    private function dropboxObjectMetadata(BackupDestination $destination, string $key): ?array
+    {
+        $response = Http::withToken($this->dropboxToken($destination))
+            ->post('https://api.dropboxapi.com/2/files/get_metadata', [
+                'path' => $key,
+                'include_deleted' => false,
+            ]);
+
+        if ($response->status() === 409) {
+            return null;
+        }
+
+        $this->ensureDropboxOk($response);
+        $metadata = (array) $response->json();
+
+        if (($metadata['.tag'] ?? null) !== 'file') {
+            return null;
+        }
+
+        $id = $metadata['id'] ?? null;
+
+        if (! is_string($id) || ! str_starts_with($id, 'id:')) {
+            return null;
+        }
+
+        $displayName = $this->dropboxDisplayName($destination, $metadata);
+
+        if (str_starts_with($key, 'id:')) {
+            if ($id !== $key) {
+                return null;
+            }
+
+            $displayName ??= (string) ($metadata['name'] ?? basename((string) ($metadata['path_display'] ?? $key)));
+        }
+
+        if ($displayName === null) {
+            return null;
+        }
+
+        return [
+            'key' => $id,
+            'display_name' => $displayName,
+            'size' => (int) ($metadata['size'] ?? 0),
+            'last_modified' => filled($modified = $metadata['server_modified'] ?? null) ? date(DATE_ATOM, strtotime((string) $modified)) : null,
+        ];
     }
 
     private function dropboxToken(BackupDestination $destination): string
@@ -881,6 +1259,29 @@ class DestinationStorage
         $path = $this->joinRelative($destination->setting('remote_path'), $directory, $filename);
 
         return $path === '' ? '' : '/'.ltrim($path, '/');
+    }
+
+    /** @param array<string, mixed> $entry */
+    private function dropboxDisplayName(BackupDestination $destination, array $entry): ?string
+    {
+        $displayPath = (string) ($entry['path_display'] ?? '');
+        $lowerPath = (string) ($entry['path_lower'] ?? mb_strtolower($displayPath));
+        $root = $this->dropboxPath($destination);
+        $lowerRoot = mb_strtolower($root);
+
+        if ($displayPath === '') {
+            return null;
+        }
+
+        if ($lowerRoot !== '' && ! str_starts_with($lowerPath, $lowerRoot.'/')) {
+            return null;
+        }
+
+        $rootSegmentCount = count(array_filter(explode('/', trim($root, '/')), fn (string $segment): bool => $segment !== ''));
+        $displaySegments = array_values(array_filter(explode('/', trim($displayPath, '/')), fn (string $segment): bool => $segment !== ''));
+        $relativeSegments = array_slice($displaySegments, $rootSegmentCount);
+
+        return $relativeSegments === [] ? null : implode('/', $relativeSegments);
     }
 
     private function listGoogleDrive(BackupDestination $destination, int $limit = 1000): array
@@ -945,7 +1346,7 @@ class DestinationStorage
 
         $response = Http::withToken($this->googleDriveToken($destination))
             ->withHeaders(['Content-Type' => 'multipart/related; boundary='.$boundary])
-            ->send('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', ['body' => $body]);
+            ->send('POST', $this->googleDriveUploadEndpoint($destination).'/files?uploadType=multipart&supportsAllDrives=true', ['body' => $body]);
 
         if ($response->failed()) {
             throw new RuntimeException('Google Drive upload failed with HTTP '.$response->status().'.');
@@ -954,21 +1355,82 @@ class DestinationStorage
         return 'gdrive:'.$response->json('id');
     }
 
-    private function downloadGoogleDrive(BackupDestination $destination, string $key, string $targetPath): void
+    private function downloadGoogleDrive(BackupDestination $destination, string $key, string $targetPath, ?callable $progress): void
     {
         $id = Str::startsWith($key, 'gdrive:') ? Str::after($key, 'gdrive:') : $key;
+        $options = ['sink' => $targetPath];
+
+        if ($progress !== null) {
+            $options['progress'] = $progress;
+        }
+
         $response = Http::withToken($this->googleDriveToken($destination))
-            ->send('GET', $this->googleDriveEndpoint($destination).'/files/'.$id.'?alt=media&supportsAllDrives=true', ['sink' => $targetPath]);
+            ->send('GET', $this->googleDriveEndpoint($destination).'/files/'.$id.'?alt=media&supportsAllDrives=true', $options);
 
         if ($response->failed()) {
             throw new RuntimeException('Google Drive download failed with HTTP '.$response->status().'.');
         }
     }
 
+    private function hasGoogleDriveObject(BackupDestination $destination, string $key): bool
+    {
+        if (! Str::startsWith($key, 'gdrive:') || blank($id = Str::after($key, 'gdrive:'))) {
+            return false;
+        }
+
+        $response = Http::withToken($this->googleDriveToken($destination))->get(
+            $this->googleDriveEndpoint($destination).'/files/'.rawurlencode($id),
+            ['fields' => 'id,parents,trashed,mimeType', 'supportsAllDrives' => 'true'],
+        );
+
+        if ($response->status() === 404) {
+            return false;
+        }
+
+        if ($response->failed()) {
+            throw new RuntimeException('Google Drive request failed with HTTP '.$response->status().'.');
+        }
+
+        return ! $response->json('trashed', false)
+            && $response->json('mimeType') !== 'application/vnd.google-apps.folder'
+            && in_array((string) $destination->setting('folder_id'), $response->json('parents', []), true);
+    }
+
+    /** @return array{key: string, display_name: string}|null */
+    private function findGoogleDriveObjectByFilename(BackupDestination $destination, string $filename): ?array
+    {
+        $escapedFilename = str_replace(['\\', "'"], ['\\\\', "\\'"], $filename);
+        $response = Http::withToken($this->googleDriveToken($destination))->get(
+            $this->googleDriveEndpoint($destination).'/files',
+            [
+                'q' => "'".$destination->setting('folder_id')."' in parents and name = '{$escapedFilename}' and trashed = false",
+                'fields' => 'files(id,name,mimeType)',
+                'pageSize' => 2,
+                'supportsAllDrives' => 'true',
+                'includeItemsFromAllDrives' => 'true',
+            ],
+        );
+
+        if ($response->failed()) {
+            throw new RuntimeException('Google Drive request failed with HTTP '.$response->status().'.');
+        }
+
+        $files = collect($response->json('files', []))
+            ->filter(fn (array $file): bool => ($file['name'] ?? null) === $filename
+                && ($file['mimeType'] ?? null) !== 'application/vnd.google-apps.folder')
+            ->values();
+
+        if ($files->count() !== 1) {
+            return null;
+        }
+
+        return ['key' => 'gdrive:'.$files[0]['id'], 'display_name' => $filename];
+    }
+
     private function googleDriveToken(BackupDestination $destination): string
     {
         $credentials = json_decode((string) $destination->secret('credentials_json'), true, flags: JSON_THROW_ON_ERROR);
-        $tokenUrl = (string) ($destination->setting('token_url') ?: ($credentials['token_uri'] ?? 'https://oauth2.googleapis.com/token'));
+        $tokenUrl = $this->googleDriveTokenUrl($destination, $credentials);
         $now = time();
         $claims = [
             'iss' => $credentials['client_email'] ?? null,
@@ -1002,7 +1464,35 @@ class DestinationStorage
 
     private function googleDriveEndpoint(BackupDestination $destination): string
     {
-        return rtrim((string) ($destination->setting('endpoint') ?: 'https://www.googleapis.com/drive/v3'), '/');
+        $endpoint = rtrim((string) ($destination->setting('endpoint') ?: 'https://www.googleapis.com/drive/v3'), '/');
+        $this->outboundHostGuard->assertUrlAllowed($endpoint);
+
+        return $endpoint;
+    }
+
+    private function googleDriveUploadEndpoint(BackupDestination $destination): string
+    {
+        $endpoint = $this->googleDriveEndpoint($destination);
+        $parts = parse_url($endpoint);
+
+        if (! is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            throw new RuntimeException('Google Drive API endpoint must be a valid URL.');
+        }
+
+        $authority = $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+        $uploadEndpoint = $authority.'/upload'.($parts['path'] ?? '');
+        $this->outboundHostGuard->assertUrlAllowed($uploadEndpoint);
+
+        return rtrim($uploadEndpoint, '/');
+    }
+
+    /** @param array<string, mixed> $credentials */
+    private function googleDriveTokenUrl(BackupDestination $destination, array $credentials): string
+    {
+        $tokenUrl = (string) ($destination->setting('token_url') ?: ($credentials['token_uri'] ?? 'https://oauth2.googleapis.com/token'));
+        $this->outboundHostGuard->assertUrlAllowed($tokenUrl);
+
+        return $tokenUrl;
     }
 
     private function base64Url(string $value): string
@@ -1013,6 +1503,7 @@ class DestinationStorage
     private function testLocal(BackupDestination $destination): void
     {
         $path = (string) $destination->setting('archive_path');
+        $this->hostPathPolicy->assertValidAtRuntime($path);
 
         if (! File::isDirectory($path)) {
             throw new RuntimeException('Local archive path does not exist or is not a directory.');
@@ -1039,15 +1530,21 @@ class DestinationStorage
         $objects = [];
 
         foreach ($iterator as $file) {
-            if (! $file->isFile()) {
+            if ($file->isLink() || ! $file->isFile()) {
+                continue;
+            }
+
+            $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($base) + 1));
+
+            try {
+                $relative = $this->assertLocalKey($relative);
+            } catch (RuntimeException) {
                 continue;
             }
 
             if (count($objects) >= $limit) {
                 break;
             }
-
-            $relative = ltrim(Str::after($file->getPathname(), $base), '/');
 
             $objects[] = [
                 'key' => $relative,
@@ -1062,23 +1559,103 @@ class DestinationStorage
 
     private function uploadLocal(BackupDestination $destination, string $sourcePath, string $filename, ?string $directory): string
     {
-        $key = $this->joinRelative($directory, $filename);
-        $target = $this->joinAbsolute((string) $destination->setting('archive_path'), $key);
-        File::ensureDirectoryExists(dirname($target));
-        File::copy($sourcePath, $target);
+        $archivePath = (string) $destination->setting('archive_path');
+        $this->hostPathPolicy->assertValidAtRuntime($archivePath);
+        $key = $this->assertLocalKey($this->joinRelative($directory, $filename));
+        $archiveRoot = realpath($archivePath);
+
+        if ($archiveRoot === false) {
+            throw new RuntimeException('Local archive path does not exist.');
+        }
+
+        $rootStat = @lstat($archiveRoot);
+
+        if ($rootStat === false || ($rootStat['mode'] & 0170000) !== 0040000) {
+            throw new RuntimeException('Local archive path changed while it was being opened.');
+        }
+
+        $this->secureLocalArchiveReader->write($archiveRoot, $key, $sourcePath, $rootStat);
 
         return $key;
     }
 
-    private function downloadLocal(BackupDestination $destination, string $key, string $targetPath): void
+    private function downloadLocal(BackupDestination $destination, string $key, string $targetPath, ?callable $progress): void
     {
-        $source = $this->joinAbsolute((string) $destination->setting('archive_path'), $key);
+        $key = $this->assertLocalKey($key);
+        $configuredRoot = (string) $destination->setting('archive_path');
+        $this->hostPathPolicy->assertValidAtRuntime($configuredRoot);
+        $archiveRoot = realpath($configuredRoot);
 
-        if (! File::exists($source)) {
-            throw new RuntimeException('Local backup file does not exist.');
+        if ($archiveRoot === false) {
+            throw new RuntimeException('Local archive path does not exist.');
         }
 
-        File::copy($source, $targetPath);
+        $this->hostPathPolicy->assertValidAtRuntime($archiveRoot);
+
+        $rootStat = @lstat($archiveRoot);
+
+        if ($rootStat === false || ($rootStat['mode'] & 0170000) !== 0040000) {
+            throw new RuntimeException('Local archive path changed while it was being opened.');
+        }
+
+        $this->secureLocalArchiveReader->copy($archiveRoot, $key, $targetPath, $rootStat, $progress);
+    }
+
+    private function hasLocalObject(BackupDestination $destination, string $key): bool
+    {
+        $this->testLocal($destination);
+        $archiveRoot = realpath((string) $destination->setting('archive_path'));
+
+        if ($archiveRoot === false) {
+            return false;
+        }
+
+        $segments = explode('/', $this->assertLocalKey($key));
+        $path = $archiveRoot;
+
+        foreach ($segments as $index => $segment) {
+            $path .= DIRECTORY_SEPARATOR.$segment;
+            $stat = @lstat($path);
+
+            if ($stat === false) {
+                return false;
+            }
+
+            $type = $stat['mode'] & 0170000;
+
+            if ($index === array_key_last($segments)) {
+                return $type === 0100000;
+            }
+
+            if ($type !== 0040000) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private function assertLocalKey(string $key): string
+    {
+        if (
+            $key === ''
+            || strlen($key) > 1024
+            || str_starts_with($key, '/')
+            || str_starts_with($key, '\\')
+            || str_contains($key, '\\')
+            || preg_match('/^[A-Za-z]:/', $key) === 1
+            || preg_match('/[\x00-\x1F\x7F]/', $key) === 1
+        ) {
+            throw new RuntimeException('Local backup key must stay within the archive path.');
+        }
+
+        foreach (explode('/', $key) as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..' || strlen($segment) > 255) {
+                throw new RuntimeException('Local backup key must stay within the archive path.');
+            }
+        }
+
+        return $key;
     }
 
     /**
@@ -1147,26 +1724,48 @@ class DestinationStorage
     }
 
     /**
-     * List backup objects from a read-only mount of the volume. `|| true` keeps
-     * an absent sub-directory (nothing backed up yet) from being a hard error,
-     * matching the "empty listing is fine" behaviour of the other providers.
+     * List backup objects from a read-only mount of the volume. Only an absent
+     * sub-directory is treated as an empty destination.
      */
     private function listDockerVolume(BackupDestination $destination, int $limit = 1000): array
     {
         [$volume, $dir] = $this->dockerVolumeTarget($destination);
 
-        // Cap the output inside the container so a huge volume cannot fill the
-        // process buffer or time out: `head` stops `find` (via SIGPIPE) once the
-        // limit is reached. The limit is a trusted int, so interpolating it is
-        // safe; usage aggregation passes PHP_INT_MAX and is left uncapped.
-        $cap = $limit < PHP_INT_MAX ? ' | head -n '.(int) $limit : '';
-        $script = 'find "$1" -type f -exec stat -c "%s|%Y|%n" {} + 2>/dev/null'.$cap.' || true';
+        // Reject unsafe keys and sort newest first before the in-container cap. PHP
+        // repeats the validation below as the run-time trust boundary.
+        $filter = 'awk -v prefix="$1/" \'{ first = index($0, "|"); if (! first) next; rest = substr($0, first + 1); second = index(rest, "|"); if (! second) next; path = substr(rest, second + 1); if (substr(path, 1, length(prefix)) != prefix) next; key = substr(path, length(prefix) + 1); lower = tolower(key); if (! length(key) || length(key) > 1024 || substr(key, 1, 1) == "\\\\" || key ~ /^[A-Za-z]:/ || key ~ /[[:cntrl:]]/ || lower !~ /\.(tar|tar\.gz|tgz|tar\.zst|gz|zst)(\.(gpg|age))?$/) next; count_segments = split(key, segments, "/"); valid = 1; for (i = 1; i <= count_segments; i++) if (! length(segments[i]) || segments[i] == "." || segments[i] == ".." || length(segments[i]) > 255) valid = 0; if (! valid) next; print }\'';
+        // Spool each stage to disk: portable sh has no pipefail, and head can
+        // otherwise cause a successful upstream stage to fail with SIGPIPE.
+        $script = <<<'SH'
+parent="$1"
+while [ "$parent" != / ]; do
+    parent=${parent%/*}
+    [ -n "$parent" ] || parent=/
+    if [ -e "$parent" ] || [ -L "$parent" ]; then
+        [ -d "$parent" ] && [ -x "$parent" ] || exit 1
+    fi
+done
+if [ ! -e "$1" ] && [ ! -L "$1" ]; then
+    exit 0
+fi
+[ -d "$1" ] || exit 1
+spool=$(mktemp -d) || exit 1
+trap 'rm -rf "$spool"' EXIT
+trap 'exit 1' HUP INT TERM
+SH;
+        $script .= PHP_EOL.'find "$1" -type f ! -path "*'.PHP_EOL.'*" -print0 > "$spool/paths" || exit $?'.PHP_EOL;
+        $script .= 'xargs -0 -r stat -c "%s|%Y|%n" < "$spool/paths" > "$spool/stats" || exit $?'.PHP_EOL;
+        $script .= $limit === PHP_INT_MAX
+            ? 'cat "$spool/stats"'
+            : $filter.' < "$spool/stats" > "$spool/filtered" || exit $?'.PHP_EOL
+                .'sort -t "|" -k2,2nr < "$spool/filtered" > "$spool/sorted" || exit $?'.PHP_EOL
+                .'head -n "$2" < "$spool/sorted"';
         $command = [
             'docker', 'run', '--rm',
             '-v', $volume.':'.DockerVolumeName::MOUNT_POINT.':ro',
             '--entrypoint', 'sh',
             RunBackupContainer::IMAGE,
-            '-c', $script, 'sh', $dir,
+            '-c', $script, 'sh', $dir, (string) $limit,
         ];
 
         $result = $this->dockerProcess->run($command, 120);
@@ -1178,10 +1777,6 @@ class DestinationStorage
         $objects = [];
 
         foreach (preg_split('/\R/', trim($result->output)) ?: [] as $line) {
-            if (count($objects) >= $limit) {
-                break;
-            }
-
             if ($line === '') {
                 continue;
             }
@@ -1193,10 +1788,20 @@ class DestinationStorage
             }
 
             [$size, $mtime, $path] = $parts;
-            $relative = ltrim(Str::after($path, $dir), '/');
+            $prefix = rtrim($dir, '/').'/';
 
-            if ($relative === '') {
+            if (! str_starts_with($path, $prefix)) {
                 continue;
+            }
+
+            try {
+                $relative = DockerVolumeName::assertKey(substr($path, strlen($prefix)));
+            } catch (RuntimeException) {
+                continue;
+            }
+
+            if (count($objects) >= $limit) {
+                break;
             }
 
             $objects[] = [
@@ -1284,7 +1889,7 @@ class DestinationStorage
      * mount. No shell: the path is a single argv element and the key has already
      * been rejected if it contains a traversal segment or a colon.
      */
-    private function downloadDockerVolume(BackupDestination $destination, string $key, string $targetPath): void
+    private function downloadDockerVolume(BackupDestination $destination, string $key, string $targetPath, ?callable $progress): void
     {
         [$volume, $dir] = $this->dockerVolumeTarget($destination);
         $path = $dir.'/'.DockerVolumeName::assertKey($key);
@@ -1297,7 +1902,12 @@ class DestinationStorage
             $path,
         ];
 
-        $result = $this->dockerProcess->runWithOutputFile($command, $targetPath, 0);
+        $result = $progress === null
+            ? $this->dockerProcess->runWithOutputFile($command, $targetPath, 0)
+            : $this->dockerProcess->whileMonitoring(
+                $progress,
+                fn (): DockerProcessResult => $this->dockerProcess->runWithOutputFile($command, $targetPath, 0),
+            );
 
         if (! $result->successful()) {
             if (File::exists($targetPath)) {
@@ -1306,6 +1916,29 @@ class DestinationStorage
 
             throw new RuntimeException('Unable to download from the Docker volume destination: '.($result->errorOutput ?: 'unknown error'));
         }
+    }
+
+    private function hasDockerVolumeObject(BackupDestination $destination, string $key): bool
+    {
+        [$volume, $dir] = $this->dockerVolumeTarget($destination);
+        $path = $dir.'/'.DockerVolumeName::assertKey($key);
+        $result = $this->dockerProcess->run([
+            'docker', 'run', '--rm',
+            '-v', $volume.':'.DockerVolumeName::MOUNT_POINT.':ro',
+            '--entrypoint', 'test',
+            RunBackupContainer::IMAGE,
+            '-f', $path,
+        ], 120);
+
+        if ($result->exitCode === 1 && ! $result->timedOut) {
+            return false;
+        }
+
+        if (! $result->successful()) {
+            throw new RuntimeException('Unable to inspect the Docker volume destination: '.($result->combinedOutput() ?: 'unknown error'));
+        }
+
+        return true;
     }
 
     private function joinRelative(mixed ...$parts): string

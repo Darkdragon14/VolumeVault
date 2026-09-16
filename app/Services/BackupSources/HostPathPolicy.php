@@ -43,6 +43,22 @@ class HostPathPolicy
 
         if ($real !== false && $real !== $normalized) {
             $this->assertValid($this->normalize($real));
+
+            return;
+        }
+
+        if ($real === false) {
+            $ancestor = $normalized;
+            $suffix = [];
+
+            while ($ancestor !== '/' && ($canonicalAncestor = @realpath($ancestor)) === false) {
+                array_unshift($suffix, basename($ancestor));
+                $ancestor = dirname($ancestor);
+            }
+
+            if (isset($canonicalAncestor) && $canonicalAncestor !== false) {
+                $this->assertValid($this->normalize($canonicalAncestor.'/'.implode('/', $suffix)));
+            }
         }
     }
 

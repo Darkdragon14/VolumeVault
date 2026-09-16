@@ -2,22 +2,40 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\CreateBackupGroupRun;
+use App\Actions\Backup\UpdateBackupJobGroup;
 use App\Jobs\RunBackupGroupJob;
+use App\Models\ActivityLog;
 use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerVolume;
+use App\Models\NotificationChannel;
 use App\Models\User;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Inertia\Testing\AssertableInertia as Assert;
+use RuntimeException;
 use Tests\TestCase;
 
 class BackupJobGroupControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        foreach (['db_data', 'cache_data', 'solo_data', 'member_vol'] as $volumeName) {
+            DockerVolume::create(['name' => $volumeName, 'exists' => true]);
+        }
+    }
 
     public function test_creating_a_job_in_group_mode_with_a_new_group_creates_the_group_and_attaches_the_member(): void
     {
@@ -74,6 +92,51 @@ class BackupJobGroupControllerTest extends TestCase
         $this->assertNull($job->next_run_at);
     }
 
+    public function test_a_job_can_move_between_existing_groups(): void
+    {
+        $sourceGroup = $this->group();
+        $targetGroup = $this->group();
+        $targetGroup->forceFill(['name' => 'Target group'])->save();
+        $job = $this->member($sourceGroup);
+
+        $this->actingAs($this->admin())
+            ->put(route('backup-jobs.update', $job), [
+                'name' => $job->name,
+                'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                'volume_name' => $job->volume_name,
+                'backup_destination_id' => $job->backup_destination_id,
+                'planning_mode' => 'group',
+                'group_selection' => 'existing',
+                'backup_job_group_id' => $targetGroup->id,
+            ])
+            ->assertRedirect(route('backup-jobs.index'));
+
+        $this->assertSame($targetGroup->id, $job->fresh()->backup_job_group_id);
+        $this->assertFalse($sourceGroup->members()->exists());
+    }
+
+    public function test_a_job_can_detach_from_a_group_to_standalone_scheduling(): void
+    {
+        $group = $this->group();
+        $job = $this->member($group);
+
+        $this->actingAs($this->admin())
+            ->put(route('backup-jobs.update', $job), [
+                'name' => $job->name,
+                'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                'volume_name' => $job->volume_name,
+                'backup_destination_id' => $job->backup_destination_id,
+                'planning_mode' => 'standalone',
+                'schedule_type' => BackupJob::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '04:00'],
+            ])
+            ->assertRedirect(route('backup-jobs.index'));
+
+        $job->refresh();
+        $this->assertNull($job->backup_job_group_id);
+        $this->assertNotNull($job->next_run_at);
+    }
+
     public function test_a_standalone_job_still_keeps_its_own_schedule(): void
     {
         $destination = $this->destination();
@@ -110,6 +173,64 @@ class BackupJobGroupControllerTest extends TestCase
         $this->assertNotNull($group);
         $this->assertSame(BackupJobGroup::FAILURE_POLICY_STOP, $group->failure_policy);
         $this->assertNotNull($group->next_run_at);
+    }
+
+    public function test_web_group_creation_revalidates_channels_and_rolls_back_the_group(): void
+    {
+        $channel = $this->notificationChannel('Deleted before web group channel lock');
+        $this->deleteChannelAfterGroupCreation($channel);
+
+        $this->actingAs($this->admin())
+            ->post(route('backup-groups.store'), [
+                'name' => 'Rolled back web group',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '02:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+                'notification_channel_ids' => [$channel->id],
+            ])
+            ->assertSessionHasErrors('notification_channel_ids');
+
+        $this->assertSame(0, BackupJobGroup::count());
+        $this->assertSame(0, ActivityLog::where('event_type', 'backup_group_created')->count());
+        $this->assertDatabaseHas('notification_channels', ['id' => $channel->id]);
+    }
+
+    public function test_web_group_creation_locks_channels_in_id_order_before_pivot_sync_and_activity(): void
+    {
+        $firstChannel = $this->notificationChannel('First ordered create channel');
+        $secondChannel = $this->notificationChannel('Second ordered create channel');
+        $queries = [];
+        DB::listen(function (QueryExecuted $query) use (&$queries): void {
+            $queries[] = $query;
+        });
+
+        $this->actingAs($this->admin())
+            ->post(route('backup-groups.store'), [
+                'name' => 'Ordered web group creation',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '02:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+                'notification_channel_ids' => [$secondChannel->id, $firstChannel->id],
+            ])
+            ->assertRedirect();
+
+        $groupInsert = collect($queries)->search(fn (QueryExecuted $query): bool => str_starts_with($query->sql, 'insert into "backup_job_groups"'));
+        $channelLock = collect($queries)->search(fn (QueryExecuted $query): bool => str_contains($query->sql, 'select "id" from "notification_channels"')
+            && str_contains($query->sql, 'order by "id" asc'));
+        $pivotSync = collect($queries)->search(fn (QueryExecuted $query): bool => str_starts_with($query->sql, 'insert into "backup_job_group_notification_channel"'));
+        $activityInsert = collect($queries)->search(fn (QueryExecuted $query): bool => str_starts_with($query->sql, 'insert into "activity_logs"'));
+
+        $this->assertIsInt($groupInsert);
+        $this->assertIsInt($channelLock);
+        $this->assertIsInt($pivotSync);
+        $this->assertIsInt($activityInsert);
+        $this->assertStringContainsString(
+            sprintf('in (%d, %d)', $firstChannel->id, $secondChannel->id),
+            $queries[$channelLock]->sql,
+        );
+        $this->assertLessThan($channelLock, $groupInsert);
+        $this->assertLessThan($pivotSync, $channelLock);
+        $this->assertLessThan($activityInsert, $pivotSync);
     }
 
     public function test_deleting_a_group_is_blocked_while_it_has_members(): void
@@ -187,6 +308,7 @@ class BackupJobGroupControllerTest extends TestCase
 
     public function test_running_a_group_now_queues_a_group_run(): void
     {
+        config(['queue.default' => 'database']);
         Bus::fake([RunBackupGroupJob::class]);
 
         $group = $this->group();
@@ -198,6 +320,22 @@ class BackupJobGroupControllerTest extends TestCase
 
         Bus::assertDispatched(RunBackupGroupJob::class);
         $this->assertSame(1, $group->groupRuns()->count());
+    }
+
+    public function test_group_run_uses_schedule_data_reloaded_under_the_group_lock(): void
+    {
+        $staleGroup = $this->group();
+        $this->member($staleGroup);
+        $staleGroup->newQuery()->whereKey($staleGroup->id)->update([
+            'schedule_config' => ['time' => '07:00'],
+            'cron_expression' => '0 7 * * *',
+            'next_run_at' => now()->subMinute(),
+        ]);
+
+        $run = app(CreateBackupGroupRun::class)->handle($staleGroup, BackupGroupRun::TRIGGER_MANUAL);
+
+        $this->assertNotNull($run);
+        $this->assertSame(7, $staleGroup->fresh()->next_run_at->hour);
     }
 
     public function test_a_group_member_cannot_be_run_as_a_standalone_job(): void
@@ -228,6 +366,166 @@ class BackupJobGroupControllerTest extends TestCase
             ->assertRedirect(route('backup-groups.index'));
 
         $this->assertFalse($group->fresh()->notifications_enabled);
+    }
+
+    public function test_web_group_update_uses_locked_lifecycle_state_and_preserves_omitted_notifications(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        $channel = $this->notificationChannel('Existing web channel');
+        $group->forceFill(['notifications_enabled' => false])->save();
+        $group->notificationChannels()->attach($channel);
+        $lifecycleAt = now()->subHour()->startOfSecond();
+        $changedAfterRouteBinding = false;
+
+        Event::listen('eloquent.retrieved: '.BackupJobGroup::class, function (BackupJobGroup $retrieved) use ($group, $lifecycleAt, &$changedAfterRouteBinding): void {
+            if ($changedAfterRouteBinding || $retrieved->id !== $group->id) {
+                return;
+            }
+
+            $changedAfterRouteBinding = true;
+            BackupJobGroup::query()->whereKey($group->id)->update([
+                'status' => BackupJobGroup::STATUS_RUNNING,
+                'pause_reason' => 'Lifecycle marker',
+                'last_run_at' => $lifecycleAt,
+                'last_success_at' => $lifecycleAt,
+                'last_error' => 'Worker marker',
+                'last_error_at' => $lifecycleAt,
+            ]);
+        });
+
+        $this->actingAs($this->admin())
+            ->put(route('backup-groups.update', $group), [
+                'name' => 'Locked web update',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '05:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_STOP,
+            ])
+            ->assertRedirect(route('backup-groups.index'));
+
+        $freshGroup = $group->fresh();
+        $this->assertSame(BackupJobGroup::STATUS_RUNNING, $freshGroup->status);
+        $this->assertSame('Lifecycle marker', $freshGroup->pause_reason);
+        $this->assertSame('Worker marker', $freshGroup->last_error);
+        $this->assertTrue($freshGroup->last_run_at->equalTo($lifecycleAt));
+        $this->assertTrue($freshGroup->last_success_at->equalTo($lifecycleAt));
+        $this->assertTrue($freshGroup->last_error_at->equalTo($lifecycleAt));
+        $this->assertFalse($freshGroup->notifications_enabled);
+        $this->assertSame([$channel->id], $freshGroup->notificationChannels()->pluck('notification_channels.id')->all());
+        $this->assertSame(['time' => '05:00'], $member->fresh()->schedule_config);
+        $this->assertSame('0 5 * * *', $member->fresh()->cron_expression);
+    }
+
+    public function test_web_group_update_rolls_back_config_channels_and_member_propagation_together(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        $existingChannel = $this->notificationChannel('Existing rollback channel');
+        $replacementChannel = $this->notificationChannel('Replacement rollback channel');
+        $group->forceFill(['notifications_enabled' => false])->save();
+        $group->notificationChannels()->attach($existingChannel);
+        $this->failAfterMemberScheduleUpdate();
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->actingAs($this->admin())->put(route('backup-groups.update', $group), [
+                'name' => 'Must roll back',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '06:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_STOP,
+                'notifications_enabled' => true,
+                'notification_channel_ids' => [$replacementChannel->id],
+            ]);
+            $this->fail('The member propagation failure was not raised.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Stop after member propagation.', $exception->getMessage());
+        } finally {
+            Event::forget(QueryExecuted::class);
+        }
+
+        $freshGroup = $group->fresh();
+        $this->assertSame('Group', $freshGroup->name);
+        $this->assertSame(['time' => '02:00'], $freshGroup->schedule_config);
+        $this->assertFalse($freshGroup->notifications_enabled);
+        $this->assertSame([$existingChannel->id], $freshGroup->notificationChannels()->pluck('notification_channels.id')->all());
+        $this->assertSame(['time' => '02:00'], $member->fresh()->schedule_config);
+        $this->assertSame('0 2 * * *', $member->fresh()->cron_expression);
+    }
+
+    public function test_web_group_update_revalidates_channels_and_rolls_back_config(): void
+    {
+        $group = $this->group();
+        $member = $this->member($group);
+        $existingChannel = $this->notificationChannel('Existing revalidation channel');
+        $missingChannel = $this->notificationChannel('Missing revalidation channel');
+        $group->notificationChannels()->attach($existingChannel);
+        Event::listen('eloquent.updated: '.BackupJobGroup::class, function (BackupJobGroup $updated) use ($group, $missingChannel): void {
+            if ($updated->id === $group->id) {
+                DB::table('notification_channels')->where('id', $missingChannel->id)->delete();
+            }
+        });
+
+        $this->actingAs($this->admin())
+            ->put(route('backup-groups.update', $group), [
+                'name' => 'Must roll back after revalidation',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '06:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_STOP,
+                'notification_channel_ids' => [$missingChannel->id],
+            ])
+            ->assertSessionHasErrors('notification_channel_ids');
+
+        $freshGroup = $group->fresh();
+        $this->assertSame('Group', $freshGroup->name);
+        $this->assertSame(['time' => '02:00'], $freshGroup->schedule_config);
+        $this->assertSame([$existingChannel->id], $freshGroup->notificationChannels()->pluck('notification_channels.id')->all());
+        $this->assertSame(['time' => '02:00'], $member->fresh()->schedule_config);
+        $this->assertDatabaseHas('notification_channels', ['id' => $missingChannel->id]);
+    }
+
+    public function test_group_update_locks_members_in_id_order_before_channel_sync_and_bulk_update(): void
+    {
+        $group = $this->group();
+        $this->member($group);
+        $this->member($group);
+        $channel = $this->notificationChannel('Ordered lock channel');
+        $secondChannel = $this->notificationChannel('Second ordered lock channel');
+        $queries = [];
+        DB::listen(function (QueryExecuted $query) use (&$queries): void {
+            $queries[] = $query;
+        });
+
+        app(UpdateBackupJobGroup::class)->handle($group, [
+            'name' => 'Ordered locks',
+            'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '06:00'],
+            'timezone' => 'UTC',
+            'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+            'notification_channel_ids' => [$secondChannel->id, $channel->id],
+        ]);
+
+        $groupLockQuery = collect($queries)->search(fn (QueryExecuted $query): bool => str_contains($query->sql, 'select * from "backup_job_groups"')
+            && str_contains($query->sql, 'order by "id" asc'));
+        $memberLockQuery = collect($queries)->search(fn (QueryExecuted $query): bool => str_contains($query->sql, 'select * from "backup_jobs"')
+            && str_contains($query->sql, 'order by "id" asc'));
+        $channelLockQuery = collect($queries)->search(fn (QueryExecuted $query): bool => str_contains($query->sql, 'select "id" from "notification_channels"')
+            && str_contains($query->sql, 'order by "id" asc'));
+        $channelSyncQuery = collect($queries)->search(fn (QueryExecuted $query): bool => str_contains($query->sql, 'from "backup_job_group_notification_channel"'));
+        $memberUpdateQuery = collect($queries)->search(fn (QueryExecuted $query): bool => str_starts_with($query->sql, 'update "backup_jobs"'));
+
+        $this->assertIsInt($groupLockQuery);
+        $this->assertIsInt($memberLockQuery);
+        $this->assertIsInt($channelLockQuery);
+        $this->assertIsInt($channelSyncQuery);
+        $this->assertIsInt($memberUpdateQuery);
+        $this->assertStringContainsString(
+            sprintf('in (%d, %d)', $channel->id, $secondChannel->id),
+            $queries[$channelLockQuery]->sql,
+        );
+        $this->assertLessThan($memberLockQuery, $groupLockQuery);
+        $this->assertLessThan($channelLockQuery, $memberLockQuery);
+        $this->assertLessThan($channelSyncQuery, $channelLockQuery);
+        $this->assertLessThan($memberUpdateQuery, $memberLockQuery);
     }
 
     public function test_missing_schedule_input_is_a_validation_error_not_a_server_error(): void
@@ -497,6 +795,33 @@ class BackupJobGroupControllerTest extends TestCase
             'status' => BackupJob::STATUS_ACTIVE,
             'next_run_at' => null,
         ]);
+    }
+
+    private function notificationChannel(string $name): NotificationChannel
+    {
+        return NotificationChannel::create([
+            'name' => $name,
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/backup-group-test',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'is_active' => true,
+        ]);
+    }
+
+    private function failAfterMemberScheduleUpdate(): void
+    {
+        Event::listen(QueryExecuted::class, function (QueryExecuted $query): void {
+            if (str_starts_with($query->sql, 'update "backup_jobs"')) {
+                throw new RuntimeException('Stop after member propagation.');
+            }
+        });
+    }
+
+    private function deleteChannelAfterGroupCreation(NotificationChannel $channel): void
+    {
+        Event::listen('eloquent.created: '.BackupJobGroup::class, function () use ($channel): void {
+            DB::table('notification_channels')->where('id', $channel->id)->delete();
+        });
     }
 
     private function groupRun(BackupJobGroup $group, BackupJob $member, string $status, ?int $size, Carbon $finishedAt): BackupGroupRun

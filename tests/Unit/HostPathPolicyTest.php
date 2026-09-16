@@ -98,4 +98,27 @@ class HostPathPolicyTest extends TestCase
         (new HostPathPolicy)->assertValidAtRuntime($path);
         $this->addToAssertionCount(1);
     }
+
+    public function test_unavailable_suffix_below_a_symlinked_ancestor_cannot_escape_the_allowlist(): void
+    {
+        $base = sys_get_temp_dir().'/volumevault-hostpath-ancestor-'.uniqid();
+        $allowed = $base.'/allowed';
+        $outside = $base.'/outside';
+        $link = $allowed.'/linked';
+
+        mkdir($allowed, 0700, true);
+        mkdir($outside, 0700, true);
+        symlink($outside, $link);
+        config(['volumevault.host_path_allowlist' => [$allowed]]);
+
+        try {
+            $this->expectException(InvalidArgumentException::class);
+            (new HostPathPolicy)->assertValidAtRuntime($link.'/missing/archive');
+        } finally {
+            unlink($link);
+            rmdir($outside);
+            rmdir($allowed);
+            rmdir($base);
+        }
+    }
 }

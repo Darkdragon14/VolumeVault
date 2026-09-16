@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'Ранний отказ от неподдерживаемых резервных копий в Dropbox',
+        'description' => 'Восстановление на месте теперь отклоняет запрос резервной копии до постановки в очередь, если текущее хранилище задания — Dropbox. Форма объясняет ограничение и сохраняет выбор до его явного изменения.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Более безопасное восстановление из Dropbox и исправленный порядок архивов',
+        'description' => 'Загрузка через Offen не предоставляет VolumeVault проверяемый точный ID файла Dropbox. Асинхронная обработка метаданных никогда не определяет идентичность по имени файла, поскольку файл мог быть заменён. Даже новые успешные резервные копии Dropbox без подтверждённого ID файла остаются непроверяемыми для восстановления из истории запусков. Архивы в хранилищах типа «Том Docker» теперь корректно отображаются от новых к старым.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Безопасное чтение локальных архивов',
+        'description' => 'Загрузка локальных архивов для восстановления теперь фиксирует корневой каталог архива, запрещает переходы по символическим ссылкам и атомарно публикует только полные файлы, не удаляя существующие целевые файлы при сбое.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Надёжная отправка запусков из очереди',
+        'description' => 'Резервные копии, восстановления и группы в очереди теперь используют сохраняемую аренду отправки и автоматически отправляются повторно при потере первой передачи в очередь, не дублируя выполнение, уже принятое обработчиком. Требуется асинхронное подключение к очереди; драйвер sync отклоняется, поскольку он не может надёжно повторно поставить в очередь задания, ожидающие блокировку.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Nadezhnye uvedomleniya o zavershenii',
+        'description' => 'Itogovye uvedomleniya rezervnogo kopirovaniya, vosstanovleniya i grupp teper povtoryayutsya otdelno dlya kazhdogo kanala pri vremennyh oshibkah.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Надёжная история резервных копий',
+        'description' => 'Запуски теперь сохраняют исходный источник, назначение и имя архива, поэтому выполнение, метаданные, история томов и восстановление из прошлых запусков остаются корректными после изменения задания.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Сортировка заданий резервного копирования',
         'description' => 'Задания резервного копирования теперь можно сортировать в обоих направлениях по имени, следующему запуску по расписанию или последнему запуску. Сортировка применяется ко всему списку с пагинацией, сохраняется в URL и доступна через API.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Сеть Docker TCP-прокси для резервных копий',
         'description' => 'Резервные копии теперь могут обращаться к Docker TCP socket proxy по имени сервиса в сети Docker. Укажите в VOLUMEVAULT_DOCKER_NETWORK пользовательскую сеть, видимую движку, и VolumeVault подключит к ней временные контейнеры резервного копирования Offen.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Docker label managed backups',
+        'description' => 'Running containers can now declare scheduled volume backups through Docker labels. Administrators configure trusted defaults in VolumeVault, while generated jobs stay read-only and are safely disabled when their declaration disappears or conflicts.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Поддержка TCP-эндпоинтов Docker',

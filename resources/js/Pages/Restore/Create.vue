@@ -7,9 +7,15 @@ import { formatBytes } from '@/Composables/useFormatBytes';
 
 const props = defineProps<{
     job: any;
+    restoreDestination: any;
     backups: any[];
     hasOtherBackups?: boolean;
     preselectedBackupKey?: string | null;
+    backupRunId?: number | null;
+    backupRunUnverifiable?: boolean;
+    isDockerVolumeSource: boolean;
+    sourceVolumeName?: string | null;
+    sourceLabel: string;
     listError?: string | null;
     generatedTargetVolumeName: string;
 }>();
@@ -25,10 +31,11 @@ const localDateKey = (value?: string | null): string => value
     ? new Intl.DateTimeFormat('en-CA', { timeZone: timezone.value, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
     : '';
 
-const isDockerVolumeSource = computed(() => !!props.job.is_docker_volume_source);
-const sourceVolumeName = computed(() => props.job.volume_name as string);
+const isDockerVolumeSource = computed(() => props.isDockerVolumeSource);
+const sourceVolumeName = computed(() => props.sourceVolumeName ?? '');
 
 const form = useForm({
+    backup_run_id: props.backupRunId ?? null,
     selected_backup_key: '',
     mode: 'new_volume',
     target_volume_name: props.generatedTargetVolumeName,
@@ -75,6 +82,8 @@ const modes = computed(() => {
 const selectedMode = computed(() => modes.value.find((mode) => mode.value === form.mode));
 const requiresConfirmation = computed(() => !!selectedMode.value?.requiresConfirmation);
 const isInPlace = computed(() => form.mode === 'inplace' || form.mode === 'safe_inplace');
+const dropboxSafetyBackupUnavailable = computed(() => isInPlace.value && props.job.destination?.provider === 'dropbox');
+const safetyBackupBlocked = computed(() => dropboxSafetyBackupUnavailable.value && form.backup_before_overwrite);
 const confirmationMatches = computed(() => !requiresConfirmation.value || form.confirmation_text === sourceVolumeName.value);
 
 // Keep the target volume in sync with the mode: in-place modes write back into
@@ -108,6 +117,14 @@ const dateFilter = ref('');
 const showAll = ref(false);
 
 const scopedBackups = computed(() => {
+    if (props.backupRunUnverifiable) {
+        return [];
+    }
+
+    if (props.backupRunId && props.preselectedBackupKey) {
+        return props.backups.filter((backup) => backup.key === props.preselectedBackupKey);
+    }
+
     if (showAll.value || !props.hasOtherBackups) {
         return props.backups;
     }
@@ -132,12 +149,25 @@ const visibleBackups = computed(() => {
 const latestKey = computed(() => scopedBackups.value[0]?.key ?? null);
 
 const selectedBackup = computed(() => props.backups.find((backup) => backup.key === form.selected_backup_key));
-const sourceLabel = (job: any) => job.source_label || job.host_path || job.volume_name || t('Unknown');
-const submit = () => form.post(`/backup-jobs/${props.job.id}/restore`);
+const submit = () => {
+    if (props.backupRunUnverifiable || safetyBackupBlocked.value) {
+        return;
+    }
+
+    form.post(`/backup-jobs/${props.job.id}/restore`, {
+        onError: (errors) => {
+            if (errors.selected_backup_key) {
+                step.value = 1;
+            } else if (errors.backup_before_overwrite) {
+                step.value = 2;
+            }
+        },
+    });
+};
 
 // Preselect a specific archive (e.g. from a "Restore this backup" link), even
 // when it belongs to another job — reveal all backups so it stays visible.
-if (props.preselectedBackupKey) {
+if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
     const match = props.backups.find((backup) => backup.key === props.preselectedBackupKey);
     if (match) {
         form.selected_backup_key = match.key;
@@ -149,8 +179,8 @@ if (props.preselectedBackupKey) {
 </script>
 
 <template>
-    <Head :title="t('Restore {name}', { name: job.name })" />
     <AppLayout :title="t('Restore {name}', { name: job.name })" :subtitle="t('Choose a backup archive and restore it into a new Docker volume.')">
+        <Head :title="t('Restore {name}', { name: job.name })" />
         <template #actions>
             <Link :href="`/backup-jobs/${job.id}`" class="btn-secondary">{{ t('Back to job') }}</Link>
         </template>
@@ -163,10 +193,12 @@ if (props.preselectedBackupKey) {
 
         <section v-if="step === 1" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Select backup') }}</h2>
-            <p class="mt-1 text-sm text-slate-400">{{ t('Backups are listed newest first from {name}.', { name: job.destination?.name }) }}</p>
+            <p class="mt-1 text-sm text-slate-400">{{ t('Backups are listed newest first from {name}.', { name: restoreDestination?.name }) }}</p>
             <p v-if="listError" class="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ listError }}</p>
+            <p v-if="backupRunUnverifiable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('This historical Dropbox backup has no stable file ID. Its identity cannot be verified, so restoring this run is unavailable.') }}</p>
+            <p v-if="form.errors.selected_backup_key" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.selected_backup_key }}</p>
 
-            <div v-if="backups.length" class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div v-if="backups.length && !backupRunUnverifiable" class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label class="block flex-1 space-y-1">
                     <span class="label">{{ t('Filter by name') }}</span>
                     <input v-model="search" type="search" class="input" :placeholder="t('Search backups')">
@@ -178,7 +210,7 @@ if (props.preselectedBackupKey) {
                 <button v-if="dateFilter || search" type="button" class="btn-secondary" @click="search = ''; dateFilter = ''">{{ t('Clear filters') }}</button>
             </div>
 
-            <label v-if="hasOtherBackups" class="mt-4 flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+            <label v-if="hasOtherBackups && !backupRunId" class="mt-4 flex cursor-pointer items-center gap-2 text-sm text-slate-300">
                 <input v-model="showAll" type="checkbox" class="text-sky-400">
                 <span>{{ t('Show all backups in this destination') }}</span>
             </label>
@@ -200,10 +232,10 @@ if (props.preselectedBackupKey) {
                     </span>
                 </label>
             </div>
-            <p v-else-if="backups.length" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backups match the current filters.') }}</p>
-            <p v-else class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backup objects found. Run a backup first or check the destination path.') }}</p>
+            <p v-else-if="backups.length && !backupRunUnverifiable" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backups match the current filters.') }}</p>
+            <p v-else-if="!backupRunUnverifiable" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backup objects found. Run a backup first or check the destination path.') }}</p>
 
-            <button class="btn-primary mt-5" :disabled="!form.selected_backup_key" @click="step = 2">{{ t('Continue') }}</button>
+            <button class="btn-primary mt-5" :disabled="backupRunUnverifiable || !form.selected_backup_key" @click="step = 2">{{ t('Continue') }}</button>
         </section>
 
         <section v-if="step === 2" class="card p-4 sm:p-6">
@@ -242,9 +274,12 @@ if (props.preselectedBackupKey) {
                 </span>
             </label>
 
+            <p v-if="dropboxSafetyBackupUnavailable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('Safety backup before overwrite is unavailable because the job’s current destination is Dropbox. A newly uploaded Dropbox backup cannot be verified for restore. Choose a different job destination or explicitly turn off the safety backup.') }}</p>
+            <p v-if="form.errors.backup_before_overwrite" role="alert" class="mt-4 text-sm text-rose-300">{{ t(form.errors.backup_before_overwrite) }}</p>
+
             <div class="mt-5 flex flex-wrap gap-3">
                 <button class="btn-secondary" @click="step = 1">{{ t('Back') }}</button>
-                <button class="btn-primary" @click="step = 3">{{ t('Continue') }}</button>
+                <button class="btn-primary" :disabled="safetyBackupBlocked" @click="step = 3">{{ t('Continue') }}</button>
             </div>
         </section>
 
@@ -257,9 +292,9 @@ if (props.preselectedBackupKey) {
                 {{ confirmWarning }}
             </div>
             <dl class="mt-5 grid gap-4 sm:grid-cols-2">
-                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ sourceLabel(job) }}</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ sourceLabel }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Target volume') }}</dt><dd class="mt-1 break-all text-white">{{ form.target_volume_name }}</dd></div>
-                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 break-words text-white">{{ job.destination?.name }}</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 break-words text-white">{{ restoreDestination?.name }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Selected backup') }}</dt><dd class="mt-1 break-all text-white">{{ selectedBackup?.display_name || selectedBackup?.key }}</dd></div>
                 <div v-if="isInPlace"><dt class="text-xs uppercase text-slate-400">{{ t('Safety backup') }}</dt><dd class="mt-1 text-white">{{ form.backup_before_overwrite ? t('Yes, backed up before overwrite') : t('No') }}</dd></div>
             </dl>
@@ -272,7 +307,7 @@ if (props.preselectedBackupKey) {
 
             <div class="mt-5 flex flex-wrap gap-3">
                 <button class="btn-secondary" @click="step = 2">{{ t('Back') }}</button>
-                <button class="btn-primary" :disabled="form.processing || !confirmationMatches" @click="submit">{{ t('Queue restore') }}</button>
+                <button class="btn-primary" :disabled="form.processing || !confirmationMatches || safetyBackupBlocked" @click="submit">{{ t('Queue restore') }}</button>
             </div>
         </section>
 

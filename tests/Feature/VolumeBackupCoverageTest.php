@@ -135,6 +135,130 @@ class VolumeBackupCoverageTest extends TestCase
         $this->assertSame(1, $stacks['none']['unprotected_volumes']);
     }
 
+    public function test_retained_invalid_managed_job_does_not_count_as_volume_or_stack_coverage(): void
+    {
+        $destination = $this->destination();
+        $volume = DockerVolume::create([
+            'name' => 'app_data',
+            'exists' => true,
+            'labels' => ['com.docker.compose.project' => 'app'],
+        ]);
+        $job = $this->job($destination, 'app_data');
+        $job->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-app-data'),
+            'status' => BackupJob::STATUS_ERROR,
+            'label_reconciliation_error' => 'Definition disappeared.',
+        ]);
+
+        $summary = app(VolumeBackupSummaries::class)->forVolumes(collect([$volume]))->first();
+        $stack = app(VolumeBackupSummaries::class)->forStacks(collect([$volume]))->first();
+
+        $this->assertSame(0, $summary['related_jobs_count']);
+        $this->assertSame(VolumeBackupSummaries::STATE_UNPROTECTED, $summary['backup_state']);
+        $this->assertSame(0, $stack['configured_job_volumes']);
+        $this->assertSame(VolumeBackupSummaries::STACK_NOT_CONFIGURED, $stack['configuration_state']);
+    }
+
+    public function test_snapshotted_success_from_tombstoned_job_preserves_backup_history_without_current_coverage(): void
+    {
+        $destination = $this->destination();
+        $volume = DockerVolume::create([
+            'name' => 'app_data',
+            'exists' => true,
+            'labels' => ['com.docker.compose.project' => 'app'],
+        ]);
+        $tombstone = $this->job($destination, 'app_data');
+        $tombstone->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-app-data'),
+            'status' => BackupJob::STATUS_ERROR,
+            'label_reconciliation_error' => 'Definition disappeared.',
+        ]);
+        $run = BackupRun::create([
+            'backup_job_id' => $tombstone->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'app_data',
+            'finished_at' => now(),
+            'backup_key' => 'tombstone.tar.gz',
+            'backup_size_bytes' => 1024,
+        ]);
+
+        $summary = app(VolumeBackupSummaries::class)->forVolumes(collect([$volume]))->first();
+        $stack = app(VolumeBackupSummaries::class)->forStacks(collect([$volume]))->first();
+
+        $this->assertSame(0, $summary['related_jobs_count']);
+        $this->assertSame(VolumeBackupSummaries::STATE_BACKED_UP, $summary['backup_state']);
+        $this->assertSame($run->id, $summary['last_backup_run_id']);
+        $this->assertSame('tombstone.tar.gz', $summary['last_backup_key']);
+        $this->assertSame(1024, $summary['last_backup_size_bytes']);
+        $this->assertSame(0, $stack['configured_job_volumes']);
+        $this->assertSame(VolumeBackupSummaries::STACK_NOT_CONFIGURED, $stack['configuration_state']);
+        $this->assertSame(1, $stack['backed_up_volumes']);
+        $this->assertSame(1024, $stack['last_backup_size_bytes']);
+    }
+
+    public function test_legacy_success_from_tombstoned_job_remains_excluded(): void
+    {
+        $destination = $this->destination();
+        $volume = DockerVolume::create(['name' => 'app_data', 'exists' => true]);
+        $tombstone = $this->job($destination, 'app_data');
+        $tombstone->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-app-data'),
+            'status' => BackupJob::STATUS_ERROR,
+            'label_reconciliation_error' => 'Definition disappeared.',
+        ]);
+        BackupRun::create([
+            'backup_job_id' => $tombstone->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'finished_at' => now(),
+            'backup_key' => 'legacy-tombstone.tar.gz',
+            'backup_size_bytes' => 1024,
+        ]);
+
+        $summary = app(VolumeBackupSummaries::class)->forVolumes(collect([$volume]))->first();
+        $stack = app(VolumeBackupSummaries::class)->forStacks(collect([$volume]))->first();
+
+        $this->assertSame(0, $summary['related_jobs_count']);
+        $this->assertSame(VolumeBackupSummaries::STATE_UNPROTECTED, $summary['backup_state']);
+        $this->assertNull($summary['last_backup_run_id']);
+        $this->assertNull($summary['last_backup_at']);
+        $this->assertNull($summary['last_backup_key']);
+        $this->assertNull($summary['last_backup_size_bytes']);
+        $this->assertSame(0, $stack['backed_up_volumes']);
+        $this->assertSame(1, $stack['unprotected_volumes']);
+        $this->assertNull($stack['last_backup_at']);
+        $this->assertNull($stack['last_backup_size_bytes']);
+    }
+
+    public function test_historical_run_remains_attributed_to_its_snapshotted_volume(): void
+    {
+        $destination = $this->destination();
+        $originalVolume = DockerVolume::create(['name' => 'app_data', 'exists' => true]);
+        DockerVolume::create(['name' => 'replacement_data', 'exists' => true]);
+        $job = $this->job($destination, 'app_data');
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'app_data',
+            'finished_at' => now(),
+            'backup_size_bytes' => 3072,
+        ]);
+        $job->update(['volume_name' => 'replacement_data']);
+
+        $summary = app(VolumeBackupSummaries::class)->forVolumes(collect([$originalVolume]))->first();
+
+        $this->assertSame(VolumeBackupSummaries::STATE_BACKED_UP, $summary['backup_state']);
+        $this->assertSame($run->id, $summary['last_backup_run_id']);
+        $this->assertSame(3072, $summary['last_backup_size_bytes']);
+    }
+
     private function destination(): BackupDestination
     {
         return BackupDestination::create([

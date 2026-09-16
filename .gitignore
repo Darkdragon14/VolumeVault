@@ -4,6 +4,7 @@
 /public/hot
 /public/storage
 /storage/*.key
+/storage/framework/sync-docker-volumes.lock
 /database/*.sqlite
 /database/*.sqlite-*
 /storage/pail

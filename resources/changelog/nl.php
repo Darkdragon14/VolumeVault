@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'Niet-ondersteunde Dropbox-veiligheidsback-ups vooraf weigeren',
+        'description' => 'Herstel op dezelfde locatie weigert nu een aangevraagde veiligheidsback-up vóór het inplannen als de huidige taakbestemming Dropbox is. Het formulier legt de beperking uit en behoudt je keuze totdat je die expliciet wijzigt.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Veiliger Dropbox-herstel en gecorrigeerde archiefvolgorde',
+        'description' => 'Offen-uploads leveren VolumeVault geen verifieerbare exacte Dropbox-bestands-ID. Asynchrone metadataverwerking bepaalt de identiteit nooit op basis van de bestandsnaam, omdat het bestand vervangen kan zijn. Ook nieuwe geslaagde Dropbox-back-ups zonder bewezen bestands-ID blijven onverifieerbaar voor herstel vanuit de uitvoeringsgeschiedenis. Archieven op Docker-volumebestemmingen worden nu correct met de nieuwste eerst weergegeven.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Veiliger lezen van lokale archieven',
+        'description' => 'Downloads van lokale archieven voor herstelacties zetten nu de archiefhoofdmap vast, weigeren het volgen van symbolische koppelingen en publiceren volledige bestanden atomair zonder bestaande doelen bij een fout te verwijderen.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Betrouwbare verzending van wachtrijtaken',
+        'description' => 'Back-ups, herstelacties en back-upgroepen in de wachtrij gebruiken nu een persistente verzendlease en worden automatisch opnieuw verzonden als de eerste overdracht verloren gaat, zonder een uitvoering te dupliceren die al door een worker is geclaimd. Een asynchrone wachtrijverbinding is vereist; het sync-stuurprogramma wordt geweigerd omdat het taken die op een vergrendeling wachten niet duurzaam opnieuw in de wachtrij kan plaatsen.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Betrouwbare eindmeldingen',
+        'description' => 'Eindmeldingen voor back-ups, herstelacties en back-upgroepen worden nu per kanaal opnieuw geprobeerd, zodat tijdelijke fouten geen resultaat meer verloren laten gaan.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Betrouwbare back-upgeschiedenis',
+        'description' => 'Back-upruns bewaren nu hun oorspronkelijke bron, bestemming en archiefnaam, zodat uitvoering, metadata, volumegeschiedenis en herstel vanuit historische runs correct blijven nadat een taak is gewijzigd.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Sorteerbare back-uptaken',
         'description' => 'Back-uptaken kunnen nu in beide richtingen worden gesorteerd op naam, volgende geplande uitvoering of laatste uitvoering. De sortering geldt voor de volledige gepagineerde lijst, blijft in de URL staan en is ook beschikbaar via de API.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Docker TCP-proxynetwerk voor back-ups',
         'description' => 'Back-ups kunnen nu een Docker TCP-socketproxy bereiken via de servicenaam op het Docker-netwerk. Stel VOLUMEVAULT_DOCKER_NETWORK in op het door de engine zichtbare gebruikersnetwerk; VolumeVault koppelt de tijdelijke Offen-back-upcontainers eraan.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Docker label managed backups',
+        'description' => 'Running containers can now declare scheduled volume backups through Docker labels. Administrators configure trusted defaults in VolumeVault, while generated jobs stay read-only and are safely disabled when their declaration disappears or conflicts.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Ondersteuning voor Docker-TCP-endpoints',

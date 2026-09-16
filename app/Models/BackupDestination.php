@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Models;
+use App\Support\SshHostKey;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -159,6 +160,104 @@ class BackupDestination extends Model
         return $default;
     }
 
+    public function locatorFingerprint(): string
+    {
+        $locator = match ($this->provider) {
+            self::PROVIDER_AWS_S3,
+            self::PROVIDER_CLOUDFLARE_R2,
+            self::PROVIDER_CUSTOM_S3 => [
+                'endpoint' => rtrim((string) $this->setting('endpoint'), '/'),
+                'region' => strtolower(trim((string) $this->setting('region'))),
+                'bucket' => trim((string) $this->setting('bucket')),
+                'path_prefix' => trim((string) $this->setting('path_prefix'), '/'),
+                'use_path_style_endpoint' => (bool) $this->setting('use_path_style_endpoint'),
+            ],
+            self::PROVIDER_WEBDAV => [
+                'username' => trim((string) $this->secret('username')),
+                'url' => rtrim((string) $this->setting('url'), '/'),
+                'path' => trim((string) $this->setting('path'), '/'),
+            ],
+            self::PROVIDER_SSH => [
+                'host' => strtolower(trim((string) $this->setting('host'))),
+                'port' => (int) $this->setting('port', 22),
+                'remote_path' => rtrim((string) $this->setting('remote_path', '/'), '/') ?: '/',
+                'user' => trim((string) $this->secret('user')),
+                'host_key_fingerprint' => SshHostKey::fingerprint((string) $this->setting('host_key')),
+            ],
+            self::PROVIDER_AZURE_BLOB => [
+                'account_name' => $this->azureAccountName(),
+                'container' => trim((string) $this->setting('container')),
+                'endpoint' => $this->azureEndpoint(),
+            ],
+            self::PROVIDER_DROPBOX => [
+                'remote_path' => mb_strtolower(trim((string) $this->setting('remote_path'), '/')),
+                'account_credential_fingerprint' => hash('sha256', (string) $this->secret('refresh_token')),
+            ],
+            self::PROVIDER_GOOGLE_DRIVE => [
+                'client_email' => $this->googleDriveClientEmail(),
+                'folder_id' => trim((string) $this->setting('folder_id')),
+                'impersonate_subject' => strtolower(trim((string) $this->setting('impersonate_subject'))),
+                'endpoint' => rtrim((string) ($this->setting('endpoint') ?: 'https://www.googleapis.com/drive/v3'), '/'),
+            ],
+            self::PROVIDER_LOCAL => [
+                'archive_path' => rtrim((string) $this->setting('archive_path'), '/'),
+                'archive_mount_source' => rtrim((string) $this->setting('archive_mount_source'), '/'),
+            ],
+            self::PROVIDER_DOCKER_VOLUME => [
+                'volume_name' => trim((string) $this->setting('volume_name')),
+                'path_prefix' => trim((string) $this->setting('path_prefix'), '/'),
+            ],
+            default => [],
+        };
+
+        return hash('sha256', json_encode([
+            'provider' => $this->provider,
+            'locator' => $locator,
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    private function googleDriveClientEmail(): string
+    {
+        $credentials = json_decode((string) $this->secret('credentials_json'), true);
+
+        return is_array($credentials) ? strtolower(trim((string) ($credentials['client_email'] ?? ''))) : '';
+    }
+
+    private function azureAccountName(): string
+    {
+        $accountName = trim((string) $this->setting('account_name'));
+
+        if ($accountName !== '') {
+            return strtolower($accountName);
+        }
+
+        preg_match('/(?:^|;)\s*AccountName=([^;]+)/i', (string) $this->secret('connection_string'), $matches);
+
+        return strtolower(trim((string) ($matches[1] ?? '')));
+    }
+
+    private function azureEndpoint(): string
+    {
+        $endpoint = trim((string) $this->setting('endpoint'));
+        $connectionString = (string) $this->secret('connection_string');
+
+        if ($endpoint === '' && preg_match('/(?:^|;)\s*BlobEndpoint=([^;]+)/i', $connectionString, $matches)) {
+            $endpoint = trim($matches[1]);
+        }
+
+        if ($endpoint === '') {
+            preg_match('/(?:^|;)\s*DefaultEndpointsProtocol=([^;]+)/i', $connectionString, $protocolMatches);
+            preg_match('/(?:^|;)\s*EndpointSuffix=([^;]+)/i', $connectionString, $suffixMatches);
+            $accountName = $this->azureAccountName();
+
+            if ($accountName !== '') {
+                $endpoint = ($protocolMatches[1] ?? 'https').'://'.$accountName.'.'.($suffixMatches[1] ?? 'blob.core.windows.net');
+            }
+        }
+
+        return rtrim($endpoint, '/');
+    }
+
     public function targetLabel(): string
     {
         return match ($this->provider) {
@@ -216,13 +315,62 @@ class BackupDestination extends Model
      *  - a queued/running group run with a member job on this destination, whose
      *    member jobs the cascade would delete mid-run.
      */
-    public function hasRunInProgress(): bool
+    public function hasRunInProgress(bool $includeAllFinalizations = false): bool
     {
         $ofThisDestination = fn ($query) => $query->where('backup_destination_id', $this->id);
 
-        return BackupRun::whereHas('job', $ofThisDestination)->activeOrHoldingContainers()->exists()
+        return BackupRun::query()
+            ->where(function ($query) use ($ofThisDestination): void {
+                $query->where('backup_destination_id_snapshot', $this->id)
+                    ->orWhere(fn ($query) => $query
+                        ->whereNull('backup_destination_id_snapshot')
+                        ->whereHas('job', $ofThisDestination));
+            })
+            ->requiringDestinationConfiguration()
+            ->exists()
+            || ($includeAllFinalizations && BackupRun::query()
+                ->where(fn ($query) => $query
+                    ->where('backup_destination_id_snapshot', $this->id)
+                    ->orWhereHas('job', $ofThisDestination))
+                ->withOutstandingFinalizations()
+                ->exists())
+            || ($includeAllFinalizations && RestoreRun::query()
+                ->where(fn ($query) => $query
+                    ->where('backup_destination_id', $this->id)
+                    ->orWhereHas('job', $ofThisDestination))
+                ->withOutstandingFinalizations()
+                ->exists())
             || $this->restoreRuns()->activeOrHoldingContainers()->exists()
             || RestoreRun::whereHas('job', $ofThisDestination)->activeOrHoldingContainers()->exists()
+            || BackupGroupRun::query()
+                ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
+                ->whereHas('group.members', $ofThisDestination)
+                ->exists();
+    }
+
+    /**
+     * Whether in-flight work still reads this destination's current configuration.
+     */
+    public function hasConfigurationInUse(): bool
+    {
+        $ofThisDestination = fn ($query) => $query->where('backup_destination_id', $this->id);
+
+        return BackupRun::query()
+            ->where(function ($query) use ($ofThisDestination): void {
+                $query->where('backup_destination_id_snapshot', $this->id)
+                    ->orWhere(fn ($query) => $query
+                        ->whereNull('backup_destination_id_snapshot')
+                        ->whereHas('job', $ofThisDestination));
+            })
+            ->requiringDestinationConfiguration()
+            ->exists()
+            || $this->restoreRuns()->activeOrHoldingContainers()->exists()
+            || RestoreRun::query()
+                ->whereHas('job', $ofThisDestination)
+                ->whereIn('status', [RestoreRun::STATUS_QUEUED, RestoreRun::STATUS_RUNNING])
+                ->where('backup_before_overwrite', true)
+                ->whereNull('pre_restore_backup_run_id')
+                ->exists()
             || BackupGroupRun::query()
                 ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
                 ->whereHas('group.members', $ofThisDestination)
