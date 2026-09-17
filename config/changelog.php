@@ -1,37 +1,42 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'dropbox_safety_backup_validation',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'dropbox_restore_identity_and_archive_ordering',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'secure_local_archive_reads',
-        ],
-        [
-            'type' => 'feature',
-            'key' => 'docker_label_backups',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'backup_run_snapshots',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'durable_terminal_notifications',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'durable_queued_run_dispatch',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v1.23.0' => [
+            'date' => '2026-09-17',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.23.0',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'dropbox_safety_backup_validation',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'dropbox_restore_identity_and_archive_ordering',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'secure_local_archive_reads',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'docker_label_backups',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'backup_run_snapshots',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'durable_terminal_notifications',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'durable_queued_run_dispatch',
+                ],
+            ],
+        ],
         'v1.22.0' => [
             'date' => '2026-08-25',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.22.0',
