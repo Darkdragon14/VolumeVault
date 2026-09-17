@@ -5,12 +5,14 @@ namespace Tests\Feature;
 use App\Actions\Backup\CreateBackupGroupRun;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
+use App\Actions\Backup\WithBackupGroupMutationLocks;
 use App\Actions\Docker\StartDockerContainers;
 use App\Jobs\DispatchDueBackupGroupsJob;
 use App\Jobs\DispatchDueBackupJobsJob;
-use App\Jobs\RecordArchiveMetadataJob;
+use App\Jobs\ProcessRunFinalizationJob as ProcessBackupRunFinalizationJob;
 use App\Jobs\RunBackupGroupJob;
 use App\Jobs\RunBackupJob;
+use App\Models\ActivityLog;
 use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
@@ -18,16 +20,21 @@ use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
+use App\Models\RunFinalization as BackupRunFinalization;
 use App\Models\User;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Services\Docker\SelfContainerResolver;
+use App\Services\Notifications\ResolveNotificationChannels;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\VolumeJobLock;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
@@ -69,7 +76,7 @@ class GroupedBackupTest extends TestCase
 
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         // Member runs must stay silent — the group emits the single notification set.
         $notifier->shouldNotReceive('sendBackupRunStarted');
         $notifier->shouldNotReceive('sendBackupRunFinished');
@@ -93,6 +100,27 @@ class GroupedBackupTest extends TestCase
         $memberRuns = BackupRun::where('backup_group_run_id', $run->id)->get();
         $this->assertCount(2, $memberRuns);
         $this->assertTrue($memberRuns->every(fn (BackupRun $r): bool => $r->status === BackupRun::STATUS_SUCCESS));
+        $this->assertTrue($memberRuns->every(fn (BackupRun $r): bool => $r->source_volume_name !== null));
+        $this->assertTrue($memberRuns->every(fn (BackupRun $r): bool => $r->backup_destination_id_snapshot !== null));
+        $this->assertTrue($memberRuns->every(fn (BackupRun $r): bool => $r->backup_filename !== null));
+    }
+
+    public function test_scheduled_group_occurrence_is_propagated_to_member_runs(): void
+    {
+        Queue::fake();
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+        $occurrence = now()->subMinutes(5)->startOfMinute();
+        $group->forceFill(['next_run_at' => $occurrence])->save();
+
+        $run = app(CreateBackupGroupRun::class)->handle($group, BackupGroupRun::TRIGGER_SCHEDULED);
+        $this->assertNotNull($run);
+        app(RunBackupGroup::class)->handle($run);
+
+        $memberRun = BackupRun::where('backup_group_run_id', $run->id)->sole();
+        $this->assertTrue($run->fresh()->scheduled_for->equalTo($occurrence));
+        $this->assertTrue($memberRun->scheduled_for->equalTo($occurrence));
     }
 
     public function test_group_run_detail_page_reports_the_aggregated_size(): void
@@ -111,8 +139,11 @@ class GroupedBackupTest extends TestCase
             'backup_group_run_id' => $groupRun->id,
             'status' => BackupRun::STATUS_SUCCESS,
             'trigger' => BackupRun::TRIGGER_MANUAL,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'historical_vol_a',
             'backup_size_bytes' => 4096,
         ]);
+        $member->update(['volume_name' => 'retargeted_vol_a']);
 
         $this->actingAs(User::factory()->admin()->create())
             ->get(route('backup-group-runs.show', $groupRun))
@@ -120,6 +151,7 @@ class GroupedBackupTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('BackupGroups/RunShow')
                 ->where('run.total_backup_size_bytes', 4096)
+                ->where('run.members.0.source_label', 'historical_vol_a')
             );
     }
 
@@ -129,7 +161,7 @@ class GroupedBackupTest extends TestCase
 
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $notifier->shouldNotReceive('sendBackupRunStarted');
         $notifier->shouldNotReceive('sendBackupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
@@ -158,7 +190,7 @@ class GroupedBackupTest extends TestCase
 
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $notifier->shouldNotReceive('sendBackupRunStarted');
         $notifier->shouldNotReceive('sendBackupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
@@ -219,6 +251,7 @@ class GroupedBackupTest extends TestCase
 
     public function test_the_scheduler_dispatches_due_groups_and_skips_group_members(): void
     {
+        config(['queue.default' => 'database']);
         Bus::fake([RunBackupGroupJob::class, RunBackupJob::class]);
 
         $group = $this->group();
@@ -328,7 +361,7 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
     }
 
-    public function test_reconciliation_releases_an_orphaned_group_lock(): void
+    public function test_reconciliation_leaves_an_orphaned_group_lock_to_expire(): void
     {
         $group = $this->group();
         $this->member($group, 'vol_a');
@@ -344,13 +377,14 @@ class GroupedBackupTest extends TestCase
         ]);
 
         $lockKey = VolumeJobLock::cacheKeyFor('backup-group-'.$group->id);
-        $this->assertTrue(Cache::lock($lockKey, 86400)->get());
+        $orphaned = Cache::lock($lockKey, 86400);
+        $this->assertTrue($orphaned->get());
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
-        // The orphaned lock is force-released, so a fresh acquire succeeds.
-        $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the group lock should be released');
+        $this->assertFalse(Cache::lock($lockKey, 86400)->get());
+        $orphaned->release();
     }
 
     public function test_the_group_run_job_releases_lock_losers_and_retries_until_a_deadline(): void
@@ -393,7 +427,7 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(0, BackupRun::where('backup_group_run_id', $run->id)->count());
     }
 
-    public function test_reconciliation_releases_the_volume_lock_of_a_stale_queued_member_run(): void
+    public function test_reconciliation_leaves_the_volume_lock_of_a_stale_queued_member_to_expire(): void
     {
         $group = $this->group();
         $member = $this->member($group, 'vol_a');
@@ -417,12 +451,14 @@ class GroupedBackupTest extends TestCase
         BackupRun::whereKey($memberRun->id)->update(['created_at' => now()->subHour()]);
 
         $lockKey = VolumeJobLock::cacheKey('vol_a');
-        $this->assertTrue(Cache::lock($lockKey, 86400)->get());
+        $orphaned = Cache::lock($lockKey, 86400);
+        $this->assertTrue($orphaned->get());
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->fresh()->status);
-        $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the member volume lock should be released');
+        $this->assertFalse(Cache::lock($lockKey, 86400)->get());
+        $orphaned->release();
     }
 
     public function test_reconciliation_does_not_close_a_group_run_with_a_recently_finished_member(): void
@@ -455,7 +491,7 @@ class GroupedBackupTest extends TestCase
 
     public function test_a_member_run_defers_archive_metadata_to_a_job(): void
     {
-        Queue::fake([RecordArchiveMetadataJob::class]);
+        Queue::fake([ProcessBackupRunFinalizationJob::class]);
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
 
         $group = $this->group();
@@ -480,7 +516,8 @@ class GroupedBackupTest extends TestCase
         // never blocks the group worker (which would let a live group run be
         // reconciled as stale).
         $this->assertSame(BackupRun::STATUS_SUCCESS, $memberRun->fresh()->status);
-        Queue::assertPushed(RecordArchiveMetadataJob::class, fn (RecordArchiveMetadataJob $job): bool => $job->backupRunId === $memberRun->id);
+        $finalization = BackupRunFinalization::whereBelongsTo($memberRun)->where('type', BackupRunFinalization::TYPE_ARCHIVE_METADATA)->firstOrFail();
+        Queue::assertPushed(ProcessBackupRunFinalizationJob::class, fn (ProcessBackupRunFinalizationJob $job): bool => $job->runFinalizationId === $finalization->id);
     }
 
     public function test_a_member_restore_notification_is_delivered_through_the_group_channels(): void
@@ -514,7 +551,7 @@ class GroupedBackupTest extends TestCase
         $this->assertContains('RESTORE_URL', $docker->shoutrrrUrls, 'the member restore should notify the group channel');
     }
 
-    public function test_reconciliation_releases_the_lock_of_a_stale_queued_group_run(): void
+    public function test_stale_queued_group_run_without_an_active_predecessor_is_failed_while_its_lock_expires_by_ttl(): void
     {
         $group = $this->group();
         $this->member($group, 'vol_a');
@@ -530,12 +567,61 @@ class GroupedBackupTest extends TestCase
         BackupGroupRun::whereKey($run->id)->update(['created_at' => now()->subHour()]);
 
         $lockKey = VolumeJobLock::cacheKeyFor('backup-group-'.$group->id);
-        $this->assertTrue(Cache::lock($lockKey, 86400)->get());
+        $orphaned = Cache::lock($lockKey, 86400);
+        $this->assertTrue($orphaned->get());
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
-        $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the queued group run lock should be released');
+        $this->assertFalse(Cache::lock($lockKey, 86400)->get());
+        $orphaned->release();
+    }
+
+    public function test_stale_queued_group_run_with_a_confirmed_payload_survives_queue_backlog(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_QUEUED,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+        ]);
+        $run->forceFill([
+            'dispatch_token' => 'confirmed-generation',
+            'dispatch_attempted_at' => now()->subHour(),
+            'dispatch_published_at' => now()->subHour(),
+        ])->save();
+        BackupGroupRun::whereKey($run->id)->update(['created_at' => now()->subHour()]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $run->refresh();
+        $this->assertSame(BackupGroupRun::STATUS_QUEUED, $run->status);
+        $this->assertSame('confirmed-generation', $run->dispatch_token);
+        $this->assertNotNull($run->dispatch_published_at);
+    }
+
+    public function test_stale_queued_group_run_with_a_fresh_dispatch_attempt_survives_reconciliation(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a');
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_QUEUED,
+            'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
+        ]);
+        $run->forceFill([
+            'dispatch_token' => 'publishing-generation',
+            'dispatch_attempted_at' => now(),
+        ])->save();
+        BackupGroupRun::whereKey($run->id)->update(['created_at' => now()->subHour()]);
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+
+        $run->refresh();
+        $this->assertSame(BackupGroupRun::STATUS_QUEUED, $run->status);
+        $this->assertSame('publishing-generation', $run->dispatch_token);
+        $this->assertNull($run->dispatch_published_at);
     }
 
     public function test_starting_containers_refreshes_the_heartbeat_after_each_one(): void
@@ -737,7 +823,7 @@ class GroupedBackupTest extends TestCase
 
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $lockHeldDuringHandle = false;
@@ -851,7 +937,7 @@ class GroupedBackupTest extends TestCase
         $this->assertStringContainsString('was left stopped by another group member', $hostRun->logs);
     }
 
-    public function test_reconciliation_releases_the_per_job_lock_of_a_stale_queued_host_path_member(): void
+    public function test_reconciliation_leaves_the_per_job_lock_of_a_stale_queued_host_path_member_to_expire(): void
     {
         $group = $this->group();
         $member = $this->hostMember($group);
@@ -874,12 +960,14 @@ class GroupedBackupTest extends TestCase
 
         // Host-path members lock on backup-job-{id}, not a volume key.
         $lockKey = VolumeJobLock::cacheKeyFor('backup-job-'.$member->id);
-        $this->assertTrue(Cache::lock($lockKey, 86400)->get());
+        $orphaned = Cache::lock($lockKey, 86400);
+        $this->assertTrue($orphaned->get());
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(BackupRun::STATUS_FAILED, $memberRun->fresh()->status);
-        $this->assertTrue(Cache::lock($lockKey, 86400)->get(), 'the member per-job lock should be released');
+        $this->assertFalse(Cache::lock($lockKey, 86400)->get());
+        $orphaned->release();
     }
 
     public function test_a_queued_host_path_run_waiting_on_its_job_lock_is_not_reconciled(): void
@@ -913,7 +1001,7 @@ class GroupedBackupTest extends TestCase
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -942,7 +1030,7 @@ class GroupedBackupTest extends TestCase
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -983,7 +1071,7 @@ class GroupedBackupTest extends TestCase
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -1020,7 +1108,7 @@ class GroupedBackupTest extends TestCase
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -1057,7 +1145,7 @@ class GroupedBackupTest extends TestCase
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -1110,13 +1198,12 @@ class GroupedBackupTest extends TestCase
     public function test_a_queued_group_run_waiting_on_the_group_lock_is_not_reconciled(): void
     {
         $group = $this->group();
-        // The previous run just finished and is still notifying (fresh heartbeat).
+        // A previous run is still executing with a fresh heartbeat.
         BackupGroupRun::create([
             'backup_job_group_id' => $group->id,
-            'status' => BackupGroupRun::STATUS_SUCCESS,
+            'status' => BackupGroupRun::STATUS_RUNNING,
             'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
             'started_at' => now()->subMinutes(10),
-            'finished_at' => now()->subMinutes(9),
             'last_heartbeat_at' => now(),
         ]);
         // The next run is queued, waiting on the backup-group lock, and looks old.
@@ -1137,7 +1224,7 @@ class GroupedBackupTest extends TestCase
     public function test_group_mark_failed_does_not_overwrite_a_pause_applied_after_the_snapshot(): void
     {
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
-        $notifier->shouldReceive('sendGroupRunFinished');
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -1182,7 +1269,7 @@ class GroupedBackupTest extends TestCase
     {
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
-        $notifier->shouldReceive('sendGroupRunFinished');
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -1215,10 +1302,169 @@ class GroupedBackupTest extends TestCase
         $this->assertSame('maintenance', $group->fresh()->pause_reason);
     }
 
+    public function test_no_runnable_decision_is_atomic_and_uses_sorted_mutation_locks(): void
+    {
+        $group = $this->group();
+        $firstMember = $this->member($group, 'vol_a');
+        $secondMember = $this->member($group, 'vol_b');
+        $firstMember->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+        $secondMember->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+        $channel = NotificationChannel::create([
+            'name' => 'Frozen',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/frozen',
+            'notification_level' => NotificationChannel::LEVEL_ERROR,
+            'is_active' => true,
+        ]);
+        $replacement = NotificationChannel::create([
+            'name' => 'Replacement',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/replacement',
+            'notification_level' => NotificationChannel::LEVEL_ERROR,
+            'is_active' => true,
+        ]);
+        $inactive = NotificationChannel::create([
+            'name' => 'Inactive',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/inactive',
+            'notification_level' => NotificationChannel::LEVEL_ERROR,
+            'is_active' => false,
+        ]);
+        $group->notificationChannels()->attach([$channel->id, $inactive->id]);
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        $baselineTransactionLevel = DB::transactionLevel();
+        $activityState = null;
+        $queries = [];
+        $locks = new class extends WithBackupGroupMutationLocks
+        {
+            public bool $inside = false;
+
+            /** @var array<int, int> */
+            public array $groupIds = [];
+
+            public function handle(array $groupIds, callable $callback): mixed
+            {
+                $this->groupIds = $groupIds;
+
+                return parent::handle($groupIds, function ($groups) use ($callback): mixed {
+                    $this->inside = true;
+
+                    try {
+                        return $callback($groups);
+                    } finally {
+                        $this->inside = false;
+                    }
+                });
+            }
+        };
+        $this->app->instance(WithBackupGroupMutationLocks::class, $locks);
+        DB::listen(function (QueryExecuted $query) use (&$queries): void {
+            $queries[] = $query;
+        });
+        $original = ActivityLog::getEventDispatcher();
+        $dispatcher = clone $original;
+        $dispatcher->listen('eloquent.created: '.ActivityLog::class, function (ActivityLog $activity) use (&$activityState, $baselineTransactionLevel, $locks): void {
+            if ($activity->event_type === 'backup_group_run_failed') {
+                $activityState = [DB::transactionLevel() - $baselineTransactionLevel, $locks->inside];
+            }
+        });
+        ActivityLog::setEventDispatcher($dispatcher);
+
+        $notifier = Mockery::mock(SendShoutrrrNotification::class);
+        $notifier->shouldNotReceive('sendGroupRunStarted');
+        $notifier->shouldNotReceive('sendGroupRunFinished');
+        $notifier->shouldReceive('sendGroupRunFinishedToChannel')->once()->withArgs(
+            fn (BackupGroupRun $notifiedRun, NotificationChannel $recipient): bool => $notifiedRun->is($run) && $recipient->is($channel),
+        );
+        $this->app->instance(SendShoutrrrNotification::class, $notifier);
+
+        try {
+            app(RunBackupGroup::class)->handle($run);
+        } finally {
+            ActivityLog::setEventDispatcher($original);
+        }
+
+        $groupLock = collect($queries)->search(fn (QueryExecuted $query): bool => str_contains($query->sql, 'from "backup_job_groups"') && str_contains($query->sql, 'order by "id" asc'));
+        $memberLock = collect($queries)->search(fn (QueryExecuted $query): bool => str_contains($query->sql, 'from "backup_jobs"') && str_contains($query->sql, 'order by "id" asc'));
+        $claim = collect($queries)->search(fn (QueryExecuted $query): bool => str_starts_with($query->sql, 'update "backup_group_runs"') && str_contains($query->sql, '"status" = ?'));
+        $channelLock = collect($queries)->search(fn (QueryExecuted $query): bool => str_contains($query->sql, 'from "notification_channels"') && str_contains($query->sql, 'order by "notification_channels"."id" asc'));
+
+        $this->assertSame([$group->id], $locks->groupIds);
+        $this->assertSame([1, true], $activityState);
+        $this->assertIsInt($groupLock);
+        $this->assertIsInt($memberLock);
+        $this->assertIsInt($claim);
+        $this->assertIsInt($channelLock);
+        $this->assertLessThan($memberLock, $groupLock);
+        $this->assertLessThan($claim, $memberLock);
+        $this->assertLessThan($channelLock, $claim);
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
+        $this->assertSame(BackupJobGroup::STATUS_ERROR, $group->fresh()->status);
+        $this->assertSame([$channel->id], $run->finalizations()->pluck('notification_channel_id')->all());
+        $this->assertSame(BackupRunFinalization::STATUS_COMPLETED, $run->finalizations()->firstOrFail()->status);
+    }
+
+    public function test_no_runnable_activity_failure_rolls_back_claim_and_group_lifecycle(): void
+    {
+        $group = $this->group();
+        $this->member($group, 'vol_a')->forceFill(['status' => BackupJob::STATUS_PAUSED])->save();
+        $run = BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => BackupGroupRun::STATUS_QUEUED, 'trigger' => BackupGroupRun::TRIGGER_MANUAL]);
+        $original = ActivityLog::getEventDispatcher();
+        $dispatcher = clone $original;
+        $dispatcher->listen('eloquent.creating: '.ActivityLog::class, function (ActivityLog $activity): void {
+            if ($activity->event_type === 'backup_group_run_failed') {
+                throw new \RuntimeException('activity write failed');
+            }
+        });
+        ActivityLog::setEventDispatcher($dispatcher);
+
+        try {
+            app(RunBackupGroup::class)->handle($run);
+            $this->fail('Expected the no-runnable transaction to roll back.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('activity write failed', $exception->getMessage());
+        } finally {
+            ActivityLog::setEventDispatcher($original);
+        }
+
+        $this->assertSame(BackupGroupRun::STATUS_QUEUED, $run->fresh()->status);
+        $this->assertSame(BackupJobGroup::STATUS_ACTIVE, $group->fresh()->status);
+        $this->assertNull($group->fresh()->last_run_at);
+        $this->assertFalse(ActivityLog::query()->where('event_type', 'backup_group_run_failed')->exists());
+    }
+
+    public function test_explicit_frozen_group_channels_bypass_dynamic_recipient_resolution(): void
+    {
+        $group = $this->group();
+        $run = BackupGroupRun::create([
+            'backup_job_group_id' => $group->id,
+            'status' => BackupGroupRun::STATUS_FAILED,
+            'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'finished_at' => now(),
+        ]);
+        $channel = NotificationChannel::create([
+            'name' => 'Frozen',
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/frozen',
+            'notification_level' => NotificationChannel::LEVEL_ERROR,
+            'is_active' => true,
+        ]);
+        $docker = $this->recordingDocker();
+        $resolver = Mockery::mock(ResolveNotificationChannels::class);
+        $resolver->shouldNotReceive('forGroup');
+
+        (new SendShoutrrrNotification($docker, $resolver))->sendGroupRunFinished(
+            $run,
+            channels: new Collection([$channel]),
+        );
+
+        $this->assertSame(['ntfy://ntfy.sh/frozen'], $docker->shoutrrrUrls);
+    }
+
     public function test_a_stale_queued_member_run_is_reconciled_not_treated_as_a_lock_waiter(): void
     {
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
-        $notifier->shouldReceive('sendGroupRunFinished');
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -1278,10 +1524,10 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupJob::STATUS_PAUSED, $member->fresh()->status);
     }
 
-    public function test_reconciling_a_stale_group_run_keeps_a_paused_group_paused(): void
+    public function test_reconciliation_fails_an_abandoned_queued_group_run_without_resuming_its_paused_group(): void
     {
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
-        $notifier->shouldReceive('sendGroupRunFinished');
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -1295,8 +1541,6 @@ class GroupedBackupTest extends TestCase
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        // The stale group run is failed, but the paused group stays paused (with its
-        // reason) so the scheduler does not dispatch it again.
         $this->assertSame(BackupGroupRun::STATUS_FAILED, $groupRun->fresh()->status);
         $this->assertSame(BackupJobGroup::STATUS_PAUSED, $group->fresh()->status);
         $this->assertSame('maintenance', $group->fresh()->pause_reason);
@@ -1331,7 +1575,7 @@ class GroupedBackupTest extends TestCase
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldReceive('sendGroupRunStarted')->once();
-        $notifier->shouldReceive('sendGroupRunFinished')->once();
+        $notifier->shouldNotReceive('sendGroupRunFinished');
         $this->app->instance(SendShoutrrrNotification::class, $notifier);
 
         $group = $this->group();
@@ -1368,7 +1612,7 @@ class GroupedBackupTest extends TestCase
 
     public function test_a_standalone_run_defers_metadata_and_notification_to_a_job(): void
     {
-        Queue::fake([RecordArchiveMetadataJob::class]);
+        Queue::fake([ProcessBackupRunFinalizationJob::class]);
         $this->app->instance(DockerProcess::class, $this->fakeDocker());
 
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
@@ -1384,10 +1628,11 @@ class GroupedBackupTest extends TestCase
         app(RunBackup::class)->handle($run);
 
         $this->assertSame(BackupRun::STATUS_SUCCESS, $run->fresh()->status);
-        Queue::assertPushed(RecordArchiveMetadataJob::class, fn (RecordArchiveMetadataJob $j): bool => $j->backupRunId === $run->id);
+        $finalizationIds = BackupRunFinalization::whereBelongsTo($run)->pluck('id');
+        Queue::assertPushed(ProcessBackupRunFinalizationJob::class, fn (ProcessBackupRunFinalizationJob $job): bool => $finalizationIds->contains($job->runFinalizationId));
         // On its own queue so a dedicated worker runs it — a slow listing never
         // blocks the main worker and starves a same-volume waiter.
-        Queue::assertPushedOn('metadata', RecordArchiveMetadataJob::class);
+        Queue::assertPushedOn('metadata', ProcessBackupRunFinalizationJob::class);
     }
 
     public function test_the_metadata_job_sends_the_finished_notification_for_a_standalone_run(): void

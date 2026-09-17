@@ -42,7 +42,8 @@ const queuedRun = {
     started_at: null,
     finished_at: null,
     backup_size_bytes: null,
-    backup_key: null,
+    backup_key: null as string | null,
+    restore_unverifiable: false,
     docker_container_id: null,
     error_message: null,
     logs: null,
@@ -71,6 +72,27 @@ function mountPage(run = queuedRun) {
 }
 
 describe('Backup run detail', () => {
+    const unverifiableMessage = 'This Dropbox backup completed successfully, but no stable file ID was recorded. Its identity cannot be verified, so restoring this run is unavailable.';
+
+    it.each([null, '/backups/documents.tar.gz'])('explains an unverifiable successful Dropbox run with key %s', (backupKey) => {
+        const wrapper = mountPage({ ...queuedRun, status: 'success', backup_key: backupKey, restore_unverifiable: true });
+
+        expect(wrapper.get('[role="status"]').text()).toBe(unverifiableMessage);
+        expect(wrapper.text()).not.toContain('Restore this backup');
+        expect(wrapper.text()).toContain('success');
+    });
+
+    it.each(['id:stable-file', 'daily/documents.tar.gz', null])('keeps unaffected runs unchanged with key %s', (backupKey) => {
+        const wrapper = mountPage({ ...queuedRun, status: 'success', backup_key: backupKey });
+
+        expect(wrapper.text()).not.toContain(unverifiableMessage);
+        const link = wrapper.findAll('a').find((link) => link.text() === 'Restore this backup');
+        expect(Boolean(link)).toBe(Boolean(backupKey));
+        if (backupKey) {
+            expect(link?.attributes('href')).toBe(`/backup-jobs/7/restore?backup=${encodeURIComponent(backupKey)}&backup_run_id=42`);
+        }
+    });
+
     beforeEach(() => {
         inertia.usePoll.mockClear();
     });
@@ -125,6 +147,6 @@ describe('Backup run detail', () => {
 
         const restoreLink = wrapper.findAll('a').find((link) => link.text() === 'Restore this backup');
 
-        expect(restoreLink?.attributes('href')).toBe('/backup-jobs/7/restore?backup=daily%2Fdocuments%20%2342.tar.gz');
+        expect(restoreLink?.attributes('href')).toBe('/backup-jobs/7/restore?backup=daily%2Fdocuments%20%2342.tar.gz&backup_run_id=42');
     });
 });

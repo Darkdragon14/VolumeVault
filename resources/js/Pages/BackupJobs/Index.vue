@@ -165,6 +165,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <h2 class="break-words font-semibold text-white">{{ job.name }}</h2>
+                                <span v-if="job.configuration_source === 'docker_label'" class="mt-1 inline-flex rounded-full bg-sky-400/10 px-2 py-0.5 text-xs text-sky-200">{{ t('Managed by Docker labels') }}</span>
                                 <p class="mt-1 break-all text-sm text-slate-400">{{ sourceLabel(job) }}</p>
                             </div>
                             <StatusBadge :status="job.status" />
@@ -182,8 +183,8 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                             <ActionIcon v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" :label="t('Resume')" icon="play" @click="resume(job.id)" />
                             <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="job.status === 'running'" @click="pause(job.id)" />
                             <ActionIcon v-if="can.runDockerActions" :label="t('Restore')" icon="restore" :href="`/backup-jobs/${job.id}/restore`" />
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Edit')" icon="edit" :href="`/backup-jobs/${job.id}/edit`" />
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Delete')" icon="delete" variant="danger" @click="destroyJob(job.id)" />
+                            <ActionIcon v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :label="t('Edit')" icon="edit" :href="`/backup-jobs/${job.id}/edit`" />
+                            <ActionIcon v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :label="t('Delete')" icon="delete" variant="danger" @click="destroyJob(job.id)" />
                         </div>
                     </article>
                 </div>
@@ -221,7 +222,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         </thead>
                         <tbody class="divide-y divide-white/10">
                             <tr v-for="job in jobs.data" :key="job.id" class="cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewJob(job.id)" @keydown="onJobKeydown($event, job.id)">
-                                <td class="px-4 py-3 font-medium text-white">{{ job.name }}</td>
+                                <td class="px-4 py-3 font-medium text-white"><span>{{ job.name }}</span><span v-if="job.configuration_source === 'docker_label'" class="mt-1 block text-xs font-normal text-sky-200">{{ t('Managed by Docker labels') }}</span></td>
                                 <td class="px-4 py-3 text-slate-300">{{ sourceLabel(job) }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ job.destination?.name || t('Missing') }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ job.schedule_summary }}</td>
@@ -234,8 +235,8 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                                         <ActionIcon v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" :label="t('Resume')" icon="play" @click="resume(job.id)" />
                                         <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="job.status === 'running'" @click="pause(job.id)" />
                                         <ActionIcon v-if="can.runDockerActions" :label="t('Restore')" icon="restore" :href="`/backup-jobs/${job.id}/restore`" />
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Edit')" icon="edit" :href="`/backup-jobs/${job.id}/edit`" />
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Delete')" icon="delete" variant="danger" @click="destroyJob(job.id)" />
+                                        <ActionIcon v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :label="t('Edit')" icon="edit" :href="`/backup-jobs/${job.id}/edit`" />
+                                        <ActionIcon v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :label="t('Delete')" icon="delete" variant="danger" @click="destroyJob(job.id)" />
                                     </div>
                                 </td>
                             </tr>

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RestoreRun extends Model
 {
@@ -50,9 +51,17 @@ class RestoreRun extends Model
         'docker_container_id',
     ];
 
+    protected $hidden = [
+        'dispatch_token',
+        'dispatch_attempted_at',
+        'dispatch_published_at',
+    ];
+
     protected function casts(): array
     {
         return [
+            'dispatch_attempted_at' => 'datetime',
+            'dispatch_published_at' => 'datetime',
             'affected_containers' => 'array',
             'stopped_container_ids' => 'array',
             'backup_before_overwrite' => 'boolean',
@@ -78,6 +87,16 @@ class RestoreRun extends Model
         return $this->belongsTo(User::class, 'initiated_by_user_id');
     }
 
+    public function finalizations(): HasMany
+    {
+        return $this->hasMany(RunFinalization::class);
+    }
+
+    public function scopeWithOutstandingFinalizations(Builder $query): Builder
+    {
+        return $query->whereHas('finalizations', fn (Builder $query) => $query->outstanding());
+    }
+
     /**
      * A run that still matters for crash recovery: queued/running, or terminal but
      * still owning containers it stopped for a safe/in-place restore and has not
@@ -90,7 +109,7 @@ class RestoreRun extends Model
             $q->whereIn('status', [self::STATUS_QUEUED, self::STATUS_RUNNING])
                 ->orWhere(fn (Builder $inner) => $inner
                     ->whereNotNull('stopped_container_ids')
-                    ->where('stopped_container_ids', '!=', '[]'));
+                    ->whereJsonLength('stopped_container_ids', '>', 0));
         });
     }
 

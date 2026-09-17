@@ -2,9 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Alerts\EnsureAlertRules;
+use App\Enums\AlertType;
+use App\Models\AlertRule;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
+use App\Models\BackupRun;
 use App\Models\DockerVolume;
+use App\Models\JobAlertConfig;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Models\User;
@@ -28,10 +33,113 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.source_type.enum.1', 'host_path')
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.backup_exclude_regexp.maxLength', 1000)
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.notifications_enabled.default', true)
+            ->assertJsonPath('components.schemas.BackupJobRequest.properties.alert_configs.items.properties.alert_rule_id.type', 'integer')
+            ->assertJsonPath('components.schemas.BackupJobRequest.properties.alert_configs.description', 'Complete replacement set of per-rule overrides. On update, omit this field to preserve existing overrides. When custom alert settings are enabled, send null or [] to delete all overrides; submitted rules are upserted and omitted rules are deleted. use_custom_alert_settings may be omitted to use the job\'s existing setting. Explicitly setting use_custom_alert_settings to false deletes all overrides.')
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.notification_channel_ids.items.type', 'integer')
             ->assertJsonPath('components.schemas.DockerVolume.properties.backup_state.enum.0', 'backed_up')
             ->assertJsonPath('components.schemas.BackupRun.properties.backup_size_bytes.type.0', 'integer')
             ->assertJsonPath('components.securitySchemes.bearerAuth.scheme', 'bearer');
+    }
+
+    public function test_backup_run_api_uses_snapshot_attribution_after_job_retarget(): void
+    {
+        $originalDestination = BackupDestination::create([
+            'name' => 'Historical local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/tmp/historical'],
+        ]);
+        $currentDestination = BackupDestination::create([
+            'name' => 'Current local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/tmp/current'],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Retargeted job',
+            'volume_name' => 'current_data',
+            'backup_destination_id' => $currentDestination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_SUCCESS,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'historical_data',
+            'backup_destination_id_snapshot' => $originalDestination->id,
+            'backup_destination_name' => 'Historical local',
+            'backup_destination_provider' => BackupDestination::PROVIDER_LOCAL,
+            'backup_filename' => 'historical-data.tar.gz',
+            'archive_metadata_pending' => true,
+        ]);
+        $token = User::factory()->user()->create()->createToken('run-read', ['read'])->plainTextToken;
+
+        $response = $this->withToken($token)
+            ->getJson("/api/v1/backup-runs/{$run->id}")
+            ->assertOk()
+            ->assertJsonPath('data.source_name', 'historical_data')
+            ->assertJsonPath('data.source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
+            ->assertJsonPath('data.destination_id', $originalDestination->id)
+            ->assertJsonPath('data.destination_name', 'Historical local')
+            ->assertJsonPath('data.destination_provider', BackupDestination::PROVIDER_LOCAL)
+            ->assertJsonPath('data.backup_filename', 'historical-data.tar.gz')
+            ->assertJsonPath('data.archive_metadata_pending', true)
+            ->assertJsonPath('data.job.volume_name', 'current_data');
+
+        $this->assertSame($run->source_volume_name, $response->json('data.source_volume_name'));
+        $this->assertSame($run->backup_destination_id_snapshot, $response->json('data.backup_destination_id_snapshot'));
+    }
+
+    public function test_backup_run_responses_match_the_documented_schema_fields(): void
+    {
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/tmp/local'],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Job',
+            'volume_name' => 'app_data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+        $run = BackupRun::create([
+            'backup_job_id' => $job->id,
+            'status' => BackupRun::STATUS_QUEUED,
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+        ]);
+        $token = User::factory()->user()->create()->createToken('run-schema-read', ['read'])->plainTextToken;
+        $document = $this->getJson('/api/v1/openapi.json')->assertOk()->json();
+        $schemaFields = array_keys($document['components']['schemas']['BackupRun']['properties']);
+
+        $showResponse = $this->withToken($token)->getJson("/api/v1/backup-runs/{$run->id}")
+            ->assertOk()
+            ->assertJsonPath('data.source_name', 'app_data')
+            ->assertJsonPath('data.destination_name', 'Local');
+        $showFields = array_keys($showResponse->json('data'));
+        $indexFields = array_keys($this->withToken($token)->getJson('/api/v1/backup-runs')->assertOk()->json('data.0'));
+
+        sort($schemaFields);
+        sort($showFields);
+        sort($indexFields);
+        $this->assertSame($schemaFields, $showFields);
+        $this->assertSame($schemaFields, $indexFields);
+        $this->assertSame('#/components/schemas/BackupRunResponse', $document['paths']['/backup-runs/{id}']['get']['responses']['200']['content']['application/json']['schema']['$ref']);
+        $this->assertSame('#/components/schemas/BackupRunCollectionResponse', $document['paths']['/backup-runs']['get']['responses']['200']['content']['application/json']['schema']['$ref']);
     }
 
     public function test_openapi_marks_the_schema_endpoint_public_and_pause_bodies_optional(): void
@@ -187,6 +295,150 @@ class ExternalApiTest extends TestCase
             ->assertJsonPath('data.destination.has_access_key_id', true)
             ->assertJsonMissing(['secret-access-key'])
             ->assertJsonMissing(['secret-access-key-id']);
+    }
+
+    public function test_api_persists_and_returns_custom_backup_job_alert_settings(): void
+    {
+        app(EnsureAlertRules::class)->handle();
+        $admin = User::factory()->admin()->create();
+        $destination = BackupDestination::create([
+            'name' => 'R2',
+            'provider' => BackupDestination::PROVIDER_CLOUDFLARE_R2,
+            'endpoint' => 'https://account.r2.cloudflarestorage.com',
+            'region' => 'auto',
+            'bucket' => 'volumevault',
+            'access_key_id' => 'access-key',
+            'secret_access_key' => 'secret-key',
+            'is_active' => true,
+        ]);
+        DockerVolume::create(['name' => 'app-data', 'exists' => true]);
+        $rule = AlertRule::where('type', AlertType::BackupTooOld->value)->firstOrFail();
+        $omittedRule = AlertRule::where('type', AlertType::JobInErrorTooLong->value)->firstOrFail();
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+        $payload = [
+            'name' => 'Daily app data',
+            'volume_name' => 'app-data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'use_custom_alert_settings' => true,
+            'alert_notifications_enabled' => false,
+            'alert_configs' => [[
+                'alert_rule_id' => $rule->id,
+                'enabled' => true,
+                'config' => ['backup_too_old_days' => 14],
+            ], [
+                'alert_rule_id' => $omittedRule->id,
+                'enabled' => true,
+                'config' => ['job_in_error_days' => 3],
+            ]],
+        ];
+
+        $jobId = $this->withToken($token)
+            ->postJson('/api/v1/backup-jobs', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.use_custom_alert_settings', true)
+            ->assertJsonPath('data.alert_notifications_enabled', false)
+            ->assertJsonPath('data.alert_configs.0.alert_rule_id', $rule->id)
+            ->assertJsonPath('data.alert_configs.0.config.backup_too_old_days', 14)
+            ->json('data.id');
+
+        $this->assertDatabaseHas('job_alert_configs', [
+            'backup_job_id' => $jobId,
+            'alert_rule_id' => $rule->id,
+        ]);
+
+        $payloadWithoutAlertSettings = $payload;
+        unset($payloadWithoutAlertSettings['use_custom_alert_settings'], $payloadWithoutAlertSettings['alert_configs']);
+
+        $this->withToken($token)
+            ->putJson("/api/v1/backup-jobs/{$jobId}", $payloadWithoutAlertSettings)
+            ->assertOk()
+            ->assertJsonPath('data.use_custom_alert_settings', true);
+
+        $this->assertSame(2, JobAlertConfig::where('backup_job_id', $jobId)->count());
+
+        $this->withToken($token)
+            ->putJson("/api/v1/backup-jobs/{$jobId}", [
+                ...$payloadWithoutAlertSettings,
+                'alert_configs' => [[
+                    'alert_rule_id' => $rule->id,
+                    'config' => [
+                        'backup_size_out_of_range_min_bytes' => 4096,
+                        'backup_size_out_of_range_max_bytes' => 1024,
+                    ],
+                ]],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('alert_configs.0.config.backup_size_out_of_range_max_bytes');
+
+        $this->assertSame(2, JobAlertConfig::where('backup_job_id', $jobId)->count());
+
+        $this->withToken($token)
+            ->putJson("/api/v1/backup-jobs/{$jobId}", [
+                ...$payloadWithoutAlertSettings,
+                'alert_configs' => [[
+                    'alert_rule_id' => $rule->id,
+                    'enabled' => false,
+                    'config' => ['backup_too_old_days' => 30],
+                ]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.use_custom_alert_settings', true)
+            ->assertJsonPath('data.alert_configs.0.alert_rule_id', $rule->id)
+            ->assertJsonPath('data.alert_configs.0.enabled', false)
+            ->assertJsonPath('data.alert_configs.0.config.backup_too_old_days', 30)
+            ->assertJsonCount(1, 'data.alert_configs');
+
+        $this->assertDatabaseMissing('job_alert_configs', [
+            'backup_job_id' => $jobId,
+            'alert_rule_id' => $omittedRule->id,
+        ]);
+
+        $this->withToken($token)
+            ->putJson("/api/v1/backup-jobs/{$jobId}", [...$payloadWithoutAlertSettings, 'alert_configs' => null])
+            ->assertOk()
+            ->assertJsonPath('data.use_custom_alert_settings', true)
+            ->assertJsonPath('data.alert_configs', []);
+
+        $this->assertDatabaseMissing('job_alert_configs', ['backup_job_id' => $jobId]);
+
+        $this->withToken($token)
+            ->putJson("/api/v1/backup-jobs/{$jobId}", [...$payload, 'use_custom_alert_settings' => false])
+            ->assertOk()
+            ->assertJsonPath('data.use_custom_alert_settings', false)
+            ->assertJsonPath('data.alert_configs', []);
+
+        $this->assertDatabaseMissing('job_alert_configs', ['backup_job_id' => $jobId]);
+    }
+
+    public function test_backup_job_update_remains_a_full_resource_request(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'is_active' => true,
+            'settings' => ['archive_path' => storage_path('app/backups')],
+        ]);
+        $job = BackupJob::create([
+            'name' => 'Daily app data',
+            'volume_name' => 'app-data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'cron_expression' => '0 2 * * *',
+            'status' => BackupJob::STATUS_ACTIVE,
+        ]);
+        $token = $admin->createToken('openclaw-write', ['read', 'write'])->plainTextToken;
+
+        $this->withToken($token)
+            ->putJson("/api/v1/backup-jobs/{$job->id}", ['alert_configs' => []])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['name', 'backup_destination_id']);
     }
 
     public function test_admin_write_token_can_create_include_mode_backup_job(): void
@@ -563,6 +815,61 @@ class ExternalApiTest extends TestCase
             ->assertJsonMissing(['secret-access-key-id']);
     }
 
+    public function test_destination_api_partial_update_preserves_omitted_booleans_and_applies_explicit_values(): void
+    {
+        $destination = BackupDestination::create([
+            'name' => 'Custom S3',
+            'provider' => BackupDestination::PROVIDER_CUSTOM_S3,
+            'endpoint' => 'https://s3.example.com',
+            'region' => 'us-east-1',
+            'bucket' => 'volumevault',
+            'access_key_id' => 'access-key',
+            'secret_access_key' => 'secret-key',
+            'use_path_style_endpoint' => true,
+            'settings' => [
+                'endpoint' => 'https://s3.example.com',
+                'region' => 'us-east-1',
+                'bucket' => 'volumevault',
+                'use_path_style_endpoint' => true,
+            ],
+            'is_active' => false,
+        ]);
+        $token = User::factory()->admin()->create()->createToken('destination-write', ['read', 'write'])->plainTextToken;
+        $payload = [
+            'name' => 'Updated Custom S3',
+            'provider' => BackupDestination::PROVIDER_CUSTOM_S3,
+            'endpoint' => 'https://s3.example.com',
+            'region' => 'us-east-1',
+            'bucket' => 'volumevault',
+        ];
+
+        $this->withToken($token)
+            ->putJson("/api/v1/destinations/{$destination->id}", $payload)
+            ->assertOk()
+            ->assertJsonPath('data.is_active', false)
+            ->assertJsonPath('data.use_path_style_endpoint', true);
+
+        $destination->refresh();
+        $this->assertFalse($destination->is_active);
+        $this->assertTrue($destination->use_path_style_endpoint);
+        $this->assertTrue($destination->setting('use_path_style_endpoint'));
+
+        $this->withToken($token)
+            ->putJson("/api/v1/destinations/{$destination->id}", [
+                ...$payload,
+                'is_active' => true,
+                'use_path_style_endpoint' => false,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.is_active', true)
+            ->assertJsonPath('data.use_path_style_endpoint', false);
+
+        $destination->refresh();
+        $this->assertTrue($destination->is_active);
+        $this->assertFalse($destination->use_path_style_endpoint);
+        $this->assertFalse($destination->setting('use_path_style_endpoint'));
+    }
+
     public function test_admin_read_token_can_read_the_host_path_allowlist(): void
     {
         config(['volumevault.host_path_allowlist' => ['/srv//data/', '/mnt/backups']]);
@@ -653,7 +960,10 @@ class ExternalApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.volume_name.pattern', '^[A-Za-z0-9_.-]+$')
             ->assertJsonPath('components.schemas.RestoreRequest.properties.target_volume_name.pattern', '^[A-Za-z0-9_.-]+$')
-            ->assertJsonPath('components.schemas.RestoreRequest.properties.selected_backup_key.description', fn (string $d): bool => str_contains($d, '/backup-jobs/{id}/backups'));
+            ->assertJsonPath('components.schemas.RestoreRequest.properties.backup_run_id.type.0', 'integer')
+            ->assertJsonPath('paths./backup-jobs/{id}/backups.get.parameters.0.name', 'backup_run_id')
+            ->assertJsonPath('components.schemas.RestoreRequest.properties.selected_backup_key.description', fn (string $d): bool => str_contains($d, '/backup-jobs/{id}/backups')
+                && str_contains($d, 'Opaque provider object key'));
     }
 
     public function test_api_restore_is_attributed_to_the_token_owner(): void
@@ -661,6 +971,7 @@ class ExternalApiTest extends TestCase
         Queue::fake();
 
         $archivePath = sys_get_temp_dir().'/volumevault-api-restore-'.uniqid();
+        config(['volumevault.host_path_allowlist' => [sys_get_temp_dir()]]);
         File::ensureDirectoryExists($archivePath);
         File::put($archivePath.'/backup.tar.gz', 'fake-archive');
 

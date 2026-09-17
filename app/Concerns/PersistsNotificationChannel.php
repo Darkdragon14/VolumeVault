@@ -125,13 +125,23 @@ trait PersistsNotificationChannel
         return is_array($decoded) ? $decoded : [];
     }
 
-    protected function keepSingleDefaultChannel(NotificationChannel $channel): void
-    {
-        if (! $channel->is_default) {
-            return;
+    protected function payloadForLockedUpdate(
+        NotificationChannel $channel,
+        array $data,
+        Request $request,
+        ShoutrrrUrlBuilder $urlBuilder,
+        array $config,
+    ): array {
+        if ($data['service'] !== $channel->service || $this->hasFilledConfig($config)) {
+            $data['url'] = $this->buildUrl(
+                $urlBuilder,
+                $data['service'],
+                $config,
+                $this->existingWebhookMap($channel, $data['service']),
+            );
         }
 
-        NotificationChannel::whereKeyNot($channel->id)->update(['is_default' => false]);
+        return $this->payload($data, $request);
     }
 
     protected function hasFilledConfig(array $config): bool

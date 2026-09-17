@@ -3,6 +3,10 @@
 namespace Tests\Feature;
 
 use App\Actions\Backup\BackupStack;
+use App\Actions\Backup\CreateBackupRun;
+use App\Actions\Backup\CreateBackupRunRecord;
+use App\Actions\Backup\WithDockerLabelMutationLocks;
+use App\Actions\Runs\DispatchQueuedRun;
 use App\Jobs\RunBackupJob;
 use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
@@ -11,8 +15,11 @@ use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\User;
+use App\Services\Scheduling\BackupScheduleCalculator;
+use App\Services\Volumes\VolumeBackupSummaries;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class StackBulkBackupTest extends TestCase
@@ -148,6 +155,349 @@ class StackBulkBackupTest extends TestCase
         $this->assertSame(0, BackupJob::count());
         $this->assertSame(0, BackupRun::count());
         Queue::assertNothingPushed();
+    }
+
+    public function test_pending_managed_volume_is_not_created_as_a_manual_stack_job(): void
+    {
+        Queue::fake();
+        $destination = $this->destination();
+        $this->volume('app_data', 'app');
+        $managed = $this->job($destination, 'old_data');
+        $managed->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-old-data'),
+            'pending_label_reconciliation' => [
+                'action' => 'apply',
+                'payload' => [
+                    'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                    'volume_name' => 'app_data',
+                    'backup_destination_id' => $destination->id,
+                ],
+                'notification_channel_ids' => [],
+            ],
+        ]);
+
+        $result = app(BackupStack::class)->handle('app', []);
+
+        $this->assertSame(0, $result['created']);
+        $this->assertSame(0, $result['queued']);
+        $this->assertSame(1, $result['skipped']);
+        $this->assertFalse(BackupJob::query()->where('volume_name', 'app_data')->exists());
+        Queue::assertNothingPushed();
+    }
+
+    public function test_pending_reservation_and_missing_volume_are_accounted_for_once_each(): void
+    {
+        Queue::fake();
+        $destination = $this->destination();
+        $this->volume('app_data', 'app');
+        $this->volume('app_logs', 'app');
+        $managed = $this->job($destination, 'old_data');
+        $managed->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-old-data'),
+            'pending_label_reconciliation' => [
+                'action' => 'apply',
+                'payload' => [
+                    'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                    'volume_name' => 'app_data',
+                    'backup_destination_id' => $destination->id,
+                ],
+                'notification_channel_ids' => [],
+            ],
+        ]);
+
+        $result = app(BackupStack::class)->handle('app', [
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+        ]);
+
+        $this->assertSame(['created' => 1, 'queued' => 1, 'skipped' => 1, 'grouped' => 0], $result);
+        $this->assertFalse(BackupJob::query()->where('volume_name', 'app_data')->exists());
+        $this->assertTrue(BackupJob::query()->where('volume_name', 'app_logs')->exists());
+        Queue::assertPushed(RunBackupJob::class, 1);
+    }
+
+    public function test_job_with_current_and_pending_stack_reservations_is_skipped_once(): void
+    {
+        Queue::fake();
+        $destination = $this->destination();
+        $this->volume('app_data', 'app');
+        $managed = $this->job($destination, 'app_data');
+        $managed->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-app-data'),
+            'pending_label_reconciliation' => [
+                'action' => 'apply',
+                'payload' => [
+                    'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                    'volume_name' => 'app_data',
+                    'backup_destination_id' => $destination->id,
+                ],
+                'notification_channel_ids' => [],
+            ],
+        ]);
+
+        $result = app(BackupStack::class)->handle('app', []);
+
+        $this->assertSame(['created' => 0, 'queued' => 0, 'skipped' => 1, 'grouped' => 0], $result);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_pending_applied_between_reservation_and_candidate_loading_queues_normally(): void
+    {
+        Queue::fake();
+        $destination = $this->destination();
+        $this->volume('app_data', 'app');
+        $managed = $this->job($destination, 'old_data');
+        $managed->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-old-data'),
+            'pending_label_reconciliation' => [
+                'action' => 'apply',
+                'payload' => [
+                    'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                    'volume_name' => 'app_data',
+                    'backup_destination_id' => $destination->id,
+                ],
+                'notification_channel_ids' => [],
+            ],
+        ]);
+        $locks = new class($managed) extends WithDockerLabelMutationLocks
+        {
+            private bool $applied = false;
+
+            public function __construct(private readonly BackupJob $job) {}
+
+            public function handle(array $destinationIds, callable $callback, array $volumeNames = [], array $notificationChannelIds = [], array $explicitJobIds = []): mixed
+            {
+                $result = parent::handle($destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds);
+
+                if (! $this->applied) {
+                    $this->applied = true;
+                    $this->job->update([
+                        'volume_name' => 'app_data',
+                        'pending_label_reconciliation' => null,
+                    ]);
+                }
+
+                return $result;
+            }
+        };
+        $action = new BackupStack(
+            app(BackupScheduleCalculator::class),
+            app(CreateBackupRun::class),
+            app(VolumeBackupSummaries::class),
+            $locks,
+            app(DispatchQueuedRun::class),
+        );
+
+        $result = $action->handle('app', []);
+
+        $this->assertSame(['created' => 0, 'queued' => 1, 'skipped' => 0, 'grouped' => 0], $result);
+        $this->assertSame($managed->id, BackupRun::sole()->backup_job_id);
+        Queue::assertPushed(RunBackupJob::class, 1);
+    }
+
+    public function test_pending_applied_after_candidate_loading_is_revalidated_when_creating_the_run(): void
+    {
+        Queue::fake();
+        $destination = $this->destination();
+        $this->volume('app_data', 'app');
+        $managed = $this->job($destination, 'old_data');
+        $managed->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-old-data'),
+            'pending_label_reconciliation' => [
+                'action' => 'apply',
+                'payload' => [
+                    'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                    'volume_name' => 'app_data',
+                    'backup_destination_id' => $destination->id,
+                ],
+                'notification_channel_ids' => [],
+            ],
+        ]);
+        $createRun = new class(app(BackupScheduleCalculator::class), app(WithDockerLabelMutationLocks::class), app(CreateBackupRunRecord::class), $managed) extends CreateBackupRun
+        {
+            private bool $applied = false;
+
+            public function __construct(
+                BackupScheduleCalculator $scheduleCalculator,
+                WithDockerLabelMutationLocks $withLocks,
+                CreateBackupRunRecord $createBackupRunRecord,
+                private readonly BackupJob $managedJob,
+            ) {
+                parent::__construct($scheduleCalculator, $withLocks, $createBackupRunRecord);
+            }
+
+            public function handle(BackupJob $job, string $trigger, ?User $initiatedBy = null, ?array $allowedVolumeNames = null): BackupRun
+            {
+                if (! $this->applied) {
+                    $this->applied = true;
+                    $this->managedJob->update([
+                        'volume_name' => 'app_data',
+                        'pending_label_reconciliation' => null,
+                    ]);
+                }
+
+                return parent::handle($job, $trigger, $initiatedBy, $allowedVolumeNames);
+            }
+        };
+        $action = new BackupStack(
+            app(BackupScheduleCalculator::class),
+            $createRun,
+            app(VolumeBackupSummaries::class),
+            app(WithDockerLabelMutationLocks::class),
+            app(DispatchQueuedRun::class),
+        );
+
+        $result = $action->handle('app', []);
+
+        $this->assertSame(['created' => 0, 'queued' => 1, 'skipped' => 0, 'grouped' => 0], $result);
+        $this->assertSame($managed->id, BackupRun::sole()->backup_job_id);
+        Queue::assertPushed(RunBackupJob::class, 1);
+    }
+
+    public function test_pending_applied_to_another_stack_after_candidate_loading_is_not_queued(): void
+    {
+        Queue::fake();
+        $destination = $this->destination();
+        $this->volume('app_data', 'app');
+        $this->volume('other_data', 'other');
+        $managed = $this->job($destination, 'old_data');
+        $managed->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-old-data'),
+            'pending_label_reconciliation' => [
+                'action' => 'apply',
+                'payload' => [
+                    'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                    'volume_name' => 'app_data',
+                    'backup_destination_id' => $destination->id,
+                ],
+                'notification_channel_ids' => [],
+            ],
+        ]);
+        $createRun = new class(app(BackupScheduleCalculator::class), app(WithDockerLabelMutationLocks::class), app(CreateBackupRunRecord::class), $managed) extends CreateBackupRun
+        {
+            private bool $applied = false;
+
+            public function __construct(
+                BackupScheduleCalculator $scheduleCalculator,
+                WithDockerLabelMutationLocks $withLocks,
+                CreateBackupRunRecord $createBackupRunRecord,
+                private readonly BackupJob $managedJob,
+            ) {
+                parent::__construct($scheduleCalculator, $withLocks, $createBackupRunRecord);
+            }
+
+            public function handle(BackupJob $job, string $trigger, ?User $initiatedBy = null, ?array $allowedVolumeNames = null): BackupRun
+            {
+                if (! $this->applied) {
+                    $this->applied = true;
+                    $this->managedJob->update([
+                        'volume_name' => 'other_data',
+                        'pending_label_reconciliation' => null,
+                    ]);
+                }
+
+                return parent::handle($job, $trigger, $initiatedBy, $allowedVolumeNames);
+            }
+        };
+        $action = new BackupStack(
+            app(BackupScheduleCalculator::class),
+            $createRun,
+            app(VolumeBackupSummaries::class),
+            app(WithDockerLabelMutationLocks::class),
+            app(DispatchQueuedRun::class),
+        );
+
+        $result = $action->handle('app', []);
+
+        $this->assertSame(['created' => 0, 'queued' => 0, 'skipped' => 1, 'grouped' => 0], $result);
+        $this->assertSame(0, BackupRun::count());
+        Queue::assertNothingPushed();
+    }
+
+    public function test_invalid_pending_target_does_not_reserve_a_stack_volume(): void
+    {
+        Queue::fake();
+        $destination = $this->destination();
+        $this->volume('app_data', 'app');
+        $managed = $this->job($destination, 'old_data');
+        $managed->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-old-data'),
+            'status' => BackupJob::STATUS_ERROR,
+            'label_reconciliation_error' => 'Definition disappeared.',
+            'pending_label_reconciliation' => [
+                'action' => 'apply',
+                'payload' => [
+                    'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                    'volume_name' => 'app_data',
+                    'backup_destination_id' => $destination->id,
+                ],
+                'notification_channel_ids' => [],
+            ],
+        ]);
+
+        try {
+            app(BackupStack::class)->handle('app', []);
+            $this->fail('Expected missing creation inputs to be rejected.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('backup_destination_id', $exception->errors());
+        }
+
+        $this->assertSame(1, BackupJob::count());
+        Queue::assertNothingPushed();
+    }
+
+    public function test_invalid_retained_managed_job_does_not_cover_a_stack_volume(): void
+    {
+        Queue::fake();
+        $destination = $this->destination();
+        $this->volume('app_data', 'app');
+        $managed = $this->job($destination, 'app_data');
+        $managed->update([
+            'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
+            'configuration_key' => hash('sha256', 'managed-app-data'),
+            'status' => BackupJob::STATUS_ERROR,
+            'label_reconciliation_error' => 'Definition disappeared.',
+        ]);
+
+        $result = app(BackupStack::class)->handle('app', [
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+        ]);
+
+        $this->assertSame(1, $result['created']);
+        $this->assertSame(1, $result['queued']);
+        $this->assertSame(0, $result['skipped']);
+        $this->assertSame(1, BackupJob::query()->where('volume_name', 'app_data')->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_MANUAL)->count());
+        $this->assertModelExists($managed);
+        Queue::assertPushed(RunBackupJob::class, 1);
+    }
+
+    public function test_missing_job_creation_rejects_an_inactive_locked_destination(): void
+    {
+        $destination = $this->destination('Inactive', false);
+        $this->volume('app_data', 'app');
+
+        try {
+            app(BackupStack::class)->handle('app', [
+                'backup_destination_id' => $destination->id,
+                'schedule_type' => BackupJob::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '02:00'],
+            ]);
+            $this->fail('Expected an inactive destination validation error.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('backup_destination_id', $exception->errors());
+        }
+
+        $this->assertSame(0, BackupJob::count());
     }
 
     public function test_stack_backup_is_admin_only(): void

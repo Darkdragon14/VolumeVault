@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Backup\CreateBackupGroupRun;
+use App\Actions\Backup\CreateBackupJobGroup;
+use App\Actions\Backup\DeleteBackupJobGroup;
+use App\Actions\Backup\ResumeBackupJobGroup;
+use App\Actions\Backup\UpdateBackupJobGroup;
+use App\Actions\Runs\DispatchQueuedRun;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\BackupJobGroupRequest;
-use App\Jobs\RunBackupGroupJob;
-use App\Models\ActivityLog;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
@@ -29,14 +32,13 @@ class BackupJobGroupController extends Controller
         ]);
     }
 
-    public function store(BackupJobGroupRequest $request): JsonResponse
+    public function store(BackupJobGroupRequest $request, CreateBackupJobGroup $createBackupJobGroup): JsonResponse
     {
-        $group = BackupJobGroup::create($this->payload($request));
-        $this->syncNotificationChannels($group, $request);
-
-        ActivityLog::record('backup_group_created', 'Backup group created via API.', $group, [
-            'created_by' => $request->user()->id,
-        ]);
+        $group = $createBackupJobGroup->handle(
+            $this->payload($request),
+            'Backup group created via API.',
+            ['created_by' => $request->user()->id],
+        );
 
         return response()->json(['data' => $this->serializeGroup($group->loadCount('members')->load('notificationChannels'))], 201);
     }
@@ -46,41 +48,24 @@ class BackupJobGroupController extends Controller
         return response()->json(['data' => $this->serializeGroup($backupGroup->loadCount('members')->load(['notificationChannels', 'members']), withMembers: true)]);
     }
 
-    public function update(BackupJobGroupRequest $request, BackupJobGroup $backupGroup): JsonResponse
+    public function update(BackupJobGroupRequest $request, BackupJobGroup $backupGroup, UpdateBackupJobGroup $updateBackupJobGroup): JsonResponse
     {
-        $backupGroup->update($this->payload($request, $backupGroup->status, $backupGroup));
-        $this->syncNotificationChannels($backupGroup, $request);
-        $this->syncMemberSchedules($backupGroup);
+        $backupGroup = $updateBackupJobGroup->handle($backupGroup, $this->updatePayload($request));
 
-        return response()->json(['data' => $this->serializeGroup($backupGroup->fresh()->loadCount('members')->load('notificationChannels'))]);
+        return response()->json(['data' => $this->serializeGroup($backupGroup->loadCount('members')->load('notificationChannels'))]);
     }
 
-    public function destroy(BackupJobGroup $backupGroup): JsonResponse
+    public function destroy(BackupJobGroup $backupGroup, DeleteBackupJobGroup $deleteBackupJobGroup): JsonResponse
     {
-        if ($backupGroup->members()->exists()) {
-            throw ValidationException::withMessages([
-                'group' => 'Remove or reassign this group\'s jobs before deleting it.',
-            ]);
-        }
-
-        // Refuse to delete while a run is in flight: the cascade would drop the
-        // backup_group_run a worker may still be executing, losing its finalization,
-        // notification and history.
-        if ($backupGroup->groupRuns()->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])->exists()) {
-            throw ValidationException::withMessages([
-                'group' => 'This group has a backup run in progress. Wait for it to finish before deleting it.',
-            ]);
-        }
-
-        $backupGroup->delete();
+        $deleteBackupJobGroup->handle($backupGroup);
 
         return response()->json(status: 204);
     }
 
-    public function runNow(Request $request, BackupJobGroup $backupGroup, CreateBackupGroupRun $createBackupGroupRun): JsonResponse
+    public function runNow(Request $request, BackupJobGroup $backupGroup, CreateBackupGroupRun $createBackupGroupRun, DispatchQueuedRun $dispatchQueuedRun): JsonResponse
     {
         $run = $createBackupGroupRun->handle($backupGroup, BackupGroupRun::TRIGGER_MANUAL, $request->user());
-        RunBackupGroupJob::dispatch($run->id);
+        $dispatchQueuedRun->handle($run);
 
         // Surface the documented aggregate key (null for a freshly created run) so the
         // 202 payload matches the other group-run responses instead of omitting it.
@@ -108,31 +93,14 @@ class BackupJobGroupController extends Controller
         return response()->json(['data' => $this->serializeGroup($backupGroup->fresh()->loadCount('members')->load('notificationChannels'))]);
     }
 
-    public function resume(BackupJobGroup $backupGroup): JsonResponse
+    public function resume(BackupJobGroup $backupGroup, ResumeBackupJobGroup $resumeBackupJobGroup): JsonResponse
     {
-        // Atomic conditional update so a worker flipping the group to running
-        // between a stale read and the save cannot be overwritten with active.
-        $resumed = BackupJobGroup::query()
-            ->whereKey($backupGroup->id)
-            ->where('status', '!=', BackupJobGroup::STATUS_RUNNING)
-            ->update([
-                'status' => BackupJobGroup::STATUS_ACTIVE,
-                'pause_reason' => null,
-                'last_error' => null,
-                'last_error_at' => null,
-                'next_run_at' => $this->scheduleCalculator->nextRunAt($backupGroup->schedule_type, $backupGroup->schedule_config ?? [], null, $backupGroup->timezone),
-            ]);
-
-        if ($resumed === 0) {
-            throw ValidationException::withMessages([
-                'group' => 'This group is currently running. Wait for the run to finish before resuming it.',
-            ]);
-        }
+        $resumeBackupJobGroup->handle($backupGroup);
 
         return response()->json(['data' => $this->serializeGroup($backupGroup->fresh()->loadCount('members')->load('notificationChannels'))]);
     }
 
-    public function toggleNotifications(Request $request, BackupJobGroup $backupGroup): JsonResponse
+    public function toggleNotifications(Request $request, BackupJobGroup $backupGroup, UpdateBackupJobGroup $updateBackupJobGroup): JsonResponse
     {
         // Require the flag explicitly: Request::boolean() defaults a missing key to
         // false, so an empty or mistyped payload would silently disable monitoring.
@@ -140,9 +108,7 @@ class BackupJobGroupController extends Controller
             'notifications_enabled' => ['required', 'boolean'],
         ]);
 
-        $backupGroup->forceFill([
-            'notifications_enabled' => (bool) $validated['notifications_enabled'],
-        ])->save();
+        $updateBackupJobGroup->setNotificationsEnabled($backupGroup, (bool) $validated['notifications_enabled']);
 
         return response()->json(['data' => $this->serializeGroup($backupGroup->fresh()->loadCount('members')->load('notificationChannels'))]);
     }
@@ -163,31 +129,31 @@ class BackupJobGroupController extends Controller
             'failure_policy' => $request->input('failure_policy', BackupJobGroup::FAILURE_POLICY_CONTINUE),
             'notifications_enabled' => $request->has('notifications_enabled') ? $request->boolean('notifications_enabled') : (bool) ($group?->notifications_enabled ?? true),
             'next_run_at' => $this->scheduleCalculator->nextRunAt($scheduleType, $scheduleConfig, null, $timezone),
+            ...($request->has('notification_channel_ids') ? [
+                'notification_channel_ids' => $request->input('notification_channel_ids', []),
+            ] : []),
         ];
     }
 
-    private function syncNotificationChannels(BackupJobGroup $group, BackupJobGroupRequest $request): void
+    private function updatePayload(BackupJobGroupRequest $request): array
     {
-        if ($request->has('notification_channel_ids')) {
-            $group->notificationChannels()->sync(
-                collect($request->input('notification_channel_ids', []))
-                    ->map(fn ($id): int => (int) $id)
-                    ->unique()
-                    ->values()
-                    ->all(),
-            );
-        }
-    }
+        $payload = [
+            'name' => $request->input('name'),
+            'schedule_type' => $request->input('schedule_type'),
+            'schedule_config' => $request->normalizedScheduleConfig(),
+            'timezone' => $request->filled('timezone') ? $request->input('timezone') : null,
+            'failure_policy' => $request->input('failure_policy'),
+        ];
 
-    private function syncMemberSchedules(BackupJobGroup $group): void
-    {
-        $group->members()->update([
-            'schedule_type' => $group->schedule_type,
-            'schedule_config' => json_encode($group->schedule_config),
-            'cron_expression' => $group->cron_expression,
-            'timezone' => $group->timezone,
-            'next_run_at' => null,
-        ]);
+        if ($request->has('notifications_enabled')) {
+            $payload['notifications_enabled'] = $request->boolean('notifications_enabled');
+        }
+
+        if ($request->has('notification_channel_ids')) {
+            $payload['notification_channel_ids'] = $request->input('notification_channel_ids');
+        }
+
+        return $payload;
     }
 
     private function serializeGroup(BackupJobGroup $group, bool $withMembers = false): array
@@ -219,6 +185,7 @@ class BackupJobGroupController extends Controller
                 'id' => $run->id,
                 'status' => $run->status,
                 'trigger' => $run->trigger,
+                'scheduled_for' => $run->scheduled_for,
                 'total_members' => $run->total_members,
                 'succeeded_members' => $run->succeeded_members,
                 'failed_members' => $run->failed_members,

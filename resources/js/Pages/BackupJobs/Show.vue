@@ -41,8 +41,8 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                 <button v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" class="btn-secondary" @click="resume(job.id)">{{ t('Resume') }}</button>
                 <button v-else-if="can.runDockerActions" class="btn-secondary" :disabled="job.status === 'running'" @click="pause(job.id)">{{ t('Pause') }}</button>
                 <Link v-if="can.runDockerActions" :href="`/backup-jobs/${job.id}/restore`" class="btn-secondary">{{ t('Restore') }}</Link>
-                <Link v-if="can.runDockerActions" :href="`/backup-jobs/${job.id}/edit`" class="btn-secondary">{{ t('Edit') }}</Link>
-                <button v-if="can.runDockerActions" type="button" class="btn-danger" @click="destroyJob(job.id)">{{ t('Delete') }}</button>
+                <Link v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :href="`/backup-jobs/${job.id}/edit`" class="btn-secondary">{{ t('Edit') }}</Link>
+                <button v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" type="button" class="btn-danger" @click="destroyJob(job.id)">{{ t('Delete') }}</button>
             </div>
         </template>
 
@@ -51,6 +51,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                 <h2 class="mb-4 text-lg font-semibold">{{ t('Job info') }}</h2>
                 <dl class="grid gap-4 sm:grid-cols-2">
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="job.status" /></dd></div>
+                    <div v-if="job.configuration_source === 'docker_label'"><dt class="text-xs uppercase text-slate-400">{{ t('Configuration') }}</dt><dd class="mt-1 text-sky-200">{{ t('Managed by Docker labels') }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Source type') }}</dt><dd class="mt-1 text-white">{{ sourceTypeLabel(job) }}</dd></div>
                     <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ sourceLabel(job) }}</dd></div>
                     <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 break-words text-white">{{ job.destination?.name }}</dd></div>
@@ -64,7 +65,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
             </section>
             <section class="card p-4 sm:p-5">
                 <h2 class="mb-3 text-lg font-semibold">{{ t('Last error') }}</h2>
-                <p v-if="job.last_error" class="break-words rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ job.last_error }}</p>
+                <p v-if="job.label_reconciliation_error || job.last_error" class="break-words rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ job.label_reconciliation_error || job.last_error }}</p>
                 <p v-else class="text-sm text-slate-400">{{ t('No current error.') }}</p>
             </section>
         </div>

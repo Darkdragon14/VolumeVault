@@ -17,11 +17,13 @@ VolumeVault is not S3-only. It supports the destination families exposed by the 
 - Local filesystem: archive path shared between VolumeVault and the temporary Offen container.
 - Docker volume: a named Docker volume (any driver — `local`, NFS, CIFS, …) mounted **by name** into the temporary Offen container. No host path needs to be shared with VolumeVault.
 
-Each destination can be tested from the UI. Destination testing, listing, upload, download, and restore download behavior is centralized in `app/Services/BackupDestinations/DestinationStorage.php`.
+Each destination can be tested from the UI. Destination testing, listing, upload, download, and restore download behavior is centralized in `app/Services/BackupDestinations/DestinationStorage.php`. Backup runs upload through Offen, which does not expose a verifiable exact Dropbox file ID to VolumeVault. Asynchronous metadata processing never infers that ID from a filename, since the file may have been replaced. Even a newly successful Dropbox backup without a proven file ID remains unverifiable for restoration from run history.
 
 Uploaded SSH private keys are written to a temporary file with restricted permissions and copied through the Docker API into the temporary Offen backup container before it starts. The local key file and temporary container are removed after the backup attempt, including when setup or execution fails.
 
 Local destinations require special care in Docker deployments. The configured archive path must be readable by VolumeVault for listing/restores and mounted into the temporary Offen backup container for writes.
+
+The official image bundles `/usr/local/bin/volumevault-local-archive-reader`. Custom or non-official runtime images must compile and install the repository's `docker/local-archive-reader.c`; local restore downloads fail closed when this reader is unavailable.
 
 ### Docker volume destinations (NFS and other drivers)
 

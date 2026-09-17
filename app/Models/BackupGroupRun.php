@@ -36,6 +36,7 @@ class BackupGroupRun extends Model
         'initiated_by_user_id',
         'status',
         'trigger',
+        'scheduled_for',
         'started_at',
         'finished_at',
         'duration_seconds',
@@ -47,9 +48,18 @@ class BackupGroupRun extends Model
         'last_heartbeat_at',
     ];
 
+    protected $hidden = [
+        'dispatch_token',
+        'dispatch_attempted_at',
+        'dispatch_published_at',
+    ];
+
     protected function casts(): array
     {
         return [
+            'dispatch_attempted_at' => 'datetime',
+            'dispatch_published_at' => 'datetime',
+            'scheduled_for' => 'datetime',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
             'last_heartbeat_at' => 'datetime',
@@ -69,6 +79,16 @@ class BackupGroupRun extends Model
     public function memberRuns(): HasMany
     {
         return $this->hasMany(BackupRun::class, 'backup_group_run_id');
+    }
+
+    public function finalizations(): HasMany
+    {
+        return $this->hasMany(RunFinalization::class);
+    }
+
+    public function scopeWithOutstandingFinalizations(Builder $query): Builder
+    {
+        return $query->whereHas('finalizations', fn (Builder $query) => $query->outstanding());
     }
 
     /**

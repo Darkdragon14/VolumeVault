@@ -21,7 +21,12 @@ class RunRestoreJob implements ShouldQueue
 
     public int $timeout = 0;
 
-    public function __construct(public readonly int $restoreRunId) {}
+    public ?string $dispatchToken = null;
+
+    public function __construct(public readonly int $restoreRunId, ?string $dispatchToken = null)
+    {
+        $this->dispatchToken = $dispatchToken;
+    }
 
     /**
      * Time-based retry budget instead of a fixed try count: when this restore
@@ -97,7 +102,12 @@ class RunRestoreJob implements ShouldQueue
             ->exists();
 
         $backupActive = BackupRun::query()
-            ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
+            ->where(function ($query) use ($volume): void {
+                $query->where('source_volume_name', $volume)
+                    ->orWhere(fn ($query) => $query
+                        ->whereNull('source_type_snapshot')
+                        ->whereHas('job', fn ($query) => $query->where('volume_name', $volume)));
+            })
             ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
 
@@ -112,7 +122,7 @@ class RunRestoreJob implements ShouldQueue
     {
         $query
             ->where('status', RestoreRun::STATUS_RUNNING)
-            ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
+            ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->whereJsonLength('stopped_container_ids', '>', 0));
 
         if ($includeBackupCleanup) {
             $query->orWhere('docker_container_cleanup_pending', true);
@@ -120,20 +130,20 @@ class RunRestoreJob implements ShouldQueue
     }
 
     /**
-     * Called by the queue when the job fails outright (timeout, queue:restart,
-     * uncaught exception). Ensures the run never stays stuck in running/queued.
+     * Queue failure is not authoritative for terminal lifecycle state. It may only
+     * make a still-queued run eligible for publication again; a worker that already
+     * claimed the row keeps its running state and publication markers.
      */
     public function failed(Throwable $exception): void
     {
-        $run = RestoreRun::find($this->restoreRunId);
-
-        // Only fail a run the queue never actually started. A RUNNING restore is
-        // owned by its worker; a copy redelivered until retryUntil must not fail it
-        // — and emit a contradictory notification — out from under a live worker
-        // mid-restore. A genuinely dead RUNNING run is closed by stale-run
-        // reconciliation. Mirrors RunBackupJob.
-        if ($run && $run->status === RestoreRun::STATUS_QUEUED) {
-            app(RunRestore::class)->markFailed($run, $exception);
-        }
+        RestoreRun::query()
+            ->whereKey($this->restoreRunId)
+            ->where('status', RestoreRun::STATUS_QUEUED)
+            ->where('dispatch_token', $this->dispatchToken)
+            ->update([
+                'dispatch_token' => null,
+                'dispatch_attempted_at' => null,
+                'dispatch_published_at' => null,
+            ]);
     }
 }

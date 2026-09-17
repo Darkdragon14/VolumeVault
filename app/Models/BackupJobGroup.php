@@ -98,6 +98,11 @@ class BackupJobGroup extends Model
         return $this->belongsToMany(NotificationChannel::class)->withTimestamps();
     }
 
+    public function hasOutstandingFinalizations(): bool
+    {
+        return $this->groupRuns()->withOutstandingFinalizations()->exists();
+    }
+
     public function stopsOnFirstFailure(): bool
     {
         return $this->failure_policy === self::FAILURE_POLICY_STOP;

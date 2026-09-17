@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'A nem támogatott Dropbox biztonsági mentések korai elutasítása',
+        'description' => 'A helyben történő visszaállítás már sorba állítás előtt elutasítja a kért biztonsági mentést, ha a feladat jelenlegi célhelye Dropbox. Az űrlap elmagyarázza a korlátozást, és megőrzi a választást annak kifejezett módosításáig.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Biztonságosabb Dropbox-visszaállítás és javított archívumsorrend',
+        'description' => 'Az Offen feltöltései nem adnak át ellenőrizhető, pontos Dropbox-fájlazonosítót a VolumeVaultnak. Az aszinkron metaadat-feldolgozás soha nem állapítja meg az azonosságot fájlnév alapján, mert a fájlt időközben lecserélhették. Bizonyított fájlazonosító nélkül még az új, sikeres Dropbox-mentések azonossága sem ellenőrizhető a futási előzményekből történő visszaállításhoz. A Docker-kötet típusú célhelyek archívumai mostantól helyesen, a legújabbal kezdve jelennek meg.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Helyi archívumok biztonságosabb olvasása',
+        'description' => 'A visszaállításhoz letöltött helyi archívumok mostantól rögzítik az archívum gyökerét, elutasítják a szimbolikus hivatkozásokon át történő bejárást, és a teljes fájlokat atomikusan teszik közzé anélkül, hogy hiba esetén törölnék a meglévő célfájlokat.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Megbízható várólistás futtatás',
+        'description' => 'A várólistán lévő biztonsági mentések, visszaállítások és mentési csoportok mostantól tartós kiküldési bérletet használnak, és az első átadás elvesztésekor automatikusan újra sorba kerülnek anélkül, hogy egy worker által már lefoglalt futtatás megkettőződne. Aszinkron várólista-kapcsolat szükséges; a sync illesztőprogram elutasításra kerül, mert nem tudja tartósan újra sorba állítani a zárolásra váró feladatokat.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Megbizhato befejezesi ertesitesek',
+        'description' => 'A mentesek, visszaallitasok es csoportok befejezesi ertesitesei csatornankent ujraprobalhatok, igy az ideiglenes hibak nem veszitik el az eredmenyt.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Megbizhato biztonsagimentes-elozmenyek',
+        'description' => 'A mentefutasok mostantol megorzik az eredeti forrast, celt es archivumnevet, igy a vegrehajtas, a metaadatok, a kotetelozmenyek es a korabbi futasokbol inditott visszaallitasok a feladat kesobbi modositasa utan is helyesek maradnak.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Rendezhető biztonsági mentési feladatok',
         'description' => 'A biztonsági mentési feladatok mostantól mindkét irányban rendezhetők név, következő ütemezett futás vagy utolsó futás szerint. A rendezés a teljes lapozott listára vonatkozik, megmarad az URL-ben, és az API-n keresztül is elérhető.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Docker TCP proxyhálózat a mentésekhez',
         'description' => 'A mentések mostantól a Docker-hálózati szolgáltatásnevén keresztül is elérhetik a Docker TCP socket proxyt. Állítsa a VOLUMEVAULT_DOCKER_NETWORK értékét az engine számára látható egyéni hálózatra; a VolumeVault ehhez csatlakoztatja az ideiglenes Offen mentési konténereket.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Docker label managed backups',
+        'description' => 'Running containers can now declare scheduled volume backups through Docker labels. Administrators configure trusted defaults in VolumeVault, while generated jobs stay read-only and are safely disabled when their declaration disappears or conflicts.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Docker TCP-végpont támogatása',

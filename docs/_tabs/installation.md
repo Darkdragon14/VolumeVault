@@ -264,7 +264,9 @@ When `APP_VERSION` is a tagged release, VolumeVault can also check GitHub for a 
 - `VOLUMEVAULT_HOST_PATH_ALLOWLIST`: comma-separated list of Docker host path prefixes allowed for host-path backup sources **and local backup destinations**, for example `/srv,/mnt/data`. Fail-closed: when empty, host-path sources and local destinations are refused. Set the prefixes you intend to back up to/from.
 - `DB_CONNECTION`: defaults to `sqlite`.
 - `DB_DATABASE`: defaults to `/app/storage/database/database.sqlite` inside the Docker image.
-- `QUEUE_CONNECTION`: defaults to `database`.
+- `DB_QUEUE_RETRY_AFTER`, `BEANSTALKD_QUEUE_RETRY_AFTER`, and `REDIS_QUEUE_RETRY_AFTER`: default to `360` seconds and must remain greater than the 300-second Docker volume synchronization timeout. Any other queue driver that reserves jobs must use a reservation or retry delay greater than 300 seconds.
+- Amazon SQS does not use a Laravel `retry_after` setting. Configure the queue's visibility timeout in AWS to greater than 300 seconds.
+- `QUEUE_CONNECTION`: defaults to `database`. Backup and restore runs require an asynchronous queue; the `sync` driver is not supported because lock-contending jobs must be released back onto a durable queue.
 - `CACHE_STORE`: defaults to `database`.
 - `SESSION_DRIVER`: defaults to `database`.
 - `SESSION_SECURE_COOKIE`: defaults to off. Set to `true` when serving over HTTPS so the session cookie carries the `Secure` flag and is only sent over HTTPS. Leave it off for plain-HTTP or LAN-only access — a `Secure` cookie is never sent over plain HTTP, so enabling it without TLS prevents login.

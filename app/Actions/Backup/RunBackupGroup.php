@@ -2,6 +2,9 @@
 
 namespace App\Actions\Backup;
 
+use App\Actions\Runs\DispatchQueuedRun;
+use App\Actions\Runs\CreateRunFinalizations;
+use App\Actions\Runs\ProcessRunFinalization;
 use App\Models\ActivityLog;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
@@ -10,7 +13,9 @@ use App\Models\BackupRun;
 use App\Models\RestoreRun;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\VolumeJobLock;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 use Throwable;
@@ -35,68 +40,69 @@ class RunBackupGroup
     public function __construct(
         private readonly RunBackup $runBackup,
         private readonly SendShoutrrrNotification $sendShoutrrrNotification,
+        private readonly CreateBackupRunRecord $createBackupRunRecord,
+        private readonly WithBackupGroupMutationLocks $withGroupLocks,
+        private readonly CreateRunFinalizations $createFinalizations,
     ) {}
 
     public function handle(BackupGroupRun $groupRun): void
     {
         $startedAt = now();
 
-        // Atomically claim the run (non-terminal → running) so a redelivery or a
-        // reconciliation race cannot execute it twice. Mirrors RunBackup.
-        // Claim only a queued run. A run already RUNNING is owned by a worker
-        // (its timeout is 0, so a long sequential group is legitimate); a copy
-        // redelivered after the 24h lock TTL must not re-run it and overlap. A
-        // crashed RUNNING run is not resumed here — reconciliation closes it and
-        // the next scheduled run starts fresh.
-        $claimed = BackupGroupRun::query()
-            ->whereKey($groupRun->getKey())
-            ->where('status', BackupGroupRun::STATUS_QUEUED)
-            ->update([
+        $decision = $this->withGroupLocks->handle([$groupRun->backup_job_group_id], function ($groups) use ($groupRun, $startedAt): array {
+            $group = $groups->get($groupRun->backup_job_group_id);
+
+            if (! $group instanceof BackupJobGroup) {
+                return ['outcome' => 'skip'];
+            }
+
+            /** @var Collection<int, BackupJob> $members */
+            $members = $group->members()->orderBy('id')->lockForUpdate()->get();
+
+            // Claim only a queued run. A running run is already owned by a worker;
+            // reconciliation remains the sole owner of crashed running runs.
+            $claimed = BackupGroupRun::query()
+                ->whereKey($groupRun->getKey())
+                ->where('status', BackupGroupRun::STATUS_QUEUED)
+                ->update([
+                    'status' => BackupGroupRun::STATUS_RUNNING,
+                    'started_at' => $startedAt,
+                    'last_heartbeat_at' => $startedAt,
+                ]);
+
+            if ($claimed === 0) {
+                return ['outcome' => 'skip'];
+            }
+
+            $groupRun->forceFill([
                 'status' => BackupGroupRun::STATUS_RUNNING,
                 'started_at' => $startedAt,
                 'last_heartbeat_at' => $startedAt,
             ]);
 
-        if ($claimed === 0) {
-            return;
-        }
+            if ($group->status === BackupJobGroup::STATUS_PAUSED) {
+                $groupRun->forceFill([
+                    'status' => BackupGroupRun::STATUS_CANCELLED,
+                    'finished_at' => now(),
+                    'error_message' => 'Group was paused before this run started.',
+                ])->save();
 
-        $groupRun->refresh();
-        $groupRun->loadMissing('group');
-        $group = $groupRun->group;
+                ActivityLog::record('backup_group_run_cancelled', 'Backup group run cancelled: the group was paused before it started.', $groupRun, [
+                    'backup_job_group_id' => $group->id,
+                ]);
 
-        if ($group === null) {
-            return;
-        }
+                return ['outcome' => 'skip'];
+            }
 
-        // The group may have been paused after this run was queued. Don't execute
-        // it — and don't un-pause the group in the success branch below. Cancel the
-        // run so it is not retried, leaving the pause (and its reason) intact.
-        if ($group->status === BackupJobGroup::STATUS_PAUSED) {
-            $groupRun->forceFill([
-                'status' => BackupGroupRun::STATUS_CANCELLED,
-                'finished_at' => now(),
-                'error_message' => 'Group was paused before this run started.',
-            ])->save();
+            $members = $members
+                ->reject(fn (BackupJob $member): bool => $member->status === BackupJob::STATUS_PAUSED)
+                ->values();
 
-            ActivityLog::record('backup_group_run_cancelled', 'Backup group run cancelled: the group was paused before it started.', $groupRun, [
-                'backup_job_group_id' => $group->id,
-            ]);
+            if ($members->isNotEmpty()) {
+                return ['outcome' => 'run', 'group' => $group, 'members' => $members];
+            }
 
-            return;
-        }
-
-        /** @var \Illuminate\Database\Eloquent\Collection<int, BackupJob> $members */
-        $members = $group->runnableMembers()->orderBy('id')->get();
-
-        // The run was created with runnable members, but they were all paused,
-        // detached or removed before the worker started. Fail the run instead of
-        // reporting a false success that would back up nothing yet turn a
-        // dead-man's-switch monitor green. No start notification is sent — the run
-        // never begins — only the aggregated failure.
-        if ($members->isEmpty()) {
             $finishedAt = now();
-
             $groupRun->forceFill([
                 'status' => BackupGroupRun::STATUS_FAILED,
                 'finished_at' => $finishedAt,
@@ -111,9 +117,6 @@ class RunBackupGroup
                 'last_error_at' => $finishedAt,
             ])->save();
 
-            // Flip to error only if not currently paused, atomically — an admin can
-            // pause between the pause check above and here, and this write must not
-            // overwrite that deliberate pause.
             BackupJobGroup::query()
                 ->whereKey($group->id)
                 ->where('status', '!=', BackupJobGroup::STATUS_PAUSED)
@@ -123,10 +126,25 @@ class RunBackupGroup
                 'backup_job_group_id' => $group->id,
             ]);
 
-            $this->sendFinishNotification($groupRun->fresh('group'));
+            $finalizationIds = $this->createFinalizations->createGroupNotifications($groupRun, $group);
+
+            return ['outcome' => 'failed', 'finalization_ids' => $finalizationIds];
+        });
+
+        if ($decision['outcome'] === 'skip') {
+            return;
+        }
+
+        if ($decision['outcome'] === 'failed') {
+            app(ProcessRunFinalization::class)->dispatch($decision['finalization_ids']);
 
             return;
         }
+
+        /** @var BackupJobGroup $group */
+        $group = $decision['group'];
+        /** @var Collection<int, BackupJob> $members */
+        $members = $decision['members'];
 
         // Flip the group to RUNNING atomically from any non-paused, non-running
         // state (active, or error after a prior failed run — both legitimately
@@ -213,102 +231,138 @@ class RunBackupGroup
             }
         }
 
-        $finishedAt = now();
-        $status = $failed > 0 ? BackupGroupRun::STATUS_FAILED : BackupGroupRun::STATUS_SUCCESS;
+        $finalizationIds = [];
+        $finalized = $this->withGroupLocks->handle([$groupRun->backup_job_group_id], function ($groups) use ($groupRun, $startedAt, $succeeded, $failed, $members, &$finalizationIds): bool {
+            $group = $groups->get($groupRun->backup_job_group_id);
+            $lockedRun = BackupGroupRun::query()->lockForUpdate()->find($groupRun->id);
 
-        // Atomic finalization: only if we still own the run. A conditional UPDATE
-        // (running → terminal) loses the race to a reconciliation that already
-        // failed it, rather than overwriting that outcome and firing a second,
-        // contradictory notification.
-        $finalized = BackupGroupRun::query()
-            ->whereKey($groupRun->getKey())
-            ->where('status', BackupGroupRun::STATUS_RUNNING)
-            ->update([
+            if (! $group instanceof BackupJobGroup || $lockedRun?->status !== BackupGroupRun::STATUS_RUNNING) {
+                return false;
+            }
+
+            $finishedAt = now();
+            $status = $failed > 0 ? BackupGroupRun::STATUS_FAILED : BackupGroupRun::STATUS_SUCCESS;
+            $lockedRun->forceFill([
                 'status' => $status,
                 'finished_at' => $finishedAt,
                 'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
                 'succeeded_members' => $succeeded,
                 'failed_members' => $failed,
-            ]);
+            ])->save();
 
-        if ($finalized === 0) {
+            if ($status === BackupGroupRun::STATUS_SUCCESS) {
+                $group->forceFill([
+                    'status' => BackupJobGroup::STATUS_ACTIVE,
+                    'last_success_at' => $finishedAt,
+                    'last_error' => null,
+                    'last_error_at' => null,
+                    'pause_reason' => null,
+                ])->save();
+            } else {
+                $message = $failed.' of '.$members->count().' volume(s) failed to back up.';
+                $group->forceFill([
+                    'status' => BackupJobGroup::STATUS_ERROR,
+                    'last_error' => $message,
+                    'last_error_at' => $finishedAt,
+                ])->save();
+            }
+
+            $finalizationIds = $this->createFinalizations->createGroupNotifications($lockedRun, $group);
+
+            return true;
+        });
+
+        if (! $finalized) {
             return;
         }
 
         $groupRun->refresh();
-
-        if ($status === BackupGroupRun::STATUS_SUCCESS) {
-            $group->forceFill([
-                'status' => BackupJobGroup::STATUS_ACTIVE,
-                'last_success_at' => $finishedAt,
-                'last_error' => null,
-                'last_error_at' => null,
-                'pause_reason' => null,
-            ])->save();
-        } else {
-            $message = $failed.' of '.$members->count().' volume(s) failed to back up.';
-            $group->forceFill([
-                'status' => BackupJobGroup::STATUS_ERROR,
-                'last_error' => $message,
-                'last_error_at' => $finishedAt,
-            ])->save();
-        }
-
-        $this->sendFinishNotification($groupRun->fresh('group'));
+        app(ProcessRunFinalization::class)->dispatch($finalizationIds);
     }
 
     /**
      * Force a group run into the FAILED state.
      *
-     * Shared by the queue job's failed() hook (worker timeout / restart) and by
-     * stale-run reconciliation. Conditional UPDATE (non-terminal → failed) so it
-     * loses the race against an in-flight finish rather than overwriting it.
+     * Used by stale-run reconciliation. The expected status and heartbeat cutoff
+     * are revalidated while the group and run rows are locked, so it loses races
+     * against an in-flight claim, heartbeat, or finish.
      */
-    public function markFailed(BackupGroupRun $groupRun, Throwable $exception): bool
-    {
+    public function markFailed(
+        BackupGroupRun $groupRun,
+        Throwable $exception,
+        ?string $expectedStatus = null,
+        ?CarbonInterface $heartbeatCutoff = null,
+        ?string $expectedDispatchToken = null,
+    ): bool {
         $finishedAt = now();
-        $startedAt = $groupRun->started_at ?? $finishedAt;
         $message = str($exception->getMessage() ?: 'Backup group run failed.')->limit(1000)->toString();
+        $finalizationIds = [];
+        $transitioned = $this->withGroupLocks->handle([$groupRun->backup_job_group_id], function ($groups) use ($groupRun, $finishedAt, $message, $expectedStatus, $heartbeatCutoff, $expectedDispatchToken, &$finalizationIds): bool {
+            $group = $groups->get($groupRun->backup_job_group_id);
+            $lockedRun = BackupGroupRun::query()->lockForUpdate()->find($groupRun->id);
 
-        $transitioned = BackupGroupRun::query()
-            ->whereKey($groupRun->getKey())
-            ->whereNotIn('status', [BackupGroupRun::STATUS_SUCCESS, BackupGroupRun::STATUS_FAILED, BackupGroupRun::STATUS_CANCELLED])
-            ->update([
+            if (! $group instanceof BackupJobGroup || $lockedRun === null || in_array($lockedRun->status, [BackupGroupRun::STATUS_SUCCESS, BackupGroupRun::STATUS_FAILED, BackupGroupRun::STATUS_CANCELLED], true)) {
+                return false;
+            }
+
+            if ($expectedStatus !== null && $lockedRun->status !== $expectedStatus) {
+                return false;
+            }
+
+            if ($lockedRun->status === BackupGroupRun::STATUS_QUEUED
+                && $expectedDispatchToken === null
+                && ($lockedRun->dispatch_published_at !== null
+                    || $lockedRun->dispatch_attempted_at?->isAfter(now()->subMinutes(DispatchQueuedRun::LEASE_MINUTES)))) {
+                return false;
+            }
+
+            if ($expectedDispatchToken !== null) {
+                if ($lockedRun->dispatch_token !== $expectedDispatchToken
+                    || $lockedRun->dispatch_attempted_at === null
+                    || $lockedRun->dispatch_published_at === null
+                    || ! $lockedRun->dispatch_attempted_at->isAfter($lockedRun->dispatch_published_at)
+                    || $heartbeatCutoff === null
+                    || ! $lockedRun->dispatch_attempted_at->lessThan($heartbeatCutoff)) {
+                    return false;
+                }
+            } else {
+                $progressedAt = $lockedRun->last_heartbeat_at ?? $lockedRun->started_at ?? $lockedRun->created_at;
+
+                if ($heartbeatCutoff !== null && ($progressedAt === null || ! $progressedAt->lessThan($heartbeatCutoff))) {
+                    return false;
+                }
+            }
+
+            $lockedRun->forceFill([
                 'status' => BackupGroupRun::STATUS_FAILED,
                 'finished_at' => $finishedAt,
-                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
+                'duration_seconds' => ($lockedRun->started_at ?? $finishedAt)->diffInSeconds($finishedAt),
                 'error_message' => $message,
-            ]);
+            ])->save();
+            $group->forceFill([
+                'last_error' => $message,
+                'last_error_at' => $finishedAt,
+            ])->save();
+            BackupJobGroup::query()
+                ->whereKey($group->id)
+                ->where('status', '!=', BackupJobGroup::STATUS_PAUSED)
+                ->update(['status' => BackupJobGroup::STATUS_ERROR]);
+            $finalizationIds = $this->createFinalizations->createGroupNotifications($lockedRun, $group);
 
-        if ($transitioned === 0) {
+            return true;
+        });
+
+        if (! $transitioned) {
             return false;
         }
 
         $groupRun->refresh();
-        $groupRun->loadMissing('group');
-
-        if ($groupRun->group) {
-            $groupRun->group->forceFill([
-                'last_error' => $message,
-                'last_error_at' => $finishedAt,
-            ])->save();
-
-            // Flip to error only if not currently paused, atomically — an admin can
-            // pause between reconciliation's stale snapshot and here, and
-            // $groupRun->group is that snapshot. A conditional UPDATE loses the race
-            // instead of overwriting the pause (which would let the scheduler
-            // dispatch the group again).
-            BackupJobGroup::query()
-                ->whereKey($groupRun->group->getKey())
-                ->where('status', '!=', BackupJobGroup::STATUS_PAUSED)
-                ->update(['status' => BackupJobGroup::STATUS_ERROR]);
-        }
 
         ActivityLog::record('backup_group_run_failed', 'Backup group run failed.', $groupRun, [
             'backup_job_group_id' => $groupRun->backup_job_group_id,
         ]);
 
-        $this->sendFinishNotification($groupRun);
+        app(ProcessRunFinalization::class)->dispatch($finalizationIds);
 
         return true;
     }
@@ -344,14 +398,16 @@ class RunBackupGroup
         }
 
         try {
-            $memberRun = BackupRun::create([
-                'backup_job_id' => $member->id,
+            $memberRun = $this->createBackupRunRecord->handle($member, [
                 'backup_group_run_id' => $groupRun->id,
                 'initiated_by_user_id' => $groupRun->initiated_by_user_id,
                 'status' => BackupRun::STATUS_QUEUED,
                 'trigger' => $groupRun->trigger === BackupGroupRun::TRIGGER_MANUAL
                     ? BackupRun::TRIGGER_MANUAL
                     : BackupRun::TRIGGER_SCHEDULED,
+                'scheduled_for' => $groupRun->trigger === BackupGroupRun::TRIGGER_SCHEDULED
+                    ? ($groupRun->scheduled_for ?? $groupRun->created_at)
+                    : null,
             ]);
         } catch (Throwable $exception) {
             // The member was hard-deleted in the small window between the re-read
@@ -429,13 +485,18 @@ class RunBackupGroup
                     new RuntimeException(filled($volume)
                         ? 'Volume "'.$volume.'" was busy; skipped in this group run.'
                         : 'A concurrent run of this job was in progress; skipped in this group run.'),
+                    BackupRun::STATUS_QUEUED,
                 );
             }
         } catch (Throwable $exception) {
             // RunBackup normally swallows backup failures and marks the run itself;
             // this guards against an unexpected throw so one member cannot abort the
             // whole group.
-            $this->runBackup->markFailed($memberRun, $exception);
+            $expectedStatus = $memberRun->fresh()?->status;
+
+            if (in_array($expectedStatus, [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING], true)) {
+                $this->runBackup->markFailed($memberRun, $exception, $expectedStatus);
+            }
         }
 
         return $memberRun;
@@ -482,7 +543,7 @@ class RunBackupGroup
     {
         $query
             ->where('status', BackupRun::STATUS_RUNNING)
-            ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
+            ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->whereJsonLength('stopped_container_ids', '>', 0));
 
         if ($includeBackupCleanup) {
             $query->orWhere('docker_container_cleanup_pending', true);
@@ -545,20 +606,6 @@ class RunBackupGroup
             $this->sendShoutrrrNotification->sendGroupRunStarted($groupRun, fn () => $this->touchHeartbeat($groupRun));
         } catch (Throwable $exception) {
             ActivityLog::record('notification_send_failed', 'Backup group start notification failed.', $groupRun, [
-                'error' => str($exception->getMessage())->limit(1000)->toString(),
-            ]);
-        }
-    }
-
-    private function sendFinishNotification(BackupGroupRun $groupRun): void
-    {
-        try {
-            // The terminal group run still holds the backup-group lock through these
-            // sends; refresh its heartbeat per channel so a next queued run of the
-            // same group waiting on that lock is not reconciled as stale.
-            $this->sendShoutrrrNotification->sendGroupRunFinished($groupRun, fn () => $this->touchHeartbeat($groupRun));
-        } catch (Throwable $exception) {
-            ActivityLog::record('notification_send_failed', 'Backup group notification failed.', $groupRun, [
                 'error' => str($exception->getMessage())->limit(1000)->toString(),
             ]);
         }

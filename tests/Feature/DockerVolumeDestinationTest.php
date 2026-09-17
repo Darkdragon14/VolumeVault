@@ -8,13 +8,28 @@ use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Services\S3\S3ClientFactory;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
+use ReflectionMethod;
 use RuntimeException;
+use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
 class DockerVolumeDestinationTest extends TestCase
 {
     use RefreshDatabase;
+
+    private ?string $scriptDirectory = null;
+
+    protected function tearDown(): void
+    {
+        if ($this->scriptDirectory !== null) {
+            (new Filesystem)->deleteDirectory($this->scriptDirectory);
+        }
+
+        parent::tearDown();
+    }
 
     public function test_volume_name_is_required(): void
     {
@@ -98,24 +113,166 @@ class DockerVolumeDestinationTest extends TestCase
 
         $this->assertCommandRecorded($process, ['docker', 'volume', 'inspect', 'barril-backups']);
         $this->assertSomeCommandContains($process, 'barril-backups:/archive:ro');
-        // The limit is enforced inside the helper command, not just in PHP.
-        $this->assertTrue(
-            collect($process->calls)->flatten()->contains(fn ($arg): bool => is_string($arg) && str_contains($arg, 'head -n 1000')),
-            'the listing command should cap output with head -n 1000',
-        );
+        $script = collect($process->calls)->flatten()
+            ->first(fn ($arg): bool => is_string($arg) && str_contains($arg, 'awk -v prefix="$1/"'));
+
+        $this->assertNotNull($script);
+        $this->assertMatchesRegularExpression('/awk .*sort -t "\|" -k2,2nr .*head -n "\$2"/s', $script);
+        $this->assertStringNotContainsString('accepted', $script);
+        $this->assertStringNotContainsString('|| true', $script);
     }
 
-    public function test_list_handles_a_filename_that_contains_a_colon(): void
+    public function test_generated_listing_script_handles_missing_and_empty_directories(): void
     {
-        // Filename templates may render a colon (e.g. daily:123.tar.gz); listing
+        $directory = $this->scriptFixture();
+
+        foreach ([$directory.'/archives', $directory.'/missing/nested'] as $path) {
+            $result = $this->executeListingScript($path);
+
+            $this->assertSame(0, $result->getExitCode(), $result->getErrorOutput());
+            $this->assertSame('', $result->getOutput());
+        }
+    }
+
+    public function test_generated_listing_script_rejects_non_directory_and_dangling_symlink(): void
+    {
+        $directory = $this->scriptFixture();
+        file_put_contents($directory.'/file', 'not a directory');
+        symlink($directory.'/missing', $directory.'/dangling');
+
+        foreach (['file', 'file/nested', 'dangling', 'dangling/nested'] as $path) {
+            $result = $this->executeListingScript($directory.'/'.$path);
+
+            $this->assertNotSame(0, $result->getExitCode());
+            $this->assertSame('', $result->getOutput());
+        }
+    }
+
+    public function test_generated_listing_script_filters_sorts_and_caps_without_sigpipe(): void
+    {
+        $directory = $this->scriptFixture().'/archives';
+        $names = [];
+
+        for ($index = 0; $index < 1600; $index++) {
+            $name = str_repeat('a', 120).sprintf('-%04d|backup:1.tar.gz', $index);
+            file_put_contents($directory.'/'.$name, 'backup');
+            touch($directory.'/'.$name, 1700000000 + $index);
+            $names[] = $name;
+        }
+
+        foreach (["invalid\nname.tar.gz", "invalid\tname.tar.gz", 'C:drive.tar.gz', 'newer.txt'] as $name) {
+            file_put_contents($directory.'/'.$name, 'invalid');
+            touch($directory.'/'.$name, 1800000000);
+        }
+
+        $result = $this->executeListingScript($directory, 2);
+
+        $this->assertSame(0, $result->getExitCode(), $result->getErrorOutput());
+        $this->assertSame(
+            "6|1700001599|$directory/{$names[1599]}\n6|1700001598|$directory/{$names[1598]}\n",
+            $result->getOutput(),
+        );
+
+        $unbounded = $this->executeListingScript($directory, PHP_INT_MAX);
+
+        $this->assertSame(0, $unbounded->getExitCode(), $unbounded->getErrorOutput());
+        $this->assertCount(1603, explode("\n", trim($unbounded->getOutput())));
+        $this->assertStringContainsString('/newer.txt', $unbounded->getOutput());
+    }
+
+    #[DataProvider('failingListingStages')]
+    public function test_generated_listing_script_propagates_stage_failures(string $stage, int $limit): void
+    {
+        $directory = $this->scriptFixture();
+        file_put_contents($directory.'/archives/backup.tar.gz', 'backup');
+        $shim = $directory.'/bin/'.$stage;
+        file_put_contents($shim, '#!/bin/sh'."\n".'PATH="$VV_TOOL_PATH"'."\nexport PATH\n".$stage.' "$@"'."\nprintf '%s\\n' 'injected $stage failure' >&2\nexit 42\n");
+        chmod($shim, 0755);
+
+        $result = $this->executeListingScript($directory.'/archives', $limit);
+
+        $this->assertNotSame(0, $result->getExitCode());
+        $this->assertStringContainsString('injected '.$stage.' failure', $result->getErrorOutput());
+        if ($stage !== 'head') {
+            $this->assertSame('', $result->getOutput());
+        }
+    }
+
+    public static function failingListingStages(): array
+    {
+        return [
+            'find capped' => ['find', 1],
+            'stat capped' => ['stat', 1],
+            'xargs capped' => ['xargs', 1],
+            'awk capped' => ['awk', 1],
+            'sort capped' => ['sort', 1],
+            'head capped' => ['head', 1],
+            'find unbounded' => ['find', PHP_INT_MAX],
+            'stat unbounded' => ['stat', PHP_INT_MAX],
+        ];
+    }
+
+    private function scriptFixture(): string
+    {
+        $this->scriptDirectory = sys_get_temp_dir().'/vv-list-script-'.bin2hex(random_bytes(8));
+        mkdir($this->scriptDirectory);
+        foreach (['archives', 'bin', 'spool'] as $directory) {
+            mkdir($this->scriptDirectory.'/'.$directory);
+        }
+
+        return $this->scriptDirectory;
+    }
+
+    private function executeListingScript(string $path, int $limit = 1000): Process
+    {
+        $docker = $this->fakeProcess();
+        (new ReflectionMethod(DestinationStorage::class, 'listDockerVolume'))
+            ->invoke($this->storage($docker), $this->destination(), $limit);
+        $command = collect($docker->calls)->first(fn (array $command): bool => in_array('-c', $command, true));
+        $script = $command[array_search('-c', $command, true) + 1];
+        $toolPath = getenv('PATH');
+        $process = new Process(['sh', '-c', $script, 'sh', $path, (string) $limit], null, [
+            'PATH' => $this->scriptDirectory.'/bin:'.$toolPath,
+            'VV_TOOL_PATH' => $toolPath,
+            'TMPDIR' => $this->scriptDirectory.'/spool',
+        ]);
+        $process->run();
+        $this->assertSame([], (new Filesystem)->directories($this->scriptDirectory.'/spool'), 'Temporary spool must be cleaned up.');
+
+        return $process;
+    }
+
+    public function test_list_handles_a_filename_that_contains_a_pipe_and_colon(): void
+    {
+        // Filename templates may render pipes and colons; listing
         // and restoring such an archive must work.
         $process = $this->fakeProcess();
-        $process->listing = '512|1700000200|/archive/daily:123.tar.gz';
+        $process->listing = '512|1700000200|/archive/daily|backup:123.tar.gz';
 
         $objects = $this->storage($process)->listBackupObjects($this->destination());
 
         $this->assertCount(1, $objects);
-        $this->assertSame('daily:123.tar.gz', $objects[0]['key']);
+        $this->assertSame('daily|backup:123.tar.gz', $objects[0]['key']);
+    }
+
+    public function test_list_filters_every_key_that_download_validation_rejects(): void
+    {
+        $process = $this->fakeProcess();
+        $tooLongSegment = str_repeat('a', 256).'.tar.gz';
+        $process->listing = implode("\n", [
+            '1|1700000000|/archive/valid.tar.gz',
+            '1|1700000000|/archive/./dot.tar.gz',
+            '1|1700000000|/archive/../dotdot.tar.gz',
+            '1|1700000000|/archive/double//separator.tar.gz',
+            '1|1700000000|/archive/C:drive.tar.gz',
+            "1|1700000000|/archive/control\tname.tar.gz",
+            '1|1700000000|/archive/'.$tooLongSegment,
+            '1|1700000000|/archive-sibling/wrong.tar.gz',
+        ]);
+
+        $objects = $this->storage($process)->listBackupObjects($this->destination());
+
+        $this->assertSame(['valid.tar.gz'], collect($objects)->pluck('key')->all());
     }
 
     public function test_test_uses_a_noclobber_unique_write_probe(): void
@@ -171,6 +328,31 @@ class DockerVolumeDestinationTest extends TestCase
         $this->expectExceptionMessage('Invalid Docker volume object key.');
 
         $this->storage($this->fakeProcess())->download($this->destination(), '../../etc/passwd', tempnam(sys_get_temp_dir(), 'vv-dl-'));
+    }
+
+    public function test_download_key_validation_is_non_normalizing_and_enforces_path_limits(): void
+    {
+        $invalidKeys = [
+            '',
+            '/absolute.tar.gz',
+            '\\windows-rooted.tar.gz',
+            'C:drive-qualified.tar.gz',
+            './dot.tar.gz',
+            'nested/../dotdot.tar.gz',
+            'nested//empty.tar.gz',
+            "control\tname.tar.gz",
+            str_repeat('a', 256).'.tar.gz',
+            implode('/', array_fill(0, 6, str_repeat('a', 200))).'.tar.gz',
+        ];
+
+        foreach ($invalidKeys as $key) {
+            try {
+                $this->storage($this->fakeProcess())->download($this->destination(), $key, tempnam(sys_get_temp_dir(), 'vv-dl-'));
+                $this->fail('Expected Docker volume key to be rejected: '.var_export($key, true));
+            } catch (RuntimeException $exception) {
+                $this->assertSame('Invalid Docker volume object key.', $exception->getMessage());
+            }
+        }
     }
 
     public function test_download_accepts_a_colon_in_the_key(): void

@@ -13,6 +13,7 @@ use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardPreferenceController;
 use App\Http\Controllers\DestinationController;
+use App\Http\Controllers\DockerLabelBackupSettingController;
 use App\Http\Controllers\InstallationSaveController;
 use App\Http\Controllers\NotificationChannelController;
 use App\Http\Controllers\OnboardingController;
@@ -76,6 +77,8 @@ Route::middleware('auth')->group(function () {
     Route::middleware('admin')->group(function () {
         Route::get('/alerts/settings', [AlertRuleController::class, 'edit'])->name('alerts.settings.edit');
         Route::put('/alerts/settings', [AlertRuleController::class, 'update'])->name('alerts.settings.update');
+        Route::get('/settings/docker-label-backups', [DockerLabelBackupSettingController::class, 'edit'])->name('settings.docker-label-backups.edit');
+        Route::put('/settings/docker-label-backups', [DockerLabelBackupSettingController::class, 'update'])->name('settings.docker-label-backups.update');
 
         Route::post('/stacks/backup', [StackController::class, 'backup'])->name('stacks.backup');
 

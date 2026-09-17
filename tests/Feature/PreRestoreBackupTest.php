@@ -8,6 +8,7 @@ use App\Actions\Restore\RunRestore;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Docker\DockerProcess;
@@ -28,7 +29,9 @@ class PreRestoreBackupTest extends TestCase
         parent::setUp();
 
         $this->storagePath = sys_get_temp_dir().'/volumevault-pre-restore-'.uniqid();
+        config(['volumevault.host_path_allowlist' => [sys_get_temp_dir()]]);
         File::ensureDirectoryExists($this->storagePath);
+        File::put($this->storagePath.'/backup.tar.gz', 'fake-archive');
         $this->app->useStoragePath($this->storagePath);
     }
 
@@ -123,6 +126,28 @@ class PreRestoreBackupTest extends TestCase
         $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
     }
 
+    public function test_safety_backup_without_a_confirmed_archive_key_aborts_before_touching_the_volume(): void
+    {
+        $docker = $this->docker(volumeExists: true);
+        $this->app->instance(DockerProcess::class, $docker);
+        $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
+        $this->app->instance(RunBackup::class, $this->fakeRunBackup(BackupRun::STATUS_SUCCESS, backupKey: null));
+
+        $run = $this->restoreRun([
+            'mode' => RestoreRun::MODE_INPLACE,
+            'target_volume_name' => 'app_data',
+            'backup_before_overwrite' => true,
+        ]);
+
+        app(RunRestore::class)->handle($run);
+        $run->refresh();
+
+        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
+        $this->assertStringContainsString('without a confirmed archive key', $run->error_message);
+        $this->assertFalse($docker->ranClear);
+        $this->assertFalse($docker->ranRestore);
+    }
+
     public function test_safety_backup_with_stopped_applications_aborts_before_touching_the_volume(): void
     {
         $docker = $this->docker(volumeExists: true);
@@ -152,17 +177,16 @@ class PreRestoreBackupTest extends TestCase
         $this->assertNotContains(['docker', 'start', 'app-1'], $docker->commands);
     }
 
-    public function test_safety_backup_aborts_when_the_job_volume_no_longer_matches(): void
+    public function test_safety_backup_uses_the_frozen_restore_volume_after_the_job_is_retargeted(): void
     {
         $docker = $this->docker(volumeExists: true);
         $this->app->instance(DockerProcess::class, $docker);
         $this->app->instance(DestinationStorage::class, $this->storageThatDownloads());
 
-        // The job is edited to target a different volume after the restore froze
-        // its target — the safety backup would otherwise capture the wrong volume.
-        $runBackup = Mockery::mock(RunBackup::class);
-        $runBackup->shouldNotReceive('handle');
-        $this->app->instance(RunBackup::class, $runBackup);
+        $this->app->instance(RunBackup::class, $this->fakeRunBackup(BackupRun::STATUS_SUCCESS, function (BackupRun $backup): void {
+            $this->assertSame(BackupJob::SOURCE_TYPE_DOCKER_VOLUME, $backup->source_type_snapshot);
+            $this->assertSame('app_data', $backup->source_volume_name);
+        }));
 
         $run = $this->restoreRun([
             'mode' => RestoreRun::MODE_INPLACE,
@@ -174,12 +198,11 @@ class PreRestoreBackupTest extends TestCase
         app(RunRestore::class)->handle($run);
         $run->refresh();
 
-        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
-        $this->assertStringContainsString('no longer targets the volume being restored', $run->error_message);
-        $this->assertFalse($docker->ranClear, 'The volume must not be wiped when the job no longer matches.');
+        $this->assertSame(RestoreRun::STATUS_SUCCESS, $run->status);
+        $this->assertTrue($docker->ranClear);
     }
 
-    public function test_safety_backup_aborts_when_the_job_volume_changes_during_the_backup(): void
+    public function test_safety_backup_remains_bound_to_the_restore_volume_when_the_job_changes_during_backup(): void
     {
         $docker = $this->docker(volumeExists: true);
         $this->app->instance(DockerProcess::class, $docker);
@@ -191,19 +214,16 @@ class PreRestoreBackupTest extends TestCase
             'backup_before_overwrite' => true,
         ]);
 
-        // The safety backup "succeeds" but the job's volume is edited mid-run, as
-        // if an admin changed it while the backup streamed. The after-backup
-        // re-check must catch it and abort before the wipe.
-        $this->app->instance(RunBackup::class, $this->fakeRunBackup(BackupRun::STATUS_SUCCESS, function () use ($run): void {
+        $this->app->instance(RunBackup::class, $this->fakeRunBackup(BackupRun::STATUS_SUCCESS, function (BackupRun $backup) use ($run): void {
+            $this->assertSame('app_data', $backup->source_volume_name);
             $run->job->forceFill(['volume_name' => 'other_volume'])->save();
         }));
 
         app(RunRestore::class)->handle($run);
         $run->refresh();
 
-        $this->assertSame(RestoreRun::STATUS_FAILED, $run->status);
-        $this->assertStringContainsString('changed its volume during the safety backup', $run->error_message);
-        $this->assertFalse($docker->ranClear, 'The volume must not be wiped after a volume change during the safety backup.');
+        $this->assertSame(RestoreRun::STATUS_SUCCESS, $run->status);
+        $this->assertTrue($docker->ranClear);
     }
 
     public function test_no_safety_backup_runs_when_the_toggle_is_off(): void
@@ -233,6 +253,7 @@ class PreRestoreBackupTest extends TestCase
     public function test_create_restore_run_forces_the_flag_off_outside_in_place_modes(): void
     {
         $job = $this->job();
+        DockerVolume::create(['name' => $job->volume_name, 'exists' => true]);
 
         $newVolume = app(CreateRestoreRun::class)->handle($job, [
             'selected_backup_key' => 'backup.tar.gz',
@@ -258,18 +279,21 @@ class PreRestoreBackupTest extends TestCase
         ?callable $onHandle = null,
         bool $cleanupPending = false,
         ?array $stoppedContainerIds = null,
+        string|null|false $backupKey = false,
     ): RunBackup
     {
         $mock = Mockery::mock(RunBackup::class);
-        $mock->shouldReceive('handle')->andReturnUsing(function (BackupRun $run) use ($resultStatus, $onHandle, $cleanupPending, $stoppedContainerIds): void {
+        $mock->shouldReceive('handle')->andReturnUsing(function (BackupRun $run) use ($resultStatus, $onHandle, $cleanupPending, $stoppedContainerIds, $backupKey): void {
             if ($onHandle) {
-                $onHandle();
+                $onHandle($run);
             }
 
             $run->forceFill([
                 'status' => $resultStatus,
                 'error_message' => $resultStatus === BackupRun::STATUS_FAILED ? 'disk full' : null,
-                'backup_key' => $resultStatus === BackupRun::STATUS_SUCCESS ? 'safety-backup.tar.gz' : null,
+                'backup_key' => $resultStatus === BackupRun::STATUS_SUCCESS
+                    ? ($backupKey === false ? 'safety-backup.tar.gz' : $backupKey)
+                    : null,
                 'docker_container_cleanup_pending' => $cleanupPending,
                 'stopped_container_ids' => $stoppedContainerIds ?? ($cleanupPending ? ['app-1'] : null),
             ])->save();
@@ -286,7 +310,7 @@ class PreRestoreBackupTest extends TestCase
             'bucket' => 'local',
             'access_key_id' => '',
             'secret_access_key' => '',
-            'settings' => ['archive_path' => sys_get_temp_dir()],
+            'settings' => ['archive_path' => $this->storagePath],
         ]);
 
         return BackupJob::create([

@@ -2,7 +2,7 @@
 
 namespace App\Actions\Backup;
 
-use App\Jobs\RunBackupJob;
+use App\Actions\Runs\DispatchQueuedRun;
 use App\Models\ActivityLog;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
@@ -22,6 +22,8 @@ class BackupStack
         private readonly BackupScheduleCalculator $scheduleCalculator,
         private readonly CreateBackupRun $createBackupRun,
         private readonly VolumeBackupSummaries $summaries,
+        private readonly WithDockerLabelMutationLocks $withLocks,
+        private readonly DispatchQueuedRun $dispatchQueuedRun,
     ) {}
 
     /**
@@ -57,11 +59,11 @@ class BackupStack
             ]);
         }
 
-        $created = $this->createMissingJobs($volumeNames, $input);
-        $result = $this->queueRuns($volumeNames, $initiatedBy);
+        $reservations = $this->createMissingJobs($volumeNames, $input);
+        $result = $this->queueRuns($volumeNames, $reservations['pending_job_ids'], $initiatedBy);
 
         return [
-            'created' => $created,
+            'created' => $reservations['created'],
             'queued' => $result['queued'],
             'skipped' => $result['skipped'],
             'grouped' => $result['grouped'],
@@ -74,61 +76,102 @@ class BackupStack
      *
      * @param  Collection<int, string>  $volumeNames
      * @param  array<string, mixed>  $input
+     * @return array{created: int, pending_job_ids: array<int, int>}
      */
-    private function createMissingJobs(Collection $volumeNames, array $input): int
+    private function createMissingJobs(Collection $volumeNames, array $input): array
     {
-        $covered = BackupJob::query()
-            ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
-            ->whereIn('volume_name', $volumeNames->all())
-            ->pluck('volume_name');
-
-        $missing = $volumeNames->diff($covered)->values();
-
-        if ($missing->isEmpty()) {
-            return 0;
-        }
-
-        if (empty($input['backup_destination_id']) || empty($input['schedule_type'])) {
-            throw ValidationException::withMessages([
-                'backup_destination_id' => 'A destination and schedule are required to back up volumes without a job.',
-            ]);
-        }
-
-        $scheduleType = $input['schedule_type'];
-        $timezone = $input['timezone'] ?? null;
-
-        try {
-            $scheduleConfig = $this->scheduleCalculator->normalize($scheduleType, $input['schedule_config'] ?? []);
-        } catch (InvalidArgumentException $exception) {
-            throw ValidationException::withMessages([
-                'schedule_config' => $exception->getMessage(),
-            ]);
-        }
-
         $defaultChannelId = NotificationChannel::where('is_default', true)->orderBy('id')->value('id');
+        $channelIds = $defaultChannelId ? [(int) $defaultChannelId] : [];
+        $destinationIds = empty($input['backup_destination_id']) ? [] : [(int) $input['backup_destination_id']];
 
-        $missing->each(function (string $volumeName) use ($input, $scheduleType, $scheduleConfig, $timezone, $defaultChannelId): void {
-            $job = BackupJob::create([
-                'name' => $volumeName,
-                'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
-                'volume_name' => $volumeName,
-                'backup_destination_id' => (int) $input['backup_destination_id'],
-                'schedule_type' => $scheduleType,
-                'schedule_config' => $scheduleConfig,
-                'cron_expression' => $this->scheduleCalculator->cronExpression($scheduleType, $scheduleConfig),
-                'timezone' => $timezone,
-                'status' => BackupJob::STATUS_ACTIVE,
-                'next_run_at' => $this->scheduleCalculator->nextRunAt($scheduleType, $scheduleConfig, null, $timezone),
-            ]);
+        return $this->withLocks->handle(
+            $destinationIds,
+            function ($destinations, $settings, $managedJobs, $volumes, $notificationChannels) use ($volumeNames, $input, $channelIds): array {
+                if ($volumeNames->contains(fn (string $volumeName): bool => ! $volumes->get($volumeName)?->exists)) {
+                    throw ValidationException::withMessages([
+                        'volumes' => 'A selected Docker volume no longer exists.',
+                    ]);
+                }
 
-            if ($defaultChannelId) {
-                $job->notificationChannels()->sync([(int) $defaultChannelId]);
-            }
+                $pendingJobs = $managedJobs->filter(function (BackupJob $job) use ($volumeNames): bool {
+                    $pending = $job->pending_label_reconciliation;
 
-            ActivityLog::record('backup_job_created', 'Backup job created.', $job);
-        });
+                    return is_array($pending)
+                        && ($pending['action'] ?? null) === 'apply'
+                        && ($pending['payload']['source_type'] ?? BackupJob::SOURCE_TYPE_DOCKER_VOLUME) === BackupJob::SOURCE_TYPE_DOCKER_VOLUME
+                        && $volumeNames->contains($pending['payload']['volume_name'] ?? null)
+                        && $job->label_reconciliation_error === null;
+                });
+                $covered = BackupJob::query()
+                    ->reservingDockerVolumes()
+                    ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
+                    ->whereIn('volume_name', $volumeNames->all())
+                    ->pluck('volume_name');
+                $reserved = $pendingJobs
+                    ->pluck('pending_label_reconciliation')
+                    ->pluck('payload.volume_name');
+                $missing = $volumeNames->diff($covered->merge($reserved)->unique())->values();
 
-        return $missing->count();
+                if ($missing->isEmpty()) {
+                    return ['created' => 0, 'pending_job_ids' => $pendingJobs->keys()->map(fn ($id): int => (int) $id)->values()->all()];
+                }
+
+                if (empty($input['backup_destination_id']) || empty($input['schedule_type'])) {
+                    throw ValidationException::withMessages([
+                        'backup_destination_id' => 'A destination and schedule are required to back up volumes without a job.',
+                    ]);
+                }
+
+                $scheduleType = $input['schedule_type'];
+                $timezone = $input['timezone'] ?? null;
+
+                try {
+                    $scheduleConfig = $this->scheduleCalculator->normalize($scheduleType, $input['schedule_config'] ?? []);
+                } catch (InvalidArgumentException $exception) {
+                    throw ValidationException::withMessages([
+                        'schedule_config' => $exception->getMessage(),
+                    ]);
+                }
+
+                if (! $destinations->get((int) $input['backup_destination_id'])?->is_active) {
+                    throw ValidationException::withMessages([
+                        'backup_destination_id' => 'The selected backup destination no longer exists or is inactive.',
+                    ]);
+                }
+
+                if ($notificationChannels->keys()->map(fn ($id): int => (int) $id)->sort()->values()->all()
+                    !== collect($channelIds)->sort()->values()->all()) {
+                    throw ValidationException::withMessages([
+                        'notification_channel_ids' => 'The default notification channel no longer exists.',
+                    ]);
+                }
+
+                $missing->each(function (string $volumeName) use ($input, $scheduleType, $scheduleConfig, $timezone, $channelIds, $notificationChannels): void {
+                    $job = BackupJob::create([
+                        'name' => $volumeName,
+                        'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                        'volume_name' => $volumeName,
+                        'backup_destination_id' => (int) $input['backup_destination_id'],
+                        'schedule_type' => $scheduleType,
+                        'schedule_config' => $scheduleConfig,
+                        'cron_expression' => $this->scheduleCalculator->cronExpression($scheduleType, $scheduleConfig),
+                        'timezone' => $timezone,
+                        'status' => BackupJob::STATUS_ACTIVE,
+                        'next_run_at' => $this->scheduleCalculator->nextRunAt($scheduleType, $scheduleConfig, null, $timezone),
+                    ]);
+
+                    $job->notificationChannels()->sync($notificationChannels->only($channelIds)->keys()->all());
+                    ActivityLog::record('backup_job_created', 'Backup job created.', $job);
+                });
+
+                return [
+                    'created' => $missing->count(),
+                    'pending_job_ids' => $pendingJobs->keys()->map(fn ($id): int => (int) $id)->values()->all(),
+                ];
+            },
+            $volumeNames->all(),
+            $channelIds,
+        );
     }
 
     /**
@@ -137,13 +180,21 @@ class BackupStack
      * skipped individually so one bad job never aborts the batch.
      *
      * @param  Collection<int, string>  $volumeNames
+     * @param  array<int, int>  $pendingJobIds
      * @return array{queued: int, skipped: int, grouped: int}
      */
-    private function queueRuns(Collection $volumeNames, ?User $initiatedBy): array
+    private function queueRuns(Collection $volumeNames, array $pendingJobIds, ?User $initiatedBy): array
     {
         $jobs = BackupJob::query()
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
-            ->whereIn('volume_name', $volumeNames->all())
+            ->where(function ($query): void {
+                $query->where('configuration_source', '!=', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)
+                    ->orWhereNull('label_reconciliation_error');
+            })
+            ->where(function ($query) use ($volumeNames, $pendingJobIds): void {
+                $query->whereIn('volume_name', $volumeNames->all())
+                    ->orWhereIn('id', $pendingJobIds);
+            })
             ->with('group')
             ->get();
 
@@ -171,8 +222,8 @@ class BackupStack
             }
 
             try {
-                $run = $this->createBackupRun->handle($job, BackupRun::TRIGGER_MANUAL, $initiatedBy);
-                RunBackupJob::dispatch($run->id);
+                $run = $this->createBackupRun->handle($job, BackupRun::TRIGGER_MANUAL, $initiatedBy, $volumeNames->all());
+                $this->dispatchQueuedRun->handle($run);
                 $queued++;
             } catch (ValidationException) {
                 $skipped++;

@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'Reject unsupported Dropbox safety backups before restore',
+        'description' => 'In-place restores now reject a requested safety backup before queuing when the job’s current destination is Dropbox. The restore form explains the limitation and preserves your choice until you explicitly change it.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Safer Dropbox restores and corrected archive ordering',
+        'description' => 'Offen uploads do not expose a verifiable exact Dropbox file ID to VolumeVault, and asynchronous metadata processing never resolves identity by filename because the file may have been replaced. Even newly successful Dropbox backups without a proven file ID remain unverifiable for restoration from run history. Archives on Docker volume destinations are now correctly listed newest first.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Safer local archive reads',
+        'description' => 'Local restore downloads now pin the archive root, refuse symlink traversal, and publish complete files atomically without deleting existing targets on failure.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Reliable queued run dispatch',
+        'description' => 'Queued backups, restores, and backup groups now carry a persisted dispatch lease and are automatically redispatched when an initial queue handoff is lost, without duplicating an execution already claimed by a worker. An asynchronous queue connection is required; the sync driver is rejected because it cannot durably release lock-contending jobs.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Durable completion notifications',
+        'description' => 'Backup, restore, and backup-group completion notifications are now retried independently per channel after a run finishes, so temporary notification or worker failures no longer silently lose a terminal result.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Reliable backup run history',
+        'description' => 'Backup runs now retain their original source, destination and archive filename, so queued execution, archive metadata, volume history and restores from historical runs stay correct when a backup job is edited later.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Sortable backup jobs',
         'description' => 'Backup jobs can now be sorted by name, next scheduled run, or last run in either direction. Sorting works across the full paginated list, remains in the URL, and is also available through the API.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Docker TCP proxy network for backups',
         'description' => 'Backups can now reach a Docker TCP socket proxy addressed by its Docker network service name. Set VOLUMEVAULT_DOCKER_NETWORK to the engine-visible user-defined network, and VolumeVault attaches temporary Offen backup containers to it.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Docker label managed backups',
+        'description' => 'Running containers can now declare one or more scheduled volume backups through Docker labels. Administrators configure trusted global defaults in VolumeVault, while labels may override non-secret settings. Generated jobs remain visible and operational but read-only, and are safely disabled when their declaration disappears or conflicts with manual configuration.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Docker TCP endpoint support',

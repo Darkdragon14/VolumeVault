@@ -68,6 +68,7 @@ class DestinationStorageUsageTest extends TestCase
         ]);
 
         $sftp = Mockery::mock(SFTP::class);
+        $sftp->shouldReceive('lstat')->once()->with('/srv/backups')->andReturn(['type' => 2]);
         $sftp->shouldReceive('rawlist')
             ->once()
             ->with('/srv/backups')

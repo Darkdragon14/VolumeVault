@@ -46,7 +46,8 @@ class RunBackupContainer
 
     public function handle(BackupRun $run, ?callable $heartbeat = null): DockerProcessResult
     {
-        $run->loadMissing('job.destination');
+        $run->loadMissing('job.destination', 'snapshotDestination');
+        $run->setRelation('job', $run->executionJob());
 
         $containerName = 'volumevault-backup-'.$run->id.'-'.Str::lower(Str::random(8));
         $containerCreationIssued = false;
@@ -475,7 +476,7 @@ class RunBackupContainer
 
     public function backupFilename(BackupRun $run): string
     {
-        return $this->renderBackupFilename->handle($run);
+        return $run->backup_filename ?: $this->renderBackupFilename->handle($run);
     }
 
     private function sourceMountArguments(BackupJob $job): array

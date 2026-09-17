@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Actions\Backup\RunBackup;
+use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
 use App\Support\VolumeJobLock;
@@ -21,7 +22,12 @@ class RunBackupJob implements ShouldQueue
 
     public int $timeout = 0;
 
-    public function __construct(public readonly int $backupRunId) {}
+    public ?string $dispatchToken = null;
+
+    public function __construct(public readonly int $backupRunId, ?string $dispatchToken = null)
+    {
+        $this->dispatchToken = $dispatchToken;
+    }
 
     /**
      * Time-based retry budget instead of a fixed try count: a backup that loses
@@ -42,7 +48,10 @@ class RunBackupJob implements ShouldQueue
         // restore is mid-wipe on the same volume (and vice versa). Host-path jobs
         // have no volume and keep their previous per-job key.
         $run = BackupRun::with('job:id,volume_name')->find($this->backupRunId);
-        $key = VolumeJobLock::key($run?->job?->volume_name, 'backup-job-'.($run?->backup_job_id ?? $this->backupRunId));
+        $volume = $run?->source_type_snapshot === BackupJob::SOURCE_TYPE_HOST_PATH
+            ? null
+            : ($run?->source_volume_name ?? $run?->job?->volume_name);
+        $key = VolumeJobLock::key($volume, 'backup-job-'.($run?->backup_job_id ?? $this->backupRunId));
 
         // shared() drops the per-job-class namespace from the lock key so this
         // backup and a RunRestoreJob keyed on the same volume contend for the one
@@ -81,7 +90,9 @@ class RunBackupJob implements ShouldQueue
     private function volumeBusy(BackupRun $run): bool
     {
         $run->loadMissing('job');
-        $volume = $run->job?->volume_name;
+        $volume = $run->source_type_snapshot === BackupJob::SOURCE_TYPE_HOST_PATH
+            ? null
+            : ($run->source_volume_name ?? $run->job?->volume_name);
 
         if (! filled($volume)) {
             // Host-path jobs have no volume and serialize on their per-job lock; if
@@ -96,7 +107,12 @@ class RunBackupJob implements ShouldQueue
         }
 
         $backupActive = BackupRun::query()
-            ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
+            ->where(function ($query) use ($volume): void {
+                $query->where('source_volume_name', $volume)
+                    ->orWhere(fn ($query) => $query
+                        ->whereNull('source_type_snapshot')
+                        ->whereHas('job', fn ($query) => $query->where('volume_name', $volume)));
+            })
             ->whereKeyNot($run->getKey())
             ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
@@ -117,7 +133,7 @@ class RunBackupJob implements ShouldQueue
     {
         $query
             ->where('status', BackupRun::STATUS_RUNNING)
-            ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->where('stopped_container_ids', '!=', '[]'));
+            ->orWhere(fn ($q) => $q->whereNotNull('stopped_container_ids')->whereJsonLength('stopped_container_ids', '>', 0));
 
         if ($includeBackupCleanup) {
             $query->orWhere('docker_container_cleanup_pending', true);
@@ -125,20 +141,20 @@ class RunBackupJob implements ShouldQueue
     }
 
     /**
-     * Called by the queue when the job fails outright (timeout, queue:restart,
-     * uncaught exception). Ensures the run never stays stuck in running/queued.
+     * Queue failure is not authoritative for terminal lifecycle state. It may only
+     * make a still-queued run eligible for publication again; a worker that already
+     * claimed the row keeps its running state and publication markers.
      */
     public function failed(Throwable $exception): void
     {
-        $run = BackupRun::find($this->backupRunId);
-
-        // Only fail a run the queue never actually started. A RUNNING run is owned
-        // by its worker (timeout 0, so a long backup is legitimate); a copy
-        // redelivered until retryUntil must not fail it — nor let its container
-        // restart race the live worker — out from under it. A genuinely dead
-        // RUNNING run is closed by stale-run reconciliation. Mirrors RunBackupGroupJob.
-        if ($run && $run->status === BackupRun::STATUS_QUEUED) {
-            app(RunBackup::class)->markFailed($run, $exception);
-        }
+        BackupRun::query()
+            ->whereKey($this->backupRunId)
+            ->where('status', BackupRun::STATUS_QUEUED)
+            ->where('dispatch_token', $this->dispatchToken)
+            ->update([
+                'dispatch_token' => null,
+                'dispatch_attempted_at' => null,
+                'dispatch_published_at' => null,
+            ]);
     }
 }

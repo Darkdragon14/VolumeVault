@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -37,6 +38,10 @@ class BackupJob extends Model
 
     public const FILTER_MODE_INCLUDE = 'include';
 
+    public const CONFIGURATION_SOURCE_MANUAL = 'manual';
+
+    public const CONFIGURATION_SOURCE_DOCKER_LABEL = 'docker_label';
+
     protected $fillable = [
         'name',
         'backup_job_group_id',
@@ -66,12 +71,18 @@ class BackupJob extends Model
         'backup_filename_template',
         'stop_containers_before_backup',
         'stop_container_names',
+        'configuration_source',
+        'configuration_key',
+        'label_origin',
+        'pending_label_reconciliation',
+        'label_reconciliation_error',
     ];
 
     protected $attributes = [
         'notifications_enabled' => true,
         'use_custom_alert_settings' => false,
         'alert_notifications_enabled' => true,
+        'configuration_source' => self::CONFIGURATION_SOURCE_MANUAL,
     ];
 
     protected $appends = [
@@ -93,6 +104,8 @@ class BackupJob extends Model
             'alert_notifications_enabled' => 'boolean',
             'stop_containers_before_backup' => 'boolean',
             'stop_container_names' => 'array',
+            'label_origin' => 'array',
+            'pending_label_reconciliation' => 'array',
         ];
     }
 
@@ -113,6 +126,38 @@ class BackupJob extends Model
     public function isGroupMember(): bool
     {
         return $this->backup_job_group_id !== null;
+    }
+
+    public function isDockerLabelManaged(): bool
+    {
+        return $this->configuration_source === self::CONFIGURATION_SOURCE_DOCKER_LABEL;
+    }
+
+    public function reservesDockerVolume(string $volumeName): bool
+    {
+        if (! $this->isDockerLabelManaged() || $this->label_reconciliation_error !== null) {
+            return false;
+        }
+
+        if ($this->isDockerVolumeSource() && $this->volume_name === $volumeName) {
+            return true;
+        }
+
+        $pending = $this->pending_label_reconciliation;
+
+        return is_array($pending)
+            && ($pending['action'] ?? null) === 'apply'
+            && ($pending['payload']['source_type'] ?? self::SOURCE_TYPE_DOCKER_VOLUME) === self::SOURCE_TYPE_DOCKER_VOLUME
+            && ($pending['payload']['volume_name'] ?? null) === $volumeName;
+    }
+
+    public function scopeReservingDockerVolumes(Builder $query): void
+    {
+        $query->where(function (Builder $query): void {
+            $query->where('configuration_source', '!=', self::CONFIGURATION_SOURCE_DOCKER_LABEL)
+                ->orWhereNull('configuration_source')
+                ->orWhereNull('label_reconciliation_error');
+        });
     }
 
     public function sourceType(): string
@@ -160,6 +205,12 @@ class BackupJob extends Model
     {
         return $this->runs()->activeOrHoldingContainers()->exists()
             || $this->restoreRuns()->activeOrHoldingContainers()->exists();
+    }
+
+    public function hasOutstandingFinalizations(): bool
+    {
+        return $this->runs()->withOutstandingFinalizations()->exists()
+            || $this->restoreRuns()->withOutstandingFinalizations()->exists();
     }
 
     public function restoreRuns(): HasMany

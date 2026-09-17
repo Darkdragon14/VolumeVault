@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Notifications\MutateNotificationChannel;
+use App\Actions\Notifications\NotificationChannelMutationBlocked;
 use App\Concerns\PersistsNotificationChannel;
 use App\Http\Controllers\Controller;
 use App\Models\NotificationChannel;
@@ -9,6 +11,7 @@ use App\Services\Notifications\SendShoutrrrNotification;
 use App\Services\Notifications\ShoutrrrUrlBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class NotificationChannelController extends Controller
 {
@@ -29,19 +32,19 @@ class NotificationChannelController extends Controller
         return response()->json(['data' => $notification->load('backupJobs')->safeForFrontend()]);
     }
 
-    public function update(Request $request, NotificationChannel $notification, ShoutrrrUrlBuilder $urlBuilder): JsonResponse
+    public function update(Request $request, NotificationChannel $notification, ShoutrrrUrlBuilder $urlBuilder, MutateNotificationChannel $mutateNotificationChannel): JsonResponse
     {
         $data = $this->validated($request);
         $config = $this->configFromRequest($request);
-        $shouldReplaceUrl = $data['service'] !== $notification->service || $this->hasFilledConfig($config);
 
-        if ($shouldReplaceUrl) {
-            $existing = $this->existingWebhookMap($notification, $data['service']);
-            $data['url'] = $this->buildUrl($urlBuilder, $data['service'], $config, $existing);
+        try {
+            $notification = $mutateNotificationChannel->update(
+                $notification,
+                fn (NotificationChannel $locked): array => $this->payloadForLockedUpdate($locked, $data, $request, $urlBuilder, $config),
+            );
+        } catch (NotificationChannelMutationBlocked $exception) {
+            throw ValidationException::withMessages(['notification' => $exception->getMessage()]);
         }
-
-        $notification->update($this->payload($data, $request));
-        $this->keepSingleDefaultChannel($notification);
 
         return response()->json(['data' => $notification->fresh()->load('backupJobs')->safeForFrontend()]);
     }

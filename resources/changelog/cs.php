@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'Včasné odmítnutí nepodporovaných bezpečnostních záloh na Dropbox',
+        'description' => 'Obnovení na místě nyní odmítne požadovanou bezpečnostní zálohu před zařazením do fronty, pokud je aktuálním cílem úlohy Dropbox. Formulář vysvětluje omezení a zachová vaši volbu, dokud ji výslovně nezměníte.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Bezpečnější obnovení z Dropboxu a opravené řazení archivů',
+        'description' => 'Nahrávání přes Offen neposkytuje aplikaci VolumeVault ověřitelné přesné ID souboru na Dropboxu. Asynchronní zpracování metadat nikdy neurčuje identitu podle názvu souboru, protože soubor mohl být nahrazen. I nové úspěšné zálohy na Dropboxu bez prokázaného ID souboru zůstávají neověřitelné pro obnovení z historie běhů. Archivy v cílech typu Docker svazek se nyní správně zobrazují od nejnovějších.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Bezpečnější čtení místních archivů',
+        'description' => 'Stahování místních archivů pro obnovení nyní pevně váže kořen archivu, odmítá průchod přes symbolické odkazy a úplné soubory zveřejňuje atomicky, aniž by při selhání odstranilo existující cíle.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Spolehlivé odesílání čekajících běhů',
+        'description' => 'Čekající zálohy, obnovení a skupiny záloh nyní používají trvalý časový pronájem odeslání a při ztrátě prvního předání do fronty se automaticky odešlou znovu, aniž by se duplikoval běh již převzatý workerem. Je vyžadována asynchronní fronta; synchronní ovladač je odmítnut, protože nedokáže trvale znovu zařadit úlohy čekající na zámek.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Spolehliva zaverecna upozorneni',
+        'description' => 'Zaverecna upozorneni zaloh, obnov a skupin se nyni opakuji samostatne pro kazdy kanal, takze docasna chyba neztrati vysledek behu.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Spolehliva historie zalohovani',
+        'description' => 'Spusteni zalohy si nyni uchovava puvodni zdroj, cil a nazev archivu, aby provedeni, metadata, historie svazku a obnovy z historickych spusteni zustaly spravne i po pozdejsi uprave ulohy.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Řazení úloh zálohování',
         'description' => 'Úlohy zálohování lze nyní řadit oběma směry podle názvu, příštího plánovaného spuštění nebo posledního spuštění. Řazení platí pro celý stránkovaný seznam, zůstává v URL a je dostupné také přes API.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Síť Docker TCP proxy pro zálohy',
         'description' => 'Zálohy nyní mohou dosáhnout na Docker TCP socket proxy pomocí názvu služby v síti Docker. Nastavte VOLUMEVAULT_DOCKER_NETWORK na uživatelskou síť viditelnou pro engine a VolumeVault k ní připojí dočasné zálohovací kontejnery Offen.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Docker label managed backups',
+        'description' => 'Running containers can now declare scheduled volume backups through Docker labels. Administrators configure trusted defaults in VolumeVault, while generated jobs stay read-only and are safely disabled when their declaration disappears or conflicts.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Podpora TCP endpointu Dockeru',

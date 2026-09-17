@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use LogicException;
 
 class NotificationChannel extends Model
 {
@@ -73,6 +74,13 @@ class NotificationChannel extends Model
             'is_default' => 'boolean',
             'last_tested_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (): never {
+            throw new LogicException('Notification channels must be deleted through DeleteNotificationChannel.');
+        });
     }
 
     public function backupJobs(): BelongsToMany

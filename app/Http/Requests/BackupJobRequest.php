@@ -19,6 +19,8 @@ class BackupJobRequest extends FormRequest
 {
     use ValidatesBackupSizeRange;
 
+    private bool $alertConfigsWerePresentInOriginalInput = false;
+
     public function authorize(): bool
     {
         return true;
@@ -26,6 +28,8 @@ class BackupJobRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $this->alertConfigsWerePresentInOriginalInput = $this->exists('alert_configs');
+
         $sourceType = (string) ($this->input('source_type') ?: BackupJob::SOURCE_TYPE_DOCKER_VOLUME);
         $hostPath = app(HostPathPolicy::class)->normalize($this->input('host_path'));
         $alertConfigs = $this->customAlertSettingsEnabled() ? $this->input('alert_configs') : null;
@@ -179,6 +183,11 @@ class BackupJobRequest extends FormRequest
         return app(BackupScheduleCalculator::class)->normalize((string) $this->input('schedule_type'), (array) $this->input('schedule_config'));
     }
 
+    public function alertConfigsWerePresentInOriginalInput(): bool
+    {
+        return $this->alertConfigsWerePresentInOriginalInput;
+    }
+
     private function validateHostPathSource(Validator $validator): void
     {
         if ($this->input('source_type') !== BackupJob::SOURCE_TYPE_HOST_PATH) {
@@ -214,9 +223,20 @@ class BackupJobRequest extends FormRequest
             return $this->boolean('use_custom_alert_settings');
         }
 
-        $job = $this->route('backup_job');
+        return (bool) $this->existingBackupJob()?->use_custom_alert_settings;
+    }
 
-        return $job instanceof BackupJob && $job->use_custom_alert_settings;
+    private function existingBackupJob(): ?BackupJob
+    {
+        foreach (['backup_job', 'backupJob'] as $parameter) {
+            $job = $this->route($parameter);
+
+            if ($job instanceof BackupJob) {
+                return $job;
+            }
+        }
+
+        return null;
     }
 
     private function validateAlertSizeRanges(Validator $validator): void

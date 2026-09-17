@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Backup\CreateBackupGroupRun;
+use App\Actions\Backup\CreateBackupJobGroup;
+use App\Actions\Backup\DeleteBackupJobGroup;
+use App\Actions\Backup\ResumeBackupJobGroup;
+use App\Actions\Backup\UpdateBackupJobGroup;
+use App\Actions\Runs\DispatchQueuedRun;
 use App\Concerns\PaginateWithPreference;
 use App\Http\Requests\BackupJobGroupRequest;
-use App\Jobs\RunBackupGroupJob;
-use App\Models\ActivityLog;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
@@ -50,12 +53,12 @@ class BackupJobGroupController extends Controller
         return Inertia::render('BackupGroups/Form', $this->formProps());
     }
 
-    public function store(BackupJobGroupRequest $request)
+    public function store(BackupJobGroupRequest $request, CreateBackupJobGroup $createBackupJobGroup)
     {
-        $group = BackupJobGroup::create($this->payload($request));
-        $this->syncNotificationChannels($group, $request);
-
-        ActivityLog::record('backup_group_created', 'Backup group created.', $group);
+        $group = $createBackupJobGroup->handle(
+            $this->payload($request),
+            'Backup group created.',
+        );
 
         return redirect()->route('backup-groups.edit', $group)->with('success', 'Backup group created. Add jobs to it from the backup job form.');
     }
@@ -82,44 +85,26 @@ class BackupJobGroupController extends Controller
         ]);
     }
 
-    public function update(BackupJobGroupRequest $request, BackupJobGroup $backupGroup)
+    public function update(BackupJobGroupRequest $request, BackupJobGroup $backupGroup, UpdateBackupJobGroup $updateBackupJobGroup)
     {
-        $backupGroup->update($this->payload($request, $backupGroup->status, $backupGroup));
-        $this->syncNotificationChannels($backupGroup, $request);
-
-        // Members mirror the group's schedule columns (they are never dispatched on
-        // their own, but the columns must stay valid and consistent).
-        $this->syncMemberSchedules($backupGroup);
+        $updateBackupJobGroup->handle($backupGroup, $this->updatePayload($request));
 
         return redirect()->route('backup-groups.index')->with('success', 'Backup group updated.');
     }
 
-    public function destroy(BackupJobGroup $backupGroup)
+    public function destroy(BackupJobGroup $backupGroup, DeleteBackupJobGroup $deleteBackupJobGroup)
     {
-        // Refuse to orphan members: a detached member keeps no schedule and would
-        // silently stop backing up. The user must first move its jobs back to
-        // standalone (or to another group) from the backup job form. Flash an error
-        // (rather than a validation error) so the groups index — which has no form
-        // to bind field errors to — shows it via the layout's flash banner.
-        if ($backupGroup->members()->exists()) {
+        try {
+            $deleteBackupJobGroup->handle($backupGroup);
+        } catch (ValidationException $exception) {
             return redirect()->route('backup-groups.index')
-                ->with('error', 'Remove or reassign this group\'s jobs before deleting it.');
+                ->with('error', $exception->validator->errors()->first());
         }
-
-        // Refuse to delete while a run is in flight: the cascade would drop the
-        // backup_group_run a worker may still be executing, losing its finalization,
-        // notification and history. Wait for it to finish (or be reconciled).
-        if ($backupGroup->groupRuns()->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])->exists()) {
-            return redirect()->route('backup-groups.index')
-                ->with('error', 'This group has a backup run in progress. Wait for it to finish before deleting it.');
-        }
-
-        $backupGroup->delete();
 
         return redirect()->route('backup-groups.index')->with('success', 'Backup group deleted.');
     }
 
-    public function runNow(Request $request, BackupJobGroup $backupGroup, CreateBackupGroupRun $createBackupGroupRun)
+    public function runNow(Request $request, BackupJobGroup $backupGroup, CreateBackupGroupRun $createBackupGroupRun, DispatchQueuedRun $dispatchQueuedRun)
     {
         // Flash the reason (no runnable members, group not active, …) rather than
         // letting a validation error propagate: the groups index has no form to
@@ -131,7 +116,7 @@ class BackupJobGroupController extends Controller
                 ->with('error', $exception->validator->errors()->first() ?: 'This backup group cannot run right now.');
         }
 
-        RunBackupGroupJob::dispatch($run->id);
+        $dispatchQueuedRun->handle($run);
 
         return redirect()->route('backup-group-runs.show', $run)->with('success', 'Backup group run queued.');
     }
@@ -160,34 +145,24 @@ class BackupJobGroupController extends Controller
         return back()->with('success', 'Backup group paused.');
     }
 
-    public function resume(BackupJobGroup $backupGroup)
+    public function resume(BackupJobGroup $backupGroup, ResumeBackupJobGroup $resumeBackupJobGroup)
     {
-        // Atomic conditional update: a worker can flip the group to running between
-        // a stale read and the save. Resuming only from a non-running state (0 rows
-        // => running) refuses that, so a stale Resume never flips running -> active.
-        $resumed = BackupJobGroup::query()
-            ->whereKey($backupGroup->id)
-            ->where('status', '!=', BackupJobGroup::STATUS_RUNNING)
-            ->update([
-                'status' => BackupJobGroup::STATUS_ACTIVE,
-                'pause_reason' => null,
-                'last_error' => null,
-                'last_error_at' => null,
-                'next_run_at' => $this->scheduleCalculator->nextRunAt($backupGroup->schedule_type, $backupGroup->schedule_config ?? [], null, $backupGroup->timezone),
-            ]);
-
-        if ($resumed === 0) {
-            return back()->with('error', 'This group is currently running. Wait for the run to finish before resuming it.');
+        try {
+            $resumeBackupJobGroup->handle($backupGroup);
+        } catch (ValidationException $exception) {
+            return back()->with('error', $exception->errors()['group'][0]);
         }
 
         return back()->with('success', 'Backup group resumed.');
     }
 
-    public function toggleNotifications(Request $request, BackupJobGroup $backupGroup)
+    public function toggleNotifications(Request $request, BackupJobGroup $backupGroup, UpdateBackupJobGroup $updateBackupJobGroup)
     {
-        $backupGroup->forceFill([
-            'notifications_enabled' => $request->boolean('notifications_enabled'),
-        ])->save();
+        try {
+            $updateBackupJobGroup->setNotificationsEnabled($backupGroup, $request->boolean('notifications_enabled'));
+        } catch (ValidationException $exception) {
+            return back()->with('error', $exception->errors()['group'][0]);
+        }
 
         return back()->with('success', 'Backup group notifications updated.');
     }
@@ -220,35 +195,31 @@ class BackupJobGroupController extends Controller
             // so an API caller cannot silently re-enable disabled notifications.
             'notifications_enabled' => $request->has('notifications_enabled') ? $request->boolean('notifications_enabled') : (bool) ($group?->notifications_enabled ?? true),
             'next_run_at' => $this->scheduleCalculator->nextRunAt($scheduleType, $scheduleConfig, null, $timezone),
+            ...($request->has('notification_channel_ids') ? [
+                'notification_channel_ids' => $request->input('notification_channel_ids', []),
+            ] : []),
         ];
     }
 
-    private function syncNotificationChannels(BackupJobGroup $group, BackupJobGroupRequest $request): void
+    private function updatePayload(BackupJobGroupRequest $request): array
     {
-        if ($request->has('notification_channel_ids')) {
-            $group->notificationChannels()->sync(
-                collect($request->input('notification_channel_ids', []))
-                    ->map(fn ($id): int => (int) $id)
-                    ->unique()
-                    ->values()
-                    ->all(),
-            );
-        }
-    }
+        $payload = [
+            'name' => $request->input('name'),
+            'schedule_type' => $request->input('schedule_type'),
+            'schedule_config' => $request->normalizedScheduleConfig(),
+            'timezone' => $request->filled('timezone') ? $request->input('timezone') : null,
+            'failure_policy' => $request->input('failure_policy'),
+        ];
 
-    /**
-     * Keep member jobs' (unused but non-null) schedule columns aligned with the
-     * group. Members are never dispatched on their own; next_run_at stays null.
-     */
-    private function syncMemberSchedules(BackupJobGroup $group): void
-    {
-        $group->members()->update([
-            'schedule_type' => $group->schedule_type,
-            'schedule_config' => json_encode($group->schedule_config),
-            'cron_expression' => $group->cron_expression,
-            'timezone' => $group->timezone,
-            'next_run_at' => null,
-        ]);
+        if ($request->has('notifications_enabled')) {
+            $payload['notifications_enabled'] = $request->boolean('notifications_enabled');
+        }
+
+        if ($request->has('notification_channel_ids')) {
+            $payload['notification_channel_ids'] = $request->input('notification_channel_ids');
+        }
+
+        return $payload;
     }
 
     private function serializeGroup(BackupJobGroup $group, bool $withMembers = false): array

@@ -3,14 +3,21 @@
 namespace Tests\Feature;
 
 use App\Jobs\RunBackupGroupJob;
+use App\Models\ActivityLog;
 use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerVolume;
+use App\Models\NotificationChannel;
 use App\Models\User;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use RuntimeException;
 use Tests\TestCase;
 
 class GroupedBackupApiTest extends TestCase
@@ -49,6 +56,31 @@ class GroupedBackupApiTest extends TestCase
             ->assertJsonPath('data.failure_policy', 'continue');
 
         $this->assertDatabaseHas('backup_job_groups', ['name' => 'Nightly API group']);
+    }
+
+    public function test_api_group_creation_revalidates_channels_and_rolls_back_the_group(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-write', ['read', 'write'])->plainTextToken;
+        $channel = $this->notificationChannel('Deleted before API group channel lock');
+        Event::listen('eloquent.created: '.BackupJobGroup::class, function () use ($channel): void {
+            DB::table('notification_channels')->where('id', $channel->id)->delete();
+        });
+
+        $this->withToken($token)
+            ->postJson('/api/v1/backup-groups', [
+                'name' => 'Rolled back API group',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '02:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE,
+                'notification_channel_ids' => [$channel->id],
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('notification_channel_ids');
+
+        $this->assertSame(0, BackupJobGroup::count());
+        $this->assertSame(0, ActivityLog::where('event_type', 'backup_group_created')->count());
+        $this->assertDatabaseHas('notification_channels', ['id' => $channel->id]);
     }
 
     public function test_read_token_can_list_groups_but_not_create(): void
@@ -103,6 +135,7 @@ class GroupedBackupApiTest extends TestCase
         $token = $admin->createToken('grp-write', ['read', 'write'])->plainTextToken;
         $destination = $this->destination();
         $group = $this->group();
+        DockerVolume::create(['name' => 'api_vol', 'exists' => true]);
 
         $this->withToken($token)
             ->postJson('/api/v1/backup-jobs', [
@@ -123,6 +156,7 @@ class GroupedBackupApiTest extends TestCase
 
     public function test_admin_write_token_can_queue_a_group_run(): void
     {
+        config(['queue.default' => 'database']);
         Bus::fake([RunBackupGroupJob::class]);
 
         $admin = User::factory()->admin()->create();
@@ -233,6 +267,95 @@ class GroupedBackupApiTest extends TestCase
         $this->assertFalse($group->fresh()->notifications_enabled);
     }
 
+    public function test_api_group_update_uses_locked_lifecycle_state_and_preserves_omitted_notifications(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-write', ['read', 'write'])->plainTextToken;
+        $group = $this->group();
+        $member = $this->member($group);
+        $channel = $this->notificationChannel('Existing API channel');
+        $group->forceFill(['notifications_enabled' => false])->save();
+        $group->notificationChannels()->attach($channel);
+        $lifecycleAt = now()->subHour()->startOfSecond();
+        $changedAfterRouteBinding = false;
+
+        Event::listen('eloquent.retrieved: '.BackupJobGroup::class, function (BackupJobGroup $retrieved) use ($group, $lifecycleAt, &$changedAfterRouteBinding): void {
+            if ($changedAfterRouteBinding || $retrieved->id !== $group->id) {
+                return;
+            }
+
+            $changedAfterRouteBinding = true;
+            BackupJobGroup::query()->whereKey($group->id)->update([
+                'status' => BackupJobGroup::STATUS_ERROR,
+                'pause_reason' => 'API lifecycle marker',
+                'last_run_at' => $lifecycleAt,
+                'last_success_at' => $lifecycleAt,
+                'last_error' => 'API worker marker',
+                'last_error_at' => $lifecycleAt,
+            ]);
+        });
+
+        $this->withToken($token)
+            ->putJson("/api/v1/backup-groups/{$group->id}", [
+                'name' => 'Locked API update',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '05:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_STOP,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', BackupJobGroup::STATUS_ERROR)
+            ->assertJsonPath('data.notifications_enabled', false);
+
+        $freshGroup = $group->fresh();
+        $this->assertSame(BackupJobGroup::STATUS_ERROR, $freshGroup->status);
+        $this->assertSame('API lifecycle marker', $freshGroup->pause_reason);
+        $this->assertSame('API worker marker', $freshGroup->last_error);
+        $this->assertTrue($freshGroup->last_run_at->equalTo($lifecycleAt));
+        $this->assertTrue($freshGroup->last_success_at->equalTo($lifecycleAt));
+        $this->assertTrue($freshGroup->last_error_at->equalTo($lifecycleAt));
+        $this->assertSame([$channel->id], $freshGroup->notificationChannels()->pluck('notification_channels.id')->all());
+        $this->assertSame(['time' => '05:00'], $member->fresh()->schedule_config);
+        $this->assertSame('0 5 * * *', $member->fresh()->cron_expression);
+    }
+
+    public function test_api_group_update_rolls_back_config_channels_and_member_propagation_together(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $token = $admin->createToken('grp-write', ['read', 'write'])->plainTextToken;
+        $group = $this->group();
+        $member = $this->member($group);
+        $existingChannel = $this->notificationChannel('Existing API rollback channel');
+        $replacementChannel = $this->notificationChannel('Replacement API rollback channel');
+        $group->forceFill(['notifications_enabled' => false])->save();
+        $group->notificationChannels()->attach($existingChannel);
+        $this->failAfterMemberScheduleUpdate();
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->withToken($token)->putJson("/api/v1/backup-groups/{$group->id}", [
+                'name' => 'Must roll back via API',
+                'schedule_type' => BackupJobGroup::SCHEDULE_DAILY,
+                'schedule_config' => ['time' => '06:00'],
+                'failure_policy' => BackupJobGroup::FAILURE_POLICY_STOP,
+                'notifications_enabled' => true,
+                'notification_channel_ids' => [$replacementChannel->id],
+            ]);
+            $this->fail('The member propagation failure was not raised.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Stop after member propagation.', $exception->getMessage());
+        } finally {
+            Event::forget(QueryExecuted::class);
+        }
+
+        $freshGroup = $group->fresh();
+        $this->assertSame('Group', $freshGroup->name);
+        $this->assertSame(['time' => '02:00'], $freshGroup->schedule_config);
+        $this->assertFalse($freshGroup->notifications_enabled);
+        $this->assertSame([$existingChannel->id], $freshGroup->notificationChannels()->pluck('notification_channels.id')->all());
+        $this->assertSame(['time' => '02:00'], $member->fresh()->schedule_config);
+        $this->assertSame('0 2 * * *', $member->fresh()->cron_expression);
+    }
+
     public function test_showing_a_group_includes_members_and_recent_group_runs(): void
     {
         $admin = User::factory()->admin()->create();
@@ -243,6 +366,7 @@ class GroupedBackupApiTest extends TestCase
             'backup_job_group_id' => $group->id,
             'status' => BackupGroupRun::STATUS_SUCCESS,
             'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'scheduled_for' => '2026-09-09 02:00:00',
             'started_at' => now()->subMinutes(5),
             'finished_at' => now(),
             'total_members' => 1,
@@ -261,6 +385,7 @@ class GroupedBackupApiTest extends TestCase
             ->assertOk()
             ->assertJsonStructure(['data' => ['members', 'recent_group_runs']])
             ->assertJsonCount(1, 'data.recent_group_runs')
+            ->assertJsonPath('data.recent_group_runs.0.scheduled_for', '2026-09-09T02:00:00.000000Z')
             ->assertJsonPath('data.recent_group_runs.0.total_backup_size_bytes', 4096);
     }
 
@@ -274,6 +399,7 @@ class GroupedBackupApiTest extends TestCase
             'backup_job_group_id' => $group->id,
             'status' => BackupGroupRun::STATUS_SUCCESS,
             'trigger' => BackupGroupRun::TRIGGER_MANUAL,
+            'scheduled_for' => '2026-09-09 02:00:00',
             'total_members' => 1,
             'succeeded_members' => 1,
         ]);
@@ -282,8 +408,12 @@ class GroupedBackupApiTest extends TestCase
             'backup_group_run_id' => $groupRun->id,
             'status' => BackupRun::STATUS_SUCCESS,
             'trigger' => BackupRun::TRIGGER_MANUAL,
+            'scheduled_for' => '2026-09-09 02:00:00',
+            'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+            'source_volume_name' => 'historical_member_vol',
             'backup_size_bytes' => 4096,
         ]);
+        $member->update(['volume_name' => 'retargeted_member_vol']);
 
         $this->withToken($token)
             ->getJson('/api/v1/backup-group-runs')
@@ -293,7 +423,9 @@ class GroupedBackupApiTest extends TestCase
         $this->withToken($token)
             ->getJson("/api/v1/backup-group-runs/{$groupRun->id}")
             ->assertOk()
-            ->assertJsonPath('data.total_backup_size_bytes', 4096);
+            ->assertJsonPath('data.total_backup_size_bytes', 4096)
+            ->assertJsonPath('data.members.0.source_label', 'historical_member_vol')
+            ->assertJsonPath('data.members.0.scheduled_for', '2026-09-09T02:00:00.000000Z');
     }
 
     private function destination(): BackupDestination
@@ -337,5 +469,25 @@ class GroupedBackupApiTest extends TestCase
             'status' => BackupJob::STATUS_ACTIVE,
             'next_run_at' => null,
         ]);
+    }
+
+    private function notificationChannel(string $name): NotificationChannel
+    {
+        return NotificationChannel::create([
+            'name' => $name,
+            'service' => NotificationChannel::SERVICE_ADVANCED,
+            'url' => 'ntfy://ntfy.sh/backup-group-api-test',
+            'notification_level' => NotificationChannel::LEVEL_INFO,
+            'is_active' => true,
+        ]);
+    }
+
+    private function failAfterMemberScheduleUpdate(): void
+    {
+        Event::listen(QueryExecuted::class, function (QueryExecuted $query): void {
+            if (str_starts_with($query->sql, 'update "backup_jobs"')) {
+                throw new RuntimeException('Stop after member propagation.');
+            }
+        });
     }
 }

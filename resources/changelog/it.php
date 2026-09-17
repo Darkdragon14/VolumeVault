@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'Rifiuto anticipato dei backup di sicurezza Dropbox non supportati',
+        'description' => 'I ripristini sul posto rifiutano ora un backup di sicurezza richiesto prima della messa in coda se la destinazione attuale del processo è Dropbox. Il modulo spiega il limite e conserva la scelta fino alla modifica esplicita.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Ripristini Dropbox più sicuri e ordinamento degli archivi corretto',
+        'description' => 'I caricamenti di Offen non forniscono a VolumeVault un ID esatto e verificabile del file Dropbox. L’elaborazione asincrona dei metadati non determina mai l’identità dal nome del file, poiché il file potrebbe essere stato sostituito. Anche i nuovi backup Dropbox riusciti senza un ID file comprovato restano non verificabili per il ripristino dalla cronologia delle esecuzioni. Gli archivi nelle destinazioni di tipo volume Docker sono ora elencati correttamente dal più recente al meno recente.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Lettura più sicura degli archivi locali',
+        'description' => 'I download degli archivi locali per i ripristini ora fissano la radice dell’archivio, rifiutano l’attraversamento dei link simbolici e pubblicano atomicamente i file completi senza eliminare le destinazioni esistenti in caso di errore.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Invio affidabile delle esecuzioni in coda',
+        'description' => 'Backup, ripristini e gruppi in coda ora usano un lease di invio persistente e vengono reinviati automaticamente se la consegna iniziale alla coda va persa, senza duplicare un’esecuzione già acquisita da un worker. È richiesta una connessione di coda asincrona; il driver sync viene rifiutato perché non può reinserire in modo duraturo i job in attesa di un blocco.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Notifiche finali affidabili',
+        'description' => 'Le notifiche finali di backup, ripristini e gruppi vengono ora ritentate per ogni canale, evitando la perdita dei risultati per errori temporanei.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Cronologia affidabile dei backup',
+        'description' => 'Le esecuzioni conservano ora origine, destinazione e nome archivio originali, cosi esecuzione, metadati, cronologia dei volumi e ripristini dalle esecuzioni storiche restano corretti dopo modifiche successive al processo.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Processi di backup ordinabili',
         'description' => 'I processi di backup possono ora essere ordinati in entrambe le direzioni per nome, prossima esecuzione pianificata o ultima esecuzione. L’ordinamento si applica all’intero elenco paginato, rimane nell’URL ed è disponibile anche tramite API.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Rete del proxy Docker TCP per i backup',
         'description' => 'I backup possono ora raggiungere un socket proxy Docker TCP tramite il nome del servizio nella rete Docker. Imposta VOLUMEVAULT_DOCKER_NETWORK sulla rete personalizzata visibile al motore e VolumeVault vi collegherà i container di backup Offen temporanei.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Docker label managed backups',
+        'description' => 'Running containers can now declare scheduled volume backups through Docker labels. Administrators configure trusted defaults in VolumeVault, while generated jobs stay read-only and are safely disabled when their declaration disappears or conflicts.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Supporto per endpoint Docker TCP',

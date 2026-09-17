@@ -4,12 +4,19 @@ COPY package*.json vite.config.js tailwind.config.js postcss.config.js tsconfig.
 COPY resources ./resources
 RUN npm ci && npm run build
 
+FROM alpine:3.23 AS local-archive-reader
+RUN apk add --no-cache build-base
+COPY docker/local-archive-reader.c /src/local-archive-reader.c
+RUN cc -O2 -Wall -Wextra -Werror /src/local-archive-reader.c -o /volumevault-local-archive-reader
+
 FROM serversideup/php:8.5-fpm-nginx-alpine AS runtime
 
 USER root
 
 RUN apk add --no-cache docker-cli tzdata \
     && install-php-extensions pdo_sqlite zip
+
+COPY --from=local-archive-reader --chmod=755 /volumevault-local-archive-reader /usr/local/bin/volumevault-local-archive-reader
 
 ENV APP_BASE_DIR=/app \
     NGINX_WEBROOT=/app/public \

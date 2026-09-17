@@ -71,7 +71,7 @@ class OpenApiController extends Controller
             '/backup-jobs/{id}/run' => ['post' => $this->operation('Queue a manual backup run.', ['write'], null, true, true, 202)],
             '/backup-jobs/{id}/pause' => ['post' => $this->operation('Pause a backup job.', ['write'], ['$ref' => '#/components/schemas/PauseRequest'], true, true, bodyRequired: false)],
             '/backup-jobs/{id}/resume' => ['post' => $this->operation('Resume a backup job.', ['write'], null, true, true)],
-            '/backup-jobs/{id}/backups' => ['get' => $this->operation('List backup objects available for restore.', ['read'], null, true, true)],
+            '/backup-jobs/{id}/backups' => ['get' => $this->operation('List backup objects available for restore.', ['read'], null, true, true, queryParameters: [$this->backupRunIdParameter()])],
             '/backup-jobs/{id}/restore' => ['post' => $this->operation('Queue a restore run.', ['write'], ['$ref' => '#/components/schemas/RestoreRequest'], true, true, 202)],
             '/backup-groups' => [
                 'get' => $this->operation('List backup groups.', ['read']),
@@ -88,8 +88,8 @@ class OpenApiController extends Controller
             '/backup-groups/{id}/notifications' => ['patch' => $this->operation('Enable or disable a backup group\'s notifications.', ['write'], ['$ref' => '#/components/schemas/ToggleNotificationsRequest'], true, true)],
             '/backup-group-runs' => ['get' => $this->operation('List recent backup group runs.', ['read'])],
             '/backup-group-runs/{id}' => ['get' => $this->operation('Read a backup group run with its per-volume member runs.', ['read'], null, true)],
-            '/backup-runs' => ['get' => $this->operation('List recent backup runs.', ['read'])],
-            '/backup-runs/{id}' => ['get' => $this->operation('Read backup run details and logs.', ['read'], null, true)],
+            '/backup-runs' => ['get' => $this->operation('List recent backup runs.', ['read'], response: ['$ref' => '#/components/schemas/BackupRunCollectionResponse'])],
+            '/backup-runs/{id}' => ['get' => $this->operation('Read backup run details and logs.', ['read'], null, true, response: ['$ref' => '#/components/schemas/BackupRunResponse'])],
             '/restore-runs' => ['get' => $this->operation('List recent restore runs.', ['read'])],
             '/restore-runs/{id}' => ['get' => $this->operation('Read restore run details and logs.', ['read'], null, true)],
             '/destinations' => [
@@ -112,7 +112,7 @@ class OpenApiController extends Controller
         ];
     }
 
-    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true, array $queryParameters = []): array
+    private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true, array $queryParameters = [], ?array $response = null): array
     {
         $operation = [
             'summary' => $summary,
@@ -160,6 +160,10 @@ class OpenApiController extends Controller
             ];
         }
 
+        if ($response !== null) {
+            $operation['responses'][(string) $status]['content']['application/json']['schema'] = $response;
+        }
+
         return $operation;
     }
 
@@ -188,13 +192,55 @@ class OpenApiController extends Controller
                 'properties' => [
                     'id' => ['type' => 'integer'],
                     'backup_job_id' => ['type' => 'integer'],
+                    'backup_group_run_id' => ['type' => ['integer', 'null']],
+                    'initiated_by_user_id' => ['type' => ['integer', 'null']],
                     'status' => ['type' => 'string', 'enum' => ['queued', 'running', 'success', 'failed', 'cancelled']],
                     'trigger' => ['type' => 'string', 'enum' => ['scheduled', 'manual', 'pre_restore'], 'description' => 'pre_restore marks a safety backup taken automatically before an in-place restore overwrote the volume.'],
+                    'scheduled_for' => ['type' => ['string', 'null'], 'format' => 'date-time', 'description' => 'Scheduled occurrence claimed for this run. Null for non-scheduled and legacy runs.'],
+                    'source_type_snapshot' => ['type' => ['string', 'null'], 'enum' => ['docker_volume', 'host_path', null], 'description' => 'Raw source type captured when the run was created. Null for legacy runs.'],
+                    'source_volume_name' => ['type' => ['string', 'null'], 'description' => 'Raw Docker volume snapshot. Null for host-path and legacy runs.'],
+                    'source_host_path' => ['type' => ['string', 'null'], 'description' => 'Raw host-path snapshot. Null for Docker-volume and legacy runs.'],
+                    'backup_destination_id_snapshot' => ['type' => ['integer', 'null'], 'description' => 'Raw destination ID captured when the run was created. Null for legacy runs.'],
+                    'backup_destination_name' => ['type' => ['string', 'null'], 'description' => 'Raw destination name captured when the run was created. Null for legacy runs.'],
+                    'backup_destination_provider' => ['type' => ['string', 'null'], 'description' => 'Raw destination provider captured when the run was created. Null for legacy runs.'],
+                    'source_type' => ['type' => 'string', 'enum' => ['docker_volume', 'host_path'], 'description' => 'Authoritative source type for this run, using its snapshot with a live-job fallback for legacy runs.'],
+                    'source_name' => ['type' => 'string', 'description' => 'Authoritative source volume name or host path for this run, using its snapshot with a live-job fallback for legacy runs.'],
+                    'destination_id' => ['type' => ['integer', 'null'], 'description' => 'Authoritative destination ID for this run, using its snapshot with a live-job fallback for legacy runs.'],
+                    'destination_name' => ['type' => 'string', 'description' => 'Authoritative destination name for this run, using its snapshot with a live-job fallback for legacy runs.'],
+                    'destination_provider' => ['type' => ['string', 'null'], 'description' => 'Authoritative destination provider for this run, using its snapshot with a live-job fallback for legacy runs.'],
+                    'backup_filename' => ['type' => ['string', 'null'], 'description' => 'Expected archive filename assigned when the run was created.'],
                     'started_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                    'last_heartbeat_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
                     'finished_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
                     'duration_seconds' => ['type' => ['integer', 'null']],
+                    'logs' => ['type' => ['string', 'null']],
+                    'error_message' => ['type' => ['string', 'null']],
+                    'docker_container_id' => ['type' => ['string', 'null']],
+                    'docker_container_cleanup_pending' => ['type' => 'boolean', 'description' => 'Whether interrupted backup-helper cleanup still needs to be reconciled.'],
+                    'stopped_container_ids' => ['type' => ['array', 'null'], 'items' => ['type' => 'string'], 'description' => 'Application containers still owned by this run until restart recovery completes.'],
                     'backup_key' => ['type' => ['string', 'null']],
                     'backup_size_bytes' => ['type' => ['integer', 'null']],
+                    'archive_metadata_pending' => ['type' => 'boolean', 'description' => 'Whether archive key and size metadata are still awaiting asynchronous recording.'],
+                    'created_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                    'updated_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                    'job' => ['type' => ['object', 'null'], 'description' => 'Current backup job relation retained for response compatibility.'],
+                ],
+            ],
+            'BackupRunResponse' => [
+                'type' => 'object',
+                'required' => ['data'],
+                'properties' => [
+                    'data' => ['$ref' => '#/components/schemas/BackupRun'],
+                ],
+            ],
+            'BackupRunCollectionResponse' => [
+                'type' => 'object',
+                'required' => ['data'],
+                'properties' => [
+                    'data' => [
+                        'type' => 'array',
+                        'items' => ['$ref' => '#/components/schemas/BackupRun'],
+                    ],
                 ],
             ],
             'BackupGroupRun' => [
@@ -204,6 +250,7 @@ class OpenApiController extends Controller
                     'backup_job_group_id' => ['type' => 'integer'],
                     'status' => ['type' => 'string', 'enum' => ['queued', 'running', 'success', 'failed', 'cancelled']],
                     'trigger' => ['type' => 'string', 'enum' => ['scheduled', 'manual']],
+                    'scheduled_for' => ['type' => ['string', 'null'], 'format' => 'date-time', 'description' => 'Scheduled occurrence claimed for this group run. Null for manual and legacy runs.'],
                     'started_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
                     'finished_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
                     'duration_seconds' => ['type' => ['integer', 'null']],
@@ -256,6 +303,21 @@ class OpenApiController extends Controller
                     'backup_include_paths' => ['type' => ['string', 'null'], 'maxLength' => 2000, 'description' => 'Comma-separated list of folders/files to keep, relative to the backup source root (e.g. "Backups, config/app.conf"). Used only when backup_filter_mode is "include"; empty keeps everything. Each individual path must be 200 characters or fewer and cannot contain "." or ".." segments.'],
                     'backup_filename_template' => ['type' => ['string', 'null'], 'maxLength' => 180, 'description' => 'Optional archive filename template without extension. Supported tokens: {name}, {source}, {id}, {run}, {year}, {month}, {day}, {time}, {hour}, {minute}, {second}. Existing jobs with null keep the legacy volumevault-{source}-run-{id}.tar.gz naming.'],
                     'notifications_enabled' => ['type' => 'boolean', 'default' => true],
+                    'use_custom_alert_settings' => ['type' => 'boolean', 'default' => false],
+                    'alert_notifications_enabled' => ['type' => 'boolean', 'default' => true],
+                    'alert_configs' => [
+                        'type' => ['array', 'null'],
+                        'description' => 'Complete replacement set of per-rule overrides. On update, omit this field to preserve existing overrides. When custom alert settings are enabled, send null or [] to delete all overrides; submitted rules are upserted and omitted rules are deleted. use_custom_alert_settings may be omitted to use the job\'s existing setting. Explicitly setting use_custom_alert_settings to false deletes all overrides.',
+                        'items' => [
+                            'type' => 'object',
+                            'required' => ['alert_rule_id'],
+                            'properties' => [
+                                'alert_rule_id' => ['type' => 'integer'],
+                                'enabled' => ['type' => ['boolean', 'null']],
+                                'config' => ['type' => ['object', 'null']],
+                            ],
+                        ],
+                    ],
                     'notification_channel_ids' => [
                         'type' => 'array',
                         'items' => ['type' => 'integer'],
@@ -367,7 +429,8 @@ class OpenApiController extends Controller
                 'type' => 'object',
                 'required' => ['selected_backup_key', 'mode'],
                 'properties' => [
-                    'selected_backup_key' => ['type' => 'string', 'maxLength' => 2048, 'description' => 'Object key of the backup to restore. Must be one of the keys returned by GET /backup-jobs/{id}/backups; it is checked against the destination listing (fail-closed), so arbitrary or path-traversal keys such as "../../etc/passwd" are rejected.'],
+                    'selected_backup_key' => ['type' => 'string', 'maxLength' => 2048, 'description' => 'Opaque provider object key of the backup to restore. Submit the exact key returned by GET /backup-jobs/{id}/backups; restore creation checks it against the destination listing (fail-closed). Provider keys may be absolute-looking or contain "..".'],
+                    'backup_run_id' => ['type' => ['integer', 'null'], 'description' => 'Optional successful backup run belonging to the route job. When supplied, the run\'s snapshotted destination is used for listing, key validation, and restore even if the job now uses another destination. Supply the same value to GET /backup-jobs/{id}/backups.'],
                     'mode' => ['type' => 'string', 'enum' => ['new_volume', 'inplace', 'safe_inplace'], 'description' => 'new_volume restores into a fresh volume (never destructive). inplace and safe_inplace overwrite the source volume and are only valid for Docker-volume sources; safe_inplace also stops the affected containers during the restore and restarts them afterwards. Both in-place modes require confirmation_text to equal the source volume name.'],
                     'target_volume_name' => ['type' => ['string', 'null'], 'pattern' => '^[A-Za-z0-9_.-]+$', 'maxLength' => 128, 'description' => 'Name for the new volume created by a new_volume restore. Must match ^[A-Za-z0-9_.-]+$. Ignored by the in-place modes, which always target the source volume.'],
                     'backup_before_overwrite' => ['type' => ['boolean', 'null'], 'description' => 'Only honoured by the destructive in-place modes: when true, a safety backup of the source volume is taken before it is overwritten. Ignored for new_volume.'],
@@ -413,6 +476,17 @@ class OpenApiController extends Controller
                     ],
                 ],
             ],
+        ];
+    }
+
+    private function backupRunIdParameter(): array
+    {
+        return [
+            'name' => 'backup_run_id',
+            'in' => 'query',
+            'required' => false,
+            'description' => 'Use the destination snapshotted by this successful backup run. The run must belong to the route job and have an archive key.',
+            'schema' => ['type' => 'integer'],
         ];
     }
 

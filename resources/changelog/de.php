@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'dropbox_safety_backup_validation' => [
+        'title' => 'Nicht unterstützte Dropbox-Sicherheitskopien frühzeitig ablehnen',
+        'description' => 'In-place-Wiederherstellungen lehnen eine angeforderte Sicherheitskopie vor dem Einreihen ab, wenn das aktuelle Auftragsziel Dropbox ist. Das Formular erklärt die Einschränkung und behält deine Auswahl bei, bis du sie ausdrücklich änderst.',
+    ],
+    'dropbox_restore_identity_and_archive_ordering' => [
+        'title' => 'Sicherere Dropbox-Wiederherstellungen und korrigierte Archivreihenfolge',
+        'description' => 'Offen-Uploads liefern VolumeVault keine überprüfbare exakte Dropbox-Datei-ID. Die asynchrone Metadatenverarbeitung ermittelt die Identität niemals anhand des Dateinamens, da die Datei ersetzt worden sein könnte. Auch neue erfolgreiche Dropbox-Sicherungen ohne nachgewiesene Datei-ID bleiben für eine Wiederherstellung aus dem Laufverlauf nicht verifizierbar. Archive auf Docker-Volume-Zielen werden jetzt korrekt mit den neuesten zuerst aufgelistet.',
+    ],
+    'secure_local_archive_reads' => [
+        'title' => 'Sichereres Lesen lokaler Archive',
+        'description' => 'Downloads lokaler Archive für Wiederherstellungen binden jetzt das Archiv-Stammverzeichnis fest, verweigern die Traversierung symbolischer Links und veröffentlichen vollständige Dateien atomar, ohne bei einem Fehler bestehende Zieldateien zu löschen.',
+    ],
+    'durable_queued_run_dispatch' => [
+        'title' => 'Zuverlässige Ausführung wartender Läufe',
+        'description' => 'Wartende Sicherungen, Wiederherstellungen und Sicherungsgruppen verwenden jetzt eine persistente Versand-Lease und werden automatisch erneut eingereiht, wenn die erste Übergabe an die Warteschlange verloren geht, ohne eine bereits von einem Worker übernommene Ausführung zu duplizieren. Eine asynchrone Queue-Verbindung ist erforderlich; der sync-Treiber wird abgelehnt, da er auf Sperren wartende Jobs nicht dauerhaft erneut einreihen kann.',
+    ],
+    'durable_terminal_notifications' => [
+        'title' => 'Zuverlaessige Abschlussbenachrichtigungen',
+        'description' => 'Abschlussbenachrichtigungen fuer Sicherungen, Wiederherstellungen und Sicherungsgruppen werden nun pro Kanal unabhaengig wiederholt, damit temporaere Fehler kein Endergebnis mehr verlieren.',
+    ],
+    'backup_run_snapshots' => [
+        'title' => 'Zuverlaessiger Verlauf von Backup-Laeufen',
+        'description' => 'Backup-Laeufe behalten jetzt ihre urspruengliche Quelle, ihr Ziel und ihren Archivdateinamen, damit Ausfuehrung, Archivmetadaten, Volume-Verlauf und Wiederherstellungen historischer Laeufe auch nach spaeteren Aenderungen am Auftrag korrekt bleiben.',
+    ],
     'backup_job_sorting' => [
         'title' => 'Sortierbare Backup-Aufträge',
         'description' => 'Backup-Aufträge können jetzt in beide Richtungen nach Name, nächster geplanter Ausführung oder letzter Ausführung sortiert werden. Die Sortierung gilt für die gesamte paginierte Liste, bleibt in der URL erhalten und ist auch über die API verfügbar.',
@@ -20,6 +44,10 @@ return [
     'docker_tcp_backup_network' => [
         'title' => 'Docker-TCP-Proxy-Netzwerk für Backups',
         'description' => 'Backups können jetzt einen Docker-TCP-Socket-Proxy über seinen Dienstnamen im Docker-Netzwerk erreichen. Setze VOLUMEVAULT_DOCKER_NETWORK auf das für die Engine sichtbare benutzerdefinierte Netzwerk; VolumeVault verbindet die temporären Offen-Backup-Container damit.',
+    ],
+    'docker_label_backups' => [
+        'title' => 'Docker label managed backups',
+        'description' => 'Running containers can now declare scheduled volume backups through Docker labels. Administrators configure trusted defaults in VolumeVault, while generated jobs stay read-only and are safely disabled when their declaration disappears or conflicts.',
     ],
     'docker_tcp_endpoint' => [
         'title' => 'Unterstützung für Docker-TCP-Endpunkte',

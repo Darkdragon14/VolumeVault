@@ -102,6 +102,7 @@ const settingsNav = computed(() => [
     ...(can.value.manageSensitiveData ? [
         { label: t('Destinations'), description: t('Storage targets'), href: '/destinations', shortcutKey: 'd' },
         { label: t('Notifications'), description: t('Alert channels'), href: '/notifications', shortcutKey: 'n' },
+        { label: t('Docker label backups'), description: t('Container automation'), href: '/settings/docker-label-backups', shortcutKey: 'l' },
         { label: t('Installation save'), description: t('Export and import setup'), href: '/installation-save', shortcutKey: 'i' },
     ] : []),
     ...(can.value.manageUsers ? [

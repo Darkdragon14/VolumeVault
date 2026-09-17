@@ -35,4 +35,9 @@ class DockerVolume extends Model
         return $this->hasMany(BackupJob::class, 'volume_name', 'name')
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME);
     }
+
+    public function isAvailable(): bool
+    {
+        return (bool) $this->getAttribute('exists');
+    }
 }

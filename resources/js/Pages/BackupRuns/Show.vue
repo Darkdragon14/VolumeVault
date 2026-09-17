@@ -12,7 +12,7 @@ const { t, formatDate } = useI18n();
 const page = usePage();
 const can = page.props.can as { runDockerActions?: boolean };
 
-const restoreHref = computed(() => `/backup-jobs/${props.run.job.id}/restore?backup=${encodeURIComponent(props.run.backup_key ?? '')}`);
+const restoreHref = computed(() => `/backup-jobs/${props.run.job.id}/restore?backup=${encodeURIComponent(props.run.backup_key ?? '')}&backup_run_id=${props.run.id}`);
 
 usePoll(2000, { only: ['run'] }, { mode: 'rest' });
 </script>
@@ -21,7 +21,7 @@ usePoll(2000, { only: ['run'] }, { mode: 'rest' });
     <Head :title="t('Backup run #{id}', { id: run.id })" />
     <AppLayout :title="t('Backup run #{id}', { id: run.id })" :subtitle="t('Inspect container output, status, timing, and errors for this backup run.')">
         <template #actions>
-            <Link v-if="can.runDockerActions && run.status === 'success' && run.backup_key" :href="restoreHref" class="btn-secondary">{{ t('Restore this backup') }}</Link>
+            <Link v-if="can.runDockerActions && run.status === 'success' && run.backup_key && !run.restore_unverifiable" :href="restoreHref" class="btn-secondary">{{ t('Restore this backup') }}</Link>
             <Link :href="`/backup-jobs/${run.job.id}`" class="btn-secondary">{{ t('Back to job') }}</Link>
         </template>
 
@@ -39,6 +39,7 @@ usePoll(2000, { only: ['run'] }, { mode: 'rest' });
                 <div class="min-w-0 sm:col-span-2"><dt class="text-xs uppercase text-slate-400">{{ t('Container') }}</dt><dd class="mt-1 break-all text-white">{{ run.docker_container_id || '-' }}</dd></div>
             </dl>
             <p v-if="run.error_message" class="mt-5 break-words rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ run.error_message }}</p>
+            <p v-if="run.restore_unverifiable" role="status" class="mt-5 break-words rounded-xl bg-amber-400/10 p-3 text-sm text-amber-100">{{ t('This Dropbox backup completed successfully, but no stable file ID was recorded. Its identity cannot be verified, so restoring this run is unavailable.') }}</p>
         </section>
 
         <section class="card mt-6 p-4 sm:p-5">

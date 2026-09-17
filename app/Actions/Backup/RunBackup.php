@@ -8,8 +8,10 @@ use App\Actions\Docker\ListDockerContainers;
 use App\Actions\Docker\RunBackupContainer;
 use App\Actions\Docker\StartDockerContainers;
 use App\Actions\Docker\StopDockerContainers;
-use App\Jobs\RecordArchiveMetadataJob;
+use App\Actions\Runs\CreateRunFinalizations;
+use App\Actions\Runs\ProcessRunFinalization;
 use App\Models\ActivityLog;
+use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
@@ -21,7 +23,9 @@ use App\Services\Logging\AppendRunLog;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use App\Support\RunHeartbeatLock;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
@@ -40,6 +44,7 @@ class RunBackup
         private readonly HostPathPolicy $hostPathPolicy,
         private readonly SendShoutrrrNotification $sendShoutrrrNotification,
         private readonly BackupScheduleCalculator $scheduleCalculator,
+        private readonly CreateRunFinalizations $createFinalizations,
     ) {}
 
     public function handle(BackupRun $run): void
@@ -66,7 +71,7 @@ class RunBackup
         }
 
         $run->refresh();
-        $run->loadMissing('job.destination');
+        $run->loadMissing('job.destination', 'snapshotDestination');
 
         $job = $run->job;
         $stoppedContainers = [];
@@ -76,14 +81,17 @@ class RunBackup
         // a manually paused job, flip it to running/active and clear pause_reason,
         // silently unpausing it. Only real scheduled/manual runs drive job state.
         if (! $this->isPreRestore($run)) {
-            // Flip the job to RUNNING atomically, only from a non-paused state. An
+            // Flip the job to RUNNING atomically, only from an active state. An
             // admin can pause the job while this run sits queued (job pause uses a
             // matching `where status != running` guard), so the two conditional
             // updates serialize: if the pause won (0 rows here), honour it — cancel
             // this run without unpausing the job.
+            $runnableStatuses = $job->isGroupMember()
+                ? [BackupJob::STATUS_ACTIVE, BackupJob::STATUS_ERROR]
+                : [BackupJob::STATUS_ACTIVE];
             $flipped = BackupJob::query()
                 ->whereKey($job->id)
-                ->where('status', '!=', BackupJob::STATUS_PAUSED)
+                ->whereIn('status', $runnableStatuses)
                 ->update([
                     'status' => BackupJob::STATUS_RUNNING,
                     'last_run_at' => $startedAt,
@@ -93,18 +101,22 @@ class RunBackup
                 $run->forceFill([
                     'status' => BackupRun::STATUS_CANCELLED,
                     'finished_at' => now(),
-                    'error_message' => 'Job was paused before this run started.',
+                    'error_message' => 'Job was no longer active before this run started.',
                 ])->save();
 
-                ActivityLog::record('backup_run_cancelled', 'Backup run cancelled: the job was paused before it started.', $run, [
+                ActivityLog::record('backup_run_cancelled', 'Backup run cancelled: the job was no longer active before it started.', $run, [
                     'backup_job_id' => $job->id,
                 ]);
+
+                $this->applyPendingLabelReconciliationIfReady($run);
 
                 return;
             }
 
             $job->refresh();
         }
+
+        $job = $run->executionJob();
 
         ActivityLog::record('backup_run_started', 'Backup run started.', $run, [
             'backup_job_id' => $job->id,
@@ -165,7 +177,7 @@ class RunBackup
             }
 
             $result = $this->runBackupContainer->handle(
-                $run->fresh(['job.destination']),
+                $run->fresh(['job.destination', 'snapshotDestination']),
                 fn () => $this->heartbeat($run, requiresRunning: true),
             );
             $this->appendRunLog->handle($run, $result->combinedOutput());
@@ -174,44 +186,17 @@ class RunBackup
                 throw new RuntimeException($result->combinedOutput() ?: 'Backup container failed.');
             }
 
-            $finishedAt = now();
-            $run->forceFill([
-                'status' => BackupRun::STATUS_SUCCESS,
-                'finished_at' => $finishedAt,
-                'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
-            ])->save();
-
-            // next_run_at is owned by CreateBackupRun, which already advanced it to
-            // the next theoretical slot when this run was queued. Recomputing it here
-            // from finishedAt would skip the slot whenever a run overruns its interval.
-            // Skipped for a pre-restore safety backup so it never unpauses or
-            // reschedules the job (see the start-of-run note).
-            if (! $this->isPreRestore($run)) {
-                $job->forceFill([
-                    'status' => BackupJob::STATUS_ACTIVE,
-                    'last_success_at' => $finishedAt,
-                    'last_error' => null,
-                    'last_error_at' => null,
-                    'pause_reason' => null,
-                ])->save();
+            if ($this->isPreRestore($run)) {
+                $run->forceFill($this->detectArchiveMetadata($run->id))->save();
             }
 
-            // Record archive metadata and, for a standalone run, send the finished
-            // notification off the critical path via a job that holds no volume
-            // lock. The destination listing can be slow (WebDAV Depth: infinity,
-            // recursive SFTP, slow NFS) and this backup's queue job keeps its overlap
-            // lock until it returns — doing the listing inline would block a
-            // legitimately-waiting same-volume run past reconciliation's grace and
-            // could get its lock force-released. A group member's metadata is
-            // deferred the same way; its group emits the single aggregated
-            // notification, so the member stays silent. Whether to notify is decided
-            // here (a standalone run does; a member does not) and passed to the job,
-            // not re-derived from backup_group_run_id when it runs — deleting a
-            // finished group nulls that column, which would otherwise make a member's
-            // pending metadata job send an unexpected standalone notification.
-            RecordArchiveMetadataJob::dispatch($run->id, ! $run->belongsToGroupRun());
+            $finishedAt = now();
+            if (! $this->markSuccessful($run, $finishedAt)) {
+                return;
+            }
+
         } catch (Throwable $exception) {
-            $this->markFailed($run, $exception);
+            $this->markFailed($run, $exception, BackupRun::STATUS_RUNNING);
         } finally {
             if ($stoppedContainers) {
                 $run->refresh();
@@ -236,6 +221,8 @@ class RunBackup
                     }
                 }
             }
+
+            $this->applyPendingLabelReconciliationIfReady($run);
         }
     }
 
@@ -278,6 +265,10 @@ class RunBackup
         $remaining = array_values(array_intersect($containerIds, $exclude));
         $run->forceFill(['stopped_container_ids' => $remaining ?: null])->save();
 
+        if ($remaining === []) {
+            $this->applyPendingLabelReconciliationIfReady($run);
+        }
+
         $message = 'Restarted containers left stopped after an interrupted run: '.implode(', ', $toRestart);
         $this->appendRunLog->handle($run, $message);
 
@@ -286,6 +277,37 @@ class RunBackup
         ]);
 
         return true;
+    }
+
+    public function applyPendingLabelReconciliationIfReady(BackupRun $run): bool
+    {
+        $freshRun = BackupRun::with('job')->find($run->id);
+
+        if ($freshRun === null
+            || ! in_array($freshRun->status, [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED], true)
+            || $freshRun->stopped_container_ids
+            || $freshRun->docker_container_cleanup_pending
+            || ! $freshRun->job?->isDockerLabelManaged()) {
+            return false;
+        }
+
+        $pending = $freshRun->job->pending_label_reconciliation;
+
+        try {
+            return app(ApplyPendingDockerLabelReconciliation::class)->handle($freshRun->job);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            DB::transaction(function () use ($freshRun, $pending, $exception): void {
+                $job = BackupJob::query()->lockForUpdate()->find($freshRun->backup_job_id);
+
+                if ($job?->pending_label_reconciliation === $pending && is_array($pending)) {
+                    $job->update(['label_reconciliation_error' => str($exception->getMessage())->limit(1000)->toString()]);
+                }
+            });
+
+            return false;
+        }
     }
 
     /**
@@ -374,137 +396,217 @@ class RunBackup
         return $run->trigger === BackupRun::TRIGGER_PRE_RESTORE;
     }
 
+    private function markSuccessful(BackupRun $run, CarbonInterface $finishedAt): bool
+    {
+        $finalizationIds = [];
+        $transitioned = DB::transaction(function () use ($run, $finishedAt, &$finalizationIds): bool {
+            // Label reconciliation locks jobs before inspecting their runs. Keep the
+            // same order so it cannot observe a terminal run between lifecycle writes.
+            $job = BackupJob::query()->lockForUpdate()->find($run->backup_job_id);
+
+            if ($job === null) {
+                return false;
+            }
+
+            $lockedRun = BackupRun::query()->lockForUpdate()->find($run->id);
+
+            if ($lockedRun?->status !== BackupRun::STATUS_RUNNING) {
+                return false;
+            }
+
+            // next_run_at is owned by CreateBackupRun, which already advanced it to
+            // the next theoretical slot when this run was queued. Recomputing it here
+            // from finishedAt would skip the slot whenever a run overruns its interval.
+            // A pre-restore safety backup remains invisible to the job lifecycle.
+            if (! $this->isPreRestore($lockedRun)) {
+                $job->forceFill([
+                    'status' => BackupJob::STATUS_ACTIVE,
+                    'last_success_at' => $finishedAt,
+                    'last_error' => null,
+                    'last_error_at' => null,
+                    'pause_reason' => null,
+                ])->save();
+            }
+
+            $lockedRun->forceFill([
+                'status' => BackupRun::STATUS_SUCCESS,
+                'finished_at' => $finishedAt,
+                'duration_seconds' => ($lockedRun->started_at ?? $finishedAt)->diffInSeconds($finishedAt),
+                'archive_metadata_pending' => ! $this->isPreRestore($lockedRun),
+            ])->save();
+
+            if (! $this->isPreRestore($lockedRun)) {
+                $finalizationIds[] = $this->createFinalizations->createMetadata($lockedRun)->id;
+            }
+
+            if (! $lockedRun->belongsToGroupRun() && ! $this->isPreRestore($lockedRun)) {
+                array_push($finalizationIds, ...$this->createFinalizations->createBackupNotifications($lockedRun, $job));
+            }
+
+            return true;
+        });
+
+        if ($transitioned) {
+            $run->refresh();
+            app(ProcessRunFinalization::class)->dispatch($finalizationIds);
+        }
+
+        return $transitioned;
+    }
+
     /**
      * Force a run into the FAILED state and reschedule its job.
      *
-     * Shared by the in-process catch block, the queue job's failed() hook
-     * (worker timeout / restart) and the stale-run reconciliation command.
+     * Shared by the in-process catch block and stale-run reconciliation.
      *
-     * The transition is a conditional UPDATE (non-terminal → failed), not an
-     * in-memory check + save: reconciliation holds models it materialized earlier
-     * and the worker may finish a run between that snapshot and this call. The
-     * condition makes the write lose that race rather than overwrite a
-     * just-succeeded run. Returns whether it actually transitioned so callers can
-     * tell a genuinely-failed stuck run from a no-op on an already-terminal run.
+     * The job and run are reloaded under locks before the transition, so stale
+     * reconciliation models cannot overwrite a run that already finished. Returns
+     * whether it actually transitioned so callers can tell a genuinely-failed stuck
+     * run from a no-op on an already-terminal run.
      */
-    public function markFailed(BackupRun $run, Throwable $exception, ?callable $afterTransition = null): bool
-    {
-        $run->loadMissing('job.destination');
-
-        $job = $run->job;
+    public function markFailed(
+        BackupRun $run,
+        Throwable $exception,
+        ?string $expectedStatus = null,
+        ?CarbonInterface $heartbeatCutoff = null,
+        ?callable $afterTransition = null,
+        ?string $expectedDispatchToken = null,
+    ): bool {
         $finishedAt = now();
-        $startedAt = $run->started_at ?? $finishedAt;
         $message = str($exception->getMessage() ?: 'Backup failed.')->limit(1000)->toString();
+        $job = null;
+        $finalizationIds = [];
 
-        $transitioned = BackupRun::query()
-            ->whereKey($run->getKey())
-            ->whereNotIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
-            ->update([
+        $transitioned = DB::transaction(function () use ($run, $finishedAt, $message, $expectedStatus, $heartbeatCutoff, $expectedDispatchToken, &$job, &$finalizationIds): bool {
+            // Acquire the job first to match Docker label mutation lock ordering.
+            $job = BackupJob::query()->lockForUpdate()->find($run->backup_job_id);
+
+            if ($job === null) {
+                return false;
+            }
+
+            $lockedRun = BackupRun::query()->lockForUpdate()->find($run->id);
+
+            if ($lockedRun === null || in_array($lockedRun->status, [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED], true)) {
+                return false;
+            }
+
+            if ($expectedStatus !== null && $lockedRun->status !== $expectedStatus) {
+                return false;
+            }
+
+            if ($expectedDispatchToken !== null) {
+                if ($lockedRun->dispatch_token !== $expectedDispatchToken
+                    || $lockedRun->dispatch_attempted_at === null
+                    || $lockedRun->dispatch_published_at === null
+                    || ! $lockedRun->dispatch_attempted_at->isAfter($lockedRun->dispatch_published_at)
+                    || $heartbeatCutoff === null
+                    || ! $lockedRun->dispatch_attempted_at->lessThan($heartbeatCutoff)) {
+                    return false;
+                }
+            } else {
+                $progressedAt = $lockedRun->last_heartbeat_at ?? $lockedRun->started_at ?? $lockedRun->created_at;
+
+                if ($heartbeatCutoff !== null && ($progressedAt === null || ! $progressedAt->lessThan($heartbeatCutoff))) {
+                    return false;
+                }
+            }
+
+            $startedAt = $lockedRun->started_at ?? $finishedAt;
+
+            // A failed pre-restore safety backup must not flip the job to error or
+            // reschedule it. The failure belongs to the restore lifecycle instead.
+            if (! $this->isPreRestore($lockedRun)) {
+                $attributes = [
+                    'last_error' => $message,
+                    'last_error_at' => $finishedAt,
+                ];
+
+                // A group member delegates scheduling to its group.
+                if (! $job->isGroupMember()) {
+                    $attributes['next_run_at'] = $this->scheduleCalculator->nextRunAt(
+                        $job->schedule_type,
+                        $job->schedule_config ?? [],
+                        $job->next_run_at && $job->next_run_at->isPast() ? $job->next_run_at : null,
+                        $job->timezone,
+                    );
+                }
+
+                if ($job->status !== BackupJob::STATUS_PAUSED) {
+                    $attributes['status'] = BackupJob::STATUS_ERROR;
+                }
+
+                $job->forceFill($attributes)->save();
+            }
+
+            $lockedRun->forceFill([
                 'status' => BackupRun::STATUS_FAILED,
                 'finished_at' => $finishedAt,
                 'duration_seconds' => $startedAt->diffInSeconds($finishedAt),
                 'error_message' => $message,
-            ]);
+            ])->save();
 
-        if ($transitioned === 0) {
+            if (! $lockedRun->belongsToGroupRun() && ! $this->isPreRestore($lockedRun)) {
+                array_push($finalizationIds, ...$this->createFinalizations->createBackupNotifications($lockedRun, $job));
+            }
+
+            return true;
+        });
+
+        if (! $transitioned) {
             return false;
         }
 
         $run->refresh();
 
         if ($afterTransition !== null) {
+            // In particular, stale-run reconciliation releases its heartbeat lock
+            // here, only after both terminal lifecycle writes have committed.
             $afterTransition();
         }
 
         $this->appendRunLog->handle($run, $message);
 
-        // A failed pre-restore safety backup must not flip the job to error or
-        // reschedule it — the failure belongs to the restore, which aborts and is
-        // surfaced through its own RestoreRun. Leaving the job (incl. a paused one)
-        // untouched keeps its lifecycle intact.
-        if ($job && ! $this->isPreRestore($run)) {
-            $attributes = [
-                'last_error' => $message,
-                'last_error_at' => $finishedAt,
-            ];
-
-            // A group member delegates scheduling to its group — never advance its
-            // own next_run_at (which stays null); the group owns the next slot.
-            if (! $job->isGroupMember()) {
-                $attributes['next_run_at'] = $this->scheduleCalculator->nextRunAt(
-                    $job->schedule_type,
-                    $job->schedule_config ?? [],
-                    $job->next_run_at && $job->next_run_at->isPast() ? $job->next_run_at : null,
-                    $job->timezone,
-                );
-            }
-
-            $job->forceFill($attributes)->save();
-
-            // Flip to error only if the job is not currently paused, atomically —
-            // an admin can pause between reconciliation's stale selection and here,
-            // and $job is a possibly-stale snapshot. A conditional UPDATE loses that
-            // race instead of resurrecting a paused (member) job that grouped
-            // runnableMembers() (which excludes only paused) would then pick up again.
-            BackupJob::query()
-                ->whereKey($job->id)
-                ->where('status', '!=', BackupJob::STATUS_PAUSED)
-                ->update(['status' => BackupJob::STATUS_ERROR]);
-        }
-
         ActivityLog::record('backup_run_failed', 'Backup run failed.', $run, [
             'backup_job_id' => $job?->id,
         ]);
 
-        // Member runs stay silent: the group run aggregates the outcome and emits
-        // the single success/fail notification for the whole set. A standalone run
-        // notifies inline while still holding the overlap lock, so refresh the
-        // heartbeat up front and after each channel (each ~60s) to keep a waiting
-        // same-volume run from being reconciled as stale.
-        if (! $run->belongsToGroupRun()) {
-            $this->heartbeat($run);
-            $this->sendNotifications($run->fresh(['job.destination']), fn () => $this->heartbeat($run));
-        }
+        app(ProcessRunFinalization::class)->dispatch($finalizationIds);
 
         return true;
     }
 
-    private function recordBackupArchiveMetadata(BackupRun $run): void
+    private function recordBackupArchiveMetadata(BackupRun $run): bool
     {
-        $expectedFilename = $this->runBackupContainer->backupFilename($run);
+        $expectedFilename = $run->backup_filename ?: $this->runBackupContainer->backupFilename($run);
+        $destination = $run->destinationForRun();
 
-        try {
-            $object = collect($this->listBackupObjects->handle($run->job->destination))
-                ->first(fn (array $object): bool => $this->matchesExpectedBackupObject($object, $expectedFilename));
-        } catch (Throwable) {
+        if ($destination === null) {
             $this->appendRunLog->handle($run, 'Backup archive size could not be detected.');
 
-            return;
+            return false;
         }
+
+        if ($destination->provider === BackupDestination::PROVIDER_DROPBOX) {
+            $this->dropboxArchiveMetadata($run);
+
+            return true;
+        }
+
+        $object = $this->listBackupObjects->findByFilename($destination, $expectedFilename);
 
         if (! $object) {
             $this->appendRunLog->handle($run, 'Backup archive size could not be detected.');
 
-            return;
+            return false;
         }
 
         $run->forceFill([
             'backup_key' => (string) ($object['key'] ?? $object['display_name'] ?? $expectedFilename),
             'backup_size_bytes' => array_key_exists('size', $object) ? (int) $object['size'] : null,
         ])->save();
-    }
 
-    private function matchesExpectedBackupObject(array $object, string $expectedFilename): bool
-    {
-        foreach (['key', 'display_name'] as $field) {
-            $value = (string) ($object[$field] ?? '');
-
-            if ($value === $expectedFilename || str_ends_with($value, '/'.$expectedFilename)) {
-                return true;
-            }
-        }
-
-        return false;
+        return true;
     }
 
     /**
@@ -512,15 +614,35 @@ class RunBackup
      * the potentially-slow destination listing; dispatched as a job for group
      * members so it never blocks the group run's critical path.
      */
-    public function recordArchiveMetadata(int $backupRunId, bool $sendFinishedNotification = false): void
-    {
-        $run = BackupRun::with('job.destination')->find($backupRunId);
+    public function recordArchiveMetadata(
+        int $backupRunId,
+        bool $sendFinishedNotification = false,
+        bool $clearPendingMirror = true,
+        bool $throwOnFailure = false,
+    ): void {
+        $run = BackupRun::with('job.destination', 'snapshotDestination')->find($backupRunId);
 
         if ($run === null) {
             return;
         }
 
-        $this->recordBackupArchiveMetadata($run);
+        try {
+            $recorded = $this->recordBackupArchiveMetadata($run);
+
+            if (! $recorded && $throwOnFailure) {
+                throw new RuntimeException('Backup archive metadata could not be detected.');
+            }
+        } catch (Throwable $exception) {
+            $this->appendRunLog->handle($run, 'Backup archive size could not be detected.');
+
+            if ($throwOnFailure) {
+                throw $exception;
+            }
+        } finally {
+            if ($clearPendingMirror) {
+                $run->forceFill(['archive_metadata_pending' => false])->save();
+            }
+        }
 
         // Whether to send the finished notification was decided at dispatch (true for
         // a standalone run, false for a group member) and passed in — not re-derived
@@ -530,8 +652,54 @@ class RunBackup
         // lock returns right after marking the run terminal instead of blocking a
         // waiting same-volume run through the slow listing above.
         if ($sendFinishedNotification) {
-            $this->sendNotifications($run->fresh(['job.destination']));
+            $this->sendNotifications($run->fresh(['job.destination', 'snapshotDestination']));
         }
+    }
+
+    /** @return array{backup_key: string, backup_size_bytes: ?int} */
+    public function detectArchiveMetadata(int $backupRunId): array
+    {
+        $run = BackupRun::with('job.destination', 'snapshotDestination')->findOrFail($backupRunId);
+        $expectedFilename = $run->backup_filename ?: $this->runBackupContainer->backupFilename($run);
+        $destination = $run->destinationForRun();
+
+        if ($destination === null) {
+            throw new RuntimeException('Backup archive metadata could not be detected.');
+        }
+
+        if ($destination->provider === BackupDestination::PROVIDER_DROPBOX) {
+            return $this->dropboxArchiveMetadata($run);
+        }
+
+        $object = $this->listBackupObjects->findByFilename($destination, $expectedFilename);
+
+        if (! $object) {
+            throw new RuntimeException('Backup archive metadata could not be detected.');
+        }
+
+        return [
+            'backup_key' => (string) ($object['key'] ?? $object['display_name'] ?? $expectedFilename),
+            'backup_size_bytes' => array_key_exists('size', $object) ? (int) $object['size'] : null,
+        ];
+    }
+
+    /**
+     * Offen does not return Dropbox's upload ID to this pipeline. A later filename
+     * lookup cannot prove identity: the uploaded file may have been replaced.
+     * Only retain an exact ID already captured for the run.
+     *
+     * @return array{backup_key: string, backup_size_bytes: ?int}
+     */
+    private function dropboxArchiveMetadata(BackupRun $run): array
+    {
+        if (! str_starts_with((string) $run->backup_key, 'id:')) {
+            throw new RuntimeException('Dropbox archive identity cannot be verified because the upload did not capture a stable file ID.');
+        }
+
+        return [
+            'backup_key' => $run->backup_key,
+            'backup_size_bytes' => $run->backup_size_bytes,
+        ];
     }
 
     /**

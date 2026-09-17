@@ -19,7 +19,12 @@ class RunBackupGroupJob implements ShouldQueue
 
     public int $timeout = 0;
 
-    public function __construct(public readonly int $backupGroupRunId) {}
+    public ?string $dispatchToken = null;
+
+    public function __construct(public readonly int $backupGroupRunId, ?string $dispatchToken = null)
+    {
+        $this->dispatchToken = $dispatchToken;
+    }
 
     /**
      * A group run drives its members sequentially and each may wait on its
@@ -61,20 +66,20 @@ class RunBackupGroupJob implements ShouldQueue
     }
 
     /**
-     * Called by the queue when the job fails outright (timeout, queue:restart,
-     * uncaught exception). Ensures the group run never stays stuck running/queued
-     * and that the single aggregated failure notification still fires.
+     * Queue failure is not authoritative for terminal lifecycle state. It may only
+     * make a still-queued run eligible for publication again; a worker that already
+     * claimed the row keeps its running state and publication markers.
      */
     public function failed(Throwable $exception): void
     {
-        $groupRun = BackupGroupRun::find($this->backupGroupRunId);
-
-        // Only fail a run the queue never actually started. A RUNNING run is owned
-        // by its worker (timeout 0, so a long sequential group is legitimate); a
-        // copy redelivered until retryUntil must not fail it out from under a live
-        // worker. A genuinely dead RUNNING run is closed by stale-run reconciliation.
-        if ($groupRun && $groupRun->status === BackupGroupRun::STATUS_QUEUED) {
-            app(RunBackupGroup::class)->markFailed($groupRun, $exception);
-        }
+        BackupGroupRun::query()
+            ->whereKey($this->backupGroupRunId)
+            ->where('status', BackupGroupRun::STATUS_QUEUED)
+            ->where('dispatch_token', $this->dispatchToken)
+            ->update([
+                'dispatch_token' => null,
+                'dispatch_attempted_at' => null,
+                'dispatch_published_at' => null,
+            ]);
     }
 }

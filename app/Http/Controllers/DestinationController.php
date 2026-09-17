@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Actions\Destinations\NormalizeDestinationData;
+use App\Actions\Destinations\DestinationMutationBlocked;
+use App\Actions\Destinations\MutateDestination;
 use App\Concerns\PaginateWithPreference;
 use App\Http\Requests\StoreDestinationRequest;
 use App\Http\Requests\UpdateDestinationRequest;
@@ -11,6 +12,7 @@ use App\Models\BackupDestination;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\BackupDestinations\TestBackupDestination;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -43,15 +45,13 @@ class DestinationController extends Controller
         ]);
     }
 
-    public function store(StoreDestinationRequest $request, NormalizeDestinationData $normalizeDestinationData)
+    public function store(StoreDestinationRequest $request, MutateDestination $mutateDestination)
     {
-        $data = $normalizeDestinationData->handle([
+        $destination = $mutateDestination->create([
             ...$request->validated(),
             'use_path_style_endpoint' => $request->boolean('use_path_style_endpoint'),
             'is_active' => $request->boolean('is_active', true),
         ]);
-
-        $destination = BackupDestination::create($data);
 
         ActivityLog::record('backup_destination_created', 'Backup destination created.', $destination);
 
@@ -66,44 +66,49 @@ class DestinationController extends Controller
         ]);
     }
 
-    public function update(UpdateDestinationRequest $request, BackupDestination $destination, NormalizeDestinationData $normalizeDestinationData)
+    public function update(UpdateDestinationRequest $request, BackupDestination $destination, MutateDestination $mutateDestination)
     {
-        $data = $normalizeDestinationData->handle([
+        $data = [
             ...$request->validated(),
             'use_path_style_endpoint' => $request->boolean('use_path_style_endpoint'),
             'is_active' => $request->boolean('is_active'),
-        ], $destination);
+        ];
 
-        $destination->update($data);
+        try {
+            $mutateDestination->update($destination, $data);
+        } catch (DestinationMutationBlocked $exception) {
+            throw ValidationException::withMessages(['is_active' => $exception->getMessage()]);
+        }
 
         return redirect()->route('destinations.index')->with('success', 'Destination updated.');
     }
 
-    public function destroy(BackupDestination $destination)
+    public function destroy(BackupDestination $destination, MutateDestination $mutateDestination)
     {
-        // Deleting a destination cascades its jobs and their runs, bypassing the
-        // per-job delete guard. Refuse while any of those runs is still in flight or
-        // holds stopped containers, so reconciliation keeps the row it needs.
-        if ($destination->hasRunInProgress()) {
-            return back()->with('error', 'A backup or restore using this destination is in progress. Wait for it to finish before deleting it.');
+        try {
+            $mutateDestination->delete($destination);
+        } catch (DestinationMutationBlocked $exception) {
+            return back()->with('error', $exception->getMessage());
         }
-
-        $destination->delete();
 
         return redirect()->route('destinations.index')->with('success', 'Destination deleted.');
     }
 
-    public function updateActive(Request $request, BackupDestination $destination)
+    public function updateActive(Request $request, BackupDestination $destination, MutateDestination $mutateDestination)
     {
         $request->validate([
             'is_active' => ['required', 'boolean'],
         ]);
 
-        $destination->forceFill([
-            'is_active' => $request->boolean('is_active'),
-        ])->save();
+        $isActive = $request->boolean('is_active');
 
-        return back()->with('success', $destination->is_active ? 'Destination enabled.' : 'Destination disabled.');
+        try {
+            $mutateDestination->setActive($destination, $isActive);
+        } catch (DestinationMutationBlocked $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', $isActive ? 'Destination enabled.' : 'Destination disabled.');
     }
 
     public function test(BackupDestination $destination, TestBackupDestination $testBackupDestination)
