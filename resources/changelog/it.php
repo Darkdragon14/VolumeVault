@@ -1,17 +1,21 @@
 <?php
 
 return [
+    'remote_backup_groups' => [
+        'title' => 'Gruppi di backup su host locali e remoti',
+        'description' => 'I gruppi coordinano membri locali, remoti e misti in sequenza con un unico risultato aggregato. Il coordinamento persistente conserva membri, origini e politica di errore; il lavoro assegnato termina durante la manutenzione mentre il membro successivo attende. I controlli funzionano in modalità orchestratore e le viste identificano gli host. Ogni membro completa il proprio ciclo di arresto, backup e riavvio; non è uno snapshot coerente tra host. Sono supportati gli agenti backup-v1 esistenti.',
+    ],
     'agent_execution_safety_and_identity' => [
         'title' => 'Esecuzione sicura degli agenti e selezione precisa delle risorse',
         'description' => 'I controlli S3 degli agenti rifiutano endpoint discordanti. I container ausiliari devono essere rimossi prima di riavviare le applicazioni, anche dopo una disconnessione Docker. I collegamenti ai volumi mantengono l’host, la selezione dell’archivio trasmette il contesto storico e i ripristini non ereditano modifiche successive al tipo di origine del processo.',
     ],
     'remote_agent_execution' => [
         'title' => 'Backup e ripristini tramite agenti Docker',
-        'description' => 'Gli agenti compatibili eseguono backup e ripristini individuali con comandi cifrati persistenti e registri privati di recupero. Una destinazione di rete condivisa consente il ripristino su un altro host senza socket Docker sull’orchestratore. Risultati e metadati dei backup di sicurezza sopravvivono alle riconnessioni senza ripetere operazioni completate. Gruppi distribuiti e trasferimento di archivi locali tra host non sono ancora disponibili.',
+        'description' => 'Gli agenti compatibili eseguono backup e ripristini con comandi cifrati persistenti e registri privati di recupero. Una destinazione di rete condivisa consente il ripristino su un altro host senza socket Docker sull’orchestratore. Risultati e metadati dei backup di sicurezza sopravvivono alle riconnessioni senza ripetere operazioni completate. Il trasferimento di archivi locali tra host non è ancora disponibile.',
     ],
     'remote_host_workflows' => [
         'title' => 'Configurazione di backup e ripristini per host',
-        'description' => 'I job autonomi possono usare agent registrati, anche offline e in modalità solo orchestratore. Lo storage di rete condiviso consente il ripristino su un altro host. Inventario, percorsi e destinazioni locali sono isolati per host. Trasferimenti di archivi locali tra host e gruppi remoti non sono ancora disponibili.',
+        'description' => 'I job possono usare agent registrati, anche offline e in modalità solo orchestratore. Lo storage di rete condiviso consente il ripristino su un altro host. Inventario, percorsi e destinazioni locali sono isolati per host. I trasferimenti di archivi locali tra host non sono ancora disponibili.',
     ],
     'docker_host_metrics' => [
         'title' => 'Informazioni utili sugli host locali e sugli agenti',

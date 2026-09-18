@@ -191,6 +191,15 @@ class SendShoutrrrNotification
         }
     }
 
+    public function sendGroupRunStartedToChannel(BackupGroupRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('group', 'initiatedBy');
+        $result = $this->send($channel, $this->groupRunTitle($run), $this->groupRunMessage($run), NotificationEvent::Start);
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Backup group start notification delivery failed.');
+        }
+    }
+
     /**
      * Notify the backup job's channels about a restore lifecycle event
      * (started / succeeded / failed). Reuses the job's channels and its

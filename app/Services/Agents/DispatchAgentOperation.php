@@ -2,6 +2,7 @@
 
 namespace App\Services\Agents;
 
+use App\Actions\Backup\AdvanceBackupGroupRun;
 use App\Models\AgentOperation;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
@@ -18,6 +19,9 @@ class DispatchAgentOperation
     {
         return DB::transaction(function () use ($run): bool {
             $run = $run->fresh(['job']);
+            if ($run instanceof BackupRun && $run->belongsToGroupRun() && ! AdvanceBackupGroupRun::authorizes($run)) {
+                return false;
+            }
             $hostId = $run instanceof BackupRun ? $run->docker_host_id : $run->target_docker_host_id;
             if ($hostId === DockerHost::LOCAL_ID || $run->status !== 'queued' || app(HostWorkAdmission::class)->isWaiting($run)) {
                 return false;

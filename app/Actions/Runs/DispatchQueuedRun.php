@@ -2,6 +2,7 @@
 
 namespace App\Actions\Runs;
 
+use App\Actions\Backup\AdvanceBackupGroupRun;
 use App\Jobs\RunBackupGroupJob;
 use App\Jobs\RunBackupJob;
 use App\Jobs\RunRestoreJob;
@@ -32,6 +33,15 @@ class DispatchQueuedRun
     {
         $run->refresh();
 
+        if ($run instanceof BackupGroupRun && $run->member_run_ids !== null) {
+            app(AdvanceBackupGroupRun::class)->handle($run);
+
+            return true;
+        }
+        if ($run instanceof BackupRun && $run->belongsToGroupRun() && ! AdvanceBackupGroupRun::authorizes($run)) {
+            return false;
+        }
+
         if (($run instanceof BackupRun && $run->docker_host_id !== DockerHost::LOCAL_ID)
             || ($run instanceof RestoreRun && $run->target_docker_host_id !== DockerHost::LOCAL_ID)) {
             return app(DispatchAgentOperation::class)->handle($run);
@@ -49,7 +59,7 @@ class DispatchQueuedRun
             throw new RuntimeException('Queued backup and restore runs require an asynchronous queue connection; QUEUE_CONNECTION=sync is not supported.');
         }
 
-        if ($run instanceof BackupRun && ($run->belongsToGroupRun() || $run->trigger === BackupRun::TRIGGER_PRE_RESTORE)) {
+        if ($run instanceof BackupRun && $run->trigger === BackupRun::TRIGGER_PRE_RESTORE) {
             return false;
         }
 

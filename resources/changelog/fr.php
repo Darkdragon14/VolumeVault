@@ -1,17 +1,21 @@
 <?php
 
 return [
+    'remote_backup_groups' => [
+        'title' => 'Groupes de sauvegarde sur des hôtes locaux et distants',
+        'description' => 'Les groupes coordonnent les membres locaux, distants ou mixtes de manière séquentielle avec un résultat global. La coordination durable conserve les membres, les sources et la politique en cas d’échec ; le travail attribué se termine pendant la maintenance, puis le membre suivant attend. Les commandes fonctionnent en mode orchestrateur et les membres affichent leur hôte. Chaque membre effectue son propre cycle d’arrêt, sauvegarde et redémarrage ; ce n’est pas un instantané cohérent entre hôtes. Les agents backup-v1 existants sont compatibles.',
+    ],
     'agent_execution_safety_and_identity' => [
         'title' => 'Exécution des agents sécurisée et sélection précise des ressources',
         'description' => 'Les contrôles S3 des agents refusent les endpoints contradictoires. Les helpers doivent être supprimés avant le redémarrage des applications, même après une coupure Docker. Les raccourcis de volumes conservent leur hôte, la sélection d’archive transmet son contexte historique et une restauration n’hérite plus d’un type de source modifié sur le job.',
     ],
     'remote_agent_execution' => [
         'title' => 'Sauvegardes et restaurations exécutées par les agents',
-        'description' => 'Les agents compatibles exécutent les sauvegardes et restaurations individuelles avec des commandes chiffrées persistantes et un journal local de récupération. Une destination réseau partagée permet de restaurer sur un autre hôte sans socket Docker sur l’orchestrateur. Résultats et métadonnées des sauvegardes de sécurité survivent aux reconnexions sans rejouer le travail terminé. Les groupes distribués et le relais d’archives locales entre hôtes restent indisponibles.',
+        'description' => 'Les agents compatibles exécutent les sauvegardes et restaurations avec des commandes chiffrées persistantes et un journal local de récupération. Une destination réseau partagée permet de restaurer sur un autre hôte sans socket Docker sur l’orchestrateur. Résultats et métadonnées des sauvegardes de sécurité survivent aux reconnexions sans rejouer le travail terminé. Le relais d’archives locales entre hôtes reste indisponible.',
     ],
     'remote_host_workflows' => [
         'title' => 'Configuration des sauvegardes et restaurations par hôte',
-        'description' => 'Les jobs autonomes peuvent cibler des agents enregistrés, même hors ligne et en mode orchestrateur seul. Les restaurations peuvent cibler un autre hôte avec un stockage réseau partagé. Inventaires, chemins et destinations locales sont isolés par hôte. Le transfert des archives locales entre hôtes et les groupes distants restent indisponibles.',
+        'description' => 'Les jobs peuvent cibler des agents enregistrés, même hors ligne et en mode orchestrateur seul. Les restaurations peuvent cibler un autre hôte avec un stockage réseau partagé. Inventaires, chemins et destinations locales sont isolés par hôte. Le transfert des archives locales entre hôtes reste indisponible.',
     ],
     'docker_host_metrics' => [
         'title' => 'Informations utiles sur les hôtes locaux et les agents',

@@ -1,17 +1,21 @@
 <?php
 
 return [
+    'remote_backup_groups' => [
+        'title' => 'Mentési csoportok helyi és távoli gazdagépeken',
+        'description' => 'A csoportok helyi, távoli és vegyes tagokat koordinálnak egymás után, egyetlen összesített eredménnyel. A tartós koordináció megőrzi a tagságot, a forrásokat és a hibakezelési szabályt; a kiosztott munka karbantartás alatt befejeződik, a következő tag pedig vár. A csoportvezérlés orchestrator módban is működik, a nézetek jelzik a gazdagépet. Minden tag saját leállítási, mentési és újraindítási ciklust végez; ez nem gazdagépek közötti konzisztens pillanatkép. A meglévő backup-v1 ügynökök támogatottak.',
+    ],
     'agent_execution_safety_and_identity' => [
         'title' => 'Biztonságos ügynökvégrehajtás és pontos erőforrás-választás',
         'description' => 'Az ügynökök S3-ellenőrzése elutasítja az ellentmondó végpontokat. A segédkonténereket az alkalmazások újraindítása előtt el kell távolítani, Docker-kapcsolathiba után is. A kötetlinkek megőrzik a gépet, az archívum kiválasztása átadja a történeti kontextust, és a visszaállítás nem örökli a feladat később módosított forrástípusát.',
     ],
     'remote_agent_execution' => [
         'title' => 'Mentés és visszaállítás Docker-ügynökökkel',
-        'description' => 'A kompatibilis ügynökök önálló mentéseket és visszaállításokat hajtanak végre tartós titkosított parancsokkal és saját helyreállítási naplóval. Megosztott hálózati célról másik gépre is visszaállíthatók az adatok az orchestrátor Docker-socketje nélkül. Az eredmények és biztonsági mentések metaadatai újracsatlakozáskor megmaradnak, az elkészült munka megismétlése nélkül. Az elosztott csoportok és a helyi archívumok gépek közötti átvitele még nem érhetők el.',
+        'description' => 'A kompatibilis ügynökök mentéseket és visszaállításokat hajtanak végre tartós titkosított parancsokkal és saját helyreállítási naplóval. Megosztott hálózati célról másik gépre is visszaállíthatók az adatok az orchestrátor Docker-socketje nélkül. Az eredmények és biztonsági mentések metaadatai újracsatlakozáskor megmaradnak, az elkészült munka megismétlése nélkül. A helyi archívumok gépek közötti átvitele még nem érhető el.',
     ],
     'remote_host_workflows' => [
         'title' => 'Gépenkénti mentési és visszaállítási beállítások',
-        'description' => 'Az önálló feladatok regisztrált ügynököket célozhatnak offline állapotban és csak vezérlő módban is. Megosztott hálózati tárolóról másik gépre is lehet visszaállítani. A leltár, az útvonalak és a helyi célok gépenként elkülönülnek. A helyi archívumok gépek közötti átvitele és a távoli mentési csoportok még nem érhetők el.',
+        'description' => 'A feladatok regisztrált ügynököket célozhatnak offline állapotban és csak vezérlő módban is. Megosztott hálózati tárolóról másik gépre is lehet visszaállítani. A leltár, az útvonalak és a helyi célok gépenként elkülönülnek. A helyi archívumok gépek közötti átvitele még nem érhető el.',
     ],
     'docker_host_metrics' => [
         'title' => 'Hasznos adatok a helyi gépekről és ügynökökről',

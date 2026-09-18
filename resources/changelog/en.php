@@ -1,17 +1,21 @@
 <?php
 
 return [
+    'remote_backup_groups' => [
+        'title' => 'Backup groups across local and remote hosts',
+        'description' => 'Groups now coordinate local, remote and mixed members sequentially with one aggregate outcome. Durable coordination preserves membership, sources and failure policy; assigned work drains during maintenance while the next member waits. Group controls work in orchestrator mode and member views identify their hosts. Each member completes its own stop, backup and restart cycle; this is not a consistent cross-host snapshot. Existing backup-v1 agents are supported.',
+    ],
     'agent_execution_safety_and_identity' => [
         'title' => 'Safer agent execution and precise resource selection',
         'description' => 'Agent S3 endpoint checks reject conflicting configurations. Backup helpers must be removed before applications restart, including after a lost Docker connection. Volume shortcuts preserve their host, restore selection carries the historical backup context, and historical restores no longer inherit a changed job source type.',
     ],
     'remote_agent_execution' => [
         'title' => 'Back up and restore through Docker agents',
-        'description' => 'Compatible agents now execute standalone backups and restores using durable encrypted commands and private recovery journals. Restore from a shared network destination onto another host without a Docker socket on the orchestrator. Results and safety-backup metadata survive reconnects without replaying completed work. Distributed groups and cross-host local-archive relaying remain unavailable.',
+        'description' => 'Compatible agents now execute backups and restores using durable encrypted commands and private recovery journals. Restore from a shared network destination onto another host without a Docker socket on the orchestrator. Results and safety-backup metadata survive reconnects without replaying completed work. Cross-host local-archive relaying remains unavailable.',
     ],
     'remote_host_workflows' => [
         'title' => 'Host-aware backup and restore configuration',
-        'description' => 'Standalone jobs can target registered agents, including offline agents and orchestrator-only deployments. Restores can select another host when using shared network storage. Inventory, host paths and local destinations are scoped to their host. Cross-host transfers of host-local archives and remote backup groups remain unavailable.',
+        'description' => 'Jobs can target registered agents, including offline agents and orchestrator-only deployments. Restores can select another host when using shared network storage. Inventory, host paths and local destinations are scoped to their host. Cross-host transfers of host-local archives remain unavailable.',
     ],
     'docker_host_metrics' => [
         'title' => 'Useful local and agent host information',

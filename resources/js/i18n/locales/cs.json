@@ -1,4 +1,5 @@
 {
+  "hostWorkflow.groupRunUnavailable": "Tuto skupinu nyní nelze spustit. Zkontrolujte stav, čekající běhy, spustitelné členy, schopnosti hostitelů, místní spouštění a nastavení údržby.",
   "hostWorkflow.sourceHost": "Zdrojový hostitel Dockeru",
   "hostWorkflow.targetHost": "Cílový hostitel Dockeru",
   "hostWorkflow.destinationHost": "Hostitel vlastnící cíl",
@@ -7,7 +8,7 @@
   "hostWorkflow.noVolumes": "V inventáři tohoto hostitele nejsou žádné svazky. Synchronizujte místního hostitele, počkejte na inventář agenta nebo zvolte cestu hostitele.",
   "hostWorkflow.allowlist": "Povolené cesty na tomto agentovi: {paths}",
   "hostWorkflow.allowlistUnknown": "Seznam povolených cest agenta není dostupný. Agent cestu ověří před spuštěním.",
-  "hostWorkflow.groupsUnsupported": "Vzdálené skupiny záloh zatím nejsou podporovány. Použijte samostatně plánovanou úlohu.",
+  "hostWorkflow.groupExecution": "Skupiny mohou zahrnovat místní i vzdálené hostitele. Každý člen zastaví své kontejnery, provede zálohu a znovu je spustí před dalším členem. Nejde o konzistentní snímek napříč hostiteli.",
   "hostWorkflow.relayUnsupported": "Místní archivy lze obnovit pouze na hostiteli, kterému patří. Přenos mezi hostiteli zatím není podporován.",
   "hostWorkflow.sharedRestore": "Sdílené síťové cíle umožňují obnovu na jiného hostitele. Obnova mezi hostiteli vždy vytvoří nový svazek.",
   "hostWorkflow.targetExists": "Tento svazek již na cílovém hostiteli existuje. Zvolte nový název.",

@@ -21,7 +21,7 @@ const props = defineProps<{
 
 const { canManageBackups, canExecute, resourceHost, localExecutionEnabled } = useDeployment();
 const canManageJob = (job: any) => canManageBackups.value && (Number(job.docker_host_id ?? 1) !== 1 || localExecutionEnabled.value);
-const canRunJob = (job: any) => canExecute(resourceHost(job), 'backup-v1') && !(Number(job.docker_host_id ?? 1) !== 1 && job.backup_job_group_id);
+const canRunJob = (job: any) => canExecute(resourceHost(job), 'backup-v1');
 const { t, formatDate, timezone } = useI18n();
 const search = ref('');
 const statusFilter = ref('');

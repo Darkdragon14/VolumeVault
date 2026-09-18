@@ -1,17 +1,21 @@
 <?php
 
 return [
+    'remote_backup_groups' => [
+        'title' => 'Back-upgroepen over lokale en externe hosts',
+        'description' => 'Groepen coördineren lokale, externe en gemengde leden achtereenvolgens met één gezamenlijk resultaat. Duurzame coördinatie bewaart leden, bronnen en het foutbeleid; toegewezen werk wordt tijdens onderhoud afgerond terwijl het volgende lid wacht. Groepsbediening werkt in orchestrator-modus en leden tonen hun host. Elk lid voltooit zijn eigen stop-, back-up- en herstartcyclus; dit is geen consistente snapshot over hosts. Bestaande backup-v1-agents worden ondersteund.',
+    ],
     'agent_execution_safety_and_identity' => [
         'title' => 'Veilige agentuitvoering en juiste resourceselectie',
         'description' => 'S3-controles van agents weigeren tegenstrijdige endpoints. Back-uphelpers moeten verdwijnen voordat toepassingen herstarten, ook na een verbroken Docker-verbinding. Volumelinks behouden hun host, archiefselectie geeft de historische context door en herstel neemt geen later gewijzigd brontype van de taak over.',
     ],
     'remote_agent_execution' => [
         'title' => 'Back-ups en herstel via Docker-agents',
-        'description' => 'Compatibele agents voeren afzonderlijke back-ups en herstelbewerkingen uit met duurzame versleutelde opdrachten en privéhersteljournalen. Gedeelde netwerkbestemmingen maken herstel op een andere host mogelijk zonder Docker-socket op de orchestrator. Resultaten en veiligheidsback-upmetadata blijven behouden na herverbinden zonder voltooid werk opnieuw uit te voeren. Gedistribueerde groepen en het doorsturen van lokale archieven tussen hosts zijn nog niet beschikbaar.',
+        'description' => 'Compatibele agents voeren back-ups en herstelbewerkingen uit met duurzame versleutelde opdrachten en privéhersteljournalen. Gedeelde netwerkbestemmingen maken herstel op een andere host mogelijk zonder Docker-socket op de orchestrator. Resultaten en veiligheidsback-upmetadata blijven behouden na herverbinden zonder voltooid werk opnieuw uit te voeren. Het doorsturen van lokale archieven tussen hosts is nog niet beschikbaar.',
     ],
     'remote_host_workflows' => [
         'title' => 'Hostgerichte configuratie van back-ups en herstel',
-        'description' => 'Zelfstandige taken kunnen geregistreerde agents gebruiken, ook offline en in de modus met alleen een orchestrator. Gedeelde netwerkopslag maakt herstel op een andere host mogelijk. Inventaris, paden en lokale bestemmingen zijn per host afgeschermd. Overdracht van lokale archieven tussen hosts en externe back-upgroepen zijn nog niet beschikbaar.',
+        'description' => 'Taken kunnen geregistreerde agents gebruiken, ook offline en in de modus met alleen een orchestrator. Gedeelde netwerkopslag maakt herstel op een andere host mogelijk. Inventaris, paden en lokale bestemmingen zijn per host afgeschermd. Overdracht van lokale archieven tussen hosts is nog niet beschikbaar.',
     ],
     'docker_host_metrics' => [
         'title' => 'Duidelijke informatie over lokale hosts en agents',

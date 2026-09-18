@@ -7,7 +7,6 @@ use App\Actions\Runs\DispatchQueuedRun;
 use App\Models\ActivityLog;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJobGroup;
-use App\Support\DeploymentMode;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -36,10 +35,6 @@ class DispatchDueBackupGroupsJob implements ShouldQueue
 
     public function handle(CreateBackupGroupRun $createBackupGroupRun, DispatchQueuedRun $dispatchQueuedRun): void
     {
-        if (DeploymentMode::isOrchestrator()) {
-            return;
-        }
-
         BackupJobGroup::query()
             ->where('status', BackupJobGroup::STATUS_ACTIVE)
             ->whereNotNull('next_run_at')

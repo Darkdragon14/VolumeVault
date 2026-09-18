@@ -1,17 +1,21 @@
 <?php
 
 return [
+    'remote_backup_groups' => [
+        'title' => 'Grupos de copias en hosts locales y remotos',
+        'description' => 'Los grupos coordinan miembros locales, remotos y mixtos de forma secuencial con un resultado global. La coordinación duradera conserva miembros, fuentes y política de fallos; el trabajo asignado termina durante el mantenimiento mientras el siguiente miembro espera. Los controles funcionan en modo orquestador y las vistas identifican los hosts. Cada miembro completa su propio ciclo de parada, copia y reinicio; no es una instantánea coherente entre hosts. Se admiten los agentes backup-v1 existentes.',
+    ],
     'agent_execution_safety_and_identity' => [
         'title' => 'Ejecución segura de agentes y selección precisa de recursos',
         'description' => 'Las comprobaciones S3 de los agentes rechazan endpoints contradictorios. Los contenedores auxiliares deben eliminarse antes de reiniciar aplicaciones, incluso tras perder la conexión Docker. Los accesos a volúmenes conservan su host, la selección del archivo transmite su contexto histórico y las restauraciones no heredan cambios posteriores del tipo de origen del trabajo.',
     ],
     'remote_agent_execution' => [
         'title' => 'Copias y restauraciones mediante agentes Docker',
-        'description' => 'Los agentes compatibles ejecutan copias y restauraciones individuales con comandos cifrados persistentes y diarios privados de recuperación. Un destino de red compartido permite restaurar en otro host sin socket Docker en el orquestador. Los resultados y metadatos de copias de seguridad previas sobreviven a las reconexiones sin repetir trabajo completado. Los grupos distribuidos y el traslado de archivos locales entre hosts siguen sin estar disponibles.',
+        'description' => 'Los agentes compatibles ejecutan copias y restauraciones con comandos cifrados persistentes y diarios privados de recuperación. Un destino de red compartido permite restaurar en otro host sin socket Docker en el orquestador. Los resultados y metadatos de copias de seguridad previas sobreviven a las reconexiones sin repetir trabajo completado. El traslado de archivos locales entre hosts sigue sin estar disponible.',
     ],
     'remote_host_workflows' => [
         'title' => 'Configuración de copias y restauraciones por host',
-        'description' => 'Los trabajos independientes pueden usar agentes registrados, incluso sin conexión y en modo solo orquestador. El almacenamiento de red compartido permite restaurar en otro host. El inventario, las rutas y los destinos locales se limitan a su host. Las transferencias de archivos locales entre hosts y los grupos remotos aún no están disponibles.',
+        'description' => 'Los trabajos pueden usar agentes registrados, incluso sin conexión y en modo solo orquestador. El almacenamiento de red compartido permite restaurar en otro host. El inventario, las rutas y los destinos locales se limitan a su host. Las transferencias de archivos locales entre hosts aún no están disponibles.',
     ],
     'docker_host_metrics' => [
         'title' => 'Información útil de hosts locales y agentes',

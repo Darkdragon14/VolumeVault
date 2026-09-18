@@ -26,7 +26,7 @@ class AgentLifecycle
             $query->where('status', RestoreRun::STATUS_RUNNING)
                 ->orWhere(fn ($query) => $query->whereNotNull('stopped_container_ids')->whereJsonLength('stopped_container_ids', '>', 0));
         })->count();
-        $groups = BackupGroupRun::where('status', BackupGroupRun::STATUS_RUNNING)->where(function ($query) use ($host): void {
+        $groups = BackupGroupRun::whereNull('member_run_ids')->where('status', BackupGroupRun::STATUS_RUNNING)->where(function ($query) use ($host): void {
             $query->whereHas('group.members', fn ($jobs) => $jobs->where('docker_host_id', $host->id))
                 ->orWhereHas('memberRuns', fn ($runs) => $runs->where('docker_host_id', $host->id));
         })->count();
@@ -83,7 +83,9 @@ class AgentLifecycle
     {
         $lease = ['dispatch_token' => null, 'dispatch_attempted_at' => null, 'dispatch_published_at' => null];
         BackupRun::where('docker_host_id', $host->id)->where('status', BackupRun::STATUS_QUEUED)
-            ->whereNull('backup_group_run_id')->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE)
+            ->where(fn ($query) => $query->whereNull('backup_group_run_id')
+                ->orWhereHas('groupRun', fn ($query) => $query->whereNotNull('member_run_ids')))
+            ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE)
             ->update($lease);
         RestoreRun::where('target_docker_host_id', $host->id)->where('status', RestoreRun::STATUS_QUEUED)
             ->update($lease);

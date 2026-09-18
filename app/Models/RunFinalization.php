@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RunFinalization extends Model
 {
+    public const TYPE_STARTED_NOTIFICATION = 'started_notification';
+
     public const TYPE_ARCHIVE_METADATA = 'archive_metadata';
 
     public const TYPE_FINISHED_NOTIFICATION = 'finished_notification';

@@ -2,14 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\CreateBackupGroupRun;
 use App\Actions\Backup\CreateBackupRun;
 use App\Actions\Backup\CreateBackupRunRecord;
 use App\Actions\Docker\ValidateHostPathMount;
 use App\Actions\Restore\CreateRestoreRun;
 use App\Actions\Runs\DispatchQueuedRun;
+use App\Jobs\DispatchDueBackupGroupsJob;
 use App\Jobs\DispatchDueBackupJobsJob;
+use App\Models\AgentOperation;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerHost;
 use App\Models\DockerVolume;
@@ -19,6 +23,7 @@ use App\Services\Agents\AgentOperationBroker;
 use App\Services\BackupDestinations\ListBackupObjects;
 use App\Services\Docker\DockerProcess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -65,7 +70,7 @@ class RemoteHostWorkflowTest extends TestCase
         $this->assertSame($host->id, $job->docker_host_id);
     }
 
-    public function test_inventory_and_destination_ownership_are_scoped_and_remote_groups_rejected(): void
+    public function test_inventory_destination_and_required_group_membership_are_validated(): void
     {
         $a = $this->host();
         $b = $this->host();
@@ -73,8 +78,41 @@ class RemoteHostWorkflowTest extends TestCase
         $this->postJson('/api/v1/backup-jobs', [...$data, 'docker_host_id' => $b->id])->assertUnprocessable()->assertJsonValidationErrors('volume_name');
         $local = $this->localDestination($b);
         $this->postJson('/api/v1/backup-jobs', [...$data, 'backup_destination_id' => $local->id])->assertUnprocessable()->assertJsonValidationErrors('backup_destination_id');
-        $this->postJson('/api/v1/backup-jobs', [...$data, 'planning_mode' => 'group'])->assertUnprocessable()->assertJsonValidationErrors('planning_mode');
+        $this->postJson('/api/v1/backup-jobs', [...$data, 'planning_mode' => 'group'])->assertUnprocessable()->assertJsonValidationErrors('backup_job_group_id');
         $this->assertDatabaseCount('backup_jobs', 0);
+    }
+
+    public function test_orchestrator_group_crud_membership_schedule_and_safe_host_identity(): void
+    {
+        Queue::fake();
+        $settings = ['name' => 'Remote group', 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'], 'failure_policy' => 'continue', 'notifications_enabled' => false];
+        $id = $this->postJson('/api/v1/backup-groups', $settings)->assertCreated()->json('data.id');
+        $host = $this->host();
+        $payload = [...$this->payload($host), 'planning_mode' => 'group', 'backup_job_group_id' => $id];
+        $jobId = $this->postJson('/api/v1/backup-jobs', $payload)->assertCreated()->json('data.id');
+        $this->putJson('/api/v1/backup-groups/'.$id, [...$settings, 'name' => 'Edited'])->assertOk();
+        $response = $this->getJson('/api/v1/backup-groups/'.$id)->assertOk()
+            ->assertJsonPath('data.members.0.docker_host_id', $host->id)
+            ->assertJsonPath('data.members.0.docker_host.id', $host->id)
+            ->assertJsonPath('data.members.0.docker_host.is_local', false);
+        $this->assertArrayNotHasKey('agent_token_hash', $response->json('data.members.0.docker_host'));
+        $this->postJson('/api/v1/backup-groups/'.$id.'/pause')->assertOk();
+        $this->postJson('/api/v1/backup-groups/'.$id.'/resume')->assertOk();
+        $group = BackupJobGroup::findOrFail($id);
+        $group->update(['next_run_at' => now()->subMinute()]);
+        app(DispatchDueBackupGroupsJob::class)->handle(app(CreateBackupGroupRun::class), app(DispatchQueuedRun::class));
+        $run = $group->groupRuns()->firstOrFail();
+        $this->assertCount(1, $run->member_run_ids);
+        $this->assertSame('running', $run->status);
+        $this->assertSame(1, AgentOperation::count());
+        $this->getJson('/api/v1/backup-group-runs/'.$run->id)->assertOk()
+            ->assertJsonPath('data.members.0.docker_host_id', $host->id)
+            ->assertJsonPath('data.members.0.docker_host.name', $host->name);
+        $this->putJson('/api/v1/backup-groups/'.$id, [...$settings, 'failure_policy' => 'stop'])->assertOk();
+        $this->assertSame('continue', $run->fresh()->failure_policy_snapshot);
+        $this->postJson('/api/v1/backup-groups/'.$id.'/pause')->assertUnprocessable();
+        $this->deleteJson('/api/v1/backup-groups/'.$id)->assertUnprocessable();
+        $this->putJson('/api/v1/backup-jobs/'.$jobId, [...$payload, 'planning_mode' => 'standalone', 'backup_job_group_id' => null])->assertUnprocessable();
     }
 
     public function test_local_defaults_work_in_hybrid_but_are_rejected_in_orchestrator(): void

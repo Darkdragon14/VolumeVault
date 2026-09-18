@@ -44,6 +44,7 @@ class ProcessRunFinalization
             $metadata = match ($finalization->type) {
                 RunFinalization::TYPE_ARCHIVE_METADATA => $this->runBackup->detectArchiveMetadata($finalization->backup_run_id),
                 RunFinalization::TYPE_FINISHED_NOTIFICATION => $this->sendFinishedNotification($finalization),
+                RunFinalization::TYPE_STARTED_NOTIFICATION => $this->sendGroupStartedNotification($finalization),
                 default => throw new RuntimeException('Unknown run finalization type.'),
             };
             $this->complete($finalization->id, $claimToken, $metadata);
@@ -245,6 +246,18 @@ class ProcessRunFinalization
 
             return $finalization;
         });
+    }
+
+    /** @return array<string, mixed> */
+    private function sendGroupStartedNotification(RunFinalization $finalization): array
+    {
+        $run = $finalization->backupGroupRun;
+        $channel = $finalization->notificationChannel;
+        if ($run?->status === 'running' && $channel !== null) {
+            $this->sendShoutrrrNotification->sendGroupRunStartedToChannel($run, $channel);
+        }
+
+        return [];
     }
 
     /** @return array<string, mixed> */

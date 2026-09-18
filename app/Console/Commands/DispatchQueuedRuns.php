@@ -16,7 +16,7 @@ class DispatchQueuedRuns extends Command
 {
     protected $signature = 'volumevault:dispatch-queued-runs';
 
-    protected $description = 'Dispatch top-level queued runs whose dispatch lease is missing or stale';
+    protected $description = 'Recover queued run dispatch and advance durable sequential backup groups';
 
     public function handle(DispatchQueuedRun $dispatchQueuedRun): int
     {
@@ -32,9 +32,12 @@ class DispatchQueuedRuns extends Command
             ->each(fn (RestoreRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
 
         if (DeploymentMode::localExecutionEnabled()) {
-            $this->eligible(BackupGroupRun::query())
+            $this->eligible(BackupGroupRun::query()->whereNull('member_run_ids'))
                 ->each(fn (BackupGroupRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
         }
+
+        BackupGroupRun::whereNotNull('member_run_ids')->whereIn('status', ['queued', 'running'])->orderBy('id')
+            ->each(fn (BackupGroupRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
 
         $this->info("Dispatched {$dispatched} queued run(s).");
 

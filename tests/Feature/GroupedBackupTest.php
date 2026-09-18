@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\AdvanceBackupGroupRun;
 use App\Actions\Backup\CreateBackupGroupRun;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
@@ -18,6 +19,7 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Models\RunFinalization as BackupRunFinalization;
@@ -41,6 +43,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class GroupedBackupTest extends TestCase
@@ -122,6 +125,178 @@ class GroupedBackupTest extends TestCase
         $memberRun = BackupRun::where('backup_group_run_id', $run->id)->sole();
         $this->assertTrue($run->fresh()->scheduled_for->equalTo($occurrence));
         $this->assertTrue($memberRun->scheduled_for->equalTo($occurrence));
+    }
+
+    public function test_mixed_group_local_member_uses_the_backup_pipeline_and_snapshot_volume_lock(): void
+    {
+        Queue::fake();
+        config(['queue.default' => 'database', 'volumevault.mode' => 'hybrid']);
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $group = $this->group();
+        $group->update(['notifications_enabled' => false]);
+        $local = $this->member($group, 'vol_a');
+        $remote = $this->member($group, 'vol_b');
+        $host = DockerHost::factory()->create([
+            'agent_registered_at' => now(), 'agent_protocol_version' => 1,
+            'agent_capabilities' => ['inventory-v1', 'backup-v1', 'restore-v1'],
+        ]);
+        $destination = BackupDestination::create(['name' => 'Network', 'provider' => 'aws_s3', 'bucket' => 'archives', 'access_key_id' => 'key', 'secret_access_key' => 'secret', 'is_active' => true]);
+        $remote->update(['docker_host_id' => $host->id, 'backup_destination_id' => $destination->id]);
+        $run = app(CreateBackupGroupRun::class)->handle($group, BackupGroupRun::TRIGGER_MANUAL);
+        $child = $run->memberRuns()->where('backup_job_id', $local->id)->firstOrFail();
+        $local->update(['volume_name' => 'mutated-after-snapshot']);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $queued = new RunBackupJob($child->id);
+        $lock = Cache::lock(VolumeJobLock::cacheKeyFor(VolumeJobLock::key('vol_a', 'backup-job-'.$local->id)), 60);
+        $this->assertTrue($lock->get());
+        try {
+            $queued->middleware()[0]->handle($queued, fn () => $queued->handle(app(RunBackup::class)));
+            $this->assertSame('queued', $child->fresh()->status);
+            $this->assertDatabaseCount('agent_operations', 0);
+        } finally {
+            $lock->release();
+        }
+        $queued->middleware()[0]->handle($queued, fn () => $queued->handle(app(RunBackup::class)));
+        $this->assertSame('success', $child->fresh()->status);
+        $this->assertSame('vol_a', $child->fresh()->sourceVolumeName());
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertDatabaseHas('agent_operations', ['backup_run_id' => $run->member_run_ids[1], 'status' => 'pending']);
+        $this->assertSame($run->member_run_ids[1], $run->fresh()->current_member_run_id);
+    }
+
+    public function test_fresh_coordinator_heartbeat_does_not_strand_last_local_members_stopped_containers(): void
+    {
+        Queue::fake();
+        config(['queue.default' => 'database', 'volumevault.mode' => 'hybrid']);
+        $group = $this->group();
+        $group->update(['notifications_enabled' => false]);
+        $local = $this->member($group, 'vol_a');
+        $remote = $this->member($group, 'vol_b');
+        $host = DockerHost::factory()->create([
+            'agent_registered_at' => now(), 'agent_protocol_version' => 1,
+            'agent_capabilities' => ['inventory-v1', 'backup-v1', 'restore-v1'],
+        ]);
+        $destination = BackupDestination::create(['name' => 'Network', 'provider' => 'aws_s3', 'bucket' => 'archives', 'access_key_id' => 'key', 'secret_access_key' => 'secret', 'is_active' => true]);
+        $remote->update(['docker_host_id' => $host->id, 'backup_destination_id' => $destination->id]);
+        $run = app(CreateBackupGroupRun::class)->handle($group, BackupGroupRun::TRIGGER_MANUAL);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $child = $run->memberRuns()->where('backup_job_id', $local->id)->firstOrFail();
+        $child->forceFill([
+            'status' => BackupRun::STATUS_SUCCESS,
+            'finished_at' => now()->subHour(),
+            'last_heartbeat_at' => now()->subHour(),
+            'stopped_container_ids' => ['needs-restart'],
+            'docker_container_cleanup_pending' => false,
+        ])->save();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertTrue($run->fresh()->last_heartbeat_at->greaterThan(now()->subMinute()));
+        $this->assertSame($child->id, $run->fresh()->current_member_run_id);
+        $this->assertDatabaseCount('agent_operations', 0);
+
+        $this->mock(StartDockerContainers::class)->shouldReceive('handle')->once()->with(['needs-restart']);
+        $lock = Cache::lock(VolumeJobLock::cacheKeyFor(VolumeJobLock::key('vol_a', 'backup-job-'.$local->id)), 60);
+        $this->assertTrue($lock->get());
+        try {
+            $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+            $this->assertSame(['needs-restart'], $child->fresh()->stopped_container_ids);
+        } finally {
+            $lock->release();
+        }
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        $this->assertNull($child->fresh()->stopped_container_ids);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame($run->member_run_ids[1], $run->fresh()->current_member_run_id);
+        $this->assertDatabaseHas('agent_operations', ['backup_run_id' => $run->member_run_ids[1], 'status' => 'pending']);
+    }
+
+    public function test_paused_remote_member_selects_durable_coordinator_but_only_freezes_active_local_member(): void
+    {
+        Queue::fake();
+        config(['queue.default' => 'database', 'volumevault.mode' => 'hybrid']);
+        $this->app->instance(DockerProcess::class, $this->fakeDocker());
+        $group = $this->group();
+        $group->update(['notifications_enabled' => false]);
+        $local = $this->member($group, 'vol_a');
+        $remote = $this->member($group, 'vol_b');
+        $remote->update(['docker_host_id' => DockerHost::factory()->create()->id, 'status' => BackupJob::STATUS_PAUSED]);
+
+        $run = app(CreateBackupGroupRun::class)->handle($group, BackupGroupRun::TRIGGER_MANUAL);
+        $child = $run->memberRuns()->sole();
+        $this->assertSame([$child->id], $run->member_run_ids);
+        $this->assertSame($local->id, $child->backup_job_id);
+        app(RunBackupGroup::class)->handle($run);
+        Queue::assertPushed(RunBackupJob::class, fn (RunBackupJob $job): bool => $job->backupRunId === $child->id);
+        (new RunBackupJob($child->id))->handle(app(RunBackup::class));
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame(BackupGroupRun::STATUS_SUCCESS, $run->fresh()->status);
+        $this->assertSame(1, $run->fresh()->succeeded_members);
+        $this->assertSame(BackupJob::STATUS_PAUSED, $remote->fresh()->status);
+        $this->assertDatabaseCount('agent_operations', 0);
+    }
+
+    #[DataProvider('durableMemberLockHolders')]
+    public function test_durable_member_exhausted_publication_respects_lock_holders_and_still_fails_orphans(?string $holderKind): void
+    {
+        Queue::fake();
+        config(['queue.default' => 'database', 'volumevault.mode' => 'hybrid']);
+        $this->freezeSecond();
+        $group = $this->group();
+        $group->update(['notifications_enabled' => false]);
+        $local = $this->member($group, 'vol_a');
+        $remote = $this->member($group, 'vol_b');
+        $remote->update(['docker_host_id' => DockerHost::factory()->create()->id, 'status' => BackupJob::STATUS_PAUSED]);
+        $run = app(CreateBackupGroupRun::class)->handle($group, BackupGroupRun::TRIGGER_MANUAL);
+        $child = $run->memberRuns()->sole();
+        $holder = match ($holderKind) {
+            'backup' => BackupRun::create([
+                'backup_job_id' => $local->id, 'source_volume_name' => 'vol_a',
+                'source_type_snapshot' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
+                'status' => BackupRun::STATUS_RUNNING, 'trigger' => BackupRun::TRIGGER_MANUAL,
+            ]),
+            'restore' => RestoreRun::create([
+                'backup_job_id' => $local->id, 'backup_destination_id' => $local->backup_destination_id,
+                'selected_backup_key' => 'backup.tar.gz', 'source_volume_name' => 'vol_a',
+                'target_volume_name' => 'vol_a', 'mode' => RestoreRun::MODE_INPLACE,
+                'status' => RestoreRun::STATUS_RUNNING,
+            ]),
+            default => null,
+        };
+
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->travel(5)->minutes();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        Queue::assertPushed(RunBackupJob::class, 2);
+        $this->assertTrue($child->fresh()->dispatch_attempted_at->greaterThan($child->fresh()->dispatch_published_at));
+        $this->travel(16)->minutes();
+
+        if ($holder !== null) {
+            $holder->forceFill(['last_heartbeat_at' => now()])->save();
+            $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+            $this->assertSame(BackupRun::STATUS_QUEUED, $child->fresh()->status);
+
+            $holder->forceFill(['status' => 'success', 'finished_at' => now(), 'last_heartbeat_at' => now()])->save();
+            $this->travel(30)->seconds();
+            $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+            $this->assertSame(BackupRun::STATUS_QUEUED, $child->fresh()->status);
+            $this->assertSame(BackupGroupRun::STATUS_RUNNING, $run->fresh()->status);
+            $this->travel(91)->seconds();
+        }
+
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        $this->assertSame(BackupRun::STATUS_FAILED, $child->fresh()->status);
+        $this->assertStringContainsString('both queue publication attempts remained unclaimed', $child->fresh()->error_message);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
+    }
+
+    public static function durableMemberLockHolders(): array
+    {
+        return [
+            'backup holder and recent release' => ['backup'],
+            'restore holder and recent release' => ['restore'],
+            'genuinely orphaned publication' => [null],
+        ];
     }
 
     public function test_group_run_detail_page_reports_the_aggregated_size(): void

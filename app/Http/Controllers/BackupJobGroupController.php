@@ -14,7 +14,9 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\NotificationChannel;
+use App\Services\Agents\AgentExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -30,7 +32,8 @@ class BackupJobGroupController extends Controller
     {
         $perPage = $this->perPageForRequest($request);
 
-        $query = BackupJobGroup::withCount('members')->with('notificationChannels');
+        $query = BackupJobGroup::withCount('members')->with(['notificationChannels', 'members.dockerHost'])
+            ->withExists(['groupRuns as has_pending_run' => fn (Builder $query): Builder => $query->whereIn('status', ['queued', 'running'])]);
 
         if ($search = $request->input('search')) {
             $query->where('name', 'like', "%{$search}%");
@@ -65,7 +68,8 @@ class BackupJobGroupController extends Controller
 
     public function show(Request $request, BackupJobGroup $backupGroup): Response
     {
-        $backupGroup->load(['notificationChannels', 'members.destination'])->loadCount('members');
+        $backupGroup->load(['notificationChannels', 'members.destination', 'members.dockerHost'])->loadCount('members');
+        $backupGroup->loadExists(['groupRuns as has_pending_run' => fn (Builder $query): Builder => $query->whereIn('status', ['queued', 'running'])]);
         $perPage = $this->perPageForRequest($request);
 
         return Inertia::render('BackupGroups/Show', [
@@ -77,7 +81,8 @@ class BackupJobGroupController extends Controller
 
     public function edit(BackupJobGroup $backupGroup): Response
     {
-        $backupGroup->load(['notificationChannels', 'members.destination']);
+        $backupGroup->load(['notificationChannels', 'members.destination', 'members.dockerHost']);
+        $backupGroup->loadExists(['groupRuns as has_pending_run' => fn (Builder $query): Builder => $query->whereIn('status', ['queued', 'running'])]);
 
         return Inertia::render('BackupGroups/Form', [
             ...$this->formProps(),
@@ -226,6 +231,7 @@ class BackupJobGroupController extends Controller
     {
         $data = [
             ...$group->toArray(),
+            ...$group->runAvailability(),
             'notification_channel_ids' => $group->relationLoaded('notificationChannels')
                 ? $group->notificationChannels->pluck('id')->values()->all()
                 : $group->notificationChannels()->pluck('notification_channels.id')->values()->all(),
@@ -233,10 +239,14 @@ class BackupJobGroupController extends Controller
             'schedule_summary' => $this->scheduleCalculator->summary($group->schedule_type, $group->schedule_config ?? []),
         ];
 
+        unset($data['members']);
+
         if ($withMembers) {
             $data['members'] = $group->members->map(fn (BackupJob $member): array => [
                 'id' => $member->id,
                 'name' => $member->name,
+                'docker_host_id' => $member->docker_host_id,
+                'docker_host' => $member->dockerHost ? app(AgentExecution::class)->summary($member->dockerHost) : null,
                 'source_label' => $member->sourceName(),
                 'source_type' => $member->sourceType(),
                 'status' => $member->status,

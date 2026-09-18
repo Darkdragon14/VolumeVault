@@ -52,6 +52,11 @@ class RunBackup
     /** $acceptedOperation is reserved for inline children of an already claimed group or restore. */
     public function handle(BackupRun $run, bool $acceptedOperation = false): void
     {
+        if ($run->belongsToGroupRun()
+            && BackupGroupRun::whereKey($run->backup_group_run_id)->whereNotNull('member_run_ids')->exists()
+            && ! AdvanceBackupGroupRun::authorizes($run)) {
+            return;
+        }
         if (! $acceptedOperation && app(HostWorkAdmission::class)->isWaiting($run)) {
             return;
         }

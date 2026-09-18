@@ -10,7 +10,7 @@ Mounting `/var/run/docker.sock` gives this application high privileges on the Do
 
 VolumeVault can start privileged Docker operations through the Docker socket. Treat access to the web UI and write-capable API tokens like access to the Docker host.
 
-The same warning applies when `DOCKER_HOST` points to a TCP endpoint: Docker API access is effectively root access to the Docker host. Never expose an unencrypted endpoint to the internet or an untrusted network. Keep it behind a private network, VPN, firewall, or tightly controlled socket proxy. Filtering Docker API routes reduces exposure but does not remove the risk, because VolumeVault must create containers and mount host filesystems. VolumeVault does not currently manage Docker TLS client certificates or remote Docker hosts.
+The same warning applies when `DOCKER_HOST` points to a TCP endpoint: Docker API access is effectively root access to the Docker host. Never expose an unencrypted endpoint to the internet or an untrusted network. Keep it behind a private network, VPN, firewall, or tightly controlled socket proxy. Filtering Docker API routes reduces exposure but does not remove the risk, because VolumeVault must create containers and mount host filesystems. VolumeVault does not currently manage Docker TLS client certificates or direct remote-daemon connections. Remote Docker hosts use dedicated agents instead.
 
 VolumeVault canonicalizes paths visible in its own filesystem regardless of whether Docker uses a Unix socket or TCP endpoint. Paths unavailable to VolumeVault can only receive lexical allowlist validation before Docker tests the bind mount. Keep `VOLUMEVAULT_HOST_PATH_ALLOWLIST` narrow, protect allowlisted directories from untrusted symlink replacement, and treat changes to it as privileged configuration.
 
@@ -20,7 +20,9 @@ On first launch, VolumeVault requires onboarding and creates the first account a
 
 ### Agent Transport
 
-Orchestrator-only mode (`VOLUMEVAULT_MODE=orchestrator`) requires no Docker socket or remote daemon. Local execution entrypoints are blocked even if `DOCKER_HOST` is accidentally configured. Notifications use the bundled Shoutrrr binary. The dedicated agent retains Docker-host privileges locally and does not receive the central database or `APP_KEY`.
+Orchestrator-only mode (`VOLUMEVAULT_MODE=orchestrator`) requires no Docker socket or remote daemon. Local execution entrypoints are blocked even if `DOCKER_HOST` is accidentally configured. Remote-only backup groups are supported; mixed groups require local execution for local members. Notifications use the bundled Shoutrrr binary. The dedicated agent retains Docker-host privileges locally and does not receive the central database or `APP_KEY`.
+
+Remote/mixed groups use durable central coordination over the existing `backup-v1` operations. Each member keeps its own host-scoped source, destination and execution privileges. Membership, source identity and failure policy are snapshotted for the run. Assigned work may drain during host maintenance; an unassigned next member waits for its host to resume. Container stop, backup and restart happen separately for each member, in sequence. Groups do not stop every application's containers together and do not guarantee a consistent cross-host snapshot. Cross-host relaying of host-local archives, remote Docker-label reconciliation and agent-side destination browsing/testing remain unsupported.
 
 Maintenance and run admission serialize on the same Docker host rows. New runs cannot be claimed after maintenance wins that lock; operations accepted beforehand continue to completion and remain counted until cleanup finishes. Remote readiness additionally requires a fresh acknowledgment of the current maintenance nonce and zero reported operations. Version diagnostics are recorded only after agent authentication. Manual update guides contain no enrollment token or agent credential and do not replace containers automatically.
 

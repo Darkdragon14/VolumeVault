@@ -50,6 +50,11 @@ class RunBackupGroup
 
     public function handle(BackupGroupRun $groupRun): void
     {
+        if ($groupRun->member_run_ids !== null) {
+            app(AdvanceBackupGroupRun::class)->handle($groupRun);
+
+            return;
+        }
         if (app(HostWorkAdmission::class)->isWaiting($groupRun)) {
             return;
         }

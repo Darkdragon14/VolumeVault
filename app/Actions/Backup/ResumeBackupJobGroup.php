@@ -3,7 +3,6 @@
 namespace App\Actions\Backup;
 
 use App\Models\BackupJobGroup;
-use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
@@ -18,8 +17,6 @@ class ResumeBackupJobGroup
 
     public function handle(BackupJobGroup $group): BackupJobGroup
     {
-        LocalDockerExecution::validate();
-
         return $this->withGroupLocks->handle([$group->id], function (Collection $groups) use ($group): BackupJobGroup {
             $lockedGroup = $groups->get($group->id);
 

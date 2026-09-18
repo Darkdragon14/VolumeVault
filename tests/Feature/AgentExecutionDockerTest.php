@@ -189,6 +189,48 @@ foreach ($s3->getPaginator('ListObjectsV2', ['Bucket' => 'execution-backups']) a
 $result = ['keys' => $keys];
 PHP, ['endpoint' => $endpoint, 'password' => $password]);
             $this->assertSame([$completedBackup['key']], $objects['keys']);
+
+            $group = $this->control($server, <<<'PHP'
+$group = App\Models\BackupJobGroup::create(['name' => 'Two real agents', 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'], 'status' => 'active', 'failure_policy' => 'continue', 'notifications_enabled' => false]);
+$original = App\Models\BackupJob::findOrFail($input['job']);
+foreach ($input['hosts'] as $host) {
+    $job = $original->replicate();
+    $job->forceFill(['name' => 'Grouped agent '.$host, 'docker_host_id' => $host, 'backup_job_group_id' => $group->id, 'status' => 'active', 'next_run_at' => null])->save();
+}
+$run = app(App\Actions\Backup\CreateBackupGroupRun::class)->handle($group, 'manual');
+app(App\Actions\Runs\DispatchQueuedRun::class)->handle($run);
+$result = ['id' => $run->id, 'children' => $run->member_run_ids, 'operations' => App\Models\AgentOperation::whereIn('backup_run_id', $run->member_run_ids)->count()];
+PHP, ['job' => $backup['job'], 'hosts' => array_values($hosts)]);
+            $this->assertCount(2, $group['children']);
+            $this->assertSame(1, $group['operations']);
+            $this->interruptControlPlaneUntilResultIsDurable($server, $agents['a'], 'backup', $group['children'][0]);
+            $groupState = [];
+            $this->waitFor(function () use ($server, $group, &$groupState): bool {
+                $groupState = $this->control($server, <<<'PHP'
+Illuminate\Support\Facades\Artisan::call('volumevault:dispatch-queued-runs');
+$run = App\Models\BackupGroupRun::findOrFail($input['id']);
+$result = ['status' => $run->status, 'succeeded' => $run->succeeded_members];
+PHP, ['id' => $group['id']]);
+                $this->assertNotContains($groupState['status'], ['failed', 'cancelled']);
+
+                return $groupState['status'] === 'success';
+            }, 'durable sequential group across two real agents', 180);
+            $this->assertSame(2, $groupState['succeeded']);
+            $archives = $this->control($server, <<<'PHP'
+$runs = App\Models\BackupRun::whereIn('id', $input['children'])->orderBy('id')->get();
+$s3 = new Aws\S3\S3Client(['version' => 'latest', 'region' => 'us-east-1', 'endpoint' => $input['endpoint'], 'use_path_style_endpoint' => true, 'credentials' => ['key' => 'backup', 'secret' => $input['password']]]);
+$markers = [];
+foreach ($runs as $index => $run) {
+    $archive = gzdecode((string) $s3->getObject(['Bucket' => 'execution-backups', 'Key' => $run->backup_key])['Body']);
+    $markers[] = str_contains($archive, $input['markers'][$index]);
+}
+$result = ['markers' => $markers, 'hosts' => $runs->pluck('docker_host_id')->all(), 'keys' => $runs->pluck('backup_key')->all(), 'sequential' => $runs[0]->finished_at->lessThanOrEqualTo($runs[1]->started_at), 'operations' => App\Models\AgentOperation::whereIn('backup_run_id', $input['children'])->where('status', 'completed')->count()];
+PHP, ['children' => $group['children'], 'endpoint' => $endpoint, 'password' => $password, 'markers' => [$marker, $sentinel]]);
+            $this->assertSame([true, true], $archives['markers']);
+            $this->assertSame(array_values($hosts), $archives['hosts']);
+            $this->assertCount(2, array_unique($archives['keys']));
+            $this->assertTrue($archives['sequential']);
+            $this->assertSame(2, $archives['operations']);
         } finally {
             $this->cleanup();
         }

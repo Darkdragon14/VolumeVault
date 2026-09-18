@@ -108,6 +108,12 @@ A backup group backs up several volumes as a single scheduled operation, with **
 
 The group owns the schedule, the notification channels, and the failure policy. Each volume is still an ordinary backup job with its own destination, retention, and archive, so restores stay per-volume and unchanged.
 
+Groups can span local and remote hosts. Select the source host in each member's job form; host-local destinations must belong to that same host. Group member and run views show host names and IDs to distinguish identically named volumes. Remote-only groups also work in orchestrator mode, while mixed groups need local execution enabled for their local members.
+
+The group list and details disable `Run now` when the group has no runnable members, is inactive or already queued/running, or a member's execution host is ineligible. Offline compatible agents may still receive queued work. New group admission also checks maintenance on paused members' hosts. Configuration remains editable independently of run eligibility; execution rechecks admission when a run is requested.
+
+Remote/mixed runs use a durable central coordinator with snapshotted membership, source identity and failure policy. Existing `backup-v1` agents execute the members; no new agent protocol is required. Members run sequentially, each completing its configured container stop, backup and restart before the next starts. **This is not a consistent cross-host snapshot and does not stop all containers together.** Already assigned work drains during maintenance, while the next member waits if its host is in maintenance. Purely local groups retain their synchronous member execution within the queued group job.
+
 To create a group:
 
 1. Open `Backup groups` and create a group, or select `Part of a group` while creating a backup job and choose `Create a new group`.

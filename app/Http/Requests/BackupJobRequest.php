@@ -152,9 +152,6 @@ class BackupJobRequest extends FormRequest
                 }
             }
             if ($this->integer('docker_host_id') !== DockerHost::LOCAL_ID) {
-                if ($this->isGroupMode()) {
-                    $validator->errors()->add('planning_mode', 'Remote backup groups are not yet implemented.');
-                }
                 $host = DockerHost::find($this->integer('docker_host_id'));
                 $containerNames = collect($host?->agent_containers ?? [])
                     ->flatMap(fn (array $container): array => explode(',', (string) ($container['names'] ?? '')))

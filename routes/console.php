@@ -60,7 +60,7 @@ Artisan::command('volumevault:reset-password {email : The account email address}
 })->purpose('Reset a VolumeVault user password from the container CLI');
 
 Schedule::job(new DispatchDueBackupJobsJob)->everyMinute()->withoutOverlapping();
-Schedule::job(new DispatchDueBackupGroupsJob)->everyMinute()->withoutOverlapping()->when(fn () => DeploymentMode::localExecutionEnabled());
+Schedule::job(new DispatchDueBackupGroupsJob)->everyMinute()->withoutOverlapping();
 Schedule::job(new SyncDockerVolumesJob)->everyFiveMinutes()->withoutOverlapping()->when(fn () => DeploymentMode::localExecutionEnabled());
 Schedule::job(new RunAlertChecksJob)->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('volumevault:reconcile-stale-runs')->everyFiveMinutes()->withoutOverlapping()->when(fn () => DeploymentMode::localExecutionEnabled());

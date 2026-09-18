@@ -1,4 +1,5 @@
 {
+  "hostWorkflow.groupRunUnavailable": "Deze groep kan nu niet worden uitgevoerd. Controleer de status, wachtende uitvoeringen, uitvoerbare leden, hostmogelijkheden, lokale uitvoering en onderhoudsinstellingen.",
   "hostWorkflow.sourceHost": "Docker-bronhost",
   "hostWorkflow.targetHost": "Docker-doelhost",
   "hostWorkflow.destinationHost": "Eigenaarhost van de bestemming",
@@ -7,7 +8,7 @@
   "hostWorkflow.noVolumes": "Geen volumes in de inventaris van deze host. Synchroniseer de lokale host, wacht op de agentinventaris of kies een hostpad.",
   "hostWorkflow.allowlist": "Toegestane paden op deze agent: {paths}",
   "hostWorkflow.allowlistUnknown": "De lijst met toegestane paden van deze agent is niet beschikbaar. De agent controleert het pad voor uitvoering.",
-  "hostWorkflow.groupsUnsupported": "Externe back-upgroepen worden nog niet ondersteund. Gebruik een afzonderlijk geplande taak.",
+  "hostWorkflow.groupExecution": "Groepen kunnen lokale en externe hosts bevatten. Elk lid stopt zijn containers, maakt een back-up en herstart ze voordat het volgende lid wordt uitgevoerd. Dit is geen consistente snapshot over meerdere hosts.",
   "hostWorkflow.relayUnsupported": "Lokale archieven kunnen alleen op hun eigenaarhost worden hersteld. Overdracht tussen hosts wordt nog niet ondersteund.",
   "hostWorkflow.sharedRestore": "Gedeelde netwerkbestemmingen ondersteunen herstel naar een andere host. Herstel tussen hosts maakt altijd een nieuw volume aan.",
   "hostWorkflow.targetExists": "Dit volume bestaat al op de doelhost. Kies een nieuwe naam.",

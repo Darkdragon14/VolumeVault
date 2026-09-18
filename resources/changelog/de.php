@@ -1,17 +1,21 @@
 <?php
 
 return [
+    'remote_backup_groups' => [
+        'title' => 'Backup-Gruppen über lokale und entfernte Hosts',
+        'description' => 'Gruppen koordinieren lokale, entfernte und gemischte Mitglieder nacheinander mit einem Gesamtergebnis. Die dauerhafte Koordination bewahrt Mitgliedschaft, Quellen und Fehlerstrategie; zugewiesene Arbeit wird während der Wartung abgeschlossen, das nächste Mitglied wartet. Gruppenaktionen funktionieren im Orchestrator-Modus und Mitglieder zeigen ihren Host. Jedes Mitglied durchläuft seinen eigenen Stopp-, Backup- und Neustartzyklus; dies ist kein konsistenter hostübergreifender Snapshot. Bestehende backup-v1-Agenten werden unterstützt.',
+    ],
     'agent_execution_safety_and_identity' => [
         'title' => 'Sichere Agent-Ausführung und eindeutige Ressourcenauswahl',
         'description' => 'S3-Prüfungen der Agents lehnen widersprüchliche Endpoints ab. Backup-Helfer müssen vor dem Neustart der Anwendungen entfernt werden, auch nach einem Docker-Verbindungsabbruch. Volume-Verknüpfungen behalten ihren Host, die Archivauswahl übermittelt den historischen Kontext und Wiederherstellungen übernehmen keinen nachträglich geänderten Quelltyp des Jobs.',
     ],
     'remote_agent_execution' => [
         'title' => 'Backups und Wiederherstellungen über Docker-Agents',
-        'description' => 'Kompatible Agents führen einzelne Backups und Wiederherstellungen mit dauerhaften verschlüsselten Befehlen und privaten Wiederherstellungsjournalen aus. Gemeinsame Netzwerkziele ermöglichen die Wiederherstellung auf einem anderen Host ohne Docker-Socket am Orchestrator. Ergebnisse und Metadaten der Sicherheitsbackups bleiben nach Verbindungsabbrüchen erhalten, ohne abgeschlossene Arbeit zu wiederholen. Verteilte Gruppen und die Weiterleitung lokaler Archive zwischen Hosts sind noch nicht verfügbar.',
+        'description' => 'Kompatible Agents führen Backups und Wiederherstellungen mit dauerhaften verschlüsselten Befehlen und privaten Wiederherstellungsjournalen aus. Gemeinsame Netzwerkziele ermöglichen die Wiederherstellung auf einem anderen Host ohne Docker-Socket am Orchestrator. Ergebnisse und Metadaten der Sicherheitsbackups bleiben nach Verbindungsabbrüchen erhalten, ohne abgeschlossene Arbeit zu wiederholen. Die Weiterleitung lokaler Archive zwischen Hosts ist noch nicht verfügbar.',
     ],
     'remote_host_workflows' => [
         'title' => 'Hostbezogene Backup- und Wiederherstellungskonfiguration',
-        'description' => 'Einzelne Jobs können registrierte Agents verwenden, auch offline und im reinen Orchestrator-Modus. Mit gemeinsamem Netzwerkspeicher sind Wiederherstellungen auf einem anderen Host möglich. Inventar, Pfade und lokale Ziele bleiben hostbezogen. Hostübergreifende Übertragungen lokaler Archive und entfernte Backup-Gruppen sind noch nicht verfügbar.',
+        'description' => 'Jobs können registrierte Agents verwenden, auch offline und im reinen Orchestrator-Modus. Mit gemeinsamem Netzwerkspeicher sind Wiederherstellungen auf einem anderen Host möglich. Inventar, Pfade und lokale Ziele bleiben hostbezogen. Hostübergreifende Übertragungen lokaler Archive sind noch nicht verfügbar.',
     ],
     'docker_host_metrics' => [
         'title' => 'Aussagekräftige Informationen zu lokalen Hosts und Agents',

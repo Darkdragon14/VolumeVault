@@ -2,13 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\AdvanceBackupGroupRun;
+use App\Actions\Backup\CreateBackupGroupRun;
 use App\Actions\Backup\CreateBackupRunRecord;
 use App\Actions\Backup\DeleteBackupJob;
+use App\Actions\Backup\RunBackup;
 use App\Actions\Runs\DispatchQueuedRun;
+use App\Actions\Runs\ProcessRunFinalization;
+use App\Jobs\RunBackupJob;
 use App\Models\ActivityLog;
 use App\Models\AgentOperation;
 use App\Models\BackupDestination;
+use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
+use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerHost;
 use App\Models\DockerVolume;
@@ -16,6 +23,7 @@ use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Models\RunFinalization;
 use App\Models\User;
+use App\Services\Agents\AgentLifecycle;
 use App\Services\Agents\AgentOperationEnvelope;
 use App\Services\Agents\AgentOperationRedactor;
 use App\Services\Agents\AgentOperationSpecification;
@@ -23,6 +31,7 @@ use App\Services\Agents\AgentRegistry;
 use App\Services\Agents\AgentTlsIdentity;
 use App\Services\Agents\DispatchAgentOperation;
 use App\Services\Docker\DockerProcess;
+use App\Services\Notifications\SendShoutrrrNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +41,7 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -397,6 +407,230 @@ class AgentOperationProtocolTest extends TestCase
         $this->assertSame(BackupJob::STATUS_PAUSED, $backup->job->fresh()->status);
         $next = $this->enqueue($this->backup($host));
         $this->assertSame($next->id, $this->pull($body, $token)['id']);
+    }
+
+    public function test_durable_group_advances_two_hosts_once_after_receipts_and_survives_lost_ack(): void
+    {
+        [$first, $body, $token] = $this->registered();
+        [$second, $secondBody, $secondToken] = $this->registered();
+        $run = $this->groupRun([$first, $second]);
+        $children = $run->memberRuns()->orderBy('id')->get();
+        $this->assertSame($children->pluck('id')->all(), $run->member_run_ids);
+        $this->assertFalse(app(DispatchAgentOperation::class)->handle($children[1]));
+        $this->assertFalse(app(DispatchQueuedRun::class)->handle($children[0]));
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $operation = $this->pull($body, $token);
+        $this->assertSame($operation, $this->pull($body, $token));
+        $this->sendAgent('operations/pull', $secondToken, $secondBody)->assertOk()->assertJsonPath('operation', null);
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $this->assertDatabaseCount('agent_operations', 1);
+        $this->complete($body, $token, $operation, ['cleanup_complete' => false])->assertUnprocessable();
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $this->assertSame($children[0]->id, $run->fresh()->current_member_run_id);
+        $this->complete($body, $token, $operation)->assertOk();
+        $this->complete($body, $token, $operation)->assertOk();
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $secondOperation = $this->pull($secondBody, $secondToken);
+        $this->assertNotSame($operation['id'], $secondOperation['id']);
+        $this->complete($secondBody, $secondToken, $secondOperation)->assertOk();
+        foreach (range(1, 3) as $attempt) {
+            $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        }
+        $this->assertSame('success', $run->fresh()->status);
+        $this->assertSame(2, $run->fresh()->succeeded_members);
+        $this->assertDatabaseCount('agent_operations', 2);
+        $this->assertSame(1, RunFinalization::where('backup_group_run_id', $run->id)->where('type', RunFinalization::TYPE_FINISHED_NOTIFICATION)->count());
+        $this->assertSame(1, RunFinalization::where('backup_group_run_id', $run->id)->where('type', RunFinalization::TYPE_STARTED_NOTIFICATION)->count());
+        $this->assertSame(0, RunFinalization::whereNotNull('backup_run_id')->count());
+        app(SendShoutrrrNotification::class)->shouldReceive('sendGroupRunFinishedToChannel')->once();
+        $finalization = RunFinalization::where('backup_group_run_id', $run->id)->where('type', RunFinalization::TYPE_FINISHED_NOTIFICATION)->firstOrFail();
+        app(ProcessRunFinalization::class)->handle($finalization->id);
+        app(ProcessRunFinalization::class)->handle($finalization->id);
+        $this->assertSame(RunFinalization::STATUS_COMPLETED, $finalization->fresh()->status);
+    }
+
+    public function test_group_freezes_sources_destinations_order_and_failure_policy_before_first_dispatch(): void
+    {
+        [$host, $body, $token] = $this->registered();
+        $run = $this->groupRun([$host, $host], BackupJobGroup::FAILURE_POLICY_STOP);
+        $children = $run->memberRuns()->orderBy('id')->get();
+        $originalDestination = $children[0]->destinationForRun()->bucket;
+        $other = BackupDestination::create(['name' => 'Other', 'provider' => 'aws_s3', 'bucket' => 'other-bucket', 'access_key_id' => 'other', 'secret_access_key' => 'other', 'is_active' => true]);
+        $children[0]->job->update(['volume_name' => 'mutated', 'backup_destination_id' => $other->id, 'stop_containers_before_backup' => true]);
+        $run->group->update(['failure_policy' => BackupJobGroup::FAILURE_POLICY_CONTINUE]);
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $operation = $this->pull($body, $token);
+        $this->assertSame('app_data', $operation['spec']['job']['volume_name']);
+        $this->assertSame($originalDestination, $operation['spec']['destination']['bucket']);
+        $this->assertFalse($operation['spec']['job']['stop_containers_before_backup']);
+        $this->complete($body, $token, $operation, ['status' => 'failed', 'error_message' => 'failed member'])->assertOk();
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $this->assertSame('failed', $run->fresh()->status);
+        $this->assertSame(1, $run->fresh()->failed_members);
+        $this->assertSame('cancelled', $children[1]->fresh()->status);
+        $this->assertDatabaseCount('agent_operations', 1);
+        $this->assertFalse(app(DispatchAgentOperation::class)->handle($children[1]));
+    }
+
+    public function test_group_continue_policy_and_terminal_cleanup_block_advancement_and_finish(): void
+    {
+        [$host, $body, $token] = $this->registered();
+        $run = $this->groupRun([$host, $host]);
+        $children = $run->memberRuns()->orderBy('id')->get();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $operation = $this->pull($body, $token);
+        $this->complete($body, $token, $operation, ['status' => 'failed'])->assertOk();
+        $children[0]->update(['docker_container_cleanup_pending' => true]);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertDatabaseCount('agent_operations', 1);
+        $this->assertSame('running', $run->fresh()->status);
+        $children[0]->update(['docker_container_cleanup_pending' => false]);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $operation = $this->pull($body, $token);
+        $this->complete($body, $token, $operation)->assertOk();
+        $children[1]->update(['stopped_container_ids' => ['container-needs-restart']]);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame('running', $run->fresh()->status);
+        $this->assertSame(0, RunFinalization::where('type', RunFinalization::TYPE_FINISHED_NOTIFICATION)->count());
+        $children[1]->update(['stopped_container_ids' => null]);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame('failed', $run->fresh()->status);
+        $this->assertSame(1, $run->fresh()->failed_members);
+        $this->assertSame(1, $run->fresh()->succeeded_members);
+    }
+
+    public function test_group_waits_for_maintenance_without_holding_host_drain_open_or_replaying_work(): void
+    {
+        [$first, $body, $token] = $this->registered();
+        [$second, $secondBody, $secondToken] = $this->registered();
+        $run = $this->groupRun([$first, $second]);
+        $first->forceFill(['maintenance_requested_at' => now()])->save();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame('queued', $run->fresh()->status);
+        $this->assertDatabaseCount('agent_operations', 0);
+        $first->forceFill(['maintenance_requested_at' => null])->save();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $operation = $this->pull($body, $token);
+        $second->forceFill(['maintenance_requested_at' => now()])->save();
+        $this->complete($body, $token, $operation)->assertOk();
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $this->assertDatabaseCount('agent_operations', 1);
+        $this->assertSame(0, app(AgentLifecycle::class)->activeOperations($second->fresh()));
+        $second->forceFill(['maintenance_requested_at' => null])->save();
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $operation = $this->pull($secondBody, $secondToken);
+        $this->complete($secondBody, $secondToken, $operation)->assertOk();
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $this->assertSame('success', $run->fresh()->status);
+    }
+
+    public function test_mixed_group_selects_local_queue_member_and_does_not_reconcile_future_members(): void
+    {
+        config(['volumevault.mode' => 'hybrid', 'queue.default' => 'database']);
+        [$remote, $body, $token] = $this->registered();
+        $local = DockerHost::findOrFail(DockerHost::LOCAL_ID);
+        $run = $this->groupRun([$remote, $local]);
+        $children = $run->memberRuns()->orderBy('id')->get();
+        $this->travel(2)->hours();
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        $this->assertSame('queued', $children[1]->fresh()->status);
+        $remote->forceFill(['last_seen_at' => now()])->save();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        Queue::assertNotPushed(RunBackupJob::class);
+        $operation = $this->pull($body, $token);
+        $this->complete($body, $token, $operation)->assertOk();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        Queue::assertPushed(RunBackupJob::class, fn ($job) => $job->backupRunId === $children[1]->id);
+        $backup = $this->mock(RunBackup::class);
+        $backup->shouldReceive('handle')->once()->withArgs(fn (BackupRun $child) => $child->id === $children[1]->id)
+            ->andReturnUsing(fn (BackupRun $child) => $child->update(['status' => 'success', 'finished_at' => now()]));
+        (new RunBackupJob($children[1]->id))->handle($backup);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame('success', $run->fresh()->status);
+    }
+
+    public function test_paused_group_cancels_frozen_children_without_dispatch_or_notification(): void
+    {
+        [$host] = $this->registered();
+        $run = $this->groupRun([$host, $host], starts: false);
+        $run->group->update(['status' => BackupJobGroup::STATUS_PAUSED]);
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $this->assertSame('cancelled', $run->fresh()->status);
+        $this->assertSame(2, $run->memberRuns()->where('status', 'cancelled')->count());
+        $this->assertDatabaseCount('agent_operations', 0);
+        $this->assertDatabaseCount('run_finalizations', 0);
+    }
+
+    public function test_coordinator_recovers_after_current_member_is_committed_but_publication_fails(): void
+    {
+        [$host, $body, $token] = $this->registered();
+        $run = $this->groupRun([$host, $host]);
+        $this->mock(DispatchAgentOperation::class)->shouldReceive('handle')->once()->andThrow(new \RuntimeException('Publication interrupted'));
+        try {
+            app(AdvanceBackupGroupRun::class)->handle($run);
+            $this->fail('Expected interrupted publication.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Publication interrupted', $exception->getMessage());
+        }
+        $this->assertSame($run->member_run_ids[0], $run->fresh()->current_member_run_id);
+        $this->assertDatabaseCount('agent_operations', 0);
+        $this->app->forgetInstance(DispatchAgentOperation::class);
+        $this->artisan('volumevault:dispatch-queued-runs')->assertSuccessful();
+        $operation = $this->pull($body, $token);
+        $this->assertSame($run->member_run_ids[0], AgentOperation::findOrFail($operation['id'])->backup_run_id);
+        $this->assertDatabaseCount('agent_operations', 1);
+        $this->assertSame(2, $run->memberRuns()->count());
+    }
+
+    public function test_maintenance_rejects_group_admission_without_partial_children(): void
+    {
+        [$host] = $this->registered();
+        $host->forceFill(['maintenance_requested_at' => now()])->save();
+        try {
+            $this->groupRun([$host, $host], starts: false);
+            $this->fail('Maintenance must block admission.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('docker_host_id', $exception->errors());
+        }
+        $this->assertDatabaseCount('backup_group_runs', 0);
+        $this->assertDatabaseCount('backup_runs', 0);
+        $this->assertDatabaseCount('agent_operations', 0);
+    }
+
+    public function test_paused_current_member_is_counted_failed_without_stalling_the_group(): void
+    {
+        [$host, $body, $token] = $this->registered();
+        $run = $this->groupRun([$host, $host]);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $first = $run->memberRuns()->orderBy('id')->firstOrFail();
+        $first->job->update(['status' => BackupJob::STATUS_PAUSED]);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame('cancelled', $first->fresh()->status);
+        $operation = $this->pull($body, $token);
+        $this->complete($body, $token, $operation)->assertOk();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame('failed', $run->fresh()->status);
+        $this->assertSame(1, $run->fresh()->failed_members);
+        $this->assertSame(1, $run->fresh()->succeeded_members);
+        $this->assertSame(BackupJob::STATUS_PAUSED, $first->job->fresh()->status);
+    }
+
+    private function groupRun(array $hosts, string $policy = BackupJobGroup::FAILURE_POLICY_CONTINUE, bool $starts = true): BackupGroupRun
+    {
+        $this->mock(SendShoutrrrNotification::class)->shouldReceive('sendGroupRunStartedToChannel')->times($starts ? 1 : 0);
+        $group = BackupJobGroup::create([
+            'name' => 'Multi-host group', 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'],
+            'status' => 'active', 'failure_policy' => $policy, 'notifications_enabled' => true,
+        ]);
+        $channel = NotificationChannel::create(['name' => 'Group', 'service' => NotificationChannel::SERVICE_ADVANCED, 'notification_level' => NotificationChannel::LEVEL_INFO, 'is_active' => true, 'url' => 'ntfy://notify.test/group']);
+        $group->notificationChannels()->attach($channel);
+        foreach ($hosts as $host) {
+            $seed = $this->backup($host);
+            $seed->job->update(['backup_job_group_id' => $group->id, 'notifications_enabled' => true]);
+            $seed->delete();
+        }
+
+        return app(CreateBackupGroupRun::class)->handle($group, BackupGroupRun::TRIGGER_MANUAL);
     }
 
     /** @return array{DockerHost, string, array<string, mixed>} */

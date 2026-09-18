@@ -1,4 +1,5 @@
 {
+  "hostWorkflow.groupRunUnavailable": "Diese Gruppe kann derzeit nicht starten. Prüfen Sie Status, ausstehende Läufe, ausführbare Mitglieder sowie Host-Funktionen, lokale Ausführung und Wartungseinstellungen.",
   "hostWorkflow.sourceHost": "Docker-Quellhost",
   "hostWorkflow.targetHost": "Docker-Zielhost",
   "hostWorkflow.destinationHost": "Eigentümerhost des Speicherziels",
@@ -7,7 +8,7 @@
   "hostWorkflow.noVolumes": "Keine Volumes im Inventar dieses Hosts. Lokalen Host synchronisieren, auf das Agent-Inventar warten oder einen Host-Pfad wählen.",
   "hostWorkflow.allowlist": "Erlaubte Pfade auf diesem Agent: {paths}",
   "hostWorkflow.allowlistUnknown": "Die erlaubten Pfade dieses Agents sind nicht verfügbar. Der Agent prüft den Pfad vor der Ausführung.",
-  "hostWorkflow.groupsUnsupported": "Remote-Backup-Gruppen werden noch nicht unterstützt. Verwenden Sie einen einzeln geplanten Auftrag.",
+  "hostWorkflow.groupExecution": "Gruppen können lokale und entfernte Hosts umfassen. Jedes Mitglied stoppt seine Container, sichert die Daten und startet sie neu, bevor das nächste Mitglied ausgeführt wird. Dies ist kein konsistenter hostübergreifender Snapshot.",
   "hostWorkflow.relayUnsupported": "Lokale Archive können nur auf ihrem Eigentümerhost wiederhergestellt werden. Die Übertragung zwischen Hosts wird noch nicht unterstützt.",
   "hostWorkflow.sharedRestore": "Gemeinsame Netzwerkziele erlauben die Wiederherstellung auf einem anderen Host. Dabei wird immer ein neues Volume erstellt.",
   "hostWorkflow.targetExists": "Dieses Volume existiert bereits auf dem Zielhost. Wählen Sie einen neuen Namen.",

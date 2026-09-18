@@ -5,6 +5,7 @@ namespace App\Services\Agents;
 use App\Models\DockerHost;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\LocalDockerExecution;
+use App\Support\DeploymentMode;
 use Illuminate\Validation\ValidationException;
 
 class AgentExecution
@@ -14,6 +15,7 @@ class AgentExecution
         $data = [
             ...$host->only(['id', 'uuid', 'name', 'driver', 'agent_protocol_version', 'agent_capabilities', 'agent_registered_at', 'agent_revoked_at', 'maintenance_requested_at']),
             'status' => $host->agentStatus(),
+            'is_local' => $host->isLocal(),
             'maintenance_requested' => $host->maintenance_requested_at !== null,
         ];
         if ($includePaths) {
@@ -31,10 +33,20 @@ class AgentExecution
             return;
         }
         $host = DockerHost::find($id);
-        if (! $host || $host->driver !== DockerHost::DRIVER_AGENT || $host->agent_revoked_at !== null
-            || $host->agent_registered_at === null || app(AgentCompatibility::class)->status($host) !== 'compatible'
-            || ! in_array($capability, $host->agent_capabilities ?? [], true)) {
+        if (! $this->supportsHost($host, $capability)) {
             throw ValidationException::withMessages(['docker_host_id' => 'Select a registered agent supporting this operation.']);
         }
+    }
+
+    public function supportsHost(?DockerHost $host, string $capability): bool
+    {
+        if ($host?->isLocal()) {
+            return DeploymentMode::localExecutionEnabled();
+        }
+
+        return $host !== null && $host->driver === DockerHost::DRIVER_AGENT
+            && $host->agent_revoked_at === null && $host->agent_registered_at !== null
+            && app(AgentCompatibility::class)->status($host) === 'compatible'
+            && in_array($capability, $host->agent_capabilities ?? [], true);
     }
 }

@@ -24,7 +24,7 @@ const activeTab = ref<'runs' | 'restores'>('runs');
 
 const { canManageBackups, canExecute, resourceHost, localExecutionEnabled } = useDeployment();
 const canManageJob = computed(() => canManageBackups.value && (Number(props.job.docker_host_id ?? 1) !== 1 || localExecutionEnabled.value));
-const canRunJob = computed(() => canExecute(resourceHost(props.job), 'backup-v1') && !(Number(props.job.docker_host_id ?? 1) !== 1 && props.job.backup_job_group_id));
+const canRunJob = computed(() => canExecute(resourceHost(props.job), 'backup-v1'));
 const { t, formatDate } = useI18n();
 const sourceLabel = (job: any) => job.source_label || job.host_path || job.volume_name || t('Unknown');
 const sourceTypeLabel = (job: any) => job.source_type === 'host_path' ? t('Host path') : t('Docker volume');
@@ -48,7 +48,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
             </div>
         </template>
 
-        <p v-if="canManageJob && !canRunJob" role="status" class="mb-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-700 dark:text-amber-200">{{ t(Number(job.docker_host_id ?? 1) !== 1 && job.backup_job_group_id ? 'hostWorkflow.groupsUnsupported' : 'hostWorkflow.unavailable') }}</p>
+        <p v-if="canManageJob && !canRunJob" role="status" class="mb-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-700 dark:text-amber-200">{{ t('hostWorkflow.unavailable') }}</p>
         <div class="grid gap-6 lg:grid-cols-3">
             <section class="card p-4 sm:p-5 lg:col-span-2">
                 <h2 class="mb-4 text-lg font-semibold">{{ t('Job info') }}</h2>

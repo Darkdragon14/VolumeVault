@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Actions\Backup\AdvanceBackupGroupRun;
 use App\Actions\Backup\RunBackup;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
@@ -71,6 +72,10 @@ class RunBackupJob implements ShouldQueue
         }
 
         $run = BackupRun::findOrFail($this->backupRunId);
+
+        if ($run->belongsToGroupRun() && ! AdvanceBackupGroupRun::authorizes($run)) {
+            return;
+        }
 
         if (app(HostWorkAdmission::class)->isWaiting($run)) {
             $this->release(60);

@@ -5,7 +5,6 @@ namespace App\Actions\Backup;
 use App\Models\ActivityLog;
 use App\Models\BackupJobGroup;
 use App\Models\NotificationChannel;
-use App\Services\Docker\LocalDockerExecution;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -17,8 +16,6 @@ class CreateBackupJobGroup
      */
     public function handle(array $attributes, string $activityDescription, array $activityContext = []): BackupJobGroup
     {
-        LocalDockerExecution::validate();
-
         return DB::transaction(function () use ($attributes, $activityDescription, $activityContext): BackupJobGroup {
             $channelIds = null;
 

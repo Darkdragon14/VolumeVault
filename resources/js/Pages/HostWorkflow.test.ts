@@ -8,6 +8,11 @@ import RestoreForm from './Restore/Create.vue';
 import DestinationForm from './Destinations/Form.vue';
 import RunShow from './BackupRuns/Show.vue';
 import VolumeIndex from './Volumes/Index.vue';
+import GroupForm from './BackupGroups/Form.vue';
+import GroupIndex from './BackupGroups/Index.vue';
+import GroupShow from './BackupGroups/Show.vue';
+import GroupRunShow from './BackupGroups/RunShow.vue';
+import StackIndex from './Stacks/Index.vue';
 import { hostSupports } from '@/Composables/useDeployment';
 
 const inertia = vi.hoisted(() => ({ page: null as any, form: null as any, submitted: vi.fn(), post: vi.fn() }));
@@ -151,17 +156,103 @@ describe('Host-scoped backup and restore workflows', () => {
         expect(wrapper.text()).not.toContain('app-a');
     });
 
-    it('disables local execution, old capabilities and remote group mode with an explanation', async () => {
+    it('disables local execution and old capabilities but allows remote group mode', async () => {
         const wrapper = render(JobForm, jobProps());
         expect(wrapper.get('[data-source-host] option[value="1"]').attributes('disabled')).toBeDefined();
         expect(wrapper.get('[data-source-host] option[value="4"]').attributes('disabled')).toBeDefined();
-        expect(wrapper.get('input[value="group"]').attributes('disabled')).toBeDefined();
-        expect(wrapper.text()).toContain('hostWorkflow.groupsUnsupported');
+        expect(wrapper.get('input[value="group"]').attributes('disabled')).toBeUndefined();
         inertia.form.docker_host_id = 1;
         inertia.form.volume_name = 'data';
         await nextTick();
         await wrapper.get('form').trigger('submit');
         expect(inertia.submitted).not.toHaveBeenCalled();
+    });
+
+    it.each(['existing', 'new'])('submits a remote grouped job with %s group selection and keeps grouping across hosts', async (selection) => {
+        const wrapper = render(JobForm, { ...jobProps(), groups: [{ id: 9, name: 'Nightly' }] });
+        await wrapper.get('input[value="group"]').setValue();
+        await wrapper.get(`input[value="${selection}"]`).setValue();
+        inertia.form.new_group.name = 'Multi-host';
+        await wrapper.get('[data-source-host]').setValue('3');
+        expect(inertia.form.planning_mode).toBe('group');
+        await wrapper.get('input[autocomplete="off"]').setValue('b-only');
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.submitted).toHaveBeenCalledWith('/backup-jobs', expect.objectContaining({
+            docker_host_id: 3, volume_name: 'b-only', backup_destination_id: 3,
+            planning_mode: 'group', group_selection: selection, backup_job_group_id: 9,
+        }));
+        expect(wrapper.text()).toContain('hostWorkflow.groupExecution');
+    });
+
+    it('preserves a remote member when editing and allows resume without an individual run action', async () => {
+        const job = { id: 7, name: 'Data', docker_host_id: 2, docker_host: remote, volume_name: 'data', backup_job_group_id: 9, status: 'paused' };
+        const form = render(JobForm, { ...jobProps(), job, groups: [{ id: 9, name: 'Nightly' }] });
+        await form.get('form').trigger('submit');
+        expect(inertia.submitted).toHaveBeenCalledWith('/backup-jobs/7', expect.objectContaining({ planning_mode: 'group', docker_host_id: 2, backup_job_group_id: 9 }));
+        const show = render(JobShow, { job, runs: pagination, restoreRuns: pagination });
+        expect(button(show, 'Run now')).toBeUndefined();
+        expect(button(show, 'Resume').attributes('disabled')).toBeUndefined();
+        await button(show, 'Resume').trigger('click');
+        expect(inertia.post).toHaveBeenCalledWith('/backup-jobs/7/resume');
+    });
+
+    it.each([old, { ...remote, maintenance_requested: true }, { ...remote, agent_revoked_at: '2026-09-18' }])('blocks grouped submission on an ineligible host: $name', async (host) => {
+        const wrapper = render(JobForm, { ...jobProps(), hosts: [host],
+            job: { id: 7, docker_host_id: host.id, volume_name: 'data', backup_job_group_id: 9 },
+            volumes: [{ docker_host_id: host.id, name: 'data' }], groups: [{ id: 9, name: 'Nightly' }],
+        });
+        expect(wrapper.get('input[value="group"]').attributes('disabled')).toBeDefined();
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.submitted).not.toHaveBeenCalled();
+    });
+
+    it('offers group creation and actions in orchestrator mode and distinguishes homonymous members by host', async () => {
+        const members = [remote, other].map((host) => ({ id: host.id, name: 'Data', job_name: 'Data', source_label: 'data', status: 'active', docker_host_id: host.id, docker_host: { id: host.id, name: host.name, is_local: false } }));
+        const group = { id: 9, name: 'Nightly', status: 'active', can_run: true, can_run_reason: null, members, members_count: 2 };
+        const index = render(GroupIndex, { groups: { ...pagination, data: [group] }, defaultPerPage: 25 });
+        expect(index.find('a[href="/backup-groups/create"]').exists()).toBe(true);
+        const stacks = render(StackIndex, { stacks: [{ name: 'Local stack', volumes: [], existing_volumes: 1, configured_job_volumes: 1 }], destinations: [], timezones: ['UTC'], appTimezone: 'UTC' });
+        expect(button(stacks, 'Run all jobs')).toBeUndefined();
+        const form = render(GroupForm, { group, notificationChannels: [], timezones: ['UTC'], appTimezone: 'UTC' });
+        await form.get('form').trigger('submit');
+        expect(inertia.submitted).toHaveBeenCalledWith('/backup-groups/9', expect.objectContaining({ name: 'Nightly' }));
+        const show = render(GroupShow, { group, runs: pagination });
+        await button(show, 'Run now').trigger('click');
+        expect(inertia.post).toHaveBeenCalledWith('/backup-groups/9/run');
+        const run = render(GroupRunShow, { run: { id: 1, members } });
+        for (const wrapper of [form, show, run]) {
+            expect(wrapper.text()).toContain('Agent A (#2)');
+            expect(wrapper.text()).toContain('Agent B (#3)');
+        }
+        inertia.page.props.can.manageSensitiveData = false;
+        await nextTick();
+        expect(form.find('form').exists()).toBe(false);
+        expect(show.find('button').exists()).toBe(false);
+        expect(index.find('a[href="/backup-groups/create"]').exists()).toBe(false);
+    });
+
+    it('uses server group eligibility on both list layouts and details while preserving management', async () => {
+        const group = { id: 9, name: 'Unavailable', status: 'active', members: [], can_run: false, can_run_reason: 'hostWorkflow.groupRunUnavailable' };
+        const index = render(GroupIndex, { groups: { ...pagination, data: [group] }, defaultPerPage: 25 });
+        const show = render(GroupShow, { group, runs: pagination });
+        const runs = index.findAll('button[aria-label="Run now"]');
+        expect(runs).toHaveLength(2);
+        for (const run of runs) {
+            expect(run.attributes('disabled')).toBeDefined();
+            await run.trigger('click');
+        }
+        expect(button(show, 'Run now').attributes('disabled')).toBeDefined();
+        await button(show, 'Run now').trigger('click');
+        expect(inertia.post).not.toHaveBeenCalled();
+        for (const wrapper of [index, show]) {
+            expect(wrapper.text()).toContain('hostWorkflow.groupRunUnavailable');
+            expect(wrapper.find('a[href="/backup-groups/9/edit"]').exists()).toBe(true);
+        }
+        expect(button(show, 'Pause').attributes('disabled')).toBeUndefined();
+        await index.setProps({ groups: { ...pagination, data: [{ ...group, can_run: true, can_run_reason: null }] } });
+        expect(index.get('button[aria-label="Run now"]').attributes('disabled')).toBeUndefined();
+        await index.get('button[aria-label="Run now"]').trigger('click');
+        expect(inertia.post).toHaveBeenCalledWith('/backup-groups/9/run');
     });
 
     it('shows remote path allowlists from the selected host', async () => {

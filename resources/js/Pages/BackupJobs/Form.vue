@@ -112,7 +112,6 @@ watch(() => form.docker_host_id, () => {
     form.host_path = '';
     form.stop_container_names = [];
     volumeSelectorOpen.value = false;
-    if (isRemote.value) form.planning_mode = 'standalone';
 });
 
 const groups = computed(() => props.groups || []);
@@ -141,7 +140,7 @@ const volumeSearch = ref(form.volume_name);
 const volumeSelectorOpen = ref(false);
 const isDockerVolumeSource = computed(() => form.source_type === 'docker_volume');
 const canSubmit = computed(() => canExecute(selectedHost.value, 'backup-v1') && Boolean(hostDestinations.value.length)
-    && (!isDockerVolumeSource.value || Boolean(selectedVolume.value)) && !(isRemote.value && isGrouped.value));
+    && (!isDockerVolumeSource.value || Boolean(selectedVolume.value)));
 
 const sourceTypeLabel = (type: string) => type === 'host_path' ? 'Host path' : 'Docker volume';
 const sourceTypeDescription = (type: string) => type === 'host_path'
@@ -413,7 +412,7 @@ const submit = () => {
                         </span>
                     </label>
                     <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm">
-                        <input v-model="form.planning_mode" type="radio" value="group" :disabled="isRemote" class="mt-1 text-sky-400">
+                        <input v-model="form.planning_mode" type="radio" value="group" :disabled="!canExecute(selectedHost, 'backup-v1')" class="mt-1 text-sky-400">
                         <span>
                             <span class="block font-semibold text-white">{{ t('Part of a group') }}</span>
                             <span class="mt-1 block text-slate-300">{{ t('The group owns the schedule and sends one notification for all its volumes.') }}</span>
@@ -421,7 +420,7 @@ const submit = () => {
                     </label>
                 </div>
 
-                <p v-if="isRemote" role="status" class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.groupsUnsupported') }}</p>
+                <p v-if="isGrouped" class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.groupExecution') }}</p>
                 <div v-if="isGrouped" class="mt-4 space-y-4">
                     <div v-if="groups.length" class="grid gap-3 sm:grid-cols-2">
                         <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">

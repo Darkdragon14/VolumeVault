@@ -1,4 +1,5 @@
 {
+  "hostWorkflow.groupRunUnavailable": "Ce groupe ne peut pas démarrer maintenant. Vérifiez son état, les exécutions en attente, les membres exécutables, les capacités des hôtes, l’exécution locale et la maintenance.",
   "hostWorkflow.sourceHost": "Hôte Docker source",
   "hostWorkflow.targetHost": "Hôte Docker cible",
   "hostWorkflow.destinationHost": "Hôte propriétaire de la destination",
@@ -7,7 +8,7 @@
   "hostWorkflow.noVolumes": "Aucun volume dans l’inventaire de cet hôte. Synchronisez l’hôte local, attendez l’inventaire de l’agent ou choisissez un chemin hôte.",
   "hostWorkflow.allowlist": "Chemins autorisés sur cet agent : {paths}",
   "hostWorkflow.allowlistUnknown": "La liste des chemins autorisés de cet agent est indisponible. L’agent valide le chemin avant l’exécution.",
-  "hostWorkflow.groupsUnsupported": "Les groupes de sauvegarde distants ne sont pas encore pris en charge. Utilisez une tâche planifiée individuellement.",
+  "hostWorkflow.groupExecution": "Les groupes peuvent inclure des hôtes locaux et distants. Chaque membre arrête ses conteneurs, effectue sa sauvegarde puis les redémarre avant le membre suivant. Il ne s’agit pas d’un instantané cohérent entre les hôtes.",
   "hostWorkflow.relayUnsupported": "Les archives locales ne peuvent être restaurées que sur leur hôte propriétaire. Le transfert entre hôtes n’est pas encore pris en charge.",
   "hostWorkflow.sharedRestore": "Les destinations réseau partagées permettent une restauration sur un autre hôte. Une restauration inter-hôtes crée toujours un nouveau volume.",
   "hostWorkflow.targetExists": "Ce volume existe déjà sur l’hôte cible. Choisissez un nouveau nom.",

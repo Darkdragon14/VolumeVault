@@ -182,7 +182,9 @@ class ReconcileStaleRuns extends Command
     {
         return BackupRun::query()
             ->where('docker_host_id', DockerHost::LOCAL_ID)
-            ->whereNull('backup_group_run_id')
+            ->where(fn ($query) => $query->whereNull('backup_group_run_id')
+                ->orWhereHas('groupRun', fn ($query) => $query->whereNotNull('member_run_ids')
+                    ->where('status', 'running')->whereColumn('current_member_run_id', 'backup_runs.id')))
             ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE)
             ->where('status', BackupRun::STATUS_QUEUED)
             ->whereNotNull('dispatch_token')
@@ -212,6 +214,7 @@ class ReconcileStaleRuns extends Command
     private function exhaustedGroupPublications(CarbonInterface $cutoff): Collection
     {
         return BackupGroupRun::query()
+            ->whereNull('member_run_ids')
             ->whereDoesntHave('group.members', fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->whereDoesntHave('memberRuns', fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->where('status', BackupGroupRun::STATUS_QUEUED)
@@ -244,6 +247,7 @@ class ReconcileStaleRuns extends Command
     private function staleGroupRuns(CarbonInterface $cutoff, array $reconciledBackupRunIds): Collection
     {
         return BackupGroupRun::query()
+            ->whereNull('member_run_ids')
             ->whereDoesntHave('group.members', fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->whereDoesntHave('memberRuns', fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
@@ -417,6 +421,9 @@ class ReconcileStaleRuns extends Command
     private function backupIsStale(BackupRun $run, CarbonInterface $cutoff): bool
     {
         if ($run->status !== BackupRun::STATUS_RUNNING) {
+            if ($run->belongsToGroupRun() && $run->groupRun?->member_run_ids !== null) {
+                return false;
+            }
             if (! $run->belongsToGroupRun() && $run->trigger !== BackupRun::TRIGGER_PRE_RESTORE) {
                 return false;
             }
@@ -553,12 +560,10 @@ class ReconcileStaleRuns extends Command
             return false;
         }
 
-        // A group member run is executed inline by the group worker, not dispatched
-        // as its own queue job, so it is never a WithoutOverlapping lock waiter that
-        // will be redelivered. A crashed worker can leave it stuck queued; it must be
-        // reconciled (failed), not exempted — otherwise it stays queued forever and
-        // also keeps its group run open (groupRunHasActiveMemberRun sees it).
-        if ($run->belongsToGroupRun()) {
+        // Legacy group members execute inline and cannot be queue lock waiters.
+        // Durable coordinated members have their own WithoutOverlapping queue jobs
+        // and need the same active/recently-released holder protection as standalone runs.
+        if ($run->belongsToGroupRun() && $run->groupRun?->member_run_ids === null) {
             return false;
         }
 
@@ -700,6 +705,10 @@ class ReconcileStaleRuns extends Command
                     ->whereDoesntHave('groupRun', fn ($group) => $group
                         ->where('status', BackupGroupRun::STATUS_RUNNING)
                         ->where('last_heartbeat_at', '>=', $cutoff))
+                    // A durable coordinator heartbeat does not imply a live local
+                    // worker. Recovery still takes the worker's volume lock and
+                    // refreshes the member before restarting any containers.
+                    ->orWhereHas('groupRun', fn ($group) => $group->whereNotNull('member_run_ids'))
                     // ...or the worker has already moved on to a later member (a
                     // higher-id member run exists), so this member's restart has
                     // finished or failed and must be recovered now — not left down

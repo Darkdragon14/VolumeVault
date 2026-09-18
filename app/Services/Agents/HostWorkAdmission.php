@@ -2,6 +2,7 @@
 
 namespace App\Services\Agents;
 
+use App\Actions\Backup\AdvanceBackupGroupRun;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
@@ -46,6 +47,11 @@ class HostWorkAdmission
             $current = $run->newQuery()->find($run->getKey());
 
             if ($current === null || $current->status !== BackupRun::STATUS_QUEUED) {
+                return 0;
+            }
+
+            if ($current instanceof BackupRun && $current->belongsToGroupRun()
+                && $current->groupRun?->member_run_ids !== null && ! AdvanceBackupGroupRun::authorizes($current)) {
                 return 0;
             }
 
@@ -113,6 +119,11 @@ class HostWorkAdmission
     {
         if ($run->status !== BackupRun::STATUS_QUEUED) {
             return false;
+        }
+
+        if ($run instanceof BackupRun && $run->belongsToGroupRun()
+            && BackupGroupRun::whereKey($run->backup_group_run_id)->whereNotNull('member_run_ids')->exists()) {
+            return ! AdvanceBackupGroupRun::authorizes($run) || $this->forRun($run);
         }
 
         if ($run instanceof BackupRun && ($run->belongsToGroupRun() || $run->trigger === BackupRun::TRIGGER_PRE_RESTORE)) {

@@ -1,4 +1,5 @@
 {
+  "hostWorkflow.groupRunUnavailable": "Ez a csoport most nem futtatható. Ellenőrizze az állapotát, a várakozó futásokat, a futtatható tagokat, a gazdagépek képességeit, a helyi végrehajtást és a karbantartási beállításokat.",
   "hostWorkflow.sourceHost": "Forrás Docker-gazdagép",
   "hostWorkflow.targetHost": "Cél Docker-gazdagép",
   "hostWorkflow.destinationHost": "A cél tulajdonos gazdagépe",
@@ -7,7 +8,7 @@
   "hostWorkflow.noVolumes": "Nincs kötet a gazdagép leltárában. Szinkronizálja a helyi gazdagépet, várja meg az ügynök leltárát, vagy válasszon gazdagépútvonalat.",
   "hostWorkflow.allowlist": "Engedélyezett útvonalak ezen az ügynökön: {paths}",
   "hostWorkflow.allowlistUnknown": "Az ügynök engedélyezett útvonalainak listája nem érhető el. Az ügynök végrehajtás előtt ellenőrzi az útvonalat.",
-  "hostWorkflow.groupsUnsupported": "A távoli mentési csoportok még nem támogatottak. Használjon önállóan ütemezett feladatot.",
+  "hostWorkflow.groupExecution": "A csoportok helyi és távoli gazdagépeket is tartalmazhatnak. Minden tag leállítja a konténereit, mentést készít, majd újraindítja őket a következő tag futtatása előtt. Ez nem gazdagépek közötti konzisztens pillanatkép.",
   "hostWorkflow.relayUnsupported": "A helyi archívumok csak a tulajdonos gazdagépen állíthatók vissza. A gazdagépek közötti átvitel még nem támogatott.",
   "hostWorkflow.sharedRestore": "A megosztott hálózati célok másik gazdagépre is visszaállíthatók. A gazdagépek közötti visszaállítás mindig új kötetet hoz létre.",
   "hostWorkflow.targetExists": "Ez a kötet már létezik a célgazdagépen. Válasszon új nevet.",

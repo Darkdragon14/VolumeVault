@@ -1,17 +1,21 @@
 <?php
 
 return [
+    'remote_backup_groups' => [
+        'title' => 'Skupiny záloh na místních i vzdálených hostitelích',
+        'description' => 'Skupiny koordinují místní, vzdálené i smíšené členy postupně s jedním souhrnným výsledkem. Trvalá koordinace zachovává členství, zdroje a zásady při selhání; přidělená práce během údržby doběhne a další člen čeká. Ovládání funguje v režimu orchestrátoru a zobrazení členů uvádí hostitele. Každý člen dokončí vlastní cyklus zastavení, zálohy a spuštění; nejde o konzistentní snímek napříč hostiteli. Stávající agenti backup-v1 jsou podporováni.',
+    ],
     'agent_execution_safety_and_identity' => [
         'title' => 'Bezpečné provádění agentů a přesný výběr prostředků',
         'description' => 'Kontroly S3 agentů odmítají rozporné endpointy. Pomocné kontejnery musí být odstraněny před restartem aplikací i po přerušení spojení s Dockerem. Odkazy na svazky zachovávají hostitele, výběr archivu předává historický kontext a obnovy nepřebírají později změněný typ zdroje úlohy.',
     ],
     'remote_agent_execution' => [
         'title' => 'Zálohování a obnova prostřednictvím agentů Dockeru',
-        'description' => 'Kompatibilní agenti provádějí jednotlivé zálohy a obnovy pomocí trvalých šifrovaných příkazů a soukromých protokolů obnovy. Sdílené síťové cíle umožňují obnovu na jiného hostitele bez Docker socketu v orchestrátoru. Výsledky a metadata bezpečnostních záloh přežijí opětovné připojení bez opakování dokončené práce. Distribuované skupiny a přenos místních archivů mezi hostiteli zatím nejsou dostupné.',
+        'description' => 'Kompatibilní agenti provádějí zálohy a obnovy pomocí trvalých šifrovaných příkazů a soukromých protokolů obnovy. Sdílené síťové cíle umožňují obnovu na jiného hostitele bez Docker socketu v orchestrátoru. Výsledky a metadata bezpečnostních záloh přežijí opětovné připojení bez opakování dokončené práce. Přenos místních archivů mezi hostiteli zatím není dostupný.',
     ],
     'remote_host_workflows' => [
         'title' => 'Konfigurace záloh a obnovy podle hostitele',
-        'description' => 'Samostatné úlohy mohou používat registrované agenty, i offline a v režimu samotného orchestrátoru. Sdílené síťové úložiště umožňuje obnovu na jiném hostiteli. Inventář, cesty a místní cíle jsou oddělené podle hostitele. Přenos místních archivů mezi hostiteli a vzdálené skupiny záloh zatím nejsou dostupné.',
+        'description' => 'Úlohy mohou používat registrované agenty, i offline a v režimu samotného orchestrátoru. Sdílené síťové úložiště umožňuje obnovu na jiném hostiteli. Inventář, cesty a místní cíle jsou oddělené podle hostitele. Přenos místních archivů mezi hostiteli zatím není dostupný.',
     ],
     'docker_host_metrics' => [
         'title' => 'Přehledné informace o místních hostitelích a agentech',

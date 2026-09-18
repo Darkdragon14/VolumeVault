@@ -80,6 +80,7 @@ class OrchestratorModeTest extends TestCase
     {
         $job = $this->job();
         $group = $this->group();
+        $job->update(['backup_job_group_id' => $group->id]);
         $this->mock(DockerProcess::class)->shouldNotReceive('run');
 
         foreach ([
@@ -191,7 +192,7 @@ class OrchestratorModeTest extends TestCase
         $events = collect(app(Schedule::class)->events());
         foreach ($events as $event) {
             $name = ($event->command ?? '').' '.($event->description ?? '');
-            $local = str_contains($name, 'DispatchDueBackupGroups') || str_contains($name, 'SyncDockerVolumes')
+            $local = str_contains($name, 'SyncDockerVolumes')
                 || str_contains($name, 'reconcile-stale-runs')
                 || str_contains($name, 'host-path-allowlist:audit');
 

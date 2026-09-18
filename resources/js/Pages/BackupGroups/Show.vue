@@ -18,7 +18,7 @@ const props = defineProps<{
     runs: PaginatedData<any>;
 }>();
 
-const { localDockerPermissions: can } = useDeployment();
+const { groupPermissions: can } = useDeployment();
 const { t, formatDate } = useI18n();
 const failurePolicyLabel = (policy: string) => policy === 'stop' ? t('Stop at first failure') : t('Continue, report failure');
 const runNow = (id: number) => router.post(`/backup-groups/${id}/run`);
@@ -32,7 +32,7 @@ const destroyGroup = (id: number) => confirm(t('Delete this backup group? Detach
     <AppLayout :title="group.name" :subtitle="t('Review schedule, members, run history, and actions for this group.')">
         <template #actions>
             <div class="flex flex-wrap gap-2">
-                <button v-if="can.runDockerActions" class="btn-primary" :disabled="group.status !== 'active'" @click="runNow(group.id)">{{ t('Run now') }}</button>
+                <button v-if="can.runDockerActions" class="btn-primary" :disabled="!group.can_run" @click="runNow(group.id)">{{ t('Run now') }}</button>
                 <button v-if="can.runDockerActions && (group.status === 'paused' || group.status === 'error')" class="btn-secondary" @click="resume(group.id)">{{ t('Resume') }}</button>
                 <button v-else-if="can.runDockerActions" class="btn-secondary" :disabled="group.status === 'running'" @click="pause(group.id)">{{ t('Pause') }}</button>
                 <Link v-if="can.runDockerActions" :href="`/backup-groups/${group.id}/edit`" class="btn-secondary">{{ t('Edit') }}</Link>
@@ -40,6 +40,7 @@ const destroyGroup = (id: number) => confirm(t('Delete this backup group? Detach
             </div>
         </template>
 
+        <p v-if="can.runDockerActions && group.can_run_reason" role="status" class="mb-4 text-sm text-slate-400">{{ t(group.can_run_reason) }}</p>
         <div class="grid gap-6 lg:grid-cols-3">
             <section class="card p-4 sm:p-5 lg:col-span-2">
                 <h2 class="mb-4 text-lg font-semibold">{{ t('Group info') }}</h2>
@@ -63,11 +64,13 @@ const destroyGroup = (id: number) => confirm(t('Delete this backup group? Detach
 
         <section class="card mt-6 p-4 sm:p-5">
             <h2 class="mb-4 text-lg font-semibold">{{ t('Members') }}</h2>
+            <p class="mb-4 text-sm text-slate-400">{{ t('hostWorkflow.groupExecution') }}</p>
             <div v-if="group.members.length" class="divide-y divide-white/10 rounded-xl border border-white/10">
                 <div v-for="member in group.members" :key="member.id" class="flex items-center justify-between gap-3 p-3 text-sm">
                     <div class="min-w-0">
                         <Link :href="`/backup-jobs/${member.id}`" class="break-words font-medium text-sky-300 hover:text-sky-200">{{ member.name }}</Link>
                         <p class="mt-1 break-all text-slate-400">{{ member.source_label }}</p>
+                        <p class="mt-1 break-words text-slate-400">{{ t('hostWorkflow.sourceHost') }}: {{ member.docker_host?.name || t('Unknown') }} (#{{ member.docker_host_id ?? 1 }})</p>
                         <p class="mt-1 text-slate-500">{{ member.destination || t('Missing') }} · {{ t('Last success') }}: {{ formatDate(member.last_success_at) }}</p>
                     </div>
                     <StatusBadge :status="member.status" />

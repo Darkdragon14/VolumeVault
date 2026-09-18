@@ -1,4 +1,5 @@
 {
+  "hostWorkflow.groupRunUnavailable": "Questo gruppo non può essere eseguito ora. Controlla lo stato, le esecuzioni in attesa, i membri eseguibili, le capacità degli host, l’esecuzione locale e la manutenzione.",
   "hostWorkflow.sourceHost": "Host Docker di origine",
   "hostWorkflow.targetHost": "Host Docker di destinazione",
   "hostWorkflow.destinationHost": "Host proprietario della destinazione",
@@ -7,7 +8,7 @@
   "hostWorkflow.noVolumes": "Nessun volume nell’inventario di questo host. Sincronizza l’host locale, attendi l’inventario dell’agente o scegli un percorso host.",
   "hostWorkflow.allowlist": "Percorsi consentiti su questo agente: {paths}",
   "hostWorkflow.allowlistUnknown": "L’elenco dei percorsi consentiti dell’agente non è disponibile. L’agente verifica il percorso prima dell’esecuzione.",
-  "hostWorkflow.groupsUnsupported": "I gruppi di backup remoti non sono ancora supportati. Usa un processo pianificato individualmente.",
+  "hostWorkflow.groupExecution": "I gruppi possono includere host locali e remoti. Ogni membro arresta i propri container, esegue il backup e li riavvia prima del membro successivo. Non si tratta di uno snapshot coerente tra host.",
   "hostWorkflow.relayUnsupported": "Gli archivi locali possono essere ripristinati solo sull’host proprietario. Il trasferimento tra host non è ancora supportato.",
   "hostWorkflow.sharedRestore": "Le destinazioni di rete condivise consentono il ripristino su un altro host. Il ripristino tra host crea sempre un nuovo volume.",
   "hostWorkflow.targetExists": "Questo volume esiste già sull’host di destinazione. Scegli un nuovo nome.",

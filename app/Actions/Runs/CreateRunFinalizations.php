@@ -86,19 +86,34 @@ class CreateRunFinalizations
         return $this->createNotificationRows('backup-group-run', $run->id, 'backup_group_run_id', $channels);
     }
 
+    /** @return list<int> */
+    public function createGroupStartNotifications(BackupGroupRun $run, BackupJobGroup $lockedGroup): array
+    {
+        if (! $lockedGroup->notifications_enabled) {
+            return [];
+        }
+
+        $channels = $lockedGroup->notificationChannels()->where('is_active', true)
+            ->where('notification_level', NotificationChannel::LEVEL_INFO)->orderBy('notification_channels.id')->lockForUpdate()->get();
+
+        return $this->createNotificationRows('backup-group-run', $run->id, 'backup_group_run_id', $channels, RunFinalization::TYPE_STARTED_NOTIFICATION);
+    }
+
     /**
      * @param  Collection<int, NotificationChannel>  $channels
      * @return list<int>
      */
-    private function createNotificationRows(string $ownerType, int $ownerId, string $ownerColumn, Collection $channels): array
+    private function createNotificationRows(string $ownerType, int $ownerId, string $ownerColumn, Collection $channels, string $type = RunFinalization::TYPE_FINISHED_NOTIFICATION): array
     {
-        return $channels->map(function (NotificationChannel $channel) use ($ownerType, $ownerId, $ownerColumn): int {
+        $event = $type === RunFinalization::TYPE_STARTED_NOTIFICATION ? 'started' : 'finished';
+
+        return $channels->map(function (NotificationChannel $channel) use ($ownerType, $ownerId, $ownerColumn, $type, $event): int {
             return RunFinalization::query()->firstOrCreate([
-                'deduplication_key' => "{$ownerType}:{$ownerId}:finished-notification:channel:{$channel->id}",
+                'deduplication_key' => "{$ownerType}:{$ownerId}:{$event}-notification:channel:{$channel->id}",
             ], [
                 $ownerColumn => $ownerId,
                 'notification_channel_id' => $channel->id,
-                'type' => RunFinalization::TYPE_FINISHED_NOTIFICATION,
+                'type' => $type,
                 'status' => RunFinalization::STATUS_PENDING,
                 'available_at' => now(),
             ])->id;

@@ -13,6 +13,7 @@ use App\Http\Requests\BackupJobGroupRequest;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
+use App\Services\Agents\AgentExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,7 +46,7 @@ class BackupJobGroupController extends Controller
 
     public function show(BackupJobGroup $backupGroup): JsonResponse
     {
-        return response()->json(['data' => $this->serializeGroup($backupGroup->loadCount('members')->load(['notificationChannels', 'members']), withMembers: true)]);
+        return response()->json(['data' => $this->serializeGroup($backupGroup->loadCount('members')->load(['notificationChannels', 'members.dockerHost']), withMembers: true)]);
     }
 
     public function update(BackupJobGroupRequest $request, BackupJobGroup $backupGroup, UpdateBackupJobGroup $updateBackupJobGroup): JsonResponse
@@ -171,6 +172,8 @@ class BackupJobGroupController extends Controller
             $data['members'] = $group->members->map(fn (BackupJob $member): array => [
                 'id' => $member->id,
                 'name' => $member->name,
+                'docker_host_id' => $member->docker_host_id,
+                'docker_host' => $member->dockerHost ? app(AgentExecution::class)->summary($member->dockerHost) : null,
                 'source_type' => $member->sourceType(),
                 'source_label' => $member->sourceName(),
                 'backup_destination_id' => $member->backup_destination_id,

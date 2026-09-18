@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use App\Models\BackupJobGroup;
-use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -24,8 +23,6 @@ class BackupJobGroupRequest extends FormRequest
 
     public function rules(): array
     {
-        LocalDockerExecution::validate();
-
         return [
             'name' => ['required', 'string', 'max:255'],
             'schedule_type' => ['required', 'string', Rule::in([

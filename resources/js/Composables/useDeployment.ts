@@ -60,6 +60,9 @@ export function useDeployment() {
         deploymentMode: computed(() => deployment.value?.mode ?? 'hybrid'),
         localExecutionEnabled,
         canManageBackups,
+        groupPermissions: computed(() => ({
+            runDockerActions: canManageBackups.value,
+        })),
         executionHosts,
         canExecute,
         resourceHost,
