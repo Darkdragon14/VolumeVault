@@ -17,7 +17,9 @@ use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\DockerVolume;
 use App\Models\RestoreRun;
+use App\Services\Agents\HostWorkAdmission;
 use App\Services\BackupDestinations\DestinationStorage;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Logging\AppendRunLog;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\RunHeartbeatLock;
@@ -47,6 +49,11 @@ class RunRestore
 
     public function handle(RestoreRun $run): void
     {
+        if (app(HostWorkAdmission::class)->isWaiting($run)) {
+            return;
+        }
+
+        LocalDockerExecution::assertHost((int) $run->target_docker_host_id);
         $startedAt = now();
 
         // Atomically claim the run: flip a QUEUED row → RUNNING in a single
@@ -56,14 +63,11 @@ class RunRestore
         // a (possibly destructive) restore a live worker is mid-way through. A row
         // reconciliation already marked terminal also matches zero rows, so a
         // delayed lock loser never resurrects a finalized restore. Mirrors RunBackup.
-        $claimed = RestoreRun::query()
-            ->whereKey($run->getKey())
-            ->where('status', RestoreRun::STATUS_QUEUED)
-            ->update([
-                'status' => RestoreRun::STATUS_RUNNING,
-                'started_at' => $startedAt,
-                'last_heartbeat_at' => $startedAt,
-            ]);
+        $claimed = app(HostWorkAdmission::class)->claim($run, [
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => $startedAt,
+            'last_heartbeat_at' => $startedAt,
+        ]);
 
         if ($claimed === 0) {
             return;
@@ -151,7 +155,7 @@ class RunRestore
                 throw new RuntimeException($result->combinedOutput() ?: 'Restore container failed.');
             }
 
-            DockerVolume::updateOrCreate(['name' => $run->target_volume_name], [
+            DockerVolume::updateOrCreate(['docker_host_id' => $run->target_docker_host_id, 'name' => $run->target_volume_name], [
                 'exists' => true,
                 'last_seen_at' => now(),
             ]);
@@ -294,6 +298,7 @@ class RunRestore
      */
     public function restartStoppedContainers(RestoreRun $run): void
     {
+        LocalDockerExecution::assertHost((int) $run->target_docker_host_id);
         $containerIds = $run->stopped_container_ids ?? [];
 
         if (! $containerIds) {

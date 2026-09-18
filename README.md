@@ -100,6 +100,14 @@ When you serve VolumeVault over HTTPS (directly or behind a TLS-terminating reve
 
 Keep your `APP_KEY` safe: it is required to decrypt destinations, notifications, two-factor secrets, and installation saves.
 
+### Deployment roles and agents
+
+The default `VOLUMEVAULT_MODE=hybrid` keeps the existing local Docker executor. Set `VOLUMEVAULT_MODE=orchestrator` to run the central application without a Docker socket or remote Docker endpoint; `docker-compose.orchestrator.yml` provides a standalone deployment for this mode. Local jobs and history remain stored, but local execution is disabled. Drain local work through maintenance before changing modes.
+
+Agents use the dedicated `volumevault-agent` PHP CLI image. The Docker hosts page shows local/central/agent roles, software and protocol compatibility, maintenance state, and a manual update guide. Keep each agent's existing `/app/storage` volume and configuration when replacing its container; a normal update does not require enrollment again. See `docs/_tabs/installation.md` for activation, image targets, compatibility and update procedures.
+
+Compatible agents execute standalone backups and restores. Shared network destinations support restoring an archive from host A into a new volume on host B. Distributed groups, remote Docker-label reconciliation and relay of archives stored only on another host remain under development.
+
 ## Documentation
 
 The full documentation is published with GitHub Pages and built from the [`docs`](docs) directory.

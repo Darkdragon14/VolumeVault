@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { destinationMatchesHost, hostId, isHostLocalDestination, useDeployment, type ExecutionHost } from '@/Composables/useDeployment';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
 
+const { localExecutionEnabled, executionHosts, canExecute, canManageBackups } = useDeployment();
+
 const props = defineProps<{
     job: any;
+    hosts?: ExecutionHost[];
+    volumes?: { docker_host_id?: number; name: string }[];
+    sourceDockerHostId?: number;
+    targetDockerHostId?: number;
     restoreDestination: any;
     backups: any[];
     hasOtherBackups?: boolean;
@@ -17,7 +24,7 @@ const props = defineProps<{
     sourceVolumeName?: string | null;
     sourceLabel: string;
     listError?: string | null;
-    generatedTargetVolumeName: string;
+    generatedTargetVolumeName: string | null;
 }>();
 
 const step = ref(1);
@@ -35,12 +42,28 @@ const isDockerVolumeSource = computed(() => props.isDockerVolumeSource);
 const sourceVolumeName = computed(() => props.sourceVolumeName ?? '');
 
 const form = useForm({
+    target_docker_host_id: props.targetDockerHostId ?? hostId(props.job),
     backup_run_id: props.backupRunId ?? null,
     selected_backup_key: '',
     mode: 'new_volume',
-    target_volume_name: props.generatedTargetVolumeName,
+    target_volume_name: props.generatedTargetVolumeName ?? '',
     backup_before_overwrite: false,
     confirmation_text: '',
+});
+
+const hosts = computed(() => executionHosts(props.hosts));
+const sourceHostId = computed(() => props.sourceDockerHostId ?? hostId(props.job));
+const targetHost = computed(() => hosts.value.find((host) => Number(host.id) === Number(form.target_docker_host_id)));
+const sameHost = computed(() => Number(form.target_docker_host_id) === Number(sourceHostId.value));
+const targetAvailable = (host: ExecutionHost) => canExecute(host, 'restore-v1') && destinationMatchesHost(props.restoreDestination, host.id);
+const workflowVisible = computed(() => canManageBackups.value && (localExecutionEnabled.value || hosts.value.length > 0));
+const targetExists = computed(() => !isInPlace.value && (props.volumes ?? []).some((volume) => hostId(volume) === Number(form.target_docker_host_id) && volume.name === form.target_volume_name));
+const targetValid = computed(() => !!targetHost.value && targetAvailable(targetHost.value) && !targetExists.value
+    && !!form.target_volume_name.trim() && (!isInPlace.value || sameHost.value));
+watch(() => form.target_docker_host_id, () => {
+    form.mode = 'new_volume';
+    form.confirmation_text = '';
+    form.backup_before_overwrite = false;
 });
 
 // --- Restore modes (data-driven so adding/auditing a mode is a one-liner) ---
@@ -57,7 +80,7 @@ const modes = computed(() => {
 
     // In-place modes overwrite the source volume itself, so they only apply to
     // Docker volume sources (host path jobs keep restore-to-new-volume only).
-    if (isDockerVolumeSource.value) {
+    if (sourceContextReady.value && isDockerVolumeSource.value && sameHost.value) {
         list.push(
             {
                 value: 'inplace',
@@ -94,7 +117,7 @@ watch(
         if (mode === 'inplace' || mode === 'safe_inplace') {
             form.target_volume_name = sourceVolumeName.value;
         } else {
-            form.target_volume_name = props.generatedTargetVolumeName;
+            form.target_volume_name = props.generatedTargetVolumeName ?? '';
             form.confirmation_text = '';
             form.backup_before_overwrite = false;
         }
@@ -149,16 +172,40 @@ const visibleBackups = computed(() => {
 const latestKey = computed(() => scopedBackups.value[0]?.key ?? null);
 
 const selectedBackup = computed(() => props.backups.find((backup) => backup.key === form.selected_backup_key));
+const sourceContextReady = computed(() => form.backup_run_id === (props.backupRunId ?? null));
+const loadingContext = ref(false);
+watch(selectedBackup, (backup) => {
+    form.backup_run_id = backup?.backup_run_id ?? (backup?.key === props.preselectedBackupKey ? props.backupRunId ?? null : null);
+    form.mode = 'new_volume';
+    form.confirmation_text = '';
+    form.backup_before_overwrite = false;
+    step.value = 1;
+}, { flush: 'sync' });
+
+const continueSelection = () => {
+    if (!selectedBackup.value || props.backupRunUnverifiable || loadingContext.value) return;
+    if (sourceContextReady.value) {
+        step.value = 2;
+        return;
+    }
+
+    loadingContext.value = true;
+    router.get(`/backup-jobs/${props.job.id}/restore`, { backup_run_id: form.backup_run_id }, {
+        preserveState: 'errors',
+        onError: (errors) => { form.errors = errors; step.value = 1; },
+        onFinish: () => { loadingContext.value = false; },
+    });
+};
 const submit = () => {
-    if (props.backupRunUnverifiable || safetyBackupBlocked.value) {
+    if (!sourceContextReady.value || loadingContext.value || !targetValid.value || !confirmationMatches.value || !selectedBackup.value || props.backupRunUnverifiable || safetyBackupBlocked.value) {
         return;
     }
 
     form.post(`/backup-jobs/${props.job.id}/restore`, {
         onError: (errors) => {
-            if (errors.selected_backup_key) {
+            if (errors.selected_backup_key || errors.backup_run_id) {
                 step.value = 1;
-            } else if (errors.backup_before_overwrite) {
+            } else if (errors.backup_before_overwrite || errors.target_docker_host_id || errors.target_volume_name || errors.mode) {
                 step.value = 2;
             }
         },
@@ -185,18 +232,21 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
             <Link :href="`/backup-jobs/${job.id}`" class="btn-secondary">{{ t('Back to job') }}</Link>
         </template>
 
-        <div class="mb-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <p v-if="!workflowVisible" role="status" class="card p-4 text-sm text-slate-400">{{ t(localExecutionEnabled ? 'hostWorkflow.unavailable' : 'dockerHosts.localDisabled') }}</p>
+        <div v-if="workflowVisible" class="mb-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
             <div v-for="number in [1, 2, 3, 4]" :key="number" class="rounded-xl border px-4 py-3 text-sm" :class="step >= number ? 'border-sky-300/40 bg-sky-300/10 text-sky-100' : 'border-white/10 bg-white/5 text-slate-400'">
                 {{ t('Step {number}', { number }) }}
             </div>
         </div>
 
-        <section v-if="step === 1" class="card p-4 sm:p-6">
+        <section v-if="workflowVisible && step === 1" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Select backup') }}</h2>
             <p class="mt-1 text-sm text-slate-400">{{ t('Backups are listed newest first from {name}.', { name: restoreDestination?.name }) }}</p>
             <p v-if="listError" class="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ listError }}</p>
             <p v-if="backupRunUnverifiable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('This historical Dropbox backup has no stable file ID. Its identity cannot be verified, so restoring this run is unavailable.') }}</p>
             <p v-if="form.errors.selected_backup_key" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.selected_backup_key }}</p>
+            <p v-if="form.errors.backup_run_id" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.backup_run_id }}</p>
+            <p v-if="form.errors.destination" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.destination }}</p>
 
             <div v-if="backups.length && !backupRunUnverifiable" class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label class="block flex-1 space-y-1">
@@ -235,11 +285,21 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
             <p v-else-if="backups.length && !backupRunUnverifiable" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backups match the current filters.') }}</p>
             <p v-else-if="!backupRunUnverifiable" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backup objects found. Run a backup first or check the destination path.') }}</p>
 
-            <button class="btn-primary mt-5" :disabled="backupRunUnverifiable || !form.selected_backup_key" @click="step = 2">{{ t('Continue') }}</button>
+            <button class="btn-primary mt-5" :disabled="loadingContext || backupRunUnverifiable || !form.selected_backup_key" @click="continueSelection">{{ t('Continue') }}</button>
         </section>
 
-        <section v-if="step === 2" class="card p-4 sm:p-6">
+        <section v-if="workflowVisible && step === 2" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Select restore mode') }}</h2>
+            <label class="mt-4 block space-y-2">
+                <span class="label">{{ t('hostWorkflow.targetHost') }}</span>
+                <select v-model="form.target_docker_host_id" class="input" data-target-host>
+                    <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!targetAvailable(host)">{{ host.name }}{{ targetAvailable(host) ? '' : ` — ${t('hostWorkflow.unavailable')}` }}</option>
+                </select>
+                <span v-if="form.errors.target_docker_host_id" class="text-sm text-rose-300">{{ form.errors.target_docker_host_id }}</span>
+            </label>
+            <p v-if="!targetHost || !targetAvailable(targetHost)" role="status" class="mt-3 text-sm text-amber-600 dark:text-amber-200">{{ t('hostWorkflow.unavailable') }}</p>
+            <p v-if="isHostLocalDestination(restoreDestination)" class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.relayUnsupported') }}</p>
+            <p v-else class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.sharedRestore') }}</p>
             <div class="mt-5 grid gap-4 lg:grid-cols-3">
                 <label
                     v-for="mode in modes"
@@ -258,6 +318,7 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
             <label v-if="!isInPlace" class="mt-5 block space-y-2">
                 <span class="label">{{ t('Target volume name') }}</span>
                 <input v-model="form.target_volume_name" class="input">
+                <span v-if="targetExists" class="text-sm text-rose-300">{{ t('hostWorkflow.targetExists') }}</span>
                 <span v-if="form.errors.target_volume_name" class="text-sm text-rose-300">{{ form.errors.target_volume_name }}</span>
             </label>
             <div v-else class="mt-5 space-y-2">
@@ -279,11 +340,11 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
 
             <div class="mt-5 flex flex-wrap gap-3">
                 <button class="btn-secondary" @click="step = 1">{{ t('Back') }}</button>
-                <button class="btn-primary" :disabled="safetyBackupBlocked" @click="step = 3">{{ t('Continue') }}</button>
+                <button class="btn-primary" :disabled="safetyBackupBlocked || !targetValid" @click="step = 3">{{ t('Continue') }}</button>
             </div>
         </section>
 
-        <section v-if="step === 3" class="card p-4 sm:p-6">
+        <section v-if="workflowVisible && step === 3" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Confirm restore') }}</h2>
             <div
                 class="mt-5 rounded-xl border p-4 text-sm"
@@ -292,6 +353,7 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
                 {{ confirmWarning }}
             </div>
             <dl class="mt-5 grid gap-4 sm:grid-cols-2">
+                <div><dt class="text-xs uppercase text-slate-400">{{ t('hostWorkflow.targetHost') }}</dt><dd class="mt-1 break-words text-white">{{ targetHost?.name }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ sourceLabel }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Target volume') }}</dt><dd class="mt-1 break-all text-white">{{ form.target_volume_name }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 break-words text-white">{{ restoreDestination?.name }}</dd></div>
@@ -307,11 +369,11 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
 
             <div class="mt-5 flex flex-wrap gap-3">
                 <button class="btn-secondary" @click="step = 2">{{ t('Back') }}</button>
-                <button class="btn-primary" :disabled="form.processing || !confirmationMatches || safetyBackupBlocked" @click="submit">{{ t('Queue restore') }}</button>
+                <button class="btn-primary" :disabled="form.processing || !confirmationMatches || safetyBackupBlocked || !targetValid" @click="submit">{{ t('Queue restore') }}</button>
             </div>
         </section>
 
-        <section v-if="step === 4" class="card p-4 sm:p-6">
+        <section v-if="workflowVisible && step === 4" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Result') }}</h2>
             <p class="mt-2 text-sm text-slate-400">{{ t('The restore run will appear in the restore run detail after submission.') }}</p>
         </section>

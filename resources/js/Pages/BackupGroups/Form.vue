@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { useDeployment } from '@/Composables/useDeployment';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import InfoTooltip from '@/Components/InfoTooltip.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { useI18n } from '@/i18n';
+
+const { localExecutionEnabled } = useDeployment();
 
 const props = defineProps<{
     group: any | null;
@@ -64,7 +67,8 @@ const submit = () => {
 <template>
     <Head :title="editing ? t('Edit backup group') : t('New backup group')" />
     <AppLayout :title="editing ? t('Edit backup group') : t('New backup group')" :subtitle="t('The group owns the schedule and notifications for its member jobs and reports a single outcome.')">
-        <form class="card max-w-4xl space-y-6 p-4 sm:p-6" @submit.prevent="submit">
+        <p v-if="!localExecutionEnabled" role="status" class="card p-4 text-sm text-slate-400">{{ t('dockerHosts.localDisabled') }}</p>
+        <form v-else class="card max-w-4xl space-y-6 p-4 sm:p-6" @submit.prevent="submit">
             <label class="block space-y-2">
                 <span class="label">{{ t('Group name') }}</span>
                 <input v-model="form.name" class="input" required placeholder="Nightly backups">

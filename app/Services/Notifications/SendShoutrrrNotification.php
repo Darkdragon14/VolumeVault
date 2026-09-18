@@ -15,6 +15,7 @@ use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Support\DeploymentMode;
 use App\Support\FormatBytes;
 use Illuminate\Database\Eloquent\Collection;
 use RuntimeException;
@@ -26,6 +27,7 @@ class SendShoutrrrNotification
     public function __construct(
         private readonly DockerProcess $dockerProcess,
         private readonly ResolveNotificationChannels $resolveNotificationChannels,
+        private readonly NativeShoutrrrProcess $nativeShoutrrrProcess,
     ) {}
 
     /**
@@ -366,6 +368,10 @@ class SendShoutrrrNotification
         // failed run) still stays silent with no side effects.
         if ($url === null) {
             return new DockerProcessResult([], 1, '', 'No webhook URL configured for this event.');
+        }
+
+        if (DeploymentMode::isOrchestrator()) {
+            return $this->nativeShoutrrrProcess->send($url, $title, $message);
         }
 
         $command = [

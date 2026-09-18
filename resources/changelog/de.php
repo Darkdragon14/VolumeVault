@@ -1,6 +1,46 @@
 <?php
 
 return [
+    'agent_execution_safety_and_identity' => [
+        'title' => 'Sichere Agent-Ausführung und eindeutige Ressourcenauswahl',
+        'description' => 'S3-Prüfungen der Agents lehnen widersprüchliche Endpoints ab. Backup-Helfer müssen vor dem Neustart der Anwendungen entfernt werden, auch nach einem Docker-Verbindungsabbruch. Volume-Verknüpfungen behalten ihren Host, die Archivauswahl übermittelt den historischen Kontext und Wiederherstellungen übernehmen keinen nachträglich geänderten Quelltyp des Jobs.',
+    ],
+    'remote_agent_execution' => [
+        'title' => 'Backups und Wiederherstellungen über Docker-Agents',
+        'description' => 'Kompatible Agents führen einzelne Backups und Wiederherstellungen mit dauerhaften verschlüsselten Befehlen und privaten Wiederherstellungsjournalen aus. Gemeinsame Netzwerkziele ermöglichen die Wiederherstellung auf einem anderen Host ohne Docker-Socket am Orchestrator. Ergebnisse und Metadaten der Sicherheitsbackups bleiben nach Verbindungsabbrüchen erhalten, ohne abgeschlossene Arbeit zu wiederholen. Verteilte Gruppen und die Weiterleitung lokaler Archive zwischen Hosts sind noch nicht verfügbar.',
+    ],
+    'remote_host_workflows' => [
+        'title' => 'Hostbezogene Backup- und Wiederherstellungskonfiguration',
+        'description' => 'Einzelne Jobs können registrierte Agents verwenden, auch offline und im reinen Orchestrator-Modus. Mit gemeinsamem Netzwerkspeicher sind Wiederherstellungen auf einem anderen Host möglich. Inventar, Pfade und lokale Ziele bleiben hostbezogen. Hostübergreifende Übertragungen lokaler Archive und entfernte Backup-Gruppen sind noch nicht verfügbar.',
+    ],
+    'docker_host_metrics' => [
+        'title' => 'Aussagekräftige Informationen zu lokalen Hosts und Agents',
+        'description' => 'Hostkarten zeigen nun die Docker-Engine-Version und synchronisierte lokale Containerzahlen. Lokale Karten blenden den Agent-Kontakt aus und erklären die letzte Volume-Synchronisierung. VolumeVault-Versionen einschließlich Entwicklungsbuilds sind klar gekennzeichnet. Reine Orchestrator-Karten zeigen keine Docker-Metriken. Die Bereitstellungsrollen erscheinen auf den Hostkarten statt unter dem Anwendungslogo.',
+    ],
+    'maintenance_dispatch_recovery' => [
+        'title' => 'Wartende Aufträge nach Wartung zuverlässig fortsetzen',
+        'description' => 'Wartende Gruppen bleiben nach langer Wartung veröffentlichbar, auch wenn die Bereinigung vor dem Dispatch läuft. Beim Fortsetzen eines Hosts erhalten seine wartenden Hauptausführungen ein neues Zustellbudget, ohne Ausführungshistorie oder interne Teiloperationen zu ändern.',
+    ],
+    'agent_deployment_lifecycle' => [
+        'title' => 'Eigenständige Agents, Orchestrator-Modus und manuelle Updates',
+        'description' => 'Agents erhalten ein eigenes PHP-CLI-Image. Der reine Orchestrator-Modus funktioniert einschließlich Benachrichtigungen ohne Docker-Daemon. Die Hostübersicht zeigt Rollen, Versionen und Protokollkompatibilität sowie persistente Wartung und eine manuelle Update-Anleitung mit erhaltener Agent-Identität. Automatische Remote-Updates sind nicht aktiviert.',
+    ],
+    'restore_target_host_recovery' => [
+        'title' => 'Wiederherstellungen anhand des Zielhosts bereinigen',
+        'description' => 'Unterbrochene Wiederherstellungen auf dem lokalen Host werden nun auch dann bereinigt, wenn ihr Archiv von einem anderen Host stammt. Dies gilt auch für ausgeschöpfte Warteschlangenübergaben und gestoppte Anwendungscontainer. Entfernte Ziele bleiben unverändert.',
+    ],
+    'agent_runtime_resilience' => [
+        'title' => 'Zuverlässige Agent-Heartbeats und Wiederherstellung',
+        'description' => 'Agents hinter demselben NAT teilen keine Verkehrslimits mehr und blockieren keine Registrierung. Lange Docker-Inventarerfassungen senden weiterhin Heartbeats und haben ein Gesamtzeitlimit. Fehlgeschlagene Zustandsschreibvorgänge beenden den Agent, damit Docker ihn mit seiner gespeicherten Identität neu starten kann.',
+    ],
+    'agent_enrollment_inventory' => [
+        'title' => 'Sichere Agent-Registrierung und Docker-Inventar',
+        'description' => 'Administratoren können Hosts über einen generierten Docker-Befehl registrieren, Verbindungsstatus und Inventarzähler einsehen sowie Registrierung erneuern und Zugriff widerrufen. PHP-CLI-Agents verwenden geprüftes TLS, persistente Identitäten und ausgehende Verbindungen. Integrierte Zertifikate werden automatisch erneuert.',
+    ],
+    'docker_host_attribution' => [
+        'title' => 'Explizite Zuordnung zum lokalen Docker-Host',
+        'description' => 'Vorhandene Volumes, Aufträge, Ausführungsverläufe und lokale Ziele werden bei der Migration automatisch dem lokalen Docker-Host zugeordnet. Konfigurationsänderungen sind nicht erforderlich. Hostbezogene Identitäten bereiten die Ausführung auf mehreren Hosts vor.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Nicht unterstützte Dropbox-Sicherheitskopien frühzeitig ablehnen',
         'description' => 'In-place-Wiederherstellungen lehnen eine angeforderte Sicherheitskopie vor dem Einreihen ab, wenn das aktuelle Auftragsziel Dropbox ist. Das Formular erklärt die Einschränkung und behält deine Auswahl bei, bis du sie ausdrücklich änderst.',

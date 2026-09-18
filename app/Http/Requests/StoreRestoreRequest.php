@@ -6,9 +6,12 @@ use App\Actions\Restore\CreateRestoreRun;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\RestoreRun;
+use App\Services\Agents\AgentExecution;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Validator;
 
 class StoreRestoreRequest extends FormRequest
@@ -21,6 +24,7 @@ class StoreRestoreRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'target_docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'],
             'backup_run_id' => ['nullable', 'integer'],
             'selected_backup_key' => ['required', 'string', 'max:2048'],
             'mode' => ['required', 'string', Rule::in([
@@ -37,6 +41,13 @@ class StoreRestoreRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            if (! $validator->errors()->has('target_docker_host_id')) {
+                try {
+                    app(AgentExecution::class)->validateHost((int) ($this->input('target_docker_host_id') ?? $this->route('backupJob')?->docker_host_id ?? DockerHost::LOCAL_ID), 'restore-v1');
+                } catch (ValidationException $exception) {
+                    $validator->errors()->add('target_docker_host_id', $exception->getMessage());
+                }
+            }
             $this->validateInPlaceMode($validator);
         });
     }

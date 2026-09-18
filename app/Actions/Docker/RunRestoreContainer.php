@@ -5,6 +5,7 @@ namespace App\Actions\Docker;
 use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Services\Docker\LocalDockerExecution;
 use Illuminate\Support\Str;
 
 class RunRestoreContainer
@@ -13,6 +14,7 @@ class RunRestoreContainer
 
     public function handle(RestoreRun $run, string $archivePath, ?callable $heartbeat = null): DockerProcessResult
     {
+        LocalDockerExecution::assertHost((int) $run->target_docker_host_id);
         $containerName = 'volumevault-restore-'.$run->id.'-'.Str::lower(Str::random(8));
 
         $command = [

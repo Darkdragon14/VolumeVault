@@ -2,7 +2,8 @@
 import ActionIcon from '@/Components/ActionIcon.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { useDeployment } from '@/Composables/useDeployment';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
@@ -10,8 +11,7 @@ import { matchesSearch, readFiltersFromUrl, useListFilters, useUrlFilters } from
 
 const props = defineProps<{ stacks: any[]; destinations: any[]; timezones: string[]; appTimezone: string }>();
 
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
+const { localDockerPermissions: can, localExecutionEnabled } = useDeployment();
 const { t, formatDate } = useI18n();
 const search = ref('');
 const backupFilter = ref('');
@@ -235,7 +235,7 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
             <button v-if="hasActiveFilters" type="button" class="btn-secondary mt-5" @click="resetFilters">{{ t('Reset filters') }}</button>
         </div>
 
-        <div v-if="backupTarget" class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4" @click.self="closeBackup">
+        <div v-if="localExecutionEnabled && backupTarget" class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4" @click.self="closeBackup">
             <div class="card w-full max-w-lg p-5">
                 <h2 class="text-lg font-semibold text-white">{{ t('Back up stack') }}</h2>
                 <p class="mt-1 break-words text-sm text-slate-400">{{ backupTarget.name || t('No stack') }}</p>

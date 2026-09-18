@@ -4,6 +4,8 @@ namespace App\Jobs;
 
 use App\Actions\Backup\RunBackupGroup;
 use App\Models\BackupGroupRun;
+use App\Services\Agents\HostWorkAdmission;
+use App\Support\DeploymentMode;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -60,9 +62,23 @@ class RunBackupGroupJob implements ShouldQueue
 
     public function handle(RunBackupGroup $runBackupGroup): void
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return;
+        }
+
         $groupRun = BackupGroupRun::findOrFail($this->backupGroupRunId);
 
+        if (app(HostWorkAdmission::class)->isWaiting($groupRun)) {
+            $this->release(60);
+
+            return;
+        }
+
         $runBackupGroup->handle($groupRun);
+
+        if (app(HostWorkAdmission::class)->isWaiting($groupRun->refresh())) {
+            $this->release(60);
+        }
     }
 
     /**

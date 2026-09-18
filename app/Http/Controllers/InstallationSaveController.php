@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\BackupDestination;
 use App\Services\BackupDestinations\DestinationStorage;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\InstallationSaves\CreateSecureInstallationSave;
+use App\Support\DeploymentMode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
@@ -18,7 +20,9 @@ class InstallationSaveController extends Controller
     public function index(): Response
     {
         return Inertia::render('InstallationSaves/Index', [
-            'destinations' => BackupDestination::where('is_active', true)->orderBy('name')->get()->map->safeForFrontend(),
+            'destinations' => BackupDestination::where('is_active', true)
+                ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->whereNotIn('provider', [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME]))
+                ->orderBy('name')->get()->map->safeForFrontend(),
         ]);
     }
 
@@ -47,6 +51,10 @@ class InstallationSaveController extends Controller
         ]);
 
         $destination = BackupDestination::where('is_active', true)->findOrFail($data['backup_destination_id']);
+
+        if ($destination->isHostBound()) {
+            LocalDockerExecution::validate();
+        }
 
         try {
             $save = $createSecureInstallationSave->handle();

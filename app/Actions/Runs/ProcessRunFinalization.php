@@ -8,6 +8,7 @@ use App\Models\BackupRun;
 use App\Models\NotificationChannel;
 use App\Models\RunFinalization;
 use App\Services\Notifications\SendShoutrrrNotification;
+use App\Support\DeploymentMode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,10 @@ class ProcessRunFinalization
 
     public function handle(int $finalizationId, ?string $enqueueToken = null, ?string $claimToken = null): void
     {
+        if ($this->requiresDisabledLocalStorage($finalizationId)) {
+            return;
+        }
+
         $claimToken ??= (string) Str::uuid();
         $finalization = $this->claim($finalizationId, $claimToken);
 
@@ -54,6 +59,10 @@ class ProcessRunFinalization
         $dispatched = 0;
 
         foreach (array_unique($finalizationIds) as $finalizationId) {
+            if ($this->requiresDisabledLocalStorage((int) $finalizationId)) {
+                continue;
+            }
+
             $enqueueToken = $this->admit((int) $finalizationId);
 
             if ($enqueueToken === null) {
@@ -79,15 +88,33 @@ class ProcessRunFinalization
     public function dispatchDue(int $limit = 100): int
     {
         $ids = $this->dueQuery()
+            ->when(DeploymentMode::isOrchestrator(), fn (Builder $query) => $query
+                ->with(['backupRun.snapshotDestination', 'backupRun.job.destination']))
             ->where(fn (Builder $query) => $query
                 ->whereNull('enqueue_token')
                 ->orWhere('enqueued_at', '<=', now()->subMinutes(self::STALE_AFTER_MINUTES)))
             ->orderBy('id')
-            ->limit($limit)
+            ->lazyById()
+            ->reject(fn (RunFinalization $finalization): bool => $this->requiresDisabledLocalStorage($finalization))
+            ->take($limit)
             ->pluck('id')
             ->all();
 
         return $this->dispatch($ids);
+    }
+
+    private function requiresDisabledLocalStorage(int|RunFinalization $finalization): bool
+    {
+        if (! DeploymentMode::isOrchestrator()) {
+            return false;
+        }
+
+        if (is_int($finalization)) {
+            $finalization = RunFinalization::find($finalization);
+        }
+
+        return $finalization?->type === RunFinalization::TYPE_ARCHIVE_METADATA
+            && $finalization->backupRun?->destinationForRun()?->isHostBound() === true;
     }
 
     public function failExecution(int $finalizationId, string $enqueueToken, string $claimToken, Throwable $exception): void

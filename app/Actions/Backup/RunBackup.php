@@ -16,8 +16,10 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
+use App\Services\Agents\HostWorkAdmission;
 use App\Services\BackupDestinations\ListBackupObjects;
 use App\Services\BackupSources\HostPathPolicy;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Docker\SelfContainerResolver;
 use App\Services\Logging\AppendRunLog;
 use App\Services\Notifications\SendShoutrrrNotification;
@@ -47,8 +49,14 @@ class RunBackup
         private readonly CreateRunFinalizations $createFinalizations,
     ) {}
 
-    public function handle(BackupRun $run): void
+    /** $acceptedOperation is reserved for inline children of an already claimed group or restore. */
+    public function handle(BackupRun $run, bool $acceptedOperation = false): void
     {
+        if (! $acceptedOperation && app(HostWorkAdmission::class)->isWaiting($run)) {
+            return;
+        }
+
+        LocalDockerExecution::assertHost((int) $run->docker_host_id);
         $startedAt = now();
 
         // Atomically claim the run: flip a QUEUED row → RUNNING in one conditional
@@ -57,14 +65,14 @@ class RunBackup
         // finds the row already RUNNING and bails instead of re-executing the same
         // backup. A row reconciliation already marked terminal also matches zero
         // rows. Mirrors RunBackupGroup.
-        $claimed = BackupRun::query()
-            ->whereKey($run->getKey())
-            ->where('status', BackupRun::STATUS_QUEUED)
-            ->update([
-                'status' => BackupRun::STATUS_RUNNING,
-                'started_at' => $startedAt,
-                'last_heartbeat_at' => $startedAt,
-            ]);
+        $attributes = [
+            'status' => BackupRun::STATUS_RUNNING,
+            'started_at' => $startedAt,
+            'last_heartbeat_at' => $startedAt,
+        ];
+        $claimed = $acceptedOperation
+            ? BackupRun::query()->whereKey($run->getKey())->where('status', BackupRun::STATUS_QUEUED)->update($attributes)
+            : app(HostWorkAdmission::class)->claim($run, $attributes);
 
         if ($claimed === 0) {
             return;
@@ -135,9 +143,11 @@ class RunBackup
                 throw new RuntimeException('The backup destination is inactive.');
             }
 
+            LocalDockerExecution::assertDestination($job->destination);
+
             if ($job->isDockerVolumeSource()) {
                 $this->inspectDockerVolume->handle($job->volume_name);
-                DockerVolume::updateOrCreate(['name' => $job->volume_name], ['exists' => true, 'last_seen_at' => now()]);
+                DockerVolume::updateOrCreate(['docker_host_id' => $run->docker_host_id, 'name' => $job->volume_name], ['exists' => true, 'last_seen_at' => now()]);
             } else {
                 $this->hostPathPolicy->assertValid((string) $job->host_path);
             }
@@ -245,6 +255,7 @@ class RunBackup
      */
     public function restartStoppedContainers(BackupRun $run, array $exclude = []): bool
     {
+        LocalDockerExecution::assertHost((int) $run->docker_host_id);
         $containerIds = $run->stopped_container_ids ?? [];
 
         if (! $containerIds) {
@@ -757,6 +768,7 @@ class RunBackup
 
         return BackupRun::query()
             ->where('backup_group_run_id', $run->backup_group_run_id)
+            ->where('docker_host_id', $run->docker_host_id)
             ->whereKeyNot($run->id)
             ->whereNotNull('stopped_container_ids')
             ->pluck('stopped_container_ids')

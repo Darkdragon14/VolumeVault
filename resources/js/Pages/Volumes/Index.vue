@@ -2,7 +2,8 @@
 import StatusBadge from '@/Components/StatusBadge.vue';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { useDeployment } from '@/Composables/useDeployment';
+import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { computed, ref } from 'vue';
 import { matchesSearch, readFiltersFromUrl, uniqueSortedOptions, useListFilters, useUrlFilters } from '@/Composables/useListFilters';
@@ -10,8 +11,7 @@ import { formatBytes } from '@/Composables/useFormatBytes';
 
 const props = defineProps<{ volumes: any[] }>();
 
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
+const { localDockerPermissions: can } = useDeployment();
 const { t, formatDate } = useI18n();
 const search = ref('');
 const statusFilter = ref('');
@@ -138,7 +138,7 @@ const sync = () => router.post('/volumes/sync');
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Last seen') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(volume.last_seen_at) }}</dd></div>
                         </dl>
                         <div class="flex flex-wrap gap-2">
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}`" />
+                            <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}&docker_host_id=${volume.docker_host_id ?? 1}`" />
                             <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume.name)" />
                         </div>
                     </article>
@@ -170,7 +170,7 @@ const sync = () => router.post('/volumes/sync');
                                 <td class="px-4 py-3 text-slate-300">{{ formatDate(volume.last_seen_at) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}`" />
+                                        <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}&docker_host_id=${volume.docker_host_id ?? 1}`" />
                                         <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume.name)" />
                                     </div>
                                 </td>

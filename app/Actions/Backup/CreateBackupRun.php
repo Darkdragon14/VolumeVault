@@ -7,6 +7,8 @@ use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Models\User;
+use App\Services\Agents\AgentExecution;
+use App\Services\Agents\HostWorkAdmission;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Validation\ValidationException;
 
@@ -28,7 +30,7 @@ class CreateBackupRun
             $references = $this->references($current);
 
             try {
-                return $this->withLocks->handleForJobs(
+                return $this->withLocks->handleForJobsOnHost(
                     $references['configuration_source'] === BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL ? [$job->id] : [],
                     [$references['destination_id']],
                     function ($destinations, $settings, $jobs) use ($job, $trigger, $initiatedBy, $references, $allowedVolumeNames): BackupRun {
@@ -50,6 +52,7 @@ class CreateBackupRun
                         return $this->createLocked($lockedJob, $trigger, $initiatedBy);
                     },
                     $current->isDockerVolumeSource() ? [$references['volume_name']] : [],
+                    dockerHostId: (int) $current->docker_host_id,
                 );
             } catch (RetryDockerLabelMutation) {
                 continue;
@@ -61,6 +64,8 @@ class CreateBackupRun
 
     private function createLocked(BackupJob $job, string $trigger, ?User $initiatedBy): BackupRun
     {
+        app(AgentExecution::class)->validateHost((int) $job->docker_host_id, 'backup-v1');
+        app(HostWorkAdmission::class)->assertAccepting((int) $job->docker_host_id);
         $this->validateRunnable($job);
 
         $run = ($this->createBackupRunRecord ?? app(CreateBackupRunRecord::class))->handle($job, [
@@ -97,11 +102,12 @@ class CreateBackupRun
     }
 
     /**
-     * @return array{destination_id: int, backup_job_group_id: ?int, configuration_source: string, source_type: string, volume_name: ?string, host_path: ?string}
+     * @return array{docker_host_id: int, destination_id: int, backup_job_group_id: ?int, configuration_source: string, source_type: string, volume_name: ?string, host_path: ?string}
      */
     private function references(BackupJob $job): array
     {
         return [
+            'docker_host_id' => (int) $job->docker_host_id,
             'destination_id' => (int) $job->backup_destination_id,
             'backup_job_group_id' => $job->backup_job_group_id !== null ? (int) $job->backup_job_group_id : null,
             'configuration_source' => (string) $job->configuration_source,
@@ -125,8 +131,12 @@ class CreateBackupRun
             throw ValidationException::withMessages(['destination' => 'The backup destination is inactive.']);
         }
 
+        if ($job->destination->isHostBound() && (int) $job->destination->docker_host_id !== (int) $job->docker_host_id) {
+            throw ValidationException::withMessages(['destination' => 'The destination belongs to another Docker host.']);
+        }
+
         if ($job->isDockerVolumeSource()) {
-            $volume = DockerVolume::where('name', $job->volume_name)->first();
+            $volume = DockerVolume::where('docker_host_id', $job->docker_host_id)->where('name', $job->volume_name)->first();
 
             if (! $volume?->isAvailable()) {
                 throw ValidationException::withMessages(['volume' => 'Docker volume not found: '.$job->volume_name]);

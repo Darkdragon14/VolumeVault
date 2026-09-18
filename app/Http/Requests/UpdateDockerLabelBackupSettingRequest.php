@@ -3,8 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Actions\Backup\RenderBackupFilename;
-use App\Models\BackupJob;
 use App\Models\BackupDestination;
+use App\Models\BackupJob;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -20,6 +21,8 @@ class UpdateDockerLabelBackupSettingRequest extends FormRequest
 
     public function rules(): array
     {
+        LocalDockerExecution::validate();
+
         return [
             'enabled' => ['required', 'boolean'],
             'backup_destination_id' => ['nullable', 'integer', 'exists:backup_destinations,id'],

@@ -2,8 +2,9 @@
 import StatusBadge from '@/Components/StatusBadge.vue';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { useDeployment } from '@/Composables/useDeployment';
 import Pagination from '@/Components/Pagination.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { ref } from 'vue';
 import { readFiltersFromUrl } from '@/Composables/useListFilters';
@@ -18,8 +19,9 @@ const props = defineProps<{
     defaultPerPage: number;
 }>();
 
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
+const { canManageBackups, canExecute, resourceHost, localExecutionEnabled } = useDeployment();
+const canManageJob = (job: any) => canManageBackups.value && (Number(job.docker_host_id ?? 1) !== 1 || localExecutionEnabled.value);
+const canRunJob = (job: any) => canExecute(resourceHost(job), 'backup-v1') && !(Number(job.docker_host_id ?? 1) !== 1 && job.backup_job_group_id);
 const { t, formatDate, timezone } = useI18n();
 const search = ref('');
 const statusFilter = ref('');
@@ -95,7 +97,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
     <Head :title="t('Backup jobs')" />
     <AppLayout :title="t('Backup jobs')" :subtitle="t('Schedule, pause, run, and restore Docker volume or host path backups from one place.')">
         <template #title-actions>
-            <ActionIcon v-if="can.runDockerActions" :label="t('New backup job')" icon="add" href="/backup-jobs/create" />
+            <ActionIcon v-if="canManageBackups" :label="t('New backup job')" icon="add" href="/backup-jobs/create" />
         </template>
 
         <template #actions>
@@ -109,7 +111,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         </button>
                     </div>
                 </div>
-                <Link v-if="can.runDockerActions" href="/backup-jobs/create" class="btn-primary hidden shrink-0 gap-2 px-3 sm:inline-flex">
+                <Link v-if="canManageBackups" href="/backup-jobs/create" class="btn-primary hidden shrink-0 gap-2 px-3 sm:inline-flex">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M12 5v14" />
                         <path d="M5 12h14" />
@@ -179,12 +181,12 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                             </div>
                         </dl>
                         <div class="flex flex-wrap gap-2" @click.stop @keydown.stop>
-                            <ActionIcon v-if="can.runDockerActions && !job.backup_job_group_id" :label="t('Run now')" icon="play" :disabled="job.status !== 'active'" @click="runNow(job.id)" />
-                            <ActionIcon v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" :label="t('Resume')" icon="play" @click="resume(job.id)" />
-                            <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="job.status === 'running'" @click="pause(job.id)" />
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Restore')" icon="restore" :href="`/backup-jobs/${job.id}/restore`" />
-                            <ActionIcon v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :label="t('Edit')" icon="edit" :href="`/backup-jobs/${job.id}/edit`" />
-                            <ActionIcon v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :label="t('Delete')" icon="delete" variant="danger" @click="destroyJob(job.id)" />
+                            <ActionIcon v-if="canManageJob(job) && !job.backup_job_group_id" :label="t('Run now')" icon="play" :disabled="job.status !== 'active' || !canRunJob(job)" @click="runNow(job.id)" />
+                            <ActionIcon v-if="canManageJob(job) && (job.status === 'paused' || job.status === 'error')" :label="t('Resume')" icon="play" :disabled="!canRunJob(job)" @click="resume(job.id)" />
+                            <ActionIcon v-else-if="canManageJob(job)" :label="t('Pause')" icon="pause" :disabled="job.status === 'running'" @click="pause(job.id)" />
+                            <ActionIcon v-if="canManageBackups" :label="t('Restore')" icon="restore" :href="`/backup-jobs/${job.id}/restore`" />
+                            <ActionIcon v-if="canManageJob(job) && job.configuration_source !== 'docker_label'" :label="t('Edit')" icon="edit" :href="`/backup-jobs/${job.id}/edit`" />
+                            <ActionIcon v-if="canManageJob(job) && job.configuration_source !== 'docker_label'" :label="t('Delete')" icon="delete" variant="danger" @click="destroyJob(job.id)" />
                         </div>
                     </article>
                 </div>
@@ -231,12 +233,12 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                                 <td class="px-4 py-3 text-slate-300">{{ job.backup_job_group_id ? t('Managed by group') : formatDate(job.next_run_at) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex md:min-w-52 flex-wrap gap-2" @click.stop @keydown.stop>
-                                        <ActionIcon v-if="can.runDockerActions && !job.backup_job_group_id" :label="t('Run now')" icon="play" :disabled="job.status !== 'active'" @click="runNow(job.id)" />
-                                        <ActionIcon v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" :label="t('Resume')" icon="play" @click="resume(job.id)" />
-                                        <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="job.status === 'running'" @click="pause(job.id)" />
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Restore')" icon="restore" :href="`/backup-jobs/${job.id}/restore`" />
-                                        <ActionIcon v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :label="t('Edit')" icon="edit" :href="`/backup-jobs/${job.id}/edit`" />
-                                        <ActionIcon v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :label="t('Delete')" icon="delete" variant="danger" @click="destroyJob(job.id)" />
+                                        <ActionIcon v-if="canManageJob(job) && !job.backup_job_group_id" :label="t('Run now')" icon="play" :disabled="job.status !== 'active' || !canRunJob(job)" @click="runNow(job.id)" />
+                                        <ActionIcon v-if="canManageJob(job) && (job.status === 'paused' || job.status === 'error')" :label="t('Resume')" icon="play" :disabled="!canRunJob(job)" @click="resume(job.id)" />
+                                        <ActionIcon v-else-if="canManageJob(job)" :label="t('Pause')" icon="pause" :disabled="job.status === 'running'" @click="pause(job.id)" />
+                                        <ActionIcon v-if="canManageBackups" :label="t('Restore')" icon="restore" :href="`/backup-jobs/${job.id}/restore`" />
+                                        <ActionIcon v-if="canManageJob(job) && job.configuration_source !== 'docker_label'" :label="t('Edit')" icon="edit" :href="`/backup-jobs/${job.id}/edit`" />
+                                        <ActionIcon v-if="canManageJob(job) && job.configuration_source !== 'docker_label'" :label="t('Delete')" icon="delete" variant="danger" @click="destroyJob(job.id)" />
                                     </div>
                                 </td>
                             </tr>
@@ -248,7 +250,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
             <div v-else class="p-10 text-center">
                 <p class="text-lg font-semibold">{{ t('No backup jobs yet.') }}</p>
                 <p class="mt-2 text-sm text-slate-400">{{ t('Add a destination, then choose a Docker volume or host path for your first scheduled backup.') }}</p>
-                <Link v-if="can.runDockerActions" href="/backup-jobs/create" class="btn-primary mt-5">{{ t('Create backup job') }}</Link>
+                <Link v-if="canManageBackups" href="/backup-jobs/create" class="btn-primary mt-5">{{ t('Create backup job') }}</Link>
             </div>
         </div>
     </AppLayout>

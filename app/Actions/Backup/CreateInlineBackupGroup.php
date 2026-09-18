@@ -4,6 +4,7 @@ namespace App\Actions\Backup;
 
 use App\Models\ActivityLog;
 use App\Models\BackupJobGroup;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 
 class CreateInlineBackupGroup
@@ -12,6 +13,8 @@ class CreateInlineBackupGroup
 
     public function handle(array $attributes, string $activityDescription): BackupJobGroup
     {
+        LocalDockerExecution::validate();
+
         $scheduleType = $attributes['schedule_type'] ?? BackupJobGroup::SCHEDULE_DAILY;
         $scheduleConfig = $this->scheduleCalculator->normalize($scheduleType, (array) ($attributes['schedule_config'] ?? []));
         $timezone = ! empty($attributes['timezone']) ? $attributes['timezone'] : null;

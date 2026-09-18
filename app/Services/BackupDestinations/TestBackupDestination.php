@@ -4,6 +4,7 @@ namespace App\Services\BackupDestinations;
 
 use App\Models\ActivityLog;
 use App\Models\BackupDestination;
+use App\Services\Docker\LocalDockerExecution;
 use Throwable;
 
 class TestBackupDestination
@@ -12,6 +13,10 @@ class TestBackupDestination
 
     public function handle(BackupDestination $destination): array
     {
+        if ($destination->isHostBound()) {
+            LocalDockerExecution::validate();
+        }
+
         try {
             $this->storage->test($destination);
 

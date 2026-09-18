@@ -18,6 +18,32 @@ On first launch, VolumeVault requires onboarding and creates the first account a
 
 ## HTTPS And Session Cookie
 
+### Agent Transport
+
+Orchestrator-only mode (`VOLUMEVAULT_MODE=orchestrator`) requires no Docker socket or remote daemon. Local execution entrypoints are blocked even if `DOCKER_HOST` is accidentally configured. Notifications use the bundled Shoutrrr binary. The dedicated agent retains Docker-host privileges locally and does not receive the central database or `APP_KEY`.
+
+Maintenance and run admission serialize on the same Docker host rows. New runs cannot be claimed after maintenance wins that lock; operations accepted beforehand continue to completion and remain counted until cleanup finishes. Remote readiness additionally requires a fresh acknowledgment of the current maintenance nonce and zero reported operations. Version diagnostics are recorded only after agent authentication. Manual update guides contain no enrollment token or agent credential and do not replace containers automatically.
+
+The optional agent endpoint uses HTTPS with a persisted private certificate authority, verified hostnames, and TLS 1.2 or newer on the agent client. Agents do not accept incoming connections and do not expose the Docker API. Obtain the generated installation command through a trusted administrator session: its bundled public CA establishes the initial trust relationship.
+
+Enrollment tokens expire after 15 minutes and can establish only one agent identity. Retrying the same enrollment with the same locally persisted credential is idempotent. The orchestrator stores SHA-256 hashes of high-entropy enrollment and agent credentials; agent credentials cannot authenticate as users or access the public API. Re-enrollment invalidates the previous credential, and revocation blocks both ordinary requests and enrollment retries.
+
+Agent private state uses a dedicated persistent directory with mode `0700` and files with mode `0600`. Protect the Docker host and storage volume as you would the Docker socket. The orchestrator's CA private key is retained in its protected persistent storage; the generated command contains only the public CA certificate. The agent does not receive `APP_KEY` or central database access.
+
+Execution specifications are encrypted at rest centrally and delivered in an authenticated encrypted envelope over TLS. The envelope key is derived with HKDF from the authenticated agent credential and host UUID; the API response does not expose destination credentials as plaintext fields. The agent journals the decrypted specification using its own local key before execution, then revalidates paths and destination egress against local policy. No arbitrary shell command, image override or central policy override is accepted in a specification.
+
+For S3-compatible destinations, an explicitly duplicated `settings.endpoint` must match the primary `endpoint`, including null/empty values. Contradictory representations are rejected rather than allowing the upload and download clients to resolve different endpoints. The agent checks the primary endpoint consumed by the uploader against its local egress policy.
+
+Every backup helper creation, including `docker run --rm`, is recorded as cleanup pending before launch. A failed attached Docker client does not prove that its helper stopped. Applications remain stopped until idempotent helper removal and secret-file cleanup are confirmed; recovery completes that sequence after an interruption.
+
+One durable assignment per host prevents overlapping backup/restore commands. Assignments are not reassigned merely because a heartbeat expires. Result callbacks require both agent authentication and the specific operation token, and duplicate completion cannot rewrite history or duplicate notification finalizations. Results are accepted only after cleanup; safety-backup metadata is preserved centrally before local receipts are compacted.
+
+Inventory updates are scoped to the authenticated host, limited in size, and ordered by a persisted sequence number for that agent identity. Revocation is rechecked inside the inventory transaction. Loss of connectivity or a failed Docker listing preserves the last known inventory rather than reporting every volume as missing.
+
+Enrollment is limited to ten requests per minute per source IP using its own counter. Authenticated heartbeats and inventories share a separate quota of 180 requests per minute per host UUID. Agent authentication runs before that quota is charged, so another host cannot consume it with invalid credentials.
+
+### Browser Sessions
+
 When VolumeVault is served over HTTPS (directly or behind a TLS-terminating reverse proxy), set `SESSION_SECURE_COOKIE=true`. This marks the session cookie with the `Secure` flag so the browser only ever sends it over HTTPS, which protects it from being leaked over an accidental plain-HTTP request.
 
 Keep it **off** for plain-HTTP or LAN-only deployments: a `Secure` cookie is never sent over plain HTTP, so enabling it without TLS means the browser drops the session cookie and login fails. Behind a reverse proxy, the request is recognised as secure once `TRUSTED_PROXIES` is set and the proxy forwards `X-Forwarded-Proto: https` (see [Installation]({{ '/installation/' | relative_url }})).

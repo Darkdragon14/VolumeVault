@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Docker\SyncDockerVolumes;
 use App\Http\Controllers\Controller;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Services\Volumes\VolumeBackupSummaries;
+use App\Support\DeploymentMode;
 use Illuminate\Http\JsonResponse;
 use Throwable;
 
@@ -14,6 +16,8 @@ class VolumeController extends Controller
     public function index(VolumeBackupSummaries $volumeBackupSummaries): JsonResponse
     {
         $volumes = DockerVolume::query()
+            ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->whereRaw('1 = 0'))
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->orderByDesc('exists')
             ->orderBy('name')
             ->get();

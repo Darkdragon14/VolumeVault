@@ -2,16 +2,19 @@
 
 namespace App\Actions\Backup;
 
-use App\Actions\Runs\DispatchQueuedRun;
 use App\Actions\Runs\CreateRunFinalizations;
+use App\Actions\Runs\DispatchQueuedRun;
 use App\Actions\Runs\ProcessRunFinalization;
 use App\Models\ActivityLog;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\RestoreRun;
+use App\Services\Agents\HostWorkAdmission;
 use App\Services\Notifications\SendShoutrrrNotification;
+use App\Support\DeploymentMode;
 use App\Support\VolumeJobLock;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -47,6 +50,12 @@ class RunBackupGroup
 
     public function handle(BackupGroupRun $groupRun): void
     {
+        if (app(HostWorkAdmission::class)->isWaiting($groupRun)) {
+            return;
+        }
+
+        DeploymentMode::assertLocalExecution();
+
         $startedAt = now();
 
         $decision = $this->withGroupLocks->handle([$groupRun->backup_job_group_id], function ($groups) use ($groupRun, $startedAt): array {
@@ -59,16 +68,18 @@ class RunBackupGroup
             /** @var Collection<int, BackupJob> $members */
             $members = $group->members()->orderBy('id')->lockForUpdate()->get();
 
+            if ($members->contains(fn (BackupJob $member): bool => $member->docker_host_id !== DockerHost::LOCAL_ID)
+                || $groupRun->memberRuns()->where('docker_host_id', '!=', DockerHost::LOCAL_ID)->exists()) {
+                throw new RuntimeException('Backup groups containing remote Docker hosts cannot execute locally.');
+            }
+
             // Claim only a queued run. A running run is already owned by a worker;
             // reconciliation remains the sole owner of crashed running runs.
-            $claimed = BackupGroupRun::query()
-                ->whereKey($groupRun->getKey())
-                ->where('status', BackupGroupRun::STATUS_QUEUED)
-                ->update([
-                    'status' => BackupGroupRun::STATUS_RUNNING,
-                    'started_at' => $startedAt,
-                    'last_heartbeat_at' => $startedAt,
-                ]);
+            $claimed = app(HostWorkAdmission::class)->claim($groupRun, [
+                'status' => BackupGroupRun::STATUS_RUNNING,
+                'started_at' => $startedAt,
+                'last_heartbeat_at' => $startedAt,
+            ]);
 
             if ($claimed === 0) {
                 return ['outcome' => 'skip'];
@@ -423,12 +434,12 @@ class RunBackupGroup
             return null;
         }
 
-        $volume = $member->isDockerVolumeSource() ? $member->volume_name : null;
+        $volume = $memberRun->sourceVolumeName();
         // The exact cache key RunBackupJob's WithoutOverlapping middleware uses, so
         // an in-process group member contends with a standalone queue job: the
         // volume lock for a Docker volume, else the per-job lock a host-path run
         // falls back to.
-        $lockKey = $this->lockKeyFor($member);
+        $lockKey = VolumeJobLock::cacheKeyFor(VolumeJobLock::key($volume, 'backup-job-'.$memberRun->backup_job_id, $memberRun->docker_host_id));
 
         try {
             Cache::lock($lockKey, 86400)
@@ -460,14 +471,14 @@ class RunBackupGroup
                     $volume = $current->isDockerVolumeSource() ? $current->volume_name : null;
 
                     if (filled($volume)) {
-                        if ($this->volumeBusy($volume, $memberRun->id)) {
+                        if ($this->volumeBusy($volume, $memberRun->id, $memberRun->docker_host_id)) {
                             throw new RuntimeException('Volume "'.$volume.'" is not ready (a previous run still has containers stopped); skipped in this group run.');
                         }
-                    } elseif ($this->jobBusy($current->id, $memberRun->id)) {
+                    } elseif ($this->jobBusy($current->id, $memberRun->id, $memberRun->docker_host_id)) {
                         throw new RuntimeException('Job "'.$current->name.'" is not ready (a previous run of it is still in progress); skipped in this group run.');
                     }
 
-                    $this->runBackup->handle($memberRun);
+                    $this->runBackup->handle($memberRun, acceptedOperation: true);
                 });
         } catch (LockTimeoutException) {
             // If the member became unrunnable (paused, detached, deleted) while we
@@ -508,15 +519,22 @@ class RunBackupGroup
      * stopped awaiting restart. Mirrors RunBackupJob::volumeBusy so an in-process
      * member run applies the same guard queued standalone jobs do.
      */
-    private function volumeBusy(string $volume, int $exceptBackupRunId): bool
+    private function volumeBusy(string $volume, int $exceptBackupRunId, int $dockerHostId): bool
     {
         $backupBusy = BackupRun::query()
-            ->whereHas('job', fn ($query) => $query->where('volume_name', $volume))
+            ->where('docker_host_id', $dockerHostId)
+            ->where(function ($query) use ($volume): void {
+                $query->where('source_volume_name', $volume)
+                    ->orWhere(fn ($query) => $query
+                        ->whereNull('source_type_snapshot')
+                        ->whereHas('job', fn ($query) => $query->where('volume_name', $volume)));
+            })
             ->whereKeyNot($exceptBackupRunId)
             ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
 
         $restoreBusy = RestoreRun::query()
+            ->where('target_docker_host_id', $dockerHostId)
             ->where('target_volume_name', $volume)
             ->where(fn ($query) => $this->stillWorking($query))
             ->exists();
@@ -530,9 +548,10 @@ class RunBackupGroup
      * containers). Host-path members serialize on their per-job lock, which
      * restores never share, so only sibling backup runs count.
      */
-    private function jobBusy(int $jobId, int $exceptBackupRunId): bool
+    private function jobBusy(int $jobId, int $exceptBackupRunId, int $dockerHostId): bool
     {
         return BackupRun::query()
+            ->where('docker_host_id', $dockerHostId)
             ->where('backup_job_id', $jobId)
             ->whereKeyNot($exceptBackupRunId)
             ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
@@ -579,9 +598,11 @@ class RunBackupGroup
      */
     private function lockKeyFor(BackupJob $member): string
     {
-        return $member->isDockerVolumeSource()
-            ? VolumeJobLock::cacheKey($member->volume_name)
-            : VolumeJobLock::cacheKeyFor('backup-job-'.$member->id);
+        return VolumeJobLock::cacheKeyFor(VolumeJobLock::key(
+            $member->isDockerVolumeSource() ? $member->volume_name : null,
+            'backup-job-'.$member->id,
+            $member->docker_host_id,
+        ));
     }
 
     /**
@@ -593,6 +614,7 @@ class RunBackupGroup
     private function memberIsRunnable(?BackupJob $member, BackupGroupRun $groupRun): bool
     {
         return $member !== null
+            && $member->docker_host_id === DockerHost::LOCAL_ID
             && $member->backup_job_group_id === $groupRun->backup_job_group_id
             && $member->status !== BackupJob::STATUS_PAUSED;
     }

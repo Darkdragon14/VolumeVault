@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { useDeployment } from '@/Composables/useDeployment';
 import Pagination from '@/Components/Pagination.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 interface PaginatedData<T> {
     data: T[];
@@ -21,8 +22,9 @@ const props = defineProps<{
 
 const activeTab = ref<'runs' | 'restores'>('runs');
 
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
+const { canManageBackups, canExecute, resourceHost, localExecutionEnabled } = useDeployment();
+const canManageJob = computed(() => canManageBackups.value && (Number(props.job.docker_host_id ?? 1) !== 1 || localExecutionEnabled.value));
+const canRunJob = computed(() => canExecute(resourceHost(props.job), 'backup-v1') && !(Number(props.job.docker_host_id ?? 1) !== 1 && props.job.backup_job_group_id));
 const { t, formatDate } = useI18n();
 const sourceLabel = (job: any) => job.source_label || job.host_path || job.volume_name || t('Unknown');
 const sourceTypeLabel = (job: any) => job.source_type === 'host_path' ? t('Host path') : t('Docker volume');
@@ -37,19 +39,21 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
     <AppLayout :title="job.name" :subtitle="t('Review schedule, destination, run history, and recovery actions for this job.')">
         <template #actions>
             <div class="flex flex-wrap gap-2">
-                <button v-if="can.runDockerActions && !job.backup_job_group_id" class="btn-primary" :disabled="job.status !== 'active'" @click="runNow(job.id)">{{ t('Run now') }}</button>
-                <button v-if="can.runDockerActions && (job.status === 'paused' || job.status === 'error')" class="btn-secondary" @click="resume(job.id)">{{ t('Resume') }}</button>
-                <button v-else-if="can.runDockerActions" class="btn-secondary" :disabled="job.status === 'running'" @click="pause(job.id)">{{ t('Pause') }}</button>
-                <Link v-if="can.runDockerActions" :href="`/backup-jobs/${job.id}/restore`" class="btn-secondary">{{ t('Restore') }}</Link>
-                <Link v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" :href="`/backup-jobs/${job.id}/edit`" class="btn-secondary">{{ t('Edit') }}</Link>
-                <button v-if="can.runDockerActions && job.configuration_source !== 'docker_label'" type="button" class="btn-danger" @click="destroyJob(job.id)">{{ t('Delete') }}</button>
+                <button v-if="canManageJob && !job.backup_job_group_id" class="btn-primary" :disabled="job.status !== 'active' || !canRunJob" @click="runNow(job.id)">{{ t('Run now') }}</button>
+                <button v-if="canManageJob && (job.status === 'paused' || job.status === 'error')" class="btn-secondary" :disabled="!canRunJob" @click="resume(job.id)">{{ t('Resume') }}</button>
+                <button v-else-if="canManageJob" class="btn-secondary" :disabled="job.status === 'running'" @click="pause(job.id)">{{ t('Pause') }}</button>
+                <Link v-if="canManageBackups" :href="`/backup-jobs/${job.id}/restore`" class="btn-secondary">{{ t('Restore') }}</Link>
+                <Link v-if="canManageJob && job.configuration_source !== 'docker_label'" :href="`/backup-jobs/${job.id}/edit`" class="btn-secondary">{{ t('Edit') }}</Link>
+                <button v-if="canManageJob && job.configuration_source !== 'docker_label'" type="button" class="btn-danger" @click="destroyJob(job.id)">{{ t('Delete') }}</button>
             </div>
         </template>
 
+        <p v-if="canManageJob && !canRunJob" role="status" class="mb-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-700 dark:text-amber-200">{{ t(Number(job.docker_host_id ?? 1) !== 1 && job.backup_job_group_id ? 'hostWorkflow.groupsUnsupported' : 'hostWorkflow.unavailable') }}</p>
         <div class="grid gap-6 lg:grid-cols-3">
             <section class="card p-4 sm:p-5 lg:col-span-2">
                 <h2 class="mb-4 text-lg font-semibold">{{ t('Job info') }}</h2>
                 <dl class="grid gap-4 sm:grid-cols-2">
+                    <div><dt class="text-xs uppercase text-slate-400">{{ t('hostWorkflow.sourceHost') }}</dt><dd class="mt-1 break-words text-white">{{ resourceHost(job)?.name ?? `#${job.docker_host_id ?? 1}` }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="job.status" /></dd></div>
                     <div v-if="job.configuration_source === 'docker_label'"><dt class="text-xs uppercase text-slate-400">{{ t('Configuration') }}</dt><dd class="mt-1 text-sky-200">{{ t('Managed by Docker labels') }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Source type') }}</dt><dd class="mt-1 text-white">{{ sourceTypeLabel(job) }}</dd></div>

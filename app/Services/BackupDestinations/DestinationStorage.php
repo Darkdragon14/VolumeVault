@@ -7,6 +7,7 @@ use App\Models\BackupDestination;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerVolumeName;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\S3\S3ClientFactory;
 use App\Services\Security\OutboundHostGuard;
 use App\Support\SshHostKey;
@@ -166,6 +167,7 @@ class DestinationStorage
     /** @return array{used_bytes: int, object_count: int} */
     public function storageUsage(BackupDestination $destination): array
     {
+        LocalDockerExecution::assertDestination($destination);
         $cacheKey = 'destination_storage_usage_bytes_'.$destination->id;
 
         return Cache::remember($cacheKey, now()->addMinutes(30), fn (): array => $this->aggregateUsage($destination));
@@ -1966,6 +1968,7 @@ SH;
      */
     private function guardOutbound(BackupDestination $destination): void
     {
+        LocalDockerExecution::assertDestination($destination);
         foreach ($this->outboundHosts($destination) as $host) {
             $this->outboundHostGuard->assertHostAllowed($host);
         }

@@ -1,6 +1,46 @@
 <?php
 
 return [
+    'agent_execution_safety_and_identity' => [
+        'title' => 'Biztonságos ügynökvégrehajtás és pontos erőforrás-választás',
+        'description' => 'Az ügynökök S3-ellenőrzése elutasítja az ellentmondó végpontokat. A segédkonténereket az alkalmazások újraindítása előtt el kell távolítani, Docker-kapcsolathiba után is. A kötetlinkek megőrzik a gépet, az archívum kiválasztása átadja a történeti kontextust, és a visszaállítás nem örökli a feladat később módosított forrástípusát.',
+    ],
+    'remote_agent_execution' => [
+        'title' => 'Mentés és visszaállítás Docker-ügynökökkel',
+        'description' => 'A kompatibilis ügynökök önálló mentéseket és visszaállításokat hajtanak végre tartós titkosított parancsokkal és saját helyreállítási naplóval. Megosztott hálózati célról másik gépre is visszaállíthatók az adatok az orchestrátor Docker-socketje nélkül. Az eredmények és biztonsági mentések metaadatai újracsatlakozáskor megmaradnak, az elkészült munka megismétlése nélkül. Az elosztott csoportok és a helyi archívumok gépek közötti átvitele még nem érhetők el.',
+    ],
+    'remote_host_workflows' => [
+        'title' => 'Gépenkénti mentési és visszaállítási beállítások',
+        'description' => 'Az önálló feladatok regisztrált ügynököket célozhatnak offline állapotban és csak vezérlő módban is. Megosztott hálózati tárolóról másik gépre is lehet visszaállítani. A leltár, az útvonalak és a helyi célok gépenként elkülönülnek. A helyi archívumok gépek közötti átvitele és a távoli mentési csoportok még nem érhetők el.',
+    ],
+    'docker_host_metrics' => [
+        'title' => 'Hasznos adatok a helyi gépekről és ügynökökről',
+        'description' => 'A gépkártyák megjelenítik a Docker motor verzióját és a szinkronizált helyi konténerszámot. A helyi kártya elrejti az ügynökökre vonatkozó utolsó kapcsolatot, és pontosítja az utolsó kötetszinkronizálást. A VolumeVault-verziók, köztük a fejlesztői buildek, egyértelmű címkét kapnak. A csak orchestrátor mód elrejti a Docker-metrikákat. A szerepek a gépkártyákon jelennek meg az alkalmazás logója helyett.',
+    ],
+    'maintenance_dispatch_recovery' => [
+        'title' => 'Várakozó munkák megbízható folytatása karbantartás után',
+        'description' => 'A sorban álló csoportok hosszú karbantartás után is kiküldhetők, akkor is, ha az egyeztetés megelőzi a kiküldést. A gép folytatása új kézbesítési keretet ad a várakozó fő futásoknak, az előzmények és belső részfeladatok módosítása nélkül.',
+    ],
+    'agent_deployment_lifecycle' => [
+        'title' => 'Dedikált ügynökkép, orchestrátor mód és kézi frissítések',
+        'description' => 'Az ügynökök külön PHP CLI-képet kapnak. A csak orchestrátor mód Docker-démon nélkül működik, az értesítésekkel együtt. A gépnézet megjeleníti a szerepeket, verziókat és kompatibilitást, tartós karbantartással és az ügynök identitását megőrző kézi frissítési útmutatóval. Az automatikus távoli frissítés nincs engedélyezve.',
+    ],
+    'restore_target_host_recovery' => [
+        'title' => 'Visszaállítások helyreállítása a célgép alapján',
+        'description' => 'A helyi gépre irányuló megszakadt visszaállítások akkor is helyreállnak, ha az archívum másik gépről származik. Ez a kimerült sorbaadási kísérletekre és a leállítva maradt alkalmazáskonténerekre is vonatkozik, a távoli célok módosítása nélkül.',
+    ],
+    'agent_runtime_resilience' => [
+        'title' => 'Megbízható ügynök-életjelek és helyreállítás',
+        'description' => 'Az azonos NAT mögötti ügynökök már nem osztoznak a forgalmi kvótákon, és nem blokkolják a regisztrációt. A hosszú Docker-leltározások közben is érkeznek életjelek, és a gyűjtésnek teljes időkorlátja van. A sikertelen állapotmentés leállítja az ügynököt, így a Docker a mentett identitással újraindíthatja.',
+    ],
+    'agent_enrollment_inventory' => [
+        'title' => 'Biztonságos ügynökregisztráció és Docker-leltár',
+        'description' => 'Az adminisztrátorok generált Docker-paranccsal regisztrálhatnak gépeket, megtekinthetik a kapcsolatot és a leltár elemszámát, megújíthatják a regisztrációt és visszavonhatják a hozzáférést. A PHP CLI-ügynökök ellenőrzött TLS-t, tartós identitást és kimenő kapcsolatokat használnak. A beépített tanúsítványok automatikusan megújulnak.',
+    ],
+    'docker_host_attribution' => [
+        'title' => 'Kifejezett hozzárendelés a helyi Docker-géphez',
+        'description' => 'A migráció automatikusan a helyi Docker-géphez rendeli a meglévő köteteket, feladatokat, futási előzményeket és helyi célokat. Nincs szükség konfigurációmódosításra. A gépenkénti identitások a többgépes végrehajtást készítik elő.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'A nem támogatott Dropbox biztonsági mentések korai elutasítása',
         'description' => 'A helyben történő visszaállítás már sorba állítás előtt elutasítja a kért biztonsági mentést, ha a feladat jelenlegi célhelye Dropbox. Az űrlap elmagyarázza a korlátozást, és megőrzi a választást annak kifejezett módosításáig.',

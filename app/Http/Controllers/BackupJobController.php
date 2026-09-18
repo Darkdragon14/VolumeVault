@@ -23,10 +23,13 @@ use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Models\JobAlertConfig;
 use App\Models\NotificationChannel;
+use App\Services\Agents\AgentExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
+use App\Support\DeploymentMode;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -50,7 +53,7 @@ class BackupJobController extends Controller
     {
         $perPage = $this->perPageForRequest($request);
 
-        $query = BackupJob::with(['destination', 'notificationChannels']);
+        $query = BackupJob::with(['destination', 'notificationChannels', 'dockerHost']);
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search): void {
@@ -118,6 +121,7 @@ class BackupJobController extends Controller
                 return $job;
             },
             $group !== null ? [$group->id] : [],
+            dockerHostId: $request->integer('docker_host_id'),
         );
 
         return redirect()->route('backup-jobs.index')->with('success', 'Backup job created.');
@@ -167,6 +171,7 @@ class BackupJobController extends Controller
             $newVolumeName = $request->input('source_type') === BackupJob::SOURCE_TYPE_DOCKER_VOLUME ? $request->input('volume_name') : null;
             $volumeNames = collect([$current->volume_name, $newVolumeName])->filter()->all();
             $references = [
+                'docker_host_id' => (int) $current->docker_host_id,
                 'destination_id' => (int) $current->backup_destination_id,
                 'backup_job_group_id' => $current->backup_job_group_id !== null ? (int) $current->backup_job_group_id : null,
                 'source_type' => $current->sourceType(),
@@ -188,6 +193,7 @@ class BackupJobController extends Controller
                             abort(404);
                         }
                         $lockedReferences = [
+                            'docker_host_id' => (int) $lockedJob->docker_host_id,
                             'destination_id' => (int) $lockedJob->backup_destination_id,
                             'backup_job_group_id' => $lockedJob->backup_job_group_id !== null ? (int) $lockedJob->backup_job_group_id : null,
                             'source_type' => $lockedJob->sourceType(),
@@ -239,6 +245,7 @@ class BackupJobController extends Controller
                     },
                     [$references['backup_job_group_id'], $group?->id],
                     [$backupJob->id],
+                    $request->integer('docker_host_id'),
                 );
                 break;
             } catch (RetryDockerLabelMutation) {
@@ -316,9 +323,14 @@ class BackupJobController extends Controller
 
         return [
             'job' => null,
-            'volumes' => DockerVolume::where('exists', true)->orderBy('name')->get(['name']),
+            'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => app(AgentExecution::class)->summary($host, includePaths: true)),
+            'volumes' => DockerVolume::query()
+                ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
+                ->where('exists', true)->orderBy('name')->get(['docker_host_id', 'name']),
             'containers' => $this->dockerContainers(),
-            'destinations' => BackupDestination::where('is_active', true)->orderBy('name')->get()->map->safeForFrontend(),
+            'destinations' => BackupDestination::where('is_active', true)
+                ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where(fn ($query) => $query->whereNull('docker_host_id')->orWhere('docker_host_id', '!=', DockerHost::LOCAL_ID)))
+                ->orderBy('name')->get()->map(fn (BackupDestination $destination): array => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]),
             'notificationChannels' => NotificationChannel::with('backupJobs')->orderBy('name')->get()->map->safeForFrontend(),
             'defaultNotificationChannelIds' => $this->defaultNotificationChannelIds(),
             'alertRules' => AlertRule::where('type', '!=', AlertType::DestinationStorageLimit->value)
@@ -338,10 +350,15 @@ class BackupJobController extends Controller
      */
     private function dockerContainers(): array
     {
+        $remote = DockerHost::where('driver', DockerHost::DRIVER_AGENT)->get()->flatMap(fn (DockerHost $host) => collect($host->agent_containers ?? [])->map(fn (array $container): array => [...$container, 'docker_host_id' => $host->id]))->all();
+        if (DeploymentMode::isOrchestrator()) {
+            return $remote;
+        }
+
         try {
-            return app(ListDockerContainers::class)->handle();
+            return [...$remote, ...array_map(fn (array $container): array => [...$container, 'docker_host_id' => DockerHost::LOCAL_ID], app(ListDockerContainers::class)->handle())];
         } catch (\Throwable) {
-            return [];
+            return $remote;
         }
     }
 
@@ -357,7 +374,8 @@ class BackupJobController extends Controller
      */
     private function changesSource(BackupJobRequest $request, BackupJob $job): bool
     {
-        return (string) $request->input('source_type') !== (string) $job->source_type
+        return $request->integer('docker_host_id') !== (int) $job->docker_host_id
+            || (string) $request->input('source_type') !== (string) $job->source_type
             || (string) $request->input('volume_name') !== (string) $job->volume_name
             || (string) $request->input('host_path') !== (string) $job->host_path;
     }
@@ -383,6 +401,7 @@ class BackupJobController extends Controller
         $isHostPath = $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH;
 
         $base = [
+            'docker_host_id' => $request->integer('docker_host_id'),
             'name' => $request->input('name'),
             'source_type' => $sourceType,
             'volume_name' => $isHostPath ? null : $request->input('volume_name'),
@@ -441,7 +460,8 @@ class BackupJobController extends Controller
 
         return [
             ...$job->toArray(),
-            'destination' => $job->destination?->safeForFrontend(),
+            'destination' => $job->destination ? [...$job->destination->safeForFrontend(), 'docker_host_id' => $job->destination->docker_host_id] : null,
+            'docker_host' => $job->dockerHost ? app(AgentExecution::class)->summary($job->dockerHost) : null,
             'notification_channel_ids' => $job->notificationChannels->pluck('id')->values()->all(),
             'alert_configs' => $job->alertConfigs->map(fn (JobAlertConfig $config): array => [
                 'alert_rule_id' => $config->alert_rule_id,

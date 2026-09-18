@@ -5,7 +5,9 @@ namespace App\Actions\Backup;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Services\Agents\AgentExecution;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class CreateBackupRunRecord
 {
@@ -29,10 +31,15 @@ class CreateBackupRunRecord
                     }
 
                     $lockedJob->setRelation('destination', $lockedDestination);
+                    app(AgentExecution::class)->validateHost((int) $lockedJob->docker_host_id, 'backup-v1');
+                    if ($lockedDestination->isHostBound() && (int) $lockedDestination->docker_host_id !== (int) $lockedJob->docker_host_id) {
+                        throw ValidationException::withMessages(['destination' => 'The destination belongs to another Docker host.']);
+                    }
 
                     $run = BackupRun::create([
                         ...$attributes,
                         'backup_job_id' => $lockedJob->id,
+                        'docker_host_id' => $lockedJob->docker_host_id,
                         'source_type_snapshot' => $sourceVolumeName !== null ? BackupJob::SOURCE_TYPE_DOCKER_VOLUME : $lockedJob->sourceType(),
                         'source_volume_name' => $sourceVolumeName ?? ($lockedJob->isDockerVolumeSource() ? $lockedJob->volume_name : null),
                         'source_host_path' => $sourceVolumeName === null && $lockedJob->isHostPathSource() ? $lockedJob->host_path : null,

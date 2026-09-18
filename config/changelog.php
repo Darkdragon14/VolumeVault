@@ -1,7 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        ['type' => 'change', 'key' => 'agent_execution_safety_and_identity'],
+        ['type' => 'feature', 'key' => 'remote_agent_execution'],
+        ['type' => 'feature', 'key' => 'remote_host_workflows'],
+        ['type' => 'change', 'key' => 'docker_host_metrics'],
+        ['type' => 'change', 'key' => 'maintenance_dispatch_recovery'],
+        ['type' => 'feature', 'key' => 'agent_deployment_lifecycle'],
+        ['type' => 'change', 'key' => 'restore_target_host_recovery'],
+        ['type' => 'change', 'key' => 'agent_runtime_resilience'],
+        ['type' => 'feature', 'key' => 'agent_enrollment_inventory'],
+        ['type' => 'change', 'key' => 'docker_host_attribution'],
+    ],
     'releases' => [
         'v1.23.0' => [
             'date' => '2026-09-17',

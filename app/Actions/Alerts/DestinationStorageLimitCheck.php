@@ -9,6 +9,7 @@ use App\Models\Alert;
 use App\Models\AlertRule;
 use App\Models\BackupDestination;
 use App\Services\BackupDestinations\DestinationStorage;
+use App\Support\DeploymentMode;
 use App\Support\FormatBytes;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -45,6 +46,12 @@ class DestinationStorageLimitCheck implements AlertCheckAction
             ->orderBy('id')
             ->get()
             ->each(function (BackupDestination $destination) use ($rule, &$findings): void {
+                if (DeploymentMode::isOrchestrator() && $destination->isHostBound()) {
+                    $this->erroredSubjectKeys[] = $destination->getMorphClass().':'.$destination->getKey();
+
+                    return;
+                }
+
                 $thresholds = $this->thresholds($destination);
 
                 if ($thresholds === null) {
@@ -182,5 +189,4 @@ class DestinationStorageLimitCheck implements AlertCheckAction
             ->where('status', AlertStatus::Active->value)
             ->first();
     }
-
 }

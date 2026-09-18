@@ -25,6 +25,7 @@ use App\Models\User;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Services\Docker\SelfContainerResolver;
+use App\Services\Notifications\NativeShoutrrrProcess;
 use App\Services\Notifications\ResolveNotificationChannels;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\VolumeJobLock;
@@ -551,7 +552,7 @@ class GroupedBackupTest extends TestCase
         $this->assertContains('RESTORE_URL', $docker->shoutrrrUrls, 'the member restore should notify the group channel');
     }
 
-    public function test_stale_queued_group_run_without_an_active_predecessor_is_failed_while_its_lock_expires_by_ttl(): void
+    public function test_unpublished_queued_group_remains_dispatchable_while_its_orphaned_lock_expires_by_ttl(): void
     {
         $group = $this->group();
         $this->member($group, 'vol_a');
@@ -572,7 +573,8 @@ class GroupedBackupTest extends TestCase
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
-        $this->assertSame(BackupGroupRun::STATUS_FAILED, $run->fresh()->status);
+        $this->assertSame(BackupGroupRun::STATUS_QUEUED, $run->fresh()->status);
+        $this->assertSame(BackupJobGroup::STATUS_ACTIVE, $group->fresh()->status);
         $this->assertFalse(Cache::lock($lockKey, 86400)->get());
         $orphaned->release();
     }
@@ -1453,7 +1455,7 @@ class GroupedBackupTest extends TestCase
         $resolver = Mockery::mock(ResolveNotificationChannels::class);
         $resolver->shouldNotReceive('forGroup');
 
-        (new SendShoutrrrNotification($docker, $resolver))->sendGroupRunFinished(
+        (new SendShoutrrrNotification($docker, $resolver, app(NativeShoutrrrProcess::class)))->sendGroupRunFinished(
             $run,
             channels: new Collection([$channel]),
         );
@@ -1524,7 +1526,7 @@ class GroupedBackupTest extends TestCase
         $this->assertSame(BackupJob::STATUS_PAUSED, $member->fresh()->status);
     }
 
-    public function test_reconciliation_fails_an_abandoned_queued_group_run_without_resuming_its_paused_group(): void
+    public function test_reconciliation_fails_exhausted_group_publications_without_resuming_its_paused_group(): void
     {
         $notifier = Mockery::mock(SendShoutrrrNotification::class);
         $notifier->shouldNotReceive('sendGroupRunFinished');
@@ -1537,7 +1539,12 @@ class GroupedBackupTest extends TestCase
             'status' => BackupGroupRun::STATUS_QUEUED,
             'trigger' => BackupGroupRun::TRIGGER_SCHEDULED,
         ]);
-        BackupGroupRun::whereKey($groupRun->id)->update(['created_at' => now()->subHour()]);
+        $groupRun->forceFill([
+            'created_at' => now()->subHours(3),
+            'dispatch_token' => 'unclaimed-group-generation',
+            'dispatch_published_at' => now()->subHours(2),
+            'dispatch_attempted_at' => now()->subHour(),
+        ])->save();
 
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 

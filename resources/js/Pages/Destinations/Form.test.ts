@@ -10,6 +10,7 @@ const inertia = vi.hoisted(() => ({
 vi.mock('@inertiajs/vue3', () => ({
     Head: { template: '<div />' },
     Link: { template: '<a><slot /></a>' },
+    usePage: () => ({ props: { can: { manageSensitiveData: true } } }),
     useForm: (data: Record<string, unknown>) => ({
         ...data,
         errors: inertia.errors,

@@ -2,8 +2,9 @@
 import StatusBadge from '@/Components/StatusBadge.vue';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { useDeployment } from '@/Composables/useDeployment';
 import Pagination from '@/Components/Pagination.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 
 interface PaginatedData<T> {
@@ -16,8 +17,7 @@ defineProps<{
     defaultPerPage: number;
 }>();
 
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
+const { localDockerPermissions: can } = useDeployment();
 const { t, formatDate, timezone } = useI18n();
 
 const runNow = (id: number) => router.post(`/backup-groups/${id}/run`);

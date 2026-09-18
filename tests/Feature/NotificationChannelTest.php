@@ -10,6 +10,7 @@ use App\Http\Controllers\NotificationChannelController as WebNotificationChannel
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerLabelBackupSetting;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
@@ -757,7 +758,7 @@ class NotificationChannelTest extends TestCase
         $this->assertLessThan($jobLock, $settingsLock);
         $this->assertLessThan($channelLock, $jobLock);
         $this->assertSame(
-            [BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL, $firstJob->id, $secondJob->id],
+            [DockerHost::LOCAL_ID, BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL, $firstJob->id, $secondJob->id],
             $queries[$jobLock]['bindings'],
         );
         $this->assertDatabaseMissing('backup_job_notification_channel', ['notification_channel_id' => $channel->id]);

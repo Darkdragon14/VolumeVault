@@ -7,9 +7,11 @@ use App\Models\ActivityLog;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
 use App\Models\User;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use App\Services\Volumes\VolumeBackupSummaries;
 use Illuminate\Support\Collection;
@@ -47,7 +49,10 @@ class BackupStack
      */
     public function handle(?string $stackName, array $input, ?User $initiatedBy = null): array
     {
+        LocalDockerExecution::validate();
+
         $volumeNames = DockerVolume::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->where('exists', true)
             ->get()
             ->filter(fn (DockerVolume $volume): bool => $this->summaries->stackName($volume) === $stackName)
@@ -103,6 +108,7 @@ class BackupStack
                         && $job->label_reconciliation_error === null;
                 });
                 $covered = BackupJob::query()
+                    ->where('docker_host_id', DockerHost::LOCAL_ID)
                     ->reservingDockerVolumes()
                     ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
                     ->whereIn('volume_name', $volumeNames->all())
@@ -148,6 +154,7 @@ class BackupStack
 
                 $missing->each(function (string $volumeName) use ($input, $scheduleType, $scheduleConfig, $timezone, $channelIds, $notificationChannels): void {
                     $job = BackupJob::create([
+                        'docker_host_id' => DockerHost::LOCAL_ID,
                         'name' => $volumeName,
                         'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
                         'volume_name' => $volumeName,
@@ -186,6 +193,7 @@ class BackupStack
     private function queueRuns(Collection $volumeNames, array $pendingJobIds, ?User $initiatedBy): array
     {
         $jobs = BackupJob::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
             ->where(function ($query): void {
                 $query->where('configuration_source', '!=', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)

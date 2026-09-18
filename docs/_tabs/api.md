@@ -10,6 +10,16 @@ VolumeVault exposes a versioned HTTP API secured with Laravel Sanctum tokens and
 
 This makes the project friendly to automation tools, monitoring scripts, dashboards, and AI agents that need to inspect backup state or trigger explicit operations without scraping the web UI.
 
+Volumes, jobs and backup runs include `docker_host_id`; restore runs include `source_docker_host_id` and `target_docker_host_id`. Backup job creation accepts `docker_host_id` (default `1`, the built-in local host); updates preserve the current host when omitted. Changing a source or host is refused while a run or cleanup remains outstanding. Inventory validation always uses the selected host. Remote jobs must be standalone: remote groups and Docker-label reconciliation are not yet supported.
+
+Agents use a separate, versioned HTTPS protocol under `/agent/v1`, with agent-specific credentials that cannot authenticate to the public API or administrator routes. Enrollment and revocation are managed through the administrator-only Docker hosts page. Remote work requires a registered, non-revoked protocol-v1 agent advertising `backup-v1` or `restore-v1` for the requested operation. Configuration and queuing do not require the agent to be online; execution is claimed when it polls. Public API user tokens cannot authenticate as agents.
+
+Agent execution uses POST `/agent/v1/operations/pull`, `/agent/v1/operations/{uuid}/progress` and `/agent/v1/operations/{uuid}/complete`. Pull responses carry credential-bound encrypted envelopes, not plaintext destination configurations. Assignments remain bound to their host until a cleanup-complete result is acknowledged. Repeated pull/result delivery is idempotent; these endpoints are not a generic Docker or shell proxy.
+
+Agent heartbeats additionally report protocol/capabilities and active operation counts, and acknowledge a server-issued maintenance nonce. Maintenance and manual update guides are administrator-only web endpoints. In orchestrator-only mode, local execution mutations return validation errors while remote standalone jobs remain configurable and scheduled. Maintenance admission is checked on the execution host (the target for restores).
+
+Host-local destinations (`local` and `docker_volume`) accept `docker_host_id`, defaulting to `1` on creation and preserving the owner on update. A backup job cannot use another host's local destination. Network destinations have no host owner. Remote bind paths are checked lexically against the agent's reported allowlist without mounting or resolving them centrally; the agent revalidates its authoritative policy at execution. Destination secrets remain encrypted and are never returned or prefilled.
+
 API tokens are created by admins from the `API tokens` screen. Tokens are displayed only once at creation and stored hashed after that.
 
 Tokens expire by default to limit the blast radius of a leaked token. The default lifetime is 60 days and is configurable with `SANCTUM_TOKEN_EXPIRATION` (in minutes); set it to `null` to allow non-expiring tokens. A per-token expiry chosen at creation can only shorten this window, never extend it.
@@ -34,6 +44,10 @@ Write operations still require an admin user, and secrets are never returned in 
 When restoring, `selected_backup_key` must be one of the keys returned by `GET /api/v1/backup-jobs/{id}/backups` - it is checked against the destination listing, so arbitrary or path-traversal keys are rejected. Volume names (`volume_name`, `target_volume_name`) must match `^[A-Za-z0-9_.-]+$`.
 
 `POST /api/v1/backup-jobs/{id}/restore` accepts these restore modes:
+
+The optional `target_docker_host_id` defaults to the job's current host. With a shared network destination, `new_volume` can restore an archive from host A onto host B, including the same volume name when absent on B. The source host and source name come from the selected historical `backup_run_id`, not the job's current configuration. In-place restores require an available volume on the target and exact typed confirmation. A safety backup additionally requires the job and its current destination to be usable on that target host.
+
+Network archive keys are still verified centrally against the destination listing. For an agent-owned local destination, supply a successful `backup_run_id` with its exact `selected_backup_key` and unchanged destination locator. Listing endpoints return known matching runs with `backup_run_id` and `verification_deferred: true`; actual archive existence is checked by the agent before modifying the target. Host-local archives cannot be restored onto another host: archive transfer between host-local destinations is not yet supported.
 
 - `new_volume`: restore into a fresh Docker volume. Provide `target_volume_name`; this is the safest mode and is also the only mode available for host-path backup jobs.
 - `inplace`: overwrite the source Docker volume. This is available only for Docker-volume backup jobs and requires `confirmation_text` to exactly match the source volume name.

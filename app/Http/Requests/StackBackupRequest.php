@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\BackupJob;
+use App\Services\Docker\LocalDockerExecution;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -15,6 +16,8 @@ class StackBackupRequest extends FormRequest
 
     public function rules(): array
     {
+        LocalDockerExecution::validate();
+
         return [
             'stack' => ['nullable', 'string', 'max:255'],
             'backup_destination_id' => ['nullable', 'integer', 'exists:backup_destinations,id'],

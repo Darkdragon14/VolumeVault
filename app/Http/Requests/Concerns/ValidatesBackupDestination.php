@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Concerns;
 
 use App\Models\BackupDestination;
+use App\Models\DockerHost;
+use App\Services\Agents\AgentExecution;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerVolumeName;
 use Illuminate\Validation\Rule;
@@ -18,6 +20,7 @@ trait ValidatesBackupDestination
     protected function baseRules(): array
     {
         return [
+            'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'],
             'name' => ['required', 'string', 'max:255'],
             'provider' => ['required', 'string', Rule::in(BackupDestination::PROVIDERS)],
             'endpoint' => ['nullable', 'string', 'max:2048'],
@@ -119,6 +122,9 @@ trait ValidatesBackupDestination
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            if (! $validator->errors()->has('docker_host_id') && in_array($this->input('provider'), [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME], true)) {
+                app(AgentExecution::class)->validateHost($this->destinationHostId(), 'backup-v1');
+            }
             $this->validateStorageLimits($validator);
             $this->validateLocalDestinationPaths($validator);
             $this->validateDockerVolumeSettings($validator);
@@ -188,10 +194,17 @@ trait ValidatesBackupDestination
                 continue;
             }
 
-            if ($message = $policy->validationError($policy->normalize($value))) {
+            if ($message = $policy->validationError($policy->normalize($value), $this->destinationHostId())) {
                 $validator->errors()->add($field, $message);
             }
         }
+    }
+
+    protected function destinationHostId(): int
+    {
+        $destination = $this->route('destination');
+
+        return (int) ($this->input('docker_host_id') ?? ($destination instanceof BackupDestination ? $destination->docker_host_id : null) ?? DockerHost::LOCAL_ID);
     }
 
     protected function validateStorageLimits(Validator $validator): void

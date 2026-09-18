@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+case "${VOLUMEVAULT_AGENTS_ENABLED:-false}" in
+    true|1|\(true\)) ;;
+    *) exec sleep infinity ;;
+esac
+
+cd /app
+while sleep 43200; do
+    if /command/s6-setuidgid www-data php artisan volumevault:agent-tls:prepare; then
+        nginx -s reload || echo "Agent TLS nginx reload failed." >&2
+    else
+        echo "Agent TLS renewal failed; retrying in 12 hours." >&2
+    fi
+done

@@ -7,6 +7,7 @@ use App\Models\Alert;
 use App\Models\User;
 use App\Services\Changelog\AvailableUpdateChecker;
 use App\Services\Changelog\Changelog;
+use App\Support\DeploymentMode;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -27,6 +28,7 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...parent::share($request),
+            'deployment' => ['mode' => DeploymentMode::mode(), 'local_execution_enabled' => DeploymentMode::localExecutionEnabled()],
             'auth' => [
                 'user' => fn () => $request->user() ? [
                     'id' => $request->user()->id,
@@ -42,7 +44,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'can' => [
                 'manageSensitiveData' => fn () => (bool) $request->user()?->isAdmin(),
-                'runDockerActions' => fn () => (bool) $request->user()?->isAdmin(),
+                'runDockerActions' => fn () => (bool) $request->user()?->isAdmin() && DeploymentMode::localExecutionEnabled(),
                 'manageUsers' => fn () => (bool) $request->user()?->isAdmin(),
             ],
             'app' => [

@@ -1,6 +1,46 @@
 <?php
 
 return [
+    'agent_execution_safety_and_identity' => [
+        'title' => 'Bezpečné provádění agentů a přesný výběr prostředků',
+        'description' => 'Kontroly S3 agentů odmítají rozporné endpointy. Pomocné kontejnery musí být odstraněny před restartem aplikací i po přerušení spojení s Dockerem. Odkazy na svazky zachovávají hostitele, výběr archivu předává historický kontext a obnovy nepřebírají později změněný typ zdroje úlohy.',
+    ],
+    'remote_agent_execution' => [
+        'title' => 'Zálohování a obnova prostřednictvím agentů Dockeru',
+        'description' => 'Kompatibilní agenti provádějí jednotlivé zálohy a obnovy pomocí trvalých šifrovaných příkazů a soukromých protokolů obnovy. Sdílené síťové cíle umožňují obnovu na jiného hostitele bez Docker socketu v orchestrátoru. Výsledky a metadata bezpečnostních záloh přežijí opětovné připojení bez opakování dokončené práce. Distribuované skupiny a přenos místních archivů mezi hostiteli zatím nejsou dostupné.',
+    ],
+    'remote_host_workflows' => [
+        'title' => 'Konfigurace záloh a obnovy podle hostitele',
+        'description' => 'Samostatné úlohy mohou používat registrované agenty, i offline a v režimu samotného orchestrátoru. Sdílené síťové úložiště umožňuje obnovu na jiném hostiteli. Inventář, cesty a místní cíle jsou oddělené podle hostitele. Přenos místních archivů mezi hostiteli a vzdálené skupiny záloh zatím nejsou dostupné.',
+    ],
+    'docker_host_metrics' => [
+        'title' => 'Přehledné informace o místních hostitelích a agentech',
+        'description' => 'Karty hostitelů nyní zobrazují verzi enginu Docker a synchronizovaný počet místních kontejnerů. Místní karta skrývá poslední kontakt určený agentům a vysvětluje poslední synchronizaci svazků. Verze VolumeVault včetně vývojových sestavení jsou jasně označeny. Karty samotného orchestrátoru skrývají metriky Dockeru. Role se zobrazují na kartách hostitelů místo pod logem aplikace.',
+    ],
+    'maintenance_dispatch_recovery' => [
+        'title' => 'Spolehlivé obnovení čekajících úloh po údržbě',
+        'description' => 'Skupiny ve frontě zůstávají po dlouhé údržbě způsobilé k odeslání, i když kontrola opuštěných běhů předchází odesílání. Obnovení hostitele obnoví pokusy o doručení jeho čekajících hlavních běhů, bez změny historie a interních podoperací.',
+    ],
+    'agent_deployment_lifecycle' => [
+        'title' => 'Samostatní agenti, režim orchestrátoru a ruční aktualizace',
+        'description' => 'Agenti mají vlastní obraz PHP CLI. Režim samotného orchestrátoru funguje bez démona Dockeru včetně oznámení. Přehled hostitelů ukazuje role, verze a kompatibilitu, trvalou údržbu a průvodce ruční aktualizací zachovávající identitu agenta. Automatické vzdálené aktualizace nejsou zapnuty.',
+    ],
+    'restore_target_host_recovery' => [
+        'title' => 'Zotavení obnov podle cílového hostitele',
+        'description' => 'Přerušené obnovy na místního hostitele se nyní zotaví i tehdy, když archiv pochází z jiného hostitele. Zotavení zahrnuje také vyčerpané pokusy o předání do fronty a zastavené aplikační kontejnery, aniž by zasahovalo do vzdálených cílů.',
+    ],
+    'agent_runtime_resilience' => [
+        'title' => 'Spolehlivé signály dostupnosti a obnova agentů',
+        'description' => 'Agenti za stejným NAT již nesdílejí limity provozu ani neblokují registraci. Dlouhé sběry inventáře Dockeru nadále odesílají signály dostupnosti a mají celkový časový limit. Selhání zápisu stavu ukončí agenta, aby jej Docker mohl restartovat s uloženou identitou.',
+    ],
+    'agent_enrollment_inventory' => [
+        'title' => 'Bezpečná registrace agentů a inventář Dockeru',
+        'description' => 'Správci mohou registrovat hostitele vygenerovaným příkazem Dockeru, sledovat připojení a počty položek inventáře, obnovit registraci a odvolat přístup. Agenti PHP CLI používají ověřené TLS, trvalé identity a odchozí spojení. Vestavěné certifikáty se obnovují automaticky.',
+    ],
+    'docker_host_attribution' => [
+        'title' => 'Výslovné přiřazení k místnímu hostiteli Dockeru',
+        'description' => 'Migrace automaticky přiřadí existující svazky, úlohy, historii běhů a místní cíle k místnímu hostiteli Dockeru. Není třeba měnit konfiguraci. Identity podle hostitele připravují spouštění na více hostitelích.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Včasné odmítnutí nepodporovaných bezpečnostních záloh na Dropbox',
         'description' => 'Obnovení na místě nyní odmítne požadovanou bezpečnostní zálohu před zařazením do fronty, pokud je aktuálním cílem úlohy Dropbox. Formulář vysvětluje omezení a zachová vaši volbu, dokud ji výslovně nezměníte.',

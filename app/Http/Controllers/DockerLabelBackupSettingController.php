@@ -8,6 +8,7 @@ use App\Models\BackupDestination;
 use App\Models\DockerLabelBackupSetting;
 use App\Models\NotificationChannel;
 use App\Services\Scheduling\BackupScheduleCalculator;
+use App\Support\DeploymentMode;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -26,7 +27,9 @@ class DockerLabelBackupSettingController extends Controller
                 'last_sync_error' => $settings->last_sync_error,
                 'last_synced_at' => $settings->last_synced_at,
             ],
-            'destinations' => BackupDestination::query()->where('is_active', true)->orderBy('name')->get()->map->safeForFrontend(),
+            'destinations' => BackupDestination::query()->where('is_active', true)
+                ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->whereNotIn('provider', [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME]))
+                ->orderBy('name')->get()->map->safeForFrontend(),
             'notificationChannels' => NotificationChannel::query()->orderBy('name')->get()->map->safeForFrontend(),
             'timezones' => \DateTimeZone::listIdentifiers(),
         ]);

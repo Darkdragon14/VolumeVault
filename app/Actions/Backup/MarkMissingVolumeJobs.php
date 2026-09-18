@@ -4,13 +4,19 @@ namespace App\Actions\Backup;
 
 use App\Models\ActivityLog;
 use App\Models\BackupJob;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
+use App\Support\DeploymentMode;
 use Illuminate\Support\Facades\DB;
 
 class MarkMissingVolumeJobs
 {
-    public function handle(array $missingVolumeNames): int
+    public function handle(array $missingVolumeNames, int $dockerHostId = DockerHost::LOCAL_ID): int
     {
+        if ($dockerHostId === DockerHost::LOCAL_ID && DeploymentMode::isOrchestrator()) {
+            return 0;
+        }
+
         $names = collect($missingVolumeNames)->filter()->unique()->values();
 
         if ($names->isEmpty()) {
@@ -20,18 +26,20 @@ class MarkMissingVolumeJobs
         $affected = 0;
 
         BackupJob::query()
+            ->where('docker_host_id', $dockerHostId)
             ->whereIn('volume_name', $names->all())
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
             ->pluck('id')
-            ->each(function (int $jobId) use ($names, &$affected): void {
-                DB::transaction(function () use ($jobId, $names, &$affected): void {
-                    $jobVolumeName = BackupJob::query()->whereKey($jobId)->value('volume_name');
+            ->each(function (int $jobId) use ($names, $dockerHostId, &$affected): void {
+                DB::transaction(function () use ($jobId, $names, $dockerHostId, &$affected): void {
+                    $jobVolumeName = BackupJob::query()->where('docker_host_id', $dockerHostId)->whereKey($jobId)->value('volume_name');
 
                     if (blank($jobVolumeName) || ! $names->contains($jobVolumeName)) {
                         return;
                     }
 
                     $volume = DockerVolume::query()
+                        ->where('docker_host_id', $dockerHostId)
                         ->where('name', $jobVolumeName)
                         ->lockForUpdate()
                         ->first();
@@ -40,7 +48,7 @@ class MarkMissingVolumeJobs
                         return;
                     }
 
-                    $job = BackupJob::query()->lockForUpdate()->find($jobId);
+                    $job = BackupJob::query()->where('docker_host_id', $dockerHostId)->lockForUpdate()->find($jobId);
 
                     if ($job === null || ! $job->isDockerVolumeSource() || $job->volume_name !== $jobVolumeName) {
                         return;

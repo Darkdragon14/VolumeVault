@@ -7,16 +7,20 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Services\Volumes\VolumeBackupSummaries;
+use App\Support\DeploymentMode;
 use Illuminate\Http\JsonResponse;
 
 class DashboardController extends Controller
 {
     public function __invoke(VolumeBackupSummaries $volumeBackupSummaries): JsonResponse
     {
-        $volumeSummaries = $volumeBackupSummaries->forVolumes(DockerVolume::query()->get());
+        $volumes = DockerVolume::where('docker_host_id', DockerHost::LOCAL_ID)
+            ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->whereRaw('1 = 0'))->get();
+        $volumeSummaries = $volumeBackupSummaries->forVolumes($volumes);
         $coverageStats = $volumeBackupSummaries->coverageStats($volumeSummaries);
         // Standalone runs only: a group's outcome is shown by the group widgets,
         // and a member run can be success while its group run aggregated to failed.
@@ -50,9 +54,9 @@ class DashboardController extends Controller
         return response()->json([
             'data' => [
                 'stats' => [
-                    'total_volumes' => DockerVolume::count(),
-                    'existing_volumes' => DockerVolume::where('exists', true)->count(),
-                    'missing_volumes' => DockerVolume::where('exists', false)->count(),
+                    'total_volumes' => $volumes->count(),
+                    'existing_volumes' => $volumes->where('exists', true)->count(),
+                    'missing_volumes' => $volumes->where('exists', false)->count(),
                     'backed_up_volumes' => $coverageStats['backed_up_volumes'],
                     'configured_volumes' => $coverageStats['configured_volumes'],
                     'unprotected_volumes' => $coverageStats['unprotected_volumes'],

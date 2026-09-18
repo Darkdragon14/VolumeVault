@@ -5,7 +5,10 @@ namespace App\Jobs;
 use App\Actions\Backup\RunBackup;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\RestoreRun;
+use App\Services\Agents\HostWorkAdmission;
+use App\Support\DeploymentMode;
 use App\Support\VolumeJobLock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -51,7 +54,7 @@ class RunBackupJob implements ShouldQueue
         $volume = $run?->source_type_snapshot === BackupJob::SOURCE_TYPE_HOST_PATH
             ? null
             : ($run?->source_volume_name ?? $run?->job?->volume_name);
-        $key = VolumeJobLock::key($volume, 'backup-job-'.($run?->backup_job_id ?? $this->backupRunId));
+        $key = VolumeJobLock::key($volume, 'backup-job-'.($run?->backup_job_id ?? $this->backupRunId), $run?->docker_host_id ?? DockerHost::LOCAL_ID);
 
         // shared() drops the per-job-class namespace from the lock key so this
         // backup and a RunRestoreJob keyed on the same volume contend for the one
@@ -63,7 +66,17 @@ class RunBackupJob implements ShouldQueue
 
     public function handle(RunBackup $runBackup): void
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return;
+        }
+
         $run = BackupRun::findOrFail($this->backupRunId);
+
+        if (app(HostWorkAdmission::class)->isWaiting($run)) {
+            $this->release(60);
+
+            return;
+        }
 
         // Defense against an expired WithoutOverlapping lock (24h TTL, no job
         // timeout): if another run is already executing on this backup's volume,
@@ -77,6 +90,10 @@ class RunBackupJob implements ShouldQueue
         }
 
         $runBackup->handle($run);
+
+        if (app(HostWorkAdmission::class)->isWaiting($run->refresh())) {
+            $this->release(60);
+        }
     }
 
     /**
@@ -100,6 +117,7 @@ class RunBackupJob implements ShouldQueue
             // means we must requeue rather than overlap it. Restores never share
             // this lock, so only sibling backup runs count.
             return BackupRun::query()
+                ->where('docker_host_id', $run->docker_host_id)
                 ->where('backup_job_id', $run->backup_job_id)
                 ->whereKeyNot($run->getKey())
                 ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
@@ -107,6 +125,7 @@ class RunBackupJob implements ShouldQueue
         }
 
         $backupActive = BackupRun::query()
+            ->where('docker_host_id', $run->docker_host_id)
             ->where(function ($query) use ($volume): void {
                 $query->where('source_volume_name', $volume)
                     ->orWhere(fn ($query) => $query
@@ -118,6 +137,7 @@ class RunBackupJob implements ShouldQueue
             ->exists();
 
         $restoreActive = RestoreRun::query()
+            ->where('target_docker_host_id', $run->docker_host_id)
             ->where('target_volume_name', $volume)
             ->where(fn ($query) => $this->stillWorking($query))
             ->exists();

@@ -5,6 +5,7 @@ namespace App\Services\BackupSources;
 use App\Models\ActivityLog;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
+use App\Support\DeploymentMode;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -68,6 +69,10 @@ class HostPathAllowlistAudit
      */
     public function blockedPaths(): array
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return [];
+        }
+
         return collect($this->pathsInUse())
             ->reject(fn (string $path): bool => $this->policy->isAllowed($path))
             ->values()

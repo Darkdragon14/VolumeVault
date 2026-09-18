@@ -29,15 +29,17 @@ class VolumeBackupSummaries
     {
         $volumes = $volumes->values();
         $volumeNames = $volumes->pluck('name')->filter()->values();
+        $hostIds = $volumes->pluck('docker_host_id')->unique()->values();
 
         $jobsByVolume = $volumeNames->isEmpty()
             ? collect()
             : BackupJob::query()
                 ->reservingDockerVolumes()
+                ->whereIn('docker_host_id', $hostIds->all())
                 ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
                 ->whereIn('volume_name', $volumeNames->all())
-                ->get(['id', 'name', 'volume_name', 'status'])
-                ->groupBy('volume_name');
+                ->get(['id', 'docker_host_id', 'name', 'volume_name', 'status'])
+                ->groupBy(fn (BackupJob $job): string => $job->docker_host_id.':'.$job->volume_name);
 
         $runsByVolume = $volumeNames->isEmpty()
             ? collect()
@@ -45,12 +47,14 @@ class VolumeBackupSummaries
                 ->select('backup_runs.*')
                 ->selectRaw('COALESCE(backup_runs.source_volume_name, backup_jobs.volume_name) as summary_volume_name')
                 ->join('backup_jobs', 'backup_jobs.id', '=', 'backup_runs.backup_job_id')
+                ->whereIn('backup_runs.docker_host_id', $hostIds->all())
                 ->where(function ($query) use ($volumeNames): void {
                     $query->where(function ($query) use ($volumeNames): void {
                         $query->where('backup_runs.source_type_snapshot', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
                             ->whereIn('backup_runs.source_volume_name', $volumeNames->all());
                     })->orWhere(function ($query) use ($volumeNames): void {
                         $query->whereNull('backup_runs.source_type_snapshot')
+                            ->whereColumn('backup_runs.docker_host_id', 'backup_jobs.docker_host_id')
                             ->where('backup_jobs.source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
                             ->whereIn('backup_jobs.volume_name', $volumeNames->all())
                             ->where(function ($query): void {
@@ -64,11 +68,12 @@ class VolumeBackupSummaries
                 ->orderByDesc('backup_runs.finished_at')
                 ->orderByDesc('backup_runs.created_at')
                 ->get()
-                ->groupBy('summary_volume_name');
+                ->groupBy(fn (BackupRun $run): string => $run->docker_host_id.':'.$run->summary_volume_name);
 
         return $volumes->map(function (DockerVolume $volume) use ($jobsByVolume, $runsByVolume): array {
-            $jobs = $jobsByVolume->get($volume->name, collect());
-            $lastSuccessfulRun = $runsByVolume->get($volume->name, collect())->first();
+            $key = $volume->docker_host_id.':'.$volume->name;
+            $jobs = $jobsByVolume->get($key, collect());
+            $lastSuccessfulRun = $runsByVolume->get($key, collect())->first();
 
             return [
                 ...$volume->toArray(),
@@ -90,8 +95,8 @@ class VolumeBackupSummaries
     public function forStacks(Collection $volumes): Collection
     {
         return $this->forVolumes($volumes)
-            ->groupBy(fn (array $volume): string => $volume['stack_name'] ?? '')
-            ->map(function (Collection $volumes, string $stackName): array {
+            ->groupBy(fn (array $volume): string => $volume['docker_host_id'].':'.($volume['stack_name'] ?? ''))
+            ->map(function (Collection $volumes): array {
                 $existingVolumes = $volumes->where('exists', true);
                 $configuredJobVolumes = $existingVolumes->filter(fn (array $volume): bool => (int) ($volume['related_jobs_count'] ?? 0) > 0)->count();
                 $lastBackup = $volumes
@@ -100,7 +105,8 @@ class VolumeBackupSummaries
                     ->first();
 
                 return [
-                    'name' => $stackName !== '' ? $stackName : null,
+                    'name' => $volumes->first()['stack_name'],
+                    'docker_host_id' => $volumes->first()['docker_host_id'],
                     'total_volumes' => $volumes->count(),
                     'existing_volumes' => $existingVolumes->count(),
                     'missing_volumes' => $volumes->where('exists', false)->count(),

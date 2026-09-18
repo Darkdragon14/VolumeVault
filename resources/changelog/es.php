@@ -1,6 +1,46 @@
 <?php
 
 return [
+    'agent_execution_safety_and_identity' => [
+        'title' => 'Ejecución segura de agentes y selección precisa de recursos',
+        'description' => 'Las comprobaciones S3 de los agentes rechazan endpoints contradictorios. Los contenedores auxiliares deben eliminarse antes de reiniciar aplicaciones, incluso tras perder la conexión Docker. Los accesos a volúmenes conservan su host, la selección del archivo transmite su contexto histórico y las restauraciones no heredan cambios posteriores del tipo de origen del trabajo.',
+    ],
+    'remote_agent_execution' => [
+        'title' => 'Copias y restauraciones mediante agentes Docker',
+        'description' => 'Los agentes compatibles ejecutan copias y restauraciones individuales con comandos cifrados persistentes y diarios privados de recuperación. Un destino de red compartido permite restaurar en otro host sin socket Docker en el orquestador. Los resultados y metadatos de copias de seguridad previas sobreviven a las reconexiones sin repetir trabajo completado. Los grupos distribuidos y el traslado de archivos locales entre hosts siguen sin estar disponibles.',
+    ],
+    'remote_host_workflows' => [
+        'title' => 'Configuración de copias y restauraciones por host',
+        'description' => 'Los trabajos independientes pueden usar agentes registrados, incluso sin conexión y en modo solo orquestador. El almacenamiento de red compartido permite restaurar en otro host. El inventario, las rutas y los destinos locales se limitan a su host. Las transferencias de archivos locales entre hosts y los grupos remotos aún no están disponibles.',
+    ],
+    'docker_host_metrics' => [
+        'title' => 'Información útil de hosts locales y agentes',
+        'description' => 'Las tarjetas muestran la versión del motor Docker y el número de contenedores locales sincronizado. La tarjeta local oculta el último contacto reservado a agentes y aclara la última sincronización de volúmenes. Las versiones de VolumeVault, incluidas las de desarrollo, se identifican claramente. El modo solo orquestador oculta las métricas Docker. Los roles aparecen en las tarjetas de hosts, no bajo el logotipo de la aplicación.',
+    ],
+    'maintenance_dispatch_recovery' => [
+        'title' => 'Reanudar el trabajo en cola tras el mantenimiento',
+        'description' => 'Los grupos en cola siguen siendo publicables tras un mantenimiento prolongado, aunque la reconciliación preceda al envío. Al reanudar un host se renuevan los intentos de entrega de sus ejecuciones principales pendientes, sin modificar el historial ni las operaciones internas.',
+    ],
+    'agent_deployment_lifecycle' => [
+        'title' => 'Agentes dedicados, modo orquestador y actualizaciones manuales',
+        'description' => 'Los agentes disponen de una imagen PHP CLI dedicada. El modo solo orquestador funciona sin daemon Docker, incluidas las notificaciones. La vista de hosts muestra roles, versiones y compatibilidad, con mantenimiento persistente y una guía de actualización manual que conserva la identidad. La actualización remota automática no está habilitada.',
+    ],
+    'restore_target_host_recovery' => [
+        'title' => 'Recuperar restauraciones según su host de destino',
+        'description' => 'Las restauraciones interrumpidas hacia el host local ahora se recuperan aunque su archivo proceda de otro host. La recuperación también gestiona los intentos agotados de publicación en cola y los contenedores que quedaron detenidos, sin modificar destinos remotos.',
+    ],
+    'agent_runtime_resilience' => [
+        'title' => 'Heartbeats y recuperación fiables de los agentes',
+        'description' => 'Los agentes detrás del mismo NAT ya no comparten cuotas ni bloquean el registro. Las recopilaciones largas del inventario Docker siguen enviando heartbeats y tienen un límite de duración. Un fallo al guardar el estado detiene el agente para que Docker lo reinicie con su identidad persistida.',
+    ],
+    'agent_enrollment_inventory' => [
+        'title' => 'Registro seguro de agentes e inventario Docker',
+        'description' => 'Los administradores pueden registrar hosts con un comando Docker generado, consultar su conexión y los recuentos de inventario, renovar el registro y revocar el acceso. Los agentes PHP CLI usan TLS verificado, identidades persistentes y conexiones salientes. Los certificados integrados se renuevan automáticamente.',
+    ],
+    'docker_host_attribution' => [
+        'title' => 'Asignación explícita al host Docker local',
+        'description' => 'La migración asigna automáticamente los volúmenes, tareas, historiales y destinos locales existentes al host Docker local. No es necesario cambiar la configuración. Las identidades por host preparan la ejecución multihost.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Rechazo anticipado de copias de seguridad previas en Dropbox',
         'description' => 'Las restauraciones en el mismo volumen rechazan la copia de seguridad previa solicitada antes de entrar en cola si el destino actual es Dropbox. El formulario explica la limitación y conserva tu elección hasta que la cambies explícitamente.',

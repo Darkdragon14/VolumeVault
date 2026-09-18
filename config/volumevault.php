@@ -1,6 +1,20 @@
 <?php
 
 return [
+    'mode' => env('VOLUMEVAULT_MODE', 'hybrid'),
+    'agents' => [
+        'enabled' => (bool) env('VOLUMEVAULT_AGENTS_ENABLED', false),
+        'url' => rtrim((string) env('VOLUMEVAULT_AGENT_URL', ''), '/'),
+        'tls_directory' => storage_path('app/private/agent-tls'),
+        'image' => trim((string) env('VOLUMEVAULT_AGENT_IMAGE', '')) ?: 'ghcr.io/darkdragon14/volumevault-agent:'.(env('APP_VERSION', 'main') === 'main' ? 'latest' : env('APP_VERSION')),
+        'client' => [
+            'url' => env('VOLUMEVAULT_ORCHESTRATOR_URL', ''),
+            'enrollment_token' => env('VOLUMEVAULT_AGENT_ENROLLMENT_TOKEN', ''),
+            'ca_certificate' => env('VOLUMEVAULT_AGENT_CA', ''),
+            'state_directory' => env('VOLUMEVAULT_AGENT_STATE_DIRECTORY', storage_path('app/agent')),
+        ],
+    ],
+
     'docker_host' => env('DOCKER_HOST', 'unix:///var/run/docker.sock'),
     'docker_network' => trim((string) env('VOLUMEVAULT_DOCKER_NETWORK', '')),
 

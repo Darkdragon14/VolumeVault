@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { isHostLocalDestination, useDeployment, type ExecutionHost } from '@/Composables/useDeployment';
 import PasswordInput from '@/Components/PasswordInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -14,16 +15,21 @@ type ProviderOption = {
 
 const props = defineProps<{
     destination: any | null;
+    hosts?: ExecutionHost[];
     providers: ProviderOption[];
 }>();
 
 const editing = computed(() => Boolean(props.destination));
+const { executionHosts, localExecutionEnabled, canManageBackups } = useDeployment();
+const hosts = computed(() => executionHosts(props.hosts));
+const hostSelectable = (host: ExecutionHost) => Number(host.id) !== 1 || localExecutionEnabled.value;
 const { t, translateError } = useI18n();
 const settings = props.destination?.settings || {};
 const hasSecret = (field: string) => Boolean(props.destination?.has_secrets?.[field]);
 const storageLimitUnitSelections = ref<Record<string, SizeUnit>>({});
 
 const form = useForm({
+    docker_host_id: props.destination?.docker_host_id ?? hosts.value[0]?.id ?? 1,
     name: props.destination?.name || '',
     provider: props.destination?.provider || props.providers[0]?.value || 'aws_s3',
     endpoint: props.destination?.endpoint || '',
@@ -74,6 +80,8 @@ const form = useForm({
 });
 
 const selectedProvider = computed(() => props.providers.find((provider) => provider.value === form.provider));
+const canSave = computed(() => canManageBackups.value && (!isHostLocalDestination(form)
+    || hosts.value.some((host) => Number(host.id) === Number(form.docker_host_id) && hostSelectable(host))));
 const isS3 = computed(() => ['aws_s3', 'cloudflare_r2', 'custom_s3'].includes(form.provider));
 const error = (key: string) => form.errors[key as keyof typeof form.errors];
 const secretHint = (field: string) => editing.value && hasSecret(field) ? t('Already saved. Leave blank to keep existing value.') : '';
@@ -92,6 +100,8 @@ const updateStorageLimitUnit = (key: string, unit: SizeUnit) => {
 const updateStorageLimitThreshold = (key: string, value: string, unit: SizeUnit) => (form.settings as Record<string, any>)[key] = unitValueToBytes(value, unit);
 
 const submit = () => {
+    if (!canSave.value) return;
+    form.transform((data) => ({ ...data, docker_host_id: isHostLocalDestination(data) ? data.docker_host_id : null }));
     if (editing.value) {
         form.put(`/destinations/${props.destination.id}`);
         return;
@@ -138,6 +148,14 @@ const fetchHostKey = async () => {
     <Head :title="editing ? t('Edit destination') : t('New destination')" />
     <AppLayout :title="editing ? t('Edit destination') : t('New destination')" :subtitle="t('Store destination settings and credentials encrypted at rest.')">
         <form class="card max-w-4xl space-y-5 p-4 sm:p-6" @submit.prevent="submit">
+            <label v-if="isHostLocalDestination(form)" class="block space-y-2">
+                <span class="label">{{ t('hostWorkflow.destinationHost') }}</span>
+                <select v-model="form.docker_host_id" class="input" required>
+                    <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!hostSelectable(host)">{{ host.name }}</option>
+                </select>
+                <p class="text-sm text-slate-400">{{ t('hostWorkflow.relayUnsupported') }}</p>
+                <span v-if="form.errors.docker_host_id" class="text-sm text-rose-300">{{ form.errors.docker_host_id }}</span>
+            </label>
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="space-y-2">
                     <span class="label">{{ t('Name') }}</span>
@@ -464,7 +482,7 @@ const fetchHostKey = async () => {
             </div>
 
             <div class="flex flex-wrap gap-3">
-                <button class="btn-primary" :disabled="form.processing">{{ editing ? t('Update destination') : t('Create destination') }}</button>
+                <button class="btn-primary" :disabled="form.processing || !canSave">{{ editing ? t('Update destination') : t('Create destination') }}</button>
                 <Link href="/destinations" class="btn-secondary">{{ t('Cancel') }}</Link>
             </div>
         </form>

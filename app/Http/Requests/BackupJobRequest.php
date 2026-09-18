@@ -7,10 +7,13 @@ use App\Actions\Docker\ValidateHostPathMount;
 use App\Http\Requests\Concerns\ValidatesBackupSizeRange;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
+use App\Models\DockerHost;
+use App\Services\Agents\AgentExecution;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Validator;
 use InvalidArgumentException;
 use Throwable;
@@ -36,6 +39,7 @@ class BackupJobRequest extends FormRequest
         $backupFilenameTemplate = trim((string) $this->input('backup_filename_template', ''));
 
         $this->merge([
+            'docker_host_id' => $this->input('docker_host_id', $this->existingBackupJob()?->docker_host_id ?? DockerHost::LOCAL_ID),
             'source_type' => $sourceType,
             'host_path' => $hostPath !== '' ? $hostPath : null,
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
@@ -63,6 +67,7 @@ class BackupJobRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'docker_host_id' => ['required', 'integer', 'exists:docker_hosts,id'],
             'name' => ['required', 'string', 'max:255'],
             'source_type' => ['required', 'string', Rule::in([
                 BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
@@ -139,6 +144,28 @@ class BackupJobRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            if (! $validator->errors()->has('docker_host_id')) {
+                try {
+                    app(AgentExecution::class)->validateHost($this->integer('docker_host_id'), 'backup-v1');
+                } catch (ValidationException $exception) {
+                    $validator->errors()->add('docker_host_id', $exception->getMessage());
+                }
+            }
+            if ($this->integer('docker_host_id') !== DockerHost::LOCAL_ID) {
+                if ($this->isGroupMode()) {
+                    $validator->errors()->add('planning_mode', 'Remote backup groups are not yet implemented.');
+                }
+                $host = DockerHost::find($this->integer('docker_host_id'));
+                $containerNames = collect($host?->agent_containers ?? [])
+                    ->flatMap(fn (array $container): array => explode(',', (string) ($container['names'] ?? '')))
+                    ->map(fn (string $name): string => ltrim(trim($name), '/'))
+                    ->filter()->all();
+                foreach ((array) $this->input('stop_container_names', []) as $name) {
+                    if (! in_array($name, $containerNames, true)) {
+                        $validator->errors()->add('stop_container_names', 'The container does not belong to the selected Docker host.');
+                    }
+                }
+            }
             // A grouped job has no schedule of its own — the group owns it.
             if (! $this->isGroupMode()) {
                 try {
@@ -202,11 +229,11 @@ class BackupJobRequest extends FormRequest
 
         $policy = app(HostPathPolicy::class);
 
-        if ($message = $policy->validationError($hostPath)) {
+        if ($message = $policy->validationError($hostPath, $this->integer('docker_host_id'))) {
             $validator->errors()->add('host_path', $message);
         }
 
-        if ($validator->errors()->has('host_path')) {
+        if ($validator->errors()->has('host_path') || $this->integer('docker_host_id') !== DockerHost::LOCAL_ID) {
             return;
         }
 

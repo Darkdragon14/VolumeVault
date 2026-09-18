@@ -5,7 +5,9 @@ namespace App\Console\Commands;
 use App\Actions\Runs\DispatchQueuedRun;
 use App\Models\BackupGroupRun;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\RestoreRun;
+use App\Support\DeploymentMode;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Throwable;
@@ -21,15 +23,18 @@ class DispatchQueuedRuns extends Command
         $dispatched = 0;
 
         $this->eligible(BackupRun::query()
+            ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->whereNull('backup_group_run_id')
             ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE))
             ->each(fn (BackupRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
 
-        $this->eligible(RestoreRun::query())
+        $this->eligible(RestoreRun::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('target_docker_host_id', '!=', DockerHost::LOCAL_ID)))
             ->each(fn (RestoreRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
 
-        $this->eligible(BackupGroupRun::query())
-            ->each(fn (BackupGroupRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
+        if (DeploymentMode::localExecutionEnabled()) {
+            $this->eligible(BackupGroupRun::query())
+                ->each(fn (BackupGroupRun $run) => $this->dispatch($run, $dispatchQueuedRun, $dispatched));
+        }
 
         $this->info("Dispatched {$dispatched} queued run(s).");
 

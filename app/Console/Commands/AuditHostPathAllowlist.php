@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\BackupSources\HostPathAllowlistAudit;
+use App\Support\DeploymentMode;
 use Illuminate\Console\Command;
 
 class AuditHostPathAllowlist extends Command
@@ -13,6 +14,10 @@ class AuditHostPathAllowlist extends Command
 
     public function handle(HostPathAllowlistAudit $audit): int
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return self::SUCCESS;
+        }
+
         $inUse = $audit->pathsInUse();
 
         if ($inUse === []) {

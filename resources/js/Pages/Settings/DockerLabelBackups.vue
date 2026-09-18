@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { useDeployment } from '@/Composables/useDeployment';
 import { Head, useForm } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { computed } from 'vue';
+
+const { localExecutionEnabled } = useDeployment();
 
 type ScheduleType = 'hourly' | 'daily' | 'weekly' | 'cron';
 type DayOfWeek = 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
@@ -150,7 +153,8 @@ const unexpectedErrors = computed(() => [...new Set(
 <template>
     <Head :title="t('Docker label backups')" />
     <AppLayout :title="t('Docker label backups')" :subtitle="t('Define trusted defaults for backup jobs declared by running containers.')">
-        <form class="space-y-6" @submit.prevent="submit">
+        <p v-if="!localExecutionEnabled" role="status" class="card p-4 text-sm text-slate-400">{{ t('dockerHosts.localDisabled') }}</p>
+        <form v-else class="space-y-6" @submit.prevent="submit">
             <section class="card space-y-5 p-5">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>

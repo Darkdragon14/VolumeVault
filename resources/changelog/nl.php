@@ -1,6 +1,46 @@
 <?php
 
 return [
+    'agent_execution_safety_and_identity' => [
+        'title' => 'Veilige agentuitvoering en juiste resourceselectie',
+        'description' => 'S3-controles van agents weigeren tegenstrijdige endpoints. Back-uphelpers moeten verdwijnen voordat toepassingen herstarten, ook na een verbroken Docker-verbinding. Volumelinks behouden hun host, archiefselectie geeft de historische context door en herstel neemt geen later gewijzigd brontype van de taak over.',
+    ],
+    'remote_agent_execution' => [
+        'title' => 'Back-ups en herstel via Docker-agents',
+        'description' => 'Compatibele agents voeren afzonderlijke back-ups en herstelbewerkingen uit met duurzame versleutelde opdrachten en privéhersteljournalen. Gedeelde netwerkbestemmingen maken herstel op een andere host mogelijk zonder Docker-socket op de orchestrator. Resultaten en veiligheidsback-upmetadata blijven behouden na herverbinden zonder voltooid werk opnieuw uit te voeren. Gedistribueerde groepen en het doorsturen van lokale archieven tussen hosts zijn nog niet beschikbaar.',
+    ],
+    'remote_host_workflows' => [
+        'title' => 'Hostgerichte configuratie van back-ups en herstel',
+        'description' => 'Zelfstandige taken kunnen geregistreerde agents gebruiken, ook offline en in de modus met alleen een orchestrator. Gedeelde netwerkopslag maakt herstel op een andere host mogelijk. Inventaris, paden en lokale bestemmingen zijn per host afgeschermd. Overdracht van lokale archieven tussen hosts en externe back-upgroepen zijn nog niet beschikbaar.',
+    ],
+    'docker_host_metrics' => [
+        'title' => 'Duidelijke informatie over lokale hosts en agents',
+        'description' => 'Hostkaarten tonen nu de Docker-engineversie en gesynchroniseerde lokale containeraantallen. Lokale kaarten verbergen het agentcontact en verduidelijken de laatste volumesynchronisatie. VolumeVault-versies, inclusief ontwikkelbuilds, zijn duidelijk benoemd. Kaarten voor alleen de orchestrator verbergen Docker-metrieken. Rollen verschijnen op de hostkaarten in plaats van onder het applicatielogo.',
+    ],
+    'maintenance_dispatch_recovery' => [
+        'title' => 'Wachtend werk betrouwbaar hervatten na onderhoud',
+        'description' => 'Groepen in de wachtrij blijven na lang onderhoud publiceerbaar, ook als reconciliatie vóór dispatch plaatsvindt. Hervatten geeft wachtende hoofduitvoeringen van die host een nieuw afleveringsbudget, zonder de uitvoeringshistorie of interne deelbewerkingen te wijzigen.',
+    ],
+    'agent_deployment_lifecycle' => [
+        'title' => 'Eigen agentimage, orchestratormodus en handmatige updates',
+        'description' => 'Agents hebben nu een eigen PHP-CLI-image. De modus met alleen de orchestrator werkt zonder Docker-daemon, inclusief meldingen. Het hostoverzicht toont rollen, versies en compatibiliteit, met persistent onderhoud en een handmatige updategids die de agentidentiteit behoudt. Automatisch bijwerken op afstand is niet ingeschakeld.',
+    ],
+    'restore_target_host_recovery' => [
+        'title' => 'Herstelbewerkingen op basis van hun doelhost herstellen',
+        'description' => 'Onderbroken herstelbewerkingen naar de lokale host worden nu ook hersteld als het archief van een andere host afkomstig is. Dit geldt ook voor uitgeputte wachtrijpublicaties en gestopte applicatiecontainers, terwijl externe doelen ongemoeid blijven.',
+    ],
+    'agent_runtime_resilience' => [
+        'title' => 'Betrouwbare agent-heartbeats en herstel',
+        'description' => 'Agents achter dezelfde NAT delen geen verkeersquota meer en blokkeren geen registratie. Langdurige Docker-inventarisaties blijven heartbeats verzenden en hebben een totale tijdslimiet. Een mislukte statusopslag stopt de agent, zodat Docker deze met de opgeslagen identiteit kan herstarten.',
+    ],
+    'agent_enrollment_inventory' => [
+        'title' => 'Veilige agentregistratie en Docker-inventaris',
+        'description' => 'Beheerders kunnen hosts registreren met een gegenereerd Docker-commando, de verbinding en inventarisaantallen bekijken, registratie vernieuwen en toegang intrekken. PHP-CLI-agents gebruiken geverifieerde TLS, persistente identiteiten en uitgaande verbindingen. Ingebouwde certificaten worden automatisch vernieuwd.',
+    ],
+    'docker_host_attribution' => [
+        'title' => 'Expliciete koppeling aan de lokale Docker-host',
+        'description' => 'Bestaande volumes, taken, uitvoeringsgeschiedenis en lokale bestemmingen worden tijdens de migratie automatisch aan de lokale Docker-host gekoppeld. Configuratiewijzigingen zijn niet nodig. Identiteiten per host bereiden uitvoering op meerdere hosts voor.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Niet-ondersteunde Dropbox-veiligheidsback-ups vooraf weigeren',
         'description' => 'Herstel op dezelfde locatie weigert nu een aangevraagde veiligheidsback-up vóór het inplannen als de huidige taakbestemming Dropbox is. Het formulier legt de beperking uit en behoudt je keuze totdat je die expliciet wijzigt.',

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { destinationMatchesHost, hostId, useDeployment, type ExecutionHost } from '@/Composables/useDeployment';
 import InfoTooltip from '@/Components/InfoTooltip.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
@@ -8,6 +9,7 @@ import { bestSizeUnit, bytesToUnitValue, sizeUnits, type SizeUnit, unitValueToBy
 
 const props = defineProps<{
     job: any | null;
+    hosts?: ExecutionHost[];
     volumes: any[];
     containers?: any[];
     destinations: any[];
@@ -20,6 +22,8 @@ const props = defineProps<{
 }>();
 
 const page = usePage();
+const { executionHosts, canExecute, canManageBackups } = useDeployment();
+const hosts = computed(() => executionHosts(props.hosts));
 const { t, translateError } = useI18n();
 const alertSizeUnitSelections = ref<Record<string, SizeUnit>>({});
 const params = new URLSearchParams(page.url.split('?')[1] || '');
@@ -51,10 +55,14 @@ const initialAlertConfigs = props.alertRules.map((rule) => {
     };
 });
 
+const requestedHostId = params.has('docker_host_id') ? Number(params.get('docker_host_id')) : params.has('volume') ? 1 : null;
+const initialHostId = props.job ? hostId(props.job) : requestedHostId ?? hosts.value.find((host) => canExecute(host, 'backup-v1'))?.id ?? null;
+const initialHostAvailable = canExecute(hosts.value.find((host) => Number(host.id) === initialHostId), 'backup-v1');
 const form = useForm({
+    docker_host_id: initialHostId,
     name: props.job?.name || '',
     source_type: props.job?.source_type || 'docker_volume',
-    volume_name: props.job?.volume_name || params.get('volume') || '',
+    volume_name: props.job ? props.job.volume_name || '' : initialHostAvailable ? params.get('volume') || '' : '',
     host_path: props.job?.host_path || '',
     backup_destination_id: props.job?.backup_destination_id || props.destinations[0]?.id || '',
     schedule_type: props.job?.schedule_type || 'daily',
@@ -90,6 +98,23 @@ const form = useForm({
     },
 });
 
+const selectedHost = computed(() => hosts.value.find((host) => Number(host.id) === Number(form.docker_host_id)));
+const isRemote = computed(() => Number(form.docker_host_id) !== 1);
+const hostVolumes = computed(() => props.volumes.filter((volume) => hostId(volume) === Number(form.docker_host_id)));
+const hostDestinations = computed(() => props.destinations.filter((destination) => destinationMatchesHost(destination, form.docker_host_id)));
+const hostPathAllowlist = computed(() => selectedHost.value?.host_path_allowlist ?? selectedHost.value?.agent_host_path_allowlist);
+watch(hostDestinations, (destinations) => {
+    if (!destinations.some((destination) => destination.id === form.backup_destination_id)) form.backup_destination_id = destinations[0]?.id ?? '';
+}, { immediate: true });
+watch(() => form.docker_host_id, () => {
+    form.volume_name = '';
+    volumeSearch.value = '';
+    form.host_path = '';
+    form.stop_container_names = [];
+    volumeSelectorOpen.value = false;
+    if (isRemote.value) form.planning_mode = 'standalone';
+});
+
 const groups = computed(() => props.groups || []);
 const isGrouped = computed(() => form.planning_mode === 'group');
 const creatingNewGroup = computed(() => form.group_selection === 'new');
@@ -115,7 +140,8 @@ const toggleNewGroupChannel = (id: number) => {
 const volumeSearch = ref(form.volume_name);
 const volumeSelectorOpen = ref(false);
 const isDockerVolumeSource = computed(() => form.source_type === 'docker_volume');
-const canSubmit = computed(() => Boolean(props.destinations.length) && (!isDockerVolumeSource.value || Boolean(props.volumes.length)));
+const canSubmit = computed(() => canExecute(selectedHost.value, 'backup-v1') && Boolean(hostDestinations.value.length)
+    && (!isDockerVolumeSource.value || Boolean(selectedVolume.value)) && !(isRemote.value && isGrouped.value));
 
 const sourceTypeLabel = (type: string) => type === 'host_path' ? 'Host path' : 'Docker volume';
 const sourceTypeDescription = (type: string) => type === 'host_path'
@@ -151,12 +177,12 @@ const filteredVolumes = computed(() => {
 
     const query = volumeSearch.value.trim().toLowerCase();
 
-    if (!query) return props.volumes;
+    if (!query) return hostVolumes.value;
 
-    return props.volumes.filter((volume) => volume.name.toLowerCase().includes(query));
+    return hostVolumes.value.filter((volume) => volume.name.toLowerCase().includes(query));
 });
 
-const selectedVolume = computed(() => props.volumes.find((volume) => volume.name === form.volume_name));
+const selectedVolume = computed(() => hostVolumes.value.find((volume) => volume.name === form.volume_name));
 const safeFilenamePart = (value: string, fallback: string) => value.replace(/[^A-Za-z0-9_.-]+/g, '_') || fallback;
 const archiveTemplate = computed(() => (form.backup_filename_template || '').trim());
 const archiveTemplateHasRunToken = computed(() => /\{(id|run)\}/.test(archiveTemplate.value));
@@ -195,7 +221,7 @@ const archiveFilenamePreview = computed(() => {
 const updateVolumeSearch = () => {
     if (!isDockerVolumeSource.value) return;
 
-    const matchingVolume = props.volumes.find((volume) => volume.name === volumeSearch.value);
+    const matchingVolume = hostVolumes.value.find((volume) => volume.name === volumeSearch.value);
 
     form.volume_name = matchingVolume?.name || '';
     volumeSelectorOpen.value = true;
@@ -236,7 +262,7 @@ const toggleStopContainersBeforeBackup = () => {
     form.stop_containers_before_backup = !form.stop_containers_before_backup;
 };
 
-const containerList = computed(() => props.containers || []);
+const containerList = computed(() => (props.containers || []).filter((container) => hostId(container) === Number(form.docker_host_id)));
 const containerName = (container: any): string => String(container?.names || '').split(',')[0].replace(/^\/+/, '').trim();
 
 const toggleStopContainerName = (name: string) => {
@@ -271,6 +297,7 @@ const submissionPayload = (data: any) => {
 };
 
 const submit = () => {
+    if (!canSubmit.value) return;
     if (editing.value) {
         form.transform(submissionPayload).put(`/backup-jobs/${props.job.id}`);
         return;
@@ -283,10 +310,19 @@ const submit = () => {
 <template>
     <Head :title="editing ? t('Edit backup job') : t('New backup job')" />
     <AppLayout :title="editing ? t('Edit backup job') : t('New backup job')" :subtitle="t('Choose the backup source, destination, schedule, retention, and file filtering.')">
-        <form class="card max-w-4xl space-y-6 p-4 sm:p-6" @submit.prevent="submit">
-            <div v-if="!destinations.length || (isDockerVolumeSource && !volumes.length)" class="space-y-2 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
-                <p v-if="!destinations.length">{{ t('You need at least one active backup destination before creating a job.') }}</p>
-                <p v-if="isDockerVolumeSource && !volumes.length">{{ t('Sync Docker volumes first, or choose a host path source.') }}</p>
+        <p v-if="!canManageBackups" role="status" class="card p-4 text-sm text-slate-400">{{ t('hostWorkflow.unavailable') }}</p>
+        <form v-else class="card max-w-4xl space-y-6 p-4 sm:p-6" @submit.prevent="submit">
+            <label class="block space-y-2">
+                <span class="label">{{ t('hostWorkflow.sourceHost') }}</span>
+                <select v-model="form.docker_host_id" class="input" data-source-host :disabled="job?.status === 'running'" required>
+                    <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!canExecute(host, 'backup-v1')">{{ host.name }}{{ canExecute(host, 'backup-v1') ? '' : ` — ${t('hostWorkflow.unavailable')}` }}</option>
+                </select>
+                <span v-if="form.errors.docker_host_id" class="text-sm text-rose-300">{{ form.errors.docker_host_id }}</span>
+            </label>
+            <p v-if="!canExecute(selectedHost, 'backup-v1')" role="status" class="text-sm text-amber-600 dark:text-amber-200">{{ t('hostWorkflow.unavailable') }}</p>
+            <div v-if="!hostDestinations.length || (isDockerVolumeSource && !hostVolumes.length)" class="space-y-2 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">
+                <p v-if="!hostDestinations.length">{{ t('hostWorkflow.noDestination') }}</p>
+                <p v-if="isDockerVolumeSource && !hostVolumes.length">{{ t('hostWorkflow.noVolumes') }}</p>
             </div>
 
             <div class="grid gap-4 sm:grid-cols-2">
@@ -350,14 +386,16 @@ const submit = () => {
                     <span class="label">{{ t('Host path') }}</span>
                     <input v-model="form.host_path" class="input font-mono" required placeholder="/srv/app-data">
                     <p class="text-sm text-slate-300">{{ t('The path must be an existing directory on the Docker host. If VOLUMEVAULT_HOST_PATH_ALLOWLIST is set, it must match one of the allowed prefixes.') }}</p>
+                    <p v-if="isRemote" class="break-words text-sm text-slate-400">{{ hostPathAllowlist ? t('hostWorkflow.allowlist', { paths: hostPathAllowlist.join(', ') || '—' }) : t('hostWorkflow.allowlistUnknown') }}</p>
                     <span v-if="form.errors.host_path" class="text-sm text-rose-300">{{ translateError(form.errors.host_path) }}</span>
                 </label>
 
                 <label class="space-y-2" :class="{ 'sm:col-span-2': !isDockerVolumeSource }">
                     <span class="label">{{ t('Destination') }}</span>
                     <select v-model="form.backup_destination_id" class="input" required>
-                        <option v-for="destination in destinations" :key="destination.id" :value="destination.id">{{ destination.name }} / {{ destination.target_label || destination.bucket }}</option>
+                        <option v-for="destination in hostDestinations" :key="destination.id" :value="destination.id">{{ destination.name }} / {{ destination.target_label || destination.bucket }}</option>
                     </select>
+                    <span v-if="form.errors.backup_destination_id" class="text-sm text-rose-300">{{ form.errors.backup_destination_id }}</span>
                 </label>
             </div>
 
@@ -375,7 +413,7 @@ const submit = () => {
                         </span>
                     </label>
                     <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm">
-                        <input v-model="form.planning_mode" type="radio" value="group" class="mt-1 text-sky-400">
+                        <input v-model="form.planning_mode" type="radio" value="group" :disabled="isRemote" class="mt-1 text-sky-400">
                         <span>
                             <span class="block font-semibold text-white">{{ t('Part of a group') }}</span>
                             <span class="mt-1 block text-slate-300">{{ t('The group owns the schedule and sends one notification for all its volumes.') }}</span>
@@ -383,6 +421,7 @@ const submit = () => {
                     </label>
                 </div>
 
+                <p v-if="isRemote" role="status" class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.groupsUnsupported') }}</p>
                 <div v-if="isGrouped" class="mt-4 space-y-4">
                     <div v-if="groups.length" class="grid gap-3 sm:grid-cols-2">
                         <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">

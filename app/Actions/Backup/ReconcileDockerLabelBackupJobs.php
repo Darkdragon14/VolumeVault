@@ -7,12 +7,14 @@ use App\Models\ActivityLog;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerLabelBackupSetting;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
 use App\Services\Scheduling\BackupScheduleCalculator;
-use Illuminate\Support\Collection;
+use App\Support\DeploymentMode;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Throwable;
 
@@ -29,6 +31,10 @@ class ReconcileDockerLabelBackupJobs
 
     public function handle(): array
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return ['created' => 0, 'updated' => 0, 'disabled' => 0, 'conflicts' => 0, 'errors' => 0];
+        }
+
         for ($attempt = 0; $attempt < 3; $attempt++) {
             try {
                 return $this->reconcile();
@@ -46,6 +52,7 @@ class ReconcileDockerLabelBackupJobs
 
         if (! $settings->enabled) {
             $managedReferences = BackupJob::query()
+                ->where('docker_host_id', DockerHost::LOCAL_ID)
                 ->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)
                 ->with('notificationChannels:id')
                 ->get();
@@ -92,6 +99,7 @@ class ReconcileDockerLabelBackupJobs
         }
 
         $managedReferences = BackupJob::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)
             ->with('notificationChannels:id')
             ->get();
@@ -242,6 +250,7 @@ class ReconcileDockerLabelBackupJobs
 
                 $managedJob = $jobs->firstWhere('configuration_key', $key);
                 $manualJob = BackupJob::query()
+                    ->where('docker_host_id', DockerHost::LOCAL_ID)
                     ->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_MANUAL)
                     ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
                     ->where('volume_name', $definition['payload']['volume_name'])
@@ -308,6 +317,7 @@ class ReconcileDockerLabelBackupJobs
 
                 $job = BackupJob::create([
                     ...$definition['payload'],
+                    'docker_host_id' => DockerHost::LOCAL_ID,
                     'status' => BackupJob::STATUS_ACTIVE,
                     'next_run_at' => $definition['next_run_at'],
                     'configuration_source' => BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL,
@@ -358,7 +368,7 @@ class ReconcileDockerLabelBackupJobs
             throw new InvalidArgumentException('Backup '.$definition['name'].' does not match a named volume mounted by the container.');
         }
 
-        if (! DockerVolume::query()->where('name', $mount['name'])->where('exists', true)->exists()) {
+        if (! DockerVolume::query()->where('docker_host_id', DockerHost::LOCAL_ID)->where('name', $mount['name'])->where('exists', true)->exists()) {
             throw new InvalidArgumentException('Docker volume not found: '.$mount['name']);
         }
 
@@ -547,6 +557,7 @@ class ReconcileDockerLabelBackupJobs
     private function disableManagedJob(string $key, string $message): void
     {
         BackupJob::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)
             ->where('configuration_key', $key)
             ->get()
@@ -555,7 +566,7 @@ class ReconcileDockerLabelBackupJobs
 
     private function disableStaleJobs(array $desiredKeys, string $message): int
     {
-        $query = BackupJob::query()->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL);
+        $query = BackupJob::query()->where('docker_host_id', DockerHost::LOCAL_ID)->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL);
 
         if ($desiredKeys !== []) {
             $query->whereNotIn('configuration_key', $desiredKeys);
@@ -566,7 +577,7 @@ class ReconcileDockerLabelBackupJobs
 
     private function queueDisable(BackupJob $job, string $message): void
     {
-        $job = BackupJob::query()->lockForUpdate()->find($job->id);
+        $job = BackupJob::query()->where('docker_host_id', DockerHost::LOCAL_ID)->lockForUpdate()->find($job->id);
 
         if (! $job) {
             return;
@@ -589,6 +600,7 @@ class ReconcileDockerLabelBackupJobs
     private function cancelQueuedRuns(BackupJob $job): ?Carbon
     {
         $cancelledOccurrence = BackupRun::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->where('backup_job_id', $job->id)
             ->where('status', BackupRun::STATUS_QUEUED)
             ->where('trigger', BackupRun::TRIGGER_SCHEDULED)
@@ -596,6 +608,7 @@ class ReconcileDockerLabelBackupJobs
             ->first(['scheduled_for', 'created_at']);
 
         BackupRun::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->where('backup_job_id', $job->id)
             ->where('status', BackupRun::STATUS_QUEUED)
             ->update([

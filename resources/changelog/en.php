@@ -1,6 +1,46 @@
 <?php
 
 return [
+    'agent_execution_safety_and_identity' => [
+        'title' => 'Safer agent execution and precise resource selection',
+        'description' => 'Agent S3 endpoint checks reject conflicting configurations. Backup helpers must be removed before applications restart, including after a lost Docker connection. Volume shortcuts preserve their host, restore selection carries the historical backup context, and historical restores no longer inherit a changed job source type.',
+    ],
+    'remote_agent_execution' => [
+        'title' => 'Back up and restore through Docker agents',
+        'description' => 'Compatible agents now execute standalone backups and restores using durable encrypted commands and private recovery journals. Restore from a shared network destination onto another host without a Docker socket on the orchestrator. Results and safety-backup metadata survive reconnects without replaying completed work. Distributed groups and cross-host local-archive relaying remain unavailable.',
+    ],
+    'remote_host_workflows' => [
+        'title' => 'Host-aware backup and restore configuration',
+        'description' => 'Standalone jobs can target registered agents, including offline agents and orchestrator-only deployments. Restores can select another host when using shared network storage. Inventory, host paths and local destinations are scoped to their host. Cross-host transfers of host-local archives and remote backup groups remain unavailable.',
+    ],
+    'docker_host_metrics' => [
+        'title' => 'Useful local and agent host information',
+        'description' => 'Host cards now show Docker engine versions and local container counts from synchronization. Local cards omit agent-only contact information and explain the last volume sync. VolumeVault versions are labeled explicitly, including development builds. Orchestrator-only cards omit Docker metrics. Deployment roles appear on host cards rather than below the application logo.',
+    ],
+    'maintenance_dispatch_recovery' => [
+        'title' => 'Resume queued work safely after maintenance',
+        'description' => 'Queued groups remain eligible for publication after long maintenance, even when reconciliation runs before dispatch. Resuming a host gives its waiting top-level runs a fresh delivery budget without changing execution history or internal child operations.',
+    ],
+    'agent_deployment_lifecycle' => [
+        'title' => 'Dedicated agents, orchestrator mode and manual updates',
+        'description' => 'Agents now have a dedicated PHP CLI image. Orchestrator-only mode works without a Docker daemon, including notifications. Docker hosts show roles, versions and protocol compatibility, with persistent maintenance and a manual update guide that preserves agent identity. Remote self-update is not enabled.',
+    ],
+    'restore_target_host_recovery' => [
+        'title' => 'Recover restores on their target host',
+        'description' => 'Interrupted restores targeting the local host are now recovered even when their archive originated on another host. Recovery also handles exhausted queue publications and stopped application containers, while leaving remote targets untouched.',
+    ],
+    'agent_runtime_resilience' => [
+        'title' => 'Reliable agent heartbeats and recovery',
+        'description' => 'Agents behind the same NAT no longer share traffic quotas or block enrollment. Long Docker inventory collections keep sending heartbeats and have a total time limit. Failed state writes stop the agent so Docker can restart it using its persisted identity.',
+    ],
+    'agent_enrollment_inventory' => [
+        'title' => 'Secure agent enrollment and Docker inventory',
+        'description' => 'Administrators can register hosts with a generated Docker command, view agent connectivity and inventory counts, renew enrollment and revoke access. PHP CLI agents use verified TLS, persistent identities and outbound-only connections. Built-in certificates renew automatically.',
+    ],
+    'docker_host_attribution' => [
+        'title' => 'Explicit local Docker host attribution',
+        'description' => 'Existing volumes, jobs, run history and local destinations are automatically assigned to the local Docker host during migration. Existing installations require no configuration changes. Host-scoped identities prepare multi-host execution.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Reject unsupported Dropbox safety backups before restore',
         'description' => 'In-place restores now reject a requested safety backup before queuing when the job’s current destination is Dropbox. The restore form explains the limitation and preserves your choice until you explicitly change it.',

@@ -3,6 +3,7 @@
 namespace App\Actions\Destinations;
 
 use App\Models\BackupDestination;
+use App\Models\DockerHost;
 use Illuminate\Support\Str;
 
 class NormalizeDestinationData
@@ -38,6 +39,9 @@ class NormalizeDestinationData
         $legacy = $this->legacyColumns($provider, $settings);
 
         $payload = [
+            'docker_host_id' => in_array($provider, [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME], true)
+                ? (int) ($data['docker_host_id'] ?? $destination?->docker_host_id ?? DockerHost::LOCAL_ID)
+                : null,
             'name' => $data['name'],
             'provider' => $provider,
             'endpoint' => $legacy['endpoint'],

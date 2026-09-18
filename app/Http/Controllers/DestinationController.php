@@ -9,8 +9,11 @@ use App\Http\Requests\StoreDestinationRequest;
 use App\Http\Requests\UpdateDestinationRequest;
 use App\Models\ActivityLog;
 use App\Models\BackupDestination;
+use App\Models\DockerHost;
+use App\Services\Agents\AgentExecution;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\BackupDestinations\TestBackupDestination;
+use App\Support\DeploymentMode;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -32,7 +35,7 @@ class DestinationController extends Controller
         $query->latest();
 
         return Inertia::render('Destinations/Index', [
-            'destinations' => $this->paginateForInertia($query, $perPage, fn (BackupDestination $d): array => $d->safeForFrontend()),
+            'destinations' => $this->paginateForInertia($query, $perPage, fn (BackupDestination $d): array => [...$d->safeForFrontend(), 'docker_host_id' => $d->docker_host_id]),
             'defaultPerPage' => $request->user()->default_per_page ?? 10,
         ]);
     }
@@ -41,7 +44,8 @@ class DestinationController extends Controller
     {
         return Inertia::render('Destinations/Form', [
             'destination' => null,
-            'providers' => BackupDestination::providerOptions(),
+            'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => app(AgentExecution::class)->summary($host, includePaths: true)),
+            'providers' => $this->providerOptions(),
         ]);
     }
 
@@ -61,8 +65,9 @@ class DestinationController extends Controller
     public function edit(BackupDestination $destination): Response
     {
         return Inertia::render('Destinations/Form', [
-            'destination' => $destination->safeForFrontend(),
-            'providers' => BackupDestination::providerOptions(),
+            'destination' => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id],
+            'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => app(AgentExecution::class)->summary($host, includePaths: true)),
+            'providers' => $this->providerOptions(),
         ]);
     }
 
@@ -132,5 +137,10 @@ class DestinationController extends Controller
                 'message' => str(trim($exception->getMessage()) ?: 'Unable to reach the SSH server.')->limit(300)->toString(),
             ], 422);
         }
+    }
+
+    private function providerOptions(): array
+    {
+        return BackupDestination::providerOptions();
     }
 }

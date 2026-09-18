@@ -6,6 +6,8 @@ use App\Models\ActivityLog;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJobGroup;
 use App\Models\User;
+use App\Services\Agents\HostWorkAdmission;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Validation\ValidationException;
 
@@ -25,6 +27,8 @@ class CreateBackupGroupRun
 
     public function handle(BackupJobGroup $group, string $trigger, ?User $initiatedBy = null): ?BackupGroupRun
     {
+        LocalDockerExecution::validate();
+
         return $this->withGroupLocks->handle([$group->id], function ($groups) use ($group, $trigger, $initiatedBy): ?BackupGroupRun {
             $lockedGroup = $groups->get($group->id);
 
@@ -67,6 +71,7 @@ class CreateBackupGroupRun
 
     private function createRun(BackupJobGroup $group, string $trigger, ?User $initiatedBy): BackupGroupRun
     {
+        app(HostWorkAdmission::class)->assertGroupAccepting($group);
         $run = BackupGroupRun::create([
             'backup_job_group_id' => $group->id,
             'initiated_by_user_id' => $initiatedBy?->getKey(),

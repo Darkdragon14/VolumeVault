@@ -29,6 +29,8 @@ class RestoreRun extends Model
     public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
+        'source_docker_host_id',
+        'target_docker_host_id',
         'backup_job_id',
         'initiated_by_user_id',
         'backup_destination_id',
@@ -60,6 +62,8 @@ class RestoreRun extends Model
     protected function casts(): array
     {
         return [
+            'source_docker_host_id' => 'integer',
+            'target_docker_host_id' => 'integer',
             'dispatch_attempted_at' => 'datetime',
             'dispatch_published_at' => 'datetime',
             'affected_containers' => 'array',
@@ -70,6 +74,21 @@ class RestoreRun extends Model
             'finished_at' => 'datetime',
             'duration_seconds' => 'integer',
         ];
+    }
+
+    protected $attributes = [
+        'source_docker_host_id' => DockerHost::LOCAL_ID,
+        'target_docker_host_id' => DockerHost::LOCAL_ID,
+    ];
+
+    public function sourceDockerHost(): BelongsTo
+    {
+        return $this->belongsTo(DockerHost::class, 'source_docker_host_id');
+    }
+
+    public function targetDockerHost(): BelongsTo
+    {
+        return $this->belongsTo(DockerHost::class, 'target_docker_host_id');
     }
 
     public function job(): BelongsTo

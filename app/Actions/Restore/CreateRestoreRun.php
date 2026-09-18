@@ -8,10 +8,14 @@ use App\Models\ActivityLog;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Models\User;
+use App\Services\Agents\AgentExecution;
+use App\Services\Agents\HostWorkAdmission;
 use App\Services\BackupDestinations\ListBackupObjects;
+use App\Services\Docker\DockerVolumeName;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -32,12 +36,22 @@ class CreateRestoreRun
 
         for ($attempt = 0; $attempt < 3; $attempt++) {
             $current = BackupJob::query()->findOrFail($job->id);
+            $targetHostId = (int) ($data['target_docker_host_id'] ?? $current->docker_host_id);
+            $data['target_docker_host_id'] = $targetHostId;
+            app(AgentExecution::class)->validateHost($targetHostId, 'restore-v1');
+            app(HostWorkAdmission::class)->assertAccepting($targetHostId);
             $this->validateSafetyBackup($current->destination, $mode, $data);
             $references = $this->references($current);
             $backupRunId = isset($data['backup_run_id']) ? (int) $data['backup_run_id'] : null;
             $selectedBackupRun = $this->resolveRestoreDestination->backupRun($current, $backupRunId);
             $sourceContext = $this->sourceContext($current, $selectedBackupRun);
             $restoreDestination = $this->resolveRestoreDestination->handle($current, $backupRunId);
+            if ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== $targetHostId) {
+                throw ValidationException::withMessages(['target_docker_host_id' => 'Archive transfer between host-local destinations not yet supported.']);
+            }
+            if ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== DockerHost::LOCAL_ID && $selectedBackupRun === null) {
+                throw ValidationException::withMessages(['backup_run_id' => 'Select a known successful backup run for an agent-owned local destination.']);
+            }
             $selectedBackupKey = $this->validateSelectedBackupKey(
                 $selectedBackupRun,
                 $restoreDestination,
@@ -53,11 +67,11 @@ class CreateRestoreRun
             );
             $targetVolume = $this->isInPlace($mode)
                 ? null
-                : $this->resolveNewVolumeTarget($sourceContext['type'], $sourceContext['name'], $data['target_volume_name'] ?? null);
+                : $this->resolveNewVolumeTarget($sourceContext['type'], $sourceContext['name'], $data['target_volume_name'] ?? null, $sourceContext['docker_host_id'], $targetHostId);
 
             try {
-                return $this->withLocks->handleForJobs(
-                    $references['configuration_source'] === BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL ? [$job->id] : [],
+                return $this->withLocks->handleForJobsOnHost(
+                    $targetHostId === DockerHost::LOCAL_ID && $references['configuration_source'] === BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL ? [$job->id] : [],
                     array_values(array_unique([$references['destination_id'], $restoreDestinationId])),
                     function ($destinations, $settings, $jobs, $volumes) use ($job, $data, $initiatedBy, $mode, $references, $sourceContext, $targetVolume, $backupRunId, $restoreDestinationId, $restoreDestinationFingerprint, $selectedBackupKeyAvailability, $validatedBackupRunKey, $selectedBackupKey): RestoreRun {
                         $lockedRestoreDestination = $destinations->get($restoreDestinationId);
@@ -70,7 +84,7 @@ class CreateRestoreRun
                             throw ValidationException::withMessages(['destination' => 'The backup destination is inactive.']);
                         }
 
-                        $lockedJob = $references['configuration_source'] === BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL
+                        $lockedJob = (int) $data['target_docker_host_id'] === DockerHost::LOCAL_ID && $references['configuration_source'] === BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL
                             ? $jobs->get($job->id)
                             : BackupJob::query()->lockForUpdate()->find($job->id);
 
@@ -122,6 +136,7 @@ class CreateRestoreRun
                         $current->isDockerVolumeSource() ? $references['volume_name'] : null,
                         $sourceContext['type'] === BackupJob::SOURCE_TYPE_DOCKER_VOLUME ? $sourceContext['name'] : null,
                     ]))),
+                    dockerHostId: $targetHostId,
                 );
             } catch (RetryDockerLabelMutation) {
                 continue;
@@ -134,6 +149,10 @@ class CreateRestoreRun
     /** @return array{available: bool, exception: ?Throwable} */
     private function selectedBackupKeyAvailability(BackupDestination $destination, string $key, bool $exhaustive): array
     {
+        if ($destination->isHostBound() && (int) $destination->docker_host_id !== DockerHost::LOCAL_ID) {
+            return ['available' => $exhaustive, 'exception' => null];
+        }
+
         try {
             $available = $this->listBackupObjects->contains($destination, $key, $exhaustive);
         } catch (Throwable $exception) {
@@ -167,6 +186,7 @@ class CreateRestoreRun
     private function destinationFingerprint(BackupDestination $destination): string
     {
         $storageAttributes = [
+            'docker_host_id',
             'provider',
             'endpoint',
             'region',
@@ -185,9 +205,12 @@ class CreateRestoreRun
             ->all()));
     }
 
-    /** @param array{type: string, name: string, in_place_supported: bool} $sourceContext */
+    /** @param array{type: string, name: string, docker_host_id: int, in_place_supported: bool} $sourceContext */
     private function createLocked(BackupJob $job, BackupDestination $restoreDestination, array $data, string $selectedBackupKey, string $mode, array $sourceContext, ?string $targetVolume, ?User $initiatedBy, ?DockerVolume $sourceVolume): RestoreRun
     {
+        $targetHostId = (int) $data['target_docker_host_id'];
+        app(AgentExecution::class)->validateHost($targetHostId, 'restore-v1');
+        app(HostWorkAdmission::class)->assertAccepting($targetHostId);
         $sourceName = $sourceContext['name'];
         $targetVolume = $this->isInPlace($mode)
             ? $this->resolveInPlaceTarget($sourceContext['type'], $sourceName, $sourceContext['in_place_supported'], $data['confirmation_text'] ?? null)
@@ -199,8 +222,21 @@ class CreateRestoreRun
             ]);
         }
 
+        if ($this->isInPlace($mode) && ($data['backup_before_overwrite'] ?? false)
+            && $targetHostId !== (int) $job->docker_host_id) {
+            throw ValidationException::withMessages(['backup_before_overwrite' => 'Safety backup requires a job configured for this target host.']);
+        }
+        if ($this->isInPlace($mode) && ($data['backup_before_overwrite'] ?? false)) {
+            app(AgentExecution::class)->validateHost($targetHostId, 'backup-v1');
+            if (! $job->destination?->is_active || ($job->destination->isHostBound() && (int) $job->destination->docker_host_id !== $targetHostId)) {
+                throw ValidationException::withMessages(['backup_before_overwrite' => 'The safety backup destination is unavailable on the target host.']);
+            }
+        }
+
         $run = RestoreRun::create([
             'backup_job_id' => $job->id,
+            'source_docker_host_id' => $sourceContext['docker_host_id'],
+            'target_docker_host_id' => $targetHostId,
             'initiated_by_user_id' => $initiatedBy?->getKey(),
             'backup_destination_id' => $restoreDestination->id,
             'selected_backup_key' => $selectedBackupKey,
@@ -266,11 +302,19 @@ class CreateRestoreRun
         return $sourceName;
     }
 
-    private function resolveNewVolumeTarget(string $sourceType, string $sourceName, ?string $requested): string
+    private function resolveNewVolumeTarget(string $sourceType, string $sourceName, ?string $requested, int $sourceHostId, int $targetHostId): string
     {
-        $targetVolume = ($requested ?: null) ?: $this->generateRestoreVolumeName->handle($sourceName);
+        $targetVolume = ($requested ?: null) ?: $this->generateRestoreVolumeName->handle($sourceName, dockerHostId: $targetHostId);
 
-        if ($sourceType === BackupJob::SOURCE_TYPE_DOCKER_VOLUME && $targetVolume === $sourceName) {
+        if (! DockerVolumeName::isValidName($targetVolume) || mb_strlen($targetVolume) > 128) {
+            throw ValidationException::withMessages(['target_volume_name' => 'The target Docker volume name is invalid.']);
+        }
+
+        if ($targetHostId !== DockerHost::LOCAL_ID && DockerVolume::where('docker_host_id', $targetHostId)->where('name', $targetVolume)->where('exists', true)->exists()) {
+            throw ValidationException::withMessages(['target_volume_name' => 'The target Docker volume already exists.']);
+        }
+
+        if ($sourceHostId === $targetHostId && $sourceType === BackupJob::SOURCE_TYPE_DOCKER_VOLUME && $targetVolume === $sourceName) {
             throw ValidationException::withMessages([
                 'target_volume_name' => 'Restore-to-new-volume cannot use the source volume name.',
             ]);
@@ -279,22 +323,24 @@ class CreateRestoreRun
         return $targetVolume;
     }
 
-    /** @return array{type: string, name: string, in_place_supported: bool} */
+    /** @return array{type: string, name: string, docker_host_id: int, in_place_supported: bool} */
     private function sourceContext(BackupJob $job, ?BackupRun $backupRun): array
     {
         return [
             'type' => $backupRun?->sourceType() ?? $job->sourceType(),
             'name' => $backupRun?->sourceName() ?? $job->sourceName(),
+            'docker_host_id' => $backupRun?->docker_host_id ?? $job->docker_host_id,
             'in_place_supported' => $backupRun === null || $backupRun->source_type_snapshot !== null,
         ];
     }
 
     /**
-     * @return array{destination_id: int, backup_job_group_id: ?int, configuration_source: string, source_type: string, volume_name: ?string, host_path: ?string}
+     * @return array{docker_host_id: int, destination_id: int, backup_job_group_id: ?int, configuration_source: string, source_type: string, volume_name: ?string, host_path: ?string}
      */
     private function references(BackupJob $job): array
     {
         return [
+            'docker_host_id' => $job->docker_host_id,
             'destination_id' => (int) $job->backup_destination_id,
             'backup_job_group_id' => $job->backup_job_group_id !== null ? (int) $job->backup_job_group_id : null,
             'configuration_source' => (string) $job->configuration_source,

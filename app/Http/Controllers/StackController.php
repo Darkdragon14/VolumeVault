@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Actions\Backup\BackupStack;
 use App\Http\Requests\StackBackupRequest;
 use App\Models\BackupDestination;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Services\Volumes\VolumeBackupSummaries;
+use App\Support\DeploymentMode;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -15,6 +17,8 @@ class StackController extends Controller
     public function index(VolumeBackupSummaries $volumeBackupSummaries): Response
     {
         $volumes = DockerVolume::query()
+            ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->whereRaw('1 = 0'))
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->orderByDesc('exists')
             ->orderBy('name')
             ->get();
@@ -22,6 +26,7 @@ class StackController extends Controller
         return Inertia::render('Stacks/Index', [
             'stacks' => $volumeBackupSummaries->forStacks($volumes),
             'destinations' => BackupDestination::where('is_active', true)
+                ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->whereNotIn('provider', [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME]))
                 ->orderBy('name')
                 ->get()
                 ->map->safeForFrontend(),

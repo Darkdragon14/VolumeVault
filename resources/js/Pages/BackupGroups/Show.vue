@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { useDeployment } from '@/Composables/useDeployment';
 import Pagination from '@/Components/Pagination.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
 
@@ -17,8 +18,7 @@ const props = defineProps<{
     runs: PaginatedData<any>;
 }>();
 
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
+const { localDockerPermissions: can } = useDeployment();
 const { t, formatDate } = useI18n();
 const failurePolicyLabel = (policy: string) => policy === 'stop' ? t('Stop at first failure') : t('Continue, report failure');
 const runNow = (id: number) => router.post(`/backup-groups/${id}/run`);

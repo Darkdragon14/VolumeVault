@@ -1,11 +1,12 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DockerLabelBackups from './DockerLabelBackups.vue';
 
 const inertia = vi.hoisted(() => ({
     form: null as Record<string, unknown> | null,
     errors: {} as Record<string, string>,
+    deployment: undefined as any,
 }));
 
 vi.mock('@inertiajs/vue3', async () => {
@@ -13,6 +14,7 @@ vi.mock('@inertiajs/vue3', async () => {
 
     return {
         Head: { template: '<div />' },
+        usePage: () => ({ props: { deployment: inertia.deployment } }),
         useForm: (data: Record<string, unknown>) => {
             inertia.form = reactive({
                 ...data,
@@ -80,6 +82,15 @@ function mountPage(errors: Record<string, string> = {}, notificationChannels: Ar
 }
 
 describe('Docker label backup settings schedule', () => {
+    beforeEach(() => inertia.deployment = undefined);
+
+    it.each([false, 0, '0', 'false'])('hides local source settings when execution is %s', (flag) => {
+        inertia.deployment = { mode: 'orchestrator', local_execution_enabled: flag };
+        const wrapper = mountPage();
+        expect(wrapper.find('form').exists()).toBe(false);
+        expect(wrapper.text()).toContain('dockerHosts.localDisabled');
+    });
+
     it('preserves valid values for the initial mode and removes unrelated keys', () => {
         mountPage();
 

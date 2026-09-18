@@ -20,7 +20,7 @@ class DestinationController extends Controller
     public function index(): JsonResponse
     {
         return response()->json([
-            'data' => BackupDestination::latest()->get()->map->safeForFrontend(),
+            'data' => BackupDestination::latest()->get()->map(fn (BackupDestination $destination): array => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]),
         ]);
     }
 
@@ -36,12 +36,12 @@ class DestinationController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        return response()->json(['data' => $destination->safeForFrontend()], 201);
+        return response()->json(['data' => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]], 201);
     }
 
     public function show(BackupDestination $destination): JsonResponse
     {
-        return response()->json(['data' => $destination->safeForFrontend()]);
+        return response()->json(['data' => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]]);
     }
 
     public function update(UpdateDestinationRequest $request, BackupDestination $destination, MutateDestination $mutateDestination): JsonResponse
@@ -60,7 +60,9 @@ class DestinationController extends Controller
             throw ValidationException::withMessages(['is_active' => $exception->getMessage()]);
         }
 
-        return response()->json(['data' => $destination->fresh()->safeForFrontend()]);
+        $destination->refresh();
+
+        return response()->json(['data' => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]]);
     }
 
     public function destroy(BackupDestination $destination, MutateDestination $mutateDestination): JsonResponse

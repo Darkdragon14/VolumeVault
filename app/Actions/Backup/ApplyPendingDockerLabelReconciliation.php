@@ -3,6 +3,8 @@
 namespace App\Actions\Backup;
 
 use App\Models\BackupJob;
+use App\Models\DockerHost;
+use App\Support\DeploymentMode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -12,8 +14,12 @@ class ApplyPendingDockerLabelReconciliation
 
     public function handle(BackupJob $job): bool
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return false;
+        }
+
         for ($attempt = 0; $attempt < 3; $attempt++) {
-            $current = BackupJob::query()->find($job->id);
+            $current = BackupJob::query()->where('docker_host_id', DockerHost::LOCAL_ID)->find($job->id);
 
             if (! $current?->isDockerLabelManaged() || ! is_array($current->pending_label_reconciliation)) {
                 return false;
@@ -57,7 +63,11 @@ class ApplyPendingDockerLabelReconciliation
         Collection $volumes,
         Collection $notificationChannels,
     ): bool {
-        if (! $job?->isDockerLabelManaged() || ! is_array($job->pending_label_reconciliation) || $job->hasRunInProgress()) {
+        if (DeploymentMode::isOrchestrator()) {
+            return false;
+        }
+
+        if (! $job?->isDockerLabelManaged() || $job->docker_host_id !== DockerHost::LOCAL_ID || ! is_array($job->pending_label_reconciliation) || $job->hasRunInProgress()) {
             return false;
         }
 
@@ -172,6 +182,10 @@ class ApplyPendingDockerLabelReconciliation
 
     public function disable(BackupJob $job, string $message): void
     {
+        if ($job->docker_host_id !== DockerHost::LOCAL_ID) {
+            throw new \RuntimeException('Remote Docker label jobs cannot be reconciled locally.');
+        }
+
         $attributes = [
             'pending_label_reconciliation' => null,
             'label_reconciliation_error' => $message,
