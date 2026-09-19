@@ -3,8 +3,11 @@
 namespace App\Services\Agents;
 
 use App\Actions\Backup\MarkMissingVolumeJobs;
+use App\Actions\Backup\ReconcileDockerLabelBackupJobs;
+use App\Actions\Backup\WithDockerLabelMutationLocks;
 use App\Models\BackupJob;
 use App\Models\DockerHost;
+use App\Models\DockerLabelBackupSetting;
 use App\Models\DockerVolume;
 use Illuminate\Support\Facades\DB;
 
@@ -15,7 +18,7 @@ class ReceiveAgentInventory
     /** @param array{instance_id: string, sequence: int, volumes: array, containers: array, host_path_allowlist: array} $data */
     public function handle(DockerHost $host, array $data): bool
     {
-        return DB::transaction(function () use ($host, $data): bool {
+        $accepted = DB::transaction(function () use ($host, $data): bool {
             $locked = DockerHost::query()->lockForUpdate()->find($host->id);
             $this->registry->assertCredential($locked, $host->agent_token_hash, $data['instance_id']);
             if ($data['sequence'] <= $locked->agent_inventory_sequence) {
@@ -52,5 +55,34 @@ class ReceiveAgentInventory
 
             return true;
         });
+
+        if ($accepted) {
+            DB::transaction(function () use ($host, $data): void {
+                $locked = DockerHost::query()->lockForUpdate()->findOrFail($host->id);
+                $this->registry->assertCredential($locked, $host->agent_token_hash, $data['instance_id']);
+                if ($locked->agent_inventory_sequence !== (int) $data['sequence'] || $locked->agent_instance_id !== $data['instance_id']) {
+                    return;
+                }
+
+                $settings = DockerLabelBackupSetting::current($locked->id);
+                if (! $settings->enabled) {
+                    return;
+                }
+
+                if (! in_array('docker-labels-v1', $locked->agent_capabilities ?? [], true) || ! ($data['label_inventory']['complete'] ?? false)) {
+                    app(WithDockerLabelMutationLocks::class)->handleForJobsOnHost([], [], function ($destinations, $settings): void {
+                        if ($settings?->enabled) {
+                            $settings->update(['last_synced_at' => now(), 'last_sync_error' => 'A complete docker-labels-v1 inventory is required. Upgrade the agent or wait for a complete inventory.']);
+                        }
+                    }, dockerHostId: $locked->id);
+
+                    return;
+                }
+
+                app(ReconcileDockerLabelBackupJobs::class)->handleOnHost($locked->id, $data['label_inventory']['containers']);
+            });
+        }
+
+        return $accepted;
     }
 }

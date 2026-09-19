@@ -46,10 +46,13 @@ class DockerHostAttributionTest extends TestCase
         $encryptedSecret = $destination->getRawOriginal('secret_access_key');
         $fingerprint = $destination->locatorFingerprint();
         $migration = require database_path('migrations/2026_09_17_101431_add_docker_host_attribution.php');
+        $labelSettingsMigration = require database_path('migrations/2026_09_18_151946_scope_docker_label_backup_settings_to_hosts.php');
 
+        $labelSettingsMigration->down();
         $migration->down();
         $this->assertFalse(Schema::hasTable('docker_hosts'));
         $migration->up();
+        $labelSettingsMigration->up();
 
         $this->assertTrue(DockerHost::findOrFail(DockerHost::LOCAL_ID)->isLocal());
         foreach ([$job, $volume, $backup, $destination] as $model) {

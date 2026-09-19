@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'remote_docker_label_backups' => [
+        'title' => 'Docker-labelback-ups op externe hosts',
+        'description' => 'Configureer standaardwaarden per host via Instellingen of de API, ook bij een zelfstandige orchestrator. Agents met docker-labels-v1 verwerken declaraties bij volledige inventarissen met actieve gedeelde bestemmingen of bestemmingen op dezelfde host. Oudere of onvolledige inventarissen behouden bestaande taken en tonen synchronisatiefouten.',
+    ],
     'remote_backup_groups' => [
         'title' => 'Back-upgroepen over lokale en externe hosts',
         'description' => 'Groepen coördineren lokale, externe en gemengde leden achtereenvolgens met één gezamenlijk resultaat. Duurzame coördinatie bewaart leden, bronnen en het foutbeleid; toegewezen werk wordt tijdens onderhoud afgerond terwijl het volgende lid wacht. Groepsbediening werkt in orchestrator-modus en leden tonen hun host. Elk lid voltooit zijn eigen stop-, back-up- en herstartcyclus; dit is geen consistente snapshot over hosts. Bestaande backup-v1-agents worden ondersteund.',

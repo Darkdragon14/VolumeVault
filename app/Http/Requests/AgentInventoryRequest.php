@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Services\Agents\AgentLabelInventory;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class AgentInventoryRequest extends FormRequest
 {
@@ -29,6 +31,7 @@ class AgentInventoryRequest extends FormRequest
         };
 
         return [
+            ...AgentLabelInventory::rules(),
             'instance_id' => ['required', 'uuid'],
             'protocol_version' => ['required', 'integer', 'in:1'],
             'sequence' => ['required', 'integer', 'min:1', 'max:9007199254740991'],
@@ -50,5 +53,20 @@ class AgentInventoryRequest extends FormRequest
             'host_path_allowlist' => ['present', 'array', 'list', 'max:100'],
             'host_path_allowlist.*' => ['required', 'string', 'max:4096', 'starts_with:/'],
         ];
+    }
+
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty() || ! $this->boolean('label_inventory.complete')) {
+                return;
+            }
+
+            $containers = $this->input('containers', []);
+            $inspected = $this->input('label_inventory.containers', []);
+            if (! AgentLabelInventory::matchesContainers($containers, $inspected)) {
+                $validator->errors()->add('label_inventory', 'A complete label snapshot must inspect every inventory container.');
+            }
+        }];
     }
 }

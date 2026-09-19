@@ -83,13 +83,14 @@ class AgentClient
      * @param  list<array{id: string, names: ?string, image: ?string, state: ?string, status: ?string}>  $containers
      * @param  list<string>  $hostPathAllowlist
      */
-    public function inventory(array $volumes, array $containers, array $hostPathAllowlist, ?string $dockerVersion = null): void
+    public function inventory(array $volumes, array $containers, array $hostPathAllowlist, ?string $dockerVersion = null, ?array $labelInventory = null): void
     {
-        $this->post('inventory', $this->credential(), [
+        $this->post('inventory', $this->credential(), AgentLabelInventory::bounded([
             'sequence' => $this->state->nextSequence(), 'volumes' => $volumes, 'containers' => $containers,
             'host_path_allowlist' => $hostPathAllowlist,
             'docker_version' => $dockerVersion,
-        ]);
+            ...($labelInventory === null ? [] : ['label_inventory' => $labelInventory]),
+        ]));
     }
 
     private function credential(): string

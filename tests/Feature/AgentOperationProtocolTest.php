@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\Backup\AdvanceBackupGroupRun;
 use App\Actions\Backup\CreateBackupGroupRun;
+use App\Actions\Backup\CreateBackupRun;
 use App\Actions\Backup\CreateBackupRunRecord;
 use App\Actions\Backup\DeleteBackupJob;
 use App\Actions\Backup\RunBackup;
@@ -18,6 +19,7 @@ use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
 use App\Models\DockerHost;
+use App\Models\DockerLabelBackupSetting;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
@@ -82,6 +84,53 @@ class AgentOperationProtocolTest extends TestCase
         $this->assertSame('running', $run->fresh()->status);
         $this->assertSame(BackupJob::STATUS_RUNNING, $run->job->fresh()->status);
         Queue::assertNothingPushed();
+        Process::assertNothingRan();
+    }
+
+    public function test_inventory_created_label_job_executes_and_completion_applies_deferred_settings(): void
+    {
+        [$host, $body, $token] = $this->registered();
+        $seed = $this->backup($host);
+        $destinationId = $seed->job->backup_destination_id;
+        $seed->job->delete();
+        $host->refresh()->forceFill(['agent_capabilities' => [...$body['capabilities'], 'docker-labels-v1']])->save();
+        DockerLabelBackupSetting::current($host->id)->update(['enabled' => true, 'backup_destination_id' => $destinationId]);
+        $inventory = [
+            ...$body, 'sequence' => 1, 'volumes' => [['name' => 'app_data']], 'host_path_allowlist' => [],
+            'containers' => [['id' => str_repeat('a', 64), 'names' => 'app']],
+            'label_inventory' => ['complete' => true, 'containers' => [[
+                'id' => str_repeat('a', 64), 'name' => 'app', 'running' => true, 'created' => now()->toIso8601String(),
+                'labels' => ['dev.darkdragon14.volumevault.enable' => 'true', 'dev.darkdragon14.volumevault.backup.volume' => 'app_data'],
+                'mounts' => [['name' => 'app_data', 'destination' => '/data']],
+            ]]],
+        ];
+        $this->sendAgent('inventory', $token, $inventory)->assertOk();
+        $job = BackupJob::firstOrFail();
+        $this->assertTrue($job->isDockerLabelManaged());
+        $run = app(CreateBackupRun::class)->handle($job, BackupRun::TRIGGER_MANUAL);
+        $this->enqueue($run);
+        $operation = $this->pull($body, $token);
+        $this->assertSame('app_data', $operation['spec']['job']['volume_name']);
+        $inventory['sequence'] = 2;
+        $inventory['label_inventory']['containers'][0]['labels']['dev.darkdragon14.volumevault.backup.retention-days'] = '12';
+        $this->sendAgent('inventory', $token, $inventory)->assertOk();
+        $this->assertSame('apply', $job->refresh()->pending_label_reconciliation['action']);
+        $this->assertNull($job->retention_days);
+        $this->complete($body, $token, $operation, ['cleanup_complete' => false])->assertUnprocessable();
+        $this->assertNull($job->refresh()->retention_days);
+        $this->complete($body, $token, $operation)->assertOk();
+        $this->assertSame(12, $job->refresh()->retention_days);
+        $this->assertNull($job->pending_label_reconciliation);
+        $this->assertSame('success', $run->refresh()->status);
+
+        $next = app(CreateBackupRun::class)->handle($job, BackupRun::TRIGGER_MANUAL);
+        $pending = $this->enqueue($next);
+        $inventory['sequence'] = 3;
+        $inventory['label_inventory']['containers'][0]['labels'] = [];
+        $this->sendAgent('inventory', $token, $inventory)->assertOk();
+        $this->assertSame('cancelled', $pending->refresh()->status);
+        $this->assertSame('cancelled', $next->refresh()->status);
+        $this->assertSame(BackupJob::STATUS_ERROR, $job->refresh()->status);
         Process::assertNothingRan();
     }
 

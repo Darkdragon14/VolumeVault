@@ -10,7 +10,6 @@ use App\Http\Controllers\NotificationChannelController as WebNotificationChannel
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
-use App\Models\DockerHost;
 use App\Models\DockerLabelBackupSetting;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
@@ -726,16 +725,15 @@ class NotificationChannelTest extends TestCase
         {
             public array $explicitJobIds = [];
 
-            public function handle(
+            public function handleAcrossHosts(
                 array $destinationIds,
                 callable $callback,
-                array $volumeNames = [],
                 array $notificationChannelIds = [],
                 array $explicitJobIds = [],
             ): mixed {
                 $this->explicitJobIds = $explicitJobIds;
 
-                return parent::handle($destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds);
+                return parent::handleAcrossHosts($destinationIds, $callback, $notificationChannelIds, $explicitJobIds);
             }
         };
         $queries = [];
@@ -758,7 +756,7 @@ class NotificationChannelTest extends TestCase
         $this->assertLessThan($jobLock, $settingsLock);
         $this->assertLessThan($channelLock, $jobLock);
         $this->assertSame(
-            [DockerHost::LOCAL_ID, BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL, $firstJob->id, $secondJob->id],
+            [BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL, $firstJob->id, $secondJob->id],
             $queries[$jobLock]['bindings'],
         );
         $this->assertDatabaseMissing('backup_job_notification_channel', ['notification_channel_id' => $channel->id]);
@@ -785,10 +783,9 @@ class NotificationChannelTest extends TestCase
                 private readonly BackupJob $job,
             ) {}
 
-            public function handle(
+            public function handleAcrossHosts(
                 array $destinationIds,
                 callable $callback,
-                array $volumeNames = [],
                 array $notificationChannelIds = [],
                 array $explicitJobIds = [],
             ): mixed {
@@ -799,7 +796,7 @@ class NotificationChannelTest extends TestCase
                     $this->attachmentChanged = true;
                 }
 
-                return parent::handle($destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds);
+                return parent::handleAcrossHosts($destinationIds, $callback, $notificationChannelIds, $explicitJobIds);
             }
         };
 

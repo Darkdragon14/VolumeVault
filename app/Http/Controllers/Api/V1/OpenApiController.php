@@ -43,6 +43,12 @@ class OpenApiController extends Controller
                 'get' => $this->operation('Read the OpenAPI document.', [], public: true),
             ],
             '/me' => ['get' => $this->operation('Inspect current authenticated user and token.', ['read'])],
+            '/settings/docker-label-backups' => [
+                'get' => $this->operation('Read Docker label settings, eligible destinations, notification channels and hosts. Omitting docker_host_id selects local host 1.', ['read'], admin: true, queryParameters: [
+                    ['name' => 'docker_host_id', 'in' => 'query', 'schema' => ['type' => 'integer', 'default' => 1]],
+                ]),
+                'put' => $this->operation('Update host-scoped Docker label settings. Remote reconciliation requires a complete docker-labels-v1 inventory; execution requires backup-v1. Destinations must be shared or owned by the selected host.', ['write'], ['$ref' => '#/components/schemas/DockerLabelBackupSettingsRequest'], admin: true),
+            ],
             '/dashboard' => ['get' => $this->operation('Read dashboard stats and recent activity.', ['read'])],
             '/volumes' => ['get' => $this->operation('List Docker volumes.', ['read'])],
             '/host-path-allowlist' => ['get' => $this->operation('Read the configured host-path allowlist (prefixes that host-path backup sources and local destinations may use). Empty/not configured means host paths are refused (fail-closed).', ['read'], null, false, true)],
@@ -280,6 +286,28 @@ class OpenApiController extends Controller
                 'required' => ['notifications_enabled'],
                 'properties' => [
                     'notifications_enabled' => ['type' => 'boolean', 'description' => 'Required. Omitting it is rejected rather than silently disabling notifications.'],
+                ],
+            ],
+            'DockerLabelBackupSettingsRequest' => [
+                'type' => 'object',
+                'required' => ['enabled', 'schedule_type', 'schedule_config', 'backup_filter_mode', 'notifications_enabled', 'alert_notifications_enabled', 'stop_containers_before_backup'],
+                'properties' => [
+                    'docker_host_id' => ['type' => 'integer', 'default' => 1],
+                    'enabled' => ['type' => 'boolean'],
+                    'backup_destination_id' => ['type' => ['integer', 'null'], 'description' => 'An active shared or same-host destination is required when enabled.'],
+                    'schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']],
+                    'schedule_config' => ['type' => 'object'],
+                    'timezone' => ['type' => ['string', 'null']],
+                    'retention_days' => ['type' => ['integer', 'null'], 'minimum' => 1],
+                    'retention_count' => ['type' => ['integer', 'null'], 'minimum' => 1],
+                    'backup_filter_mode' => ['type' => 'string', 'enum' => ['exclude', 'include']],
+                    'backup_include_paths' => ['type' => ['string', 'null'], 'maxLength' => 2000],
+                    'backup_exclude_regexp' => ['type' => ['string', 'null'], 'maxLength' => 1000],
+                    'backup_filename_template' => ['type' => ['string', 'null'], 'maxLength' => 180],
+                    'notifications_enabled' => ['type' => 'boolean'],
+                    'notification_channel_ids' => ['type' => ['array', 'null'], 'items' => ['type' => 'integer'], 'uniqueItems' => true],
+                    'alert_notifications_enabled' => ['type' => 'boolean'],
+                    'stop_containers_before_backup' => ['type' => 'boolean'],
                 ],
             ],
             'BackupJobRequest' => [

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'remote_docker_label_backups' => [
+        'title' => 'Docker label backups on remote hosts',
+        'description' => 'Configure label backup defaults per host in Settings or the API, including orchestrator-only deployments. Agents with docker-labels-v1 reconcile declarations on complete inventories using active shared or same-host destinations. Older or incomplete inventories preserve existing jobs and surface synchronization errors.',
+    ],
     'remote_backup_groups' => [
         'title' => 'Backup groups across local and remote hosts',
         'description' => 'Groups now coordinate local, remote and mixed members sequentially with one aggregate outcome. Durable coordination preserves membership, sources and failure policy; assigned work drains during maintenance while the next member waits. Group controls work in orchestrator mode and member views identify their hosts. Each member completes its own stop, backup and restart cycle; this is not a consistent cross-host snapshot. Existing backup-v1 agents are supported.',

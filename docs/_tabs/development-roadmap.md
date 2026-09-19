@@ -36,7 +36,7 @@ docker run --rm -v "$PWD:/app" -w /app composer:2 php artisan test
 ## Current Limitations
 
 - No external identity provider support yet.
-- A Docker TCP endpoint, such as a socket proxy for the local engine, can be configured through `DOCKER_HOST`; multi-host execution uses agents rather than a central list of remote Docker endpoints. Remote backups, restores and remote/mixed backup groups are available; remote label reconciliation, agent-side destination operations and host-local archive relaying remain pending.
+- A Docker TCP endpoint, such as a socket proxy for the local engine, can be configured through `DOCKER_HOST`; multi-host execution uses agents rather than a central list of remote Docker endpoints. Remote backups, restores, remote/mixed backup groups and host-scoped label reconciliation are available; agent-side destination operations and host-local archive relaying remain pending.
 - No Kubernetes support.
 - Hybrid notifications use the Shoutrrr Docker image; orchestrator-only notifications use the bundled native CLI without a daemon.
 - Backup archive extraction assumes the archive layout produced by the configured `offen/docker-volume-backup` mount path.
@@ -62,7 +62,7 @@ Build the web image with `docker build --target deploy -t volumevault:agent-test
 The test performs an actual Offen upload from engine A to S3, restores the bytes onto engine B and proves B's homonymous source volume is untouched. It suspends the orchestrator after each assignment, waits for the agent's durable result, restarts the agent before acknowledgement, then verifies completion without duplicate archives or runs. All owned containers, networks and volumes are cleaned up.
 
 ### Other Planned Improvements
-- Add remote label reconciliation, agent-side destination operations and relay for archives held on another host.
+- Add agent-side destination operations and relay for archives held on another host.
 - Add external identity provider support for shared environments.
 - Add more guided Shoutrrr services.
 - Add backup pruning visibility and destination browsing improvements.

@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\RestoreController;
 use App\Http\Controllers\Api\V1\RestoreRunController;
 use App\Http\Controllers\Api\V1\StackController;
 use App\Http\Controllers\Api\V1\VolumeController;
+use App\Http\Controllers\DockerLabelBackupSettingController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -21,6 +22,7 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware(['auth:sanctum', 'abilities:read'])->group(function () {
         Route::get('/me', MeController::class);
+        Route::get('/settings/docker-label-backups', [DockerLabelBackupSettingController::class, 'show'])->middleware('admin');
         Route::get('/dashboard', DashboardController::class);
         Route::get('/volumes', [VolumeController::class, 'index']);
         Route::get('/backup-jobs', [BackupJobController::class, 'index']);
@@ -42,6 +44,7 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware(['auth:sanctum', 'abilities:write', 'admin'])->group(function () {
+        Route::put('/settings/docker-label-backups', [DockerLabelBackupSettingController::class, 'update']);
         Route::post('/volumes/sync', [VolumeController::class, 'sync']);
         Route::post('/stacks/backup', [StackController::class, 'backup']);
         Route::post('/backup-jobs', [BackupJobController::class, 'store']);

@@ -13,6 +13,11 @@ use RuntimeException;
 
 class WithDockerLabelMutationLocks
 {
+    public function handleAcrossHosts(array $destinationIds, callable $callback, array $notificationChannelIds = [], array $explicitJobIds = []): mixed
+    {
+        return $this->handleScoped(null, $destinationIds, $callback, [], $notificationChannelIds, $explicitJobIds, null);
+    }
+
     public function handle(
         array $destinationIds,
         callable $callback,
@@ -46,7 +51,7 @@ class WithDockerLabelMutationLocks
             return $this->handle($destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds);
         }
 
-        return $this->handleScoped([], $destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds, $dockerHostId);
+        return $this->handleScoped(null, $destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds, $dockerHostId);
     }
 
     public function handleForJobsOnHost(
@@ -62,11 +67,7 @@ class WithDockerLabelMutationLocks
             return $this->handleForJobs($managedJobIds, $destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds);
         }
 
-        if ($managedJobIds !== []) {
-            throw new RuntimeException('Docker label mutations are only supported on the local Docker host.');
-        }
-
-        return $this->handleScoped([], $destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds, $dockerHostId);
+        return $this->handleScoped($managedJobIds, $destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds, $dockerHostId);
     }
 
     private function handleScoped(
@@ -76,7 +77,7 @@ class WithDockerLabelMutationLocks
         array $volumeNames,
         array $notificationChannelIds,
         array $explicitJobIds,
-        int $dockerHostId,
+        ?int $dockerHostId,
     ): mixed {
         return DB::transaction(function () use ($managedJobIds, $destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds, $dockerHostId): mixed {
             // Every caller acquires mutable label references in this order.
@@ -86,7 +87,8 @@ class WithDockerLabelMutationLocks
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
-            $settings = DockerLabelBackupSetting::query()->whereKey(1)->lockForUpdate()->firstOrFail();
+            DockerLabelBackupSetting::current($dockerHostId ?? DockerHost::LOCAL_ID);
+            $settings = DockerLabelBackupSetting::query()->orderBy('id')->lockForUpdate()->get()->firstWhere('docker_host_id', $dockerHostId);
             $volumes = DockerVolume::query()
                 ->where('docker_host_id', $dockerHostId)
                 ->whereIn('name', collect($volumeNames)->filter()->unique()->sort()->values()->all())
@@ -101,7 +103,7 @@ class WithDockerLabelMutationLocks
             $lockedJobs = BackupJob::query()
                 ->where(function ($query) use ($managedIds, $explicitIds, $dockerHostId): void {
                     $query->where(function ($query) use ($managedIds, $dockerHostId): void {
-                        $query->where('docker_host_id', $dockerHostId)
+                        $query->when($dockerHostId !== null, fn ($query) => $query->where('docker_host_id', $dockerHostId))
                             ->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)
                             ->when($managedIds !== null, fn ($query) => $query->whereKey($managedIds));
                     })->when($explicitIds !== [], fn ($query) => $query->orWhereIn($query->getModel()->getQualifiedKeyName(), $explicitIds));
@@ -110,8 +112,8 @@ class WithDockerLabelMutationLocks
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
-            if ($lockedJobs->contains(fn (BackupJob $job): bool => $job->isDockerLabelManaged() && (int) $job->docker_host_id !== DockerHost::LOCAL_ID)) {
-                throw new RuntimeException('Docker label mutations are only supported on the local Docker host.');
+            if ($dockerHostId !== null && $lockedJobs->contains(fn (BackupJob $job): bool => $job->isDockerLabelManaged() && (int) $job->docker_host_id !== $dockerHostId)) {
+                throw new RuntimeException('Docker label mutations cannot cross Docker hosts.');
             }
 
             $jobs = $lockedJobs->filter(fn (BackupJob $job): bool => $job->isDockerLabelManaged());

@@ -1,4 +1,10 @@
 {
+    "dockerLabels.host": "Hôte Docker",
+    "dockerLabels.loading": "Chargement des paramètres de l’hôte…",
+    "dockerLabels.loadFailed": "Impossible de charger l’hôte sélectionné. Les paramètres de l’hôte précédent restent affichés. Réessayez.",
+    "dockerLabels.lastSync": "Dernière synchronisation",
+    "dockerLabels.upgradeAgent": "Mettez cet agent à jour pour prendre en charge docker-labels-v1. Les paramètres peuvent être enregistrés, mais les tâches par labels existantes sont conservées jusqu’à réception d’un inventaire complet compatible.",
+    "dockerLabels.nextInventory": "Les modifications seront appliquées au prochain inventaire complet de l’agent. Seules les destinations actives partagées ou de cet hôte sont disponibles.",
   "hostWorkflow.groupRunUnavailable": "Ce groupe ne peut pas démarrer maintenant. Vérifiez son état, les exécutions en attente, les membres exécutables, les capacités des hôtes, l’exécution locale et la maintenance.",
   "hostWorkflow.sourceHost": "Hôte Docker source",
   "hostWorkflow.targetHost": "Hôte Docker cible",

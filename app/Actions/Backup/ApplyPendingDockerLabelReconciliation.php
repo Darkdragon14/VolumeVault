@@ -4,6 +4,7 @@ namespace App\Actions\Backup;
 
 use App\Models\BackupJob;
 use App\Models\DockerHost;
+use App\Models\DockerLabelBackupSetting;
 use App\Support\DeploymentMode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -14,12 +15,12 @@ class ApplyPendingDockerLabelReconciliation
 
     public function handle(BackupJob $job): bool
     {
-        if (DeploymentMode::isOrchestrator()) {
+        if ($job->docker_host_id === DockerHost::LOCAL_ID && DeploymentMode::isOrchestrator()) {
             return false;
         }
 
         for ($attempt = 0; $attempt < 3; $attempt++) {
-            $current = BackupJob::query()->where('docker_host_id', DockerHost::LOCAL_ID)->find($job->id);
+            $current = BackupJob::query()->where('docker_host_id', $job->docker_host_id)->find($job->id);
 
             if (! $current?->isDockerLabelManaged() || ! is_array($current->pending_label_reconciliation)) {
                 return false;
@@ -31,7 +32,7 @@ class ApplyPendingDockerLabelReconciliation
             $notificationChannelIds = $pending['notification_channel_ids'] ?? [];
 
             try {
-                return $this->withLocks->handleForJobs(
+                return $this->withLocks->handleForJobsOnHost(
                     [$job->id],
                     $destinationIds,
                     function ($destinations, $settings, $jobs, $volumes, $notificationChannels) use ($job, $destinationIds, $volumeNames, $notificationChannelIds): bool {
@@ -48,6 +49,7 @@ class ApplyPendingDockerLabelReconciliation
                     },
                     $volumeNames,
                     $notificationChannelIds,
+                    dockerHostId: $job->docker_host_id,
                 );
             } catch (RetryDockerLabelMutation) {
                 continue;
@@ -63,11 +65,15 @@ class ApplyPendingDockerLabelReconciliation
         Collection $volumes,
         Collection $notificationChannels,
     ): bool {
-        if (DeploymentMode::isOrchestrator()) {
+        if ($job?->docker_host_id === DockerHost::LOCAL_ID && DeploymentMode::isOrchestrator()) {
             return false;
         }
 
-        if (! $job?->isDockerLabelManaged() || $job->docker_host_id !== DockerHost::LOCAL_ID || ! is_array($job->pending_label_reconciliation) || $job->hasRunInProgress()) {
+        if (! $job?->isDockerLabelManaged() || ! is_array($job->pending_label_reconciliation) || $job->hasRunInProgress()) {
+            return false;
+        }
+
+        if ($job->docker_host_id !== DockerHost::LOCAL_ID && ! DockerLabelBackupSetting::current($job->docker_host_id)->enabled) {
             return false;
         }
 
@@ -89,8 +95,9 @@ class ApplyPendingDockerLabelReconciliation
         $jobNotificationChannels = $notificationChannels
             ->filter(fn ($channel): bool => $channelIds->contains((int) $channel->id))
             ->keyBy('id');
-        $destinationValid = $destinations->get($destinationId)?->is_active === true;
-        $volumeValid = $volumes->get($volumeName)?->isAvailable() === true;
+        $destination = $destinations->get($destinationId);
+        $destinationValid = $destination?->is_active === true && (! $destination->isHostBound() || $destination->docker_host_id === $job->docker_host_id);
+        $volumeValid = $volumes->get($volumeName)?->isAvailable() === true && $volumes->get($volumeName)->docker_host_id === $job->docker_host_id;
         $existingChannelIds = $jobNotificationChannels->keys()->map(fn ($id): int => (int) $id)->sort()->values();
         $expectedDestination = $pending['expected_destination'] ?? null;
         $expectedChannels = collect($pending['expected_notification_channels'] ?? []);
@@ -182,10 +189,6 @@ class ApplyPendingDockerLabelReconciliation
 
     public function disable(BackupJob $job, string $message): void
     {
-        if ($job->docker_host_id !== DockerHost::LOCAL_ID) {
-            throw new \RuntimeException('Remote Docker label jobs cannot be reconciled locally.');
-        }
-
         $attributes = [
             'pending_label_reconciliation' => null,
             'label_reconciliation_error' => $message,

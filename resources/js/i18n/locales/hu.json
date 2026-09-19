@@ -1,4 +1,10 @@
 {
+    "dockerLabels.host": "Docker-gazdagép",
+    "dockerLabels.loading": "Gazdagépbeállítások betöltése…",
+    "dockerLabels.loadFailed": "A kiválasztott gazdagép nem tölthető be. Továbbra is az előző gazdagép beállításai láthatók. Próbálja újra.",
+    "dockerLabels.lastSync": "Utolsó szinkronizálás",
+    "dockerLabels.upgradeAgent": "Frissítse ezt az ügynököt a docker-labels-v1 támogatásához. A beállítások menthetők, de a meglévő címkealapú feladatok a teljes kompatibilis leltár beérkezéséig megmaradnak.",
+    "dockerLabels.nextInventory": "A módosítások az ügynök következő teljes leltárakor lépnek érvénybe. Csak az aktív megosztott vagy ezen a gazdagépen lévő célok érhetők el.",
   "hostWorkflow.groupRunUnavailable": "Ez a csoport most nem futtatható. Ellenőrizze az állapotát, a várakozó futásokat, a futtatható tagokat, a gazdagépek képességeit, a helyi végrehajtást és a karbantartási beállításokat.",
   "hostWorkflow.sourceHost": "Forrás Docker-gazdagép",
   "hostWorkflow.targetHost": "Cél Docker-gazdagép",

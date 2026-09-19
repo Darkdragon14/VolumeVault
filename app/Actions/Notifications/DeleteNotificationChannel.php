@@ -5,6 +5,7 @@ namespace App\Actions\Notifications;
 use App\Actions\Backup\RetryDockerLabelMutation;
 use App\Actions\Backup\WithDockerLabelMutationLocks;
 use App\Models\BackupJob;
+use App\Models\DockerLabelBackupSetting;
 use App\Models\NotificationChannel;
 
 class DeleteNotificationChannel
@@ -20,7 +21,7 @@ class DeleteNotificationChannel
             $manualJobIds = $this->manualJobIds($channel);
 
             try {
-                $this->withLocks->handle([], function ($destinations, $settings, $jobs, $volumes, $channels) use ($channel, $manualJobIds): void {
+                $this->withLocks->handleAcrossHosts([], function ($destinations, $settings, $jobs, $volumes, $channels) use ($channel, $manualJobIds): void {
                     $channel = $channels->get($channel->id);
 
                     if (! $channel) {
@@ -33,7 +34,7 @@ class DeleteNotificationChannel
 
                     $this->mutateNotificationChannel->assertMutable($channel);
 
-                    if ($settings) {
+                    foreach (DockerLabelBackupSetting::query()->orderBy('id')->get() as $settings) {
                         $defaults = $settings->resolvedDefaults();
                         $defaults['notification_channel_ids'] = $this->withoutChannel($defaults['notification_channel_ids'] ?? [], $channel->id);
                         $settings->update(['defaults' => $defaults]);
@@ -81,5 +82,4 @@ class DeleteNotificationChannel
     {
         return collect($ids)->reject(fn ($id): bool => (int) $id === $channelId)->values()->all();
     }
-
 }

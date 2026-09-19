@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Actions\Docker\CollectAgentInventory;
 use App\Services\Agents\AgentClient;
 use App\Services\Agents\AgentCompatibility;
+use App\Services\Agents\AgentLabelInventory;
 use App\Services\Agents\AgentLoop;
 use App\Services\Agents\AgentOperationEnvelope;
 use App\Services\Agents\AgentState;
@@ -118,6 +119,30 @@ class AgentClientTest extends TestCase
             && $request['host_path_allowlist'] === ['/srv/data'] && $request['docker_version'] === '29.0.0'
             && $request->hasHeader('Authorization', 'Bearer '.$this->host.'.'.$persisted['credential']));
         Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/heartbeat') && $request['docker_status'] === 'ready' && $request['capabilities'] === AgentCompatibility::CAPABILITIES);
+    }
+
+    public function test_final_transport_budget_includes_host_paths_and_preserves_ordinary_inventory(): void
+    {
+        $this->fakeServer();
+        $client = new AgentClient($this->state());
+        $client->enroll();
+        $containers = [];
+        $labels = [];
+        foreach (range(1, 120) as $index) {
+            $id = hash('sha256', (string) $index);
+            $containers[] = ['id' => $id, 'names' => 'app-'.$index];
+            $labels[] = ['id' => $id, 'name' => 'app-'.$index, 'created' => '2026-09-01T00:00:00Z', 'running' => true, 'mounts' => [],
+                'labels' => ['dev.darkdragon14.volumevault.backup.include-paths' => str_repeat('x', 16000)]];
+        }
+        $snapshot = ['complete' => true, 'containers' => $labels];
+        $this->assertTrue(AgentLabelInventory::bounded(['containers' => $containers, 'label_inventory' => $snapshot])['label_inventory']['complete']);
+        $paths = array_fill(0, 100, '/'.str_repeat('p', 3999));
+        $volumes = [['name' => 'data', 'driver' => 'local']];
+        $client->inventory($volumes, $containers, $paths, '29.0.0', $snapshot);
+        Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/inventory')
+            && $request['label_inventory'] === ['complete' => false, 'containers' => []]
+            && $request['volumes'] === $volumes && $request['containers'] === $containers
+            && $request['host_path_allowlist'] === $paths && strlen($request->body()) < 2 * 1024 * 1024);
     }
 
     public function test_transport_options_enforce_ca_hostname_no_redirects_no_proxy_and_timeouts(): void

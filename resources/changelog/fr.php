@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'remote_docker_label_backups' => [
+        'title' => 'Sauvegardes par labels Docker sur les hôtes distants',
+        'description' => 'Configurez les valeurs par défaut par hôte dans les paramètres ou via l’API, y compris en mode orchestrateur seul. Les agents docker-labels-v1 traitent les déclarations lors des inventaires complets avec des destinations actives partagées ou du même hôte. Les inventaires anciens ou incomplets préservent les tâches existantes et signalent les erreurs de synchronisation.',
+    ],
     'remote_backup_groups' => [
         'title' => 'Groupes de sauvegarde sur des hôtes locaux et distants',
         'description' => 'Les groupes coordonnent les membres locaux, distants ou mixtes de manière séquentielle avec un résultat global. La coordination durable conserve les membres, les sources et la politique en cas d’échec ; le travail attribué se termine pendant la maintenance, puis le membre suivant attend. Les commandes fonctionnent en mode orchestrateur et les membres affichent leur hôte. Chaque membre effectue son propre cycle d’arrêt, sauvegarde et redémarrage ; ce n’est pas un instantané cohérent entre hôtes. Les agents backup-v1 existants sont compatibles.',

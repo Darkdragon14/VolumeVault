@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Actions\Backup\RenderBackupFilename;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
+use App\Models\DockerHost;
 use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -21,9 +22,12 @@ class UpdateDockerLabelBackupSettingRequest extends FormRequest
 
     public function rules(): array
     {
-        LocalDockerExecution::validate();
+        if ($this->integer('docker_host_id', DockerHost::LOCAL_ID) === DockerHost::LOCAL_ID) {
+            LocalDockerExecution::validate();
+        }
 
         return [
+            'docker_host_id' => ['sometimes', 'integer', 'exists:docker_hosts,id'],
             'enabled' => ['required', 'boolean'],
             'backup_destination_id' => ['nullable', 'integer', 'exists:backup_destinations,id'],
             'schedule_type' => ['required', Rule::in([
@@ -51,6 +55,10 @@ class UpdateDockerLabelBackupSettingRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $destination = BackupDestination::find($this->integer('backup_destination_id'));
+            if ($destination?->isHostBound() && $destination->docker_host_id !== $this->integer('docker_host_id', DockerHost::LOCAL_ID)) {
+                $validator->errors()->add('backup_destination_id', 'The destination must be shared or belong to the selected Docker host.');
+            }
             if ($this->boolean('enabled') && ! $this->filled('backup_destination_id')) {
                 $validator->errors()->add('backup_destination_id', 'Choose a default destination before enabling Docker label backups.');
             }
@@ -89,6 +97,6 @@ class UpdateDockerLabelBackupSettingRequest extends FormRequest
     {
         $validated = $this->validated();
 
-        return collect($validated)->except(['enabled', 'backup_destination_id'])->all();
+        return collect($validated)->except(['enabled', 'backup_destination_id', 'docker_host_id'])->all();
     }
 }

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'remote_docker_label_backups' => [
+        'title' => 'Backup tramite etichette Docker su host remoti',
+        'description' => 'Configura i valori predefiniti per host dalle impostazioni o tramite API, anche in modalità solo orchestratore. Gli agenti docker-labels-v1 elaborano le dichiarazioni con inventari completi e destinazioni attive condivise o dello stesso host. Gli inventari obsoleti o incompleti preservano i processi esistenti e segnalano errori di sincronizzazione.',
+    ],
     'remote_backup_groups' => [
         'title' => 'Gruppi di backup su host locali e remoti',
         'description' => 'I gruppi coordinano membri locali, remoti e misti in sequenza con un unico risultato aggregato. Il coordinamento persistente conserva membri, origini e politica di errore; il lavoro assegnato termina durante la manutenzione mentre il membro successivo attende. I controlli funzionano in modalità orchestratore e le viste identificano gli host. Ogni membro completa il proprio ciclo di arresto, backup e riavvio; non è uno snapshot coerente tra host. Sono supportati gli agenti backup-v1 esistenti.',

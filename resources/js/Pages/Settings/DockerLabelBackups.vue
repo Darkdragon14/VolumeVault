@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { useDeployment } from '@/Composables/useDeployment';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const { localExecutionEnabled } = useDeployment();
 
@@ -19,6 +19,7 @@ interface ScheduleConfig {
 }
 
 interface DockerLabelBackupSettings {
+    docker_host_id: number;
     enabled: boolean;
     backup_destination_id: number | null;
     schedule_type: ScheduleType;
@@ -39,6 +40,7 @@ interface DockerLabelBackupSettings {
 }
 
 interface DockerLabelBackupForm {
+    docker_host_id: number;
     enabled: boolean;
     backup_destination_id: number | null;
     schedule_type: ScheduleType;
@@ -63,6 +65,7 @@ interface NamedResource {
 
 const props = defineProps<{
     settings: DockerLabelBackupSettings;
+    hosts: (NamedResource & { supports_docker_labels: boolean })[];
     destinations: NamedResource[];
     notificationChannels: NamedResource[];
     timezones: string[];
@@ -92,9 +95,10 @@ const scheduleConfigFor = (scheduleType: ScheduleType, config: ScheduleConfig = 
     return { expression: typeof config.expression === 'string' && config.expression.trim() !== '' ? config.expression : '0 2 * * *' };
 };
 
-const form = useForm<DockerLabelBackupForm>({
+const formData = (): DockerLabelBackupForm => ({
+    docker_host_id: props.settings.docker_host_id,
     enabled: props.settings.enabled,
-    backup_destination_id: props.settings.backup_destination_id,
+    backup_destination_id: props.destinations.some((destination) => destination.id === props.settings.backup_destination_id) ? props.settings.backup_destination_id : null,
     schedule_type: props.settings.schedule_type,
     schedule_config: scheduleConfigFor(props.settings.schedule_type, props.settings.schedule_config),
     timezone: props.settings.timezone,
@@ -105,12 +109,43 @@ const form = useForm<DockerLabelBackupForm>({
     backup_exclude_regexp: props.settings.backup_exclude_regexp,
     backup_filename_template: props.settings.backup_filename_template,
     notifications_enabled: props.settings.notifications_enabled,
-    notification_channel_ids: props.settings.notification_channel_ids || [],
+    notification_channel_ids: [...(props.settings.notification_channel_ids || [])],
     alert_notifications_enabled: props.settings.alert_notifications_enabled,
     stop_containers_before_backup: props.settings.stop_containers_before_backup,
 });
 
-const submit = () => form.put('/settings/docker-label-backups');
+const form = useForm<DockerLabelBackupForm>(formData());
+const page = usePage();
+const canManage = computed(() => Boolean((page.props.can as { manageSensitiveData?: boolean })?.manageSensitiveData));
+const selectedHostId = ref(props.settings.docker_host_id);
+const switchingHost = ref(false);
+const hostLoadFailed = ref(false);
+const selectedHost = computed(() => props.hosts.find((host) => host.id === props.settings.docker_host_id));
+const localDisabled = computed(() => props.settings.docker_host_id === 1 && !localExecutionEnabled.value);
+watch(() => props.settings.docker_host_id, () => {
+    form.defaults(formData());
+    form.resetAndClearErrors();
+    selectedHostId.value = props.settings.docker_host_id;
+});
+const changeHost = () => {
+    if (switchingHost.value || form.processing) return;
+    switchingHost.value = true;
+    hostLoadFailed.value = false;
+    const requestedHostId = selectedHostId.value;
+    router.get('/settings/docker-label-backups', { docker_host_id: requestedHostId }, {
+        preserveState: true,
+        preserveScroll: true,
+        onFinish: () => {
+            hostLoadFailed.value = props.settings.docker_host_id !== requestedHostId;
+            selectedHostId.value = props.settings.docker_host_id;
+            switchingHost.value = false;
+        },
+    });
+};
+const submit = () => {
+    if (switchingHost.value || localDisabled.value || !canManage.value || form.processing) return;
+    form.put('/settings/docker-label-backups');
+};
 const changeScheduleType = () => {
     form.schedule_config = scheduleConfigFor(form.schedule_type);
 };
@@ -151,10 +186,30 @@ const unexpectedErrors = computed(() => [...new Set(
 </script>
 
 <template>
-    <Head :title="t('Docker label backups')" />
     <AppLayout :title="t('Docker label backups')" :subtitle="t('Define trusted defaults for backup jobs declared by running containers.')">
-        <p v-if="!localExecutionEnabled" role="status" class="card p-4 text-sm text-slate-400">{{ t('dockerHosts.localDisabled') }}</p>
-        <form v-else class="space-y-6" @submit.prevent="submit">
+        <Head :title="t('Docker label backups')" />
+        <section class="card mb-6 space-y-3 p-5">
+            <label class="block space-y-2">
+                <span class="label">{{ t('dockerLabels.host') }}</span>
+                <select v-model="selectedHostId" data-host-selector class="input" :disabled="switchingHost || form.processing" @change="changeHost">
+                    <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="host.id === 1 && !localExecutionEnabled">{{ host.name }} (#{{ host.id }})</option>
+                </select>
+            </label>
+            <p v-if="switchingHost" role="status" class="animate-pulse text-sm text-slate-400">{{ t('dockerLabels.loading') }}</p>
+            <p v-if="hostLoadFailed" role="alert" class="text-sm text-rose-300">{{ t('dockerLabels.loadFailed') }}</p>
+            <template v-if="!switchingHost">
+                <p class="text-sm text-slate-400">{{ selectedHost?.name }} (#{{ settings.docker_host_id }}) · {{ t('dockerLabels.lastSync') }}: {{ formatDate(settings.last_synced_at) }}</p>
+                <p v-if="localDisabled" role="status" class="text-sm text-slate-400">{{ t('dockerHosts.localDisabled') }}</p>
+                <p v-else-if="selectedHost && !selectedHost.supports_docker_labels" role="status" class="text-sm text-amber-300">{{ t('dockerLabels.upgradeAgent') }}</p>
+                <p v-else-if="settings.docker_host_id !== 1" class="text-sm text-slate-400">{{ t('dockerLabels.nextInventory') }}</p>
+                <section v-if="settings.last_sync_error" role="alert" class="rounded-xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-100">
+                    <h2 class="font-semibold">{{ t('Last synchronization error') }}</h2>
+                    <p class="mt-2 whitespace-pre-line">{{ settings.last_sync_error }}</p>
+                </section>
+            </template>
+        </section>
+        <form v-if="!switchingHost && !localDisabled" class="space-y-6" @submit.prevent="submit">
+            <fieldset class="space-y-6" :disabled="!canManage || form.processing">
             <section class="card space-y-5 p-5">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
@@ -227,17 +282,12 @@ const unexpectedErrors = computed(() => [...new Set(
                 <span v-for="error in errorsFor('notification_channel_ids')" :key="error" class="block text-sm text-rose-300">{{ error }}</span>
             </section>
 
-            <section v-if="settings.last_sync_error" class="rounded-xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-100">
-                <h2 class="font-semibold">{{ t('Last synchronization error') }}</h2>
-                <p class="mt-2 whitespace-pre-line">{{ settings.last_sync_error }}</p>
-                <p class="mt-2 text-xs text-rose-200/70">{{ formatDate(settings.last_synced_at) }}</p>
-            </section>
-
             <section v-if="unexpectedErrors.length" class="rounded-xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-100">
                 <p v-for="error in unexpectedErrors" :key="error">{{ error }}</p>
             </section>
 
-            <button class="btn-primary" :disabled="form.processing">{{ t('Save settings') }}</button>
+            <button v-if="canManage" class="btn-primary" :disabled="form.processing">{{ t('Save settings') }}</button>
+            </fieldset>
         </form>
     </AppLayout>
 </template>

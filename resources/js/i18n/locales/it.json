@@ -1,4 +1,10 @@
 {
+    "dockerLabels.host": "Host Docker",
+    "dockerLabels.loading": "Caricamento delle impostazioni dell’host…",
+    "dockerLabels.loadFailed": "Impossibile caricare l’host selezionato. Sono ancora visualizzate le impostazioni dell’host precedente. Riprova.",
+    "dockerLabels.lastSync": "Ultima sincronizzazione",
+    "dockerLabels.upgradeAgent": "Aggiorna questo agente per supportare docker-labels-v1. Le impostazioni possono essere salvate, ma i processi basati su etichette esistenti vengono conservati fino alla ricezione di un inventario completo compatibile.",
+    "dockerLabels.nextInventory": "Le modifiche saranno applicate al prossimo inventario completo dell’agente. Sono disponibili solo destinazioni attive condivise o di questo host.",
   "hostWorkflow.groupRunUnavailable": "Questo gruppo non può essere eseguito ora. Controlla lo stato, le esecuzioni in attesa, i membri eseguibili, le capacità degli host, l’esecuzione locale e la manutenzione.",
   "hostWorkflow.sourceHost": "Host Docker di origine",
   "hostWorkflow.targetHost": "Host Docker di destinazione",

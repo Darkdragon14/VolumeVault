@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'remote_docker_label_backups' => [
+        'title' => 'Zálohy podle štítků Dockeru na vzdálených hostitelích',
+        'description' => 'Nastavte výchozí hodnoty pro každého hostitele v nastavení nebo přes API, i v režimu samostatného orchestrátoru. Agenti docker-labels-v1 zpracovávají deklarace při úplných inventářích s aktivními sdílenými cíli nebo cíli stejného hostitele. Starší či neúplné inventáře zachovají existující úlohy a zobrazí chyby synchronizace.',
+    ],
     'remote_backup_groups' => [
         'title' => 'Skupiny záloh na místních i vzdálených hostitelích',
         'description' => 'Skupiny koordinují místní, vzdálené i smíšené členy postupně s jedním souhrnným výsledkem. Trvalá koordinace zachovává členství, zdroje a zásady při selhání; přidělená práce během údržby doběhne a další člen čeká. Ovládání funguje v režimu orchestrátoru a zobrazení členů uvádí hostitele. Každý člen dokončí vlastní cyklus zastavení, zálohy a spuštění; nejde o konzistentní snímek napříč hostiteli. Stávající agenti backup-v1 jsou podporováni.',

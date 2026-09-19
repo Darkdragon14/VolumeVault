@@ -1,4 +1,10 @@
 {
+    "dockerLabels.host": "Docker-host",
+    "dockerLabels.loading": "Hostinstellingen laden…",
+    "dockerLabels.loadFailed": "De geselecteerde host kon niet worden geladen. De instellingen van de vorige host blijven zichtbaar. Probeer het opnieuw.",
+    "dockerLabels.lastSync": "Laatste synchronisatie",
+    "dockerLabels.upgradeAgent": "Werk deze agent bij voor ondersteuning van docker-labels-v1. Instellingen kunnen worden opgeslagen, maar bestaande labeltaken blijven behouden totdat een volledige compatibele inventaris binnenkomt.",
+    "dockerLabels.nextInventory": "Wijzigingen worden bij de volgende volledige agentinventaris verwerkt. Alleen actieve gedeelde bestemmingen of bestemmingen op deze host zijn beschikbaar.",
   "hostWorkflow.groupRunUnavailable": "Deze groep kan nu niet worden uitgevoerd. Controleer de status, wachtende uitvoeringen, uitvoerbare leden, hostmogelijkheden, lokale uitvoering en onderhoudsinstellingen.",
   "hostWorkflow.sourceHost": "Docker-bronhost",
   "hostWorkflow.targetHost": "Docker-doelhost",

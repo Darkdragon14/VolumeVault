@@ -2,6 +2,7 @@
 
 return [
     'unreleased' => [
+        ['type' => 'feature', 'key' => 'remote_docker_label_backups'],
         ['type' => 'feature', 'key' => 'remote_backup_groups'],
         ['type' => 'change', 'key' => 'agent_execution_safety_and_identity'],
         ['type' => 'feature', 'key' => 'remote_agent_execution'],

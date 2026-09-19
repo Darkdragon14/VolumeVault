@@ -6,6 +6,7 @@ use Database\Factories\DockerHostFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class DockerHost extends Model
@@ -85,6 +86,11 @@ class DockerHost extends Model
     public function jobs(): HasMany
     {
         return $this->hasMany(BackupJob::class);
+    }
+
+    public function dockerLabelBackupSetting(): HasOne
+    {
+        return $this->hasOne(DockerLabelBackupSetting::class);
     }
 
     public function backupRuns(): HasMany

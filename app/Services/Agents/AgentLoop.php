@@ -89,7 +89,7 @@ class AgentLoop
         if ($this->stopping) {
             return false;
         }
-        $this->client->inventory($data['volumes'], $data['containers'], $this->hostPaths->allowedPrefixes(), $data['docker_version'] ?? null);
+        $this->client->inventory($data['volumes'], $data['containers'], $this->hostPaths->allowedPrefixes(), $data['docker_version'] ?? null, $data['label_inventory'] ?? null);
 
         return true;
     }

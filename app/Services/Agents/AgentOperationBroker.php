@@ -2,6 +2,7 @@
 
 namespace App\Services\Agents;
 
+use App\Actions\Backup\ApplyPendingDockerLabelReconciliation;
 use App\Actions\Runs\CreateRunFinalizations;
 use App\Actions\Runs\ProcessRunFinalization;
 use App\Models\ActivityLog;
@@ -166,6 +167,11 @@ class AgentOperationBroker
             return $ids;
         }, attempts: 3);
         app(ProcessRunFinalization::class)->dispatch($finalizations);
+        $operation = AgentOperation::where('docker_host_id', $host->id)->findOrFail($id);
+        $job = ($operation->kind === 'backup' ? $operation->backupRun : $operation->restoreRun)?->job;
+        if ($job) {
+            app(ApplyPendingDockerLabelReconciliation::class)->handle($job);
+        }
     }
 
     private function lockedOperation(DockerHost $host, string $id, string $token): AgentOperation

@@ -1,4 +1,10 @@
 {
+    "dockerLabels.host": "Host Docker",
+    "dockerLabels.loading": "Cargando la configuración del host…",
+    "dockerLabels.loadFailed": "No se pudo cargar el host seleccionado. Se sigue mostrando la configuración del host anterior. Inténtalo de nuevo.",
+    "dockerLabels.lastSync": "Última sincronización",
+    "dockerLabels.upgradeAgent": "Actualiza este agente para admitir docker-labels-v1. Puedes guardar la configuración, pero los trabajos por etiquetas existentes se conservan hasta recibir un inventario completo compatible.",
+    "dockerLabels.nextInventory": "Los cambios se aplicarán con el próximo inventario completo del agente. Solo están disponibles los destinos activos compartidos o de este host.",
   "hostWorkflow.groupRunUnavailable": "Este grupo no puede ejecutarse ahora. Revise su estado, las ejecuciones pendientes, los miembros ejecutables, las capacidades de los hosts, la ejecución local y el mantenimiento.",
   "hostWorkflow.sourceHost": "Host Docker de origen",
   "hostWorkflow.targetHost": "Host Docker de destino",

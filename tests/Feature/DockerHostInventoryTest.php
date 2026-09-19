@@ -176,7 +176,7 @@ class DockerHostInventoryTest extends TestCase
         }, volumeNames: ['shared']);
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Docker label mutations are only supported on the local Docker host.');
+        $this->expectExceptionMessage('Docker label mutations cannot cross Docker hosts.');
         app(WithDockerLabelMutationLocks::class)->handle([], function (): void {
             $this->fail('Remote explicit jobs must be rejected before invoking the mutation.');
         }, explicitJobIds: [$remoteJob->id]);

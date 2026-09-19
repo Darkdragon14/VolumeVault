@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'remote_docker_label_backups' => [
+        'title' => 'Copias por etiquetas Docker en hosts remotos',
+        'description' => 'Configura los valores predeterminados por host desde los ajustes o la API, también en modo solo orquestador. Los agentes docker-labels-v1 procesan las declaraciones con inventarios completos y destinos activos compartidos o del mismo host. Los inventarios antiguos o incompletos conservan los trabajos existentes y muestran errores de sincronización.',
+    ],
     'remote_backup_groups' => [
         'title' => 'Grupos de copias en hosts locales y remotos',
         'description' => 'Los grupos coordinan miembros locales, remotos y mixtos de forma secuencial con un resultado global. La coordinación duradera conserva miembros, fuentes y política de fallos; el trabajo asignado termina durante el mantenimiento mientras el siguiente miembro espera. Los controles funcionan en modo orquestador y las vistas identifican los hosts. Cada miembro completa su propio ciclo de parada, copia y reinicio; no es una instantánea coherente entre hosts. Se admiten los agentes backup-v1 existentes.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'remote_docker_label_backups' => [
+        'title' => 'Docker-címkealapú mentések távoli gazdagépeken',
+        'description' => 'Állítsa be az alapértékeket gazdagépenként a Beállításokban vagy az API-n keresztül, csak vezérlőként működő telepítésnél is. A docker-labels-v1 ügynökök teljes leltár esetén dolgozzák fel a deklarációkat aktív megosztott vagy azonos gazdagépen lévő célokkal. A régi vagy hiányos leltárak megőrzik a meglévő feladatokat és jelzik a szinkronizálási hibákat.',
+    ],
     'remote_backup_groups' => [
         'title' => 'Mentési csoportok helyi és távoli gazdagépeken',
         'description' => 'A csoportok helyi, távoli és vegyes tagokat koordinálnak egymás után, egyetlen összesített eredménnyel. A tartós koordináció megőrzi a tagságot, a forrásokat és a hibakezelési szabályt; a kiosztott munka karbantartás alatt befejeződik, a következő tag pedig vár. A csoportvezérlés orchestrator módban is működik, a nézetek jelzik a gazdagépet. Minden tag saját leállítási, mentési és újraindítási ciklust végez; ez nem gazdagépek közötti konzisztens pillanatkép. A meglévő backup-v1 ügynökök támogatottak.',

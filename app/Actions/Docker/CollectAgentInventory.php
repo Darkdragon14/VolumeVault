@@ -2,6 +2,7 @@
 
 namespace App\Actions\Docker;
 
+use App\Services\Agents\AgentLabelInventory;
 use App\Services\Docker\DockerProcess;
 use RuntimeException;
 
@@ -36,10 +37,22 @@ class CollectAgentInventory
             $progress();
             $containerInventory = $containers->handle(strict: true);
             $progress();
+            $labelInventory = AgentLabelInventory::INCOMPLETE;
+            try {
+                $labelContainers = (new ListDockerLabelBackupContainers($this->dockerProcess))->handle(strict: true);
+                foreach ($labelContainers as &$container) {
+                    $container['labels'] = array_filter($container['labels'], fn ($key): bool => AgentLabelInventory::allowsLabel((string) $key), ARRAY_FILTER_USE_KEY);
+                }
+                unset($container);
+                $labelInventory = ['complete' => true, 'containers' => $labelContainers];
+            } catch (RuntimeException) {
+                // Label inspection is optional; its failure must not suppress ordinary inventory.
+            }
+            $progress();
             $info = (new ReadDockerHostInfo($this->dockerProcess))->handle();
             $progress();
 
-            return ['volumes' => $inventory, 'containers' => $containerInventory, 'docker_version' => $info['version']];
+            return AgentLabelInventory::bounded(['volumes' => $inventory, 'containers' => $containerInventory, 'docker_version' => $info['version'], 'label_inventory' => $labelInventory]);
         }, intervalSeconds: 1);
     }
 }

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'remote_docker_label_backups' => [
+        'title' => 'Docker-Label-Backups auf entfernten Hosts',
+        'description' => 'Label-Backup-Vorgaben lassen sich pro Host über Einstellungen oder API konfigurieren, auch im reinen Orchestrator-Betrieb. Agenten mit docker-labels-v1 gleichen Deklarationen bei vollständigen Inventaren mit aktiven gemeinsamen oder hosteigenen Zielen ab. Ältere oder unvollständige Inventare erhalten bestehende Jobs und zeigen Synchronisierungsfehler an.',
+    ],
     'remote_backup_groups' => [
         'title' => 'Backup-Gruppen über lokale und entfernte Hosts',
         'description' => 'Gruppen koordinieren lokale, entfernte und gemischte Mitglieder nacheinander mit einem Gesamtergebnis. Die dauerhafte Koordination bewahrt Mitgliedschaft, Quellen und Fehlerstrategie; zugewiesene Arbeit wird während der Wartung abgeschlossen, das nächste Mitglied wartet. Gruppenaktionen funktionieren im Orchestrator-Modus und Mitglieder zeigen ihren Host. Jedes Mitglied durchläuft seinen eigenen Stopp-, Backup- und Neustartzyklus; dies ist kein konsistenter hostübergreifender Snapshot. Bestehende backup-v1-Agenten werden unterstützt.',

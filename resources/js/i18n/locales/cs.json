@@ -1,4 +1,10 @@
 {
+    "dockerLabels.host": "Hostitel Dockeru",
+    "dockerLabels.loading": "Načítání nastavení hostitele…",
+    "dockerLabels.loadFailed": "Vybraného hostitele se nepodařilo načíst. Stále se zobrazuje nastavení předchozího hostitele. Zkuste to znovu.",
+    "dockerLabels.lastSync": "Poslední synchronizace",
+    "dockerLabels.upgradeAgent": "Aktualizujte tohoto agenta pro podporu docker-labels-v1. Nastavení lze uložit, ale stávající úlohy podle štítků zůstanou zachovány do přijetí úplného kompatibilního inventáře.",
+    "dockerLabels.nextInventory": "Změny se použijí při příštím úplném inventáři agenta. Dostupné jsou pouze aktivní sdílené cíle nebo cíle tohoto hostitele.",
   "hostWorkflow.groupRunUnavailable": "Tuto skupinu nyní nelze spustit. Zkontrolujte stav, čekající běhy, spustitelné členy, schopnosti hostitelů, místní spouštění a nastavení údržby.",
   "hostWorkflow.sourceHost": "Zdrojový hostitel Dockeru",
   "hostWorkflow.targetHost": "Cílový hostitel Dockeru",

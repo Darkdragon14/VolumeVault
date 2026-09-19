@@ -1,4 +1,10 @@
 {
+    "dockerLabels.host": "Docker host",
+    "dockerLabels.loading": "Loading host settings…",
+    "dockerLabels.loadFailed": "Could not load the selected host. The previous host settings are still shown. Try again.",
+    "dockerLabels.lastSync": "Last synchronization",
+    "dockerLabels.upgradeAgent": "Upgrade this agent to support docker-labels-v1. Settings can be saved, but existing label jobs are preserved until a complete compatible inventory arrives.",
+    "dockerLabels.nextInventory": "Changes are reconciled on the next complete agent inventory. Only active shared destinations or destinations on this host are available.",
   "hostWorkflow.groupRunUnavailable": "This group cannot run now. Check its status, pending runs, runnable members and their host capabilities, local execution and maintenance settings.",
   "hostWorkflow.sourceHost": "Source Docker host",
   "hostWorkflow.targetHost": "Target Docker host",

@@ -231,6 +231,100 @@ PHP, ['children' => $group['children'], 'endpoint' => $endpoint, 'password' => $
             $this->assertCount(2, array_unique($archives['keys']));
             $this->assertTrue($archives['sequential']);
             $this->assertSame(2, $archives['operations']);
+
+            $labelVolume = 'label-managed-data';
+            $this->writeMarker($engines['a'], $labelVolume, $marker);
+            $this->writeMarker($engines['b'], $labelVolume, $sentinel);
+            $this->docker(['exec', $engines['a'], 'docker', 'run', '-d', '--pull=never', '--name', 'label-managed-app',
+                '-v', $labelVolume.':/data', '--label', 'dev.darkdragon14.volumevault.enable=true',
+                '--label', 'dev.darkdragon14.volumevault.backup.mount=/data',
+                '--entrypoint', 'sh', self::OFFEN_IMAGE, '-c', 'sleep 3600']);
+            $this->control($server, <<<'PHP'
+$destination = App\Models\BackupDestination::where('name', 'Isolated MinIO')->firstOrFail();
+App\Models\DockerLabelBackupSetting::current($input['host'])->update(['enabled' => true, 'backup_destination_id' => $destination->id]);
+$result = ['enabled' => true];
+PHP, ['host' => $hosts['a']]);
+            $beforeLabels = $this->hostIdentity($server, $hosts['a']);
+            // A normal inventory is sent every 300 seconds. Restart the isolated
+            // agent to collect this newly created fixture immediately.
+            $this->docker(['restart', $agents['a']]);
+            $labelJob = [];
+            $this->waitFor(function () use ($server, $labelVolume, $hosts, $beforeLabels, &$labelJob): bool {
+                $labelJob = $this->control($server, <<<'PHP'
+$jobs = App\Models\BackupJob::where('configuration_source', 'docker_label')->where('volume_name', $input['volume'])->get();
+$host = App\Models\DockerHost::findOrFail($input['host']);
+$result = ['id' => $jobs->first()?->id, 'hosts' => $jobs->pluck('docker_host_id')->all(), 'sequence' => $host->agent_inventory_sequence];
+PHP, ['volume' => $labelVolume, 'host' => $hosts['a']]);
+
+                return $labelJob['sequence'] > $beforeLabels['sequence'] && $labelJob['id'] !== null;
+            }, 'real agent label inventory creates a host-scoped job', 90,
+                fn (): array => $this->labelDiagnostics($server, $agents['a'], $hosts['a'], $labelVolume));
+            $this->assertSame([$hosts['a']], $labelJob['hosts']);
+            $this->assertGreaterThan($beforeLabels['sequence'], $labelJob['sequence']);
+            $this->assertSame($beforeLabels['instance'], $this->hostIdentity($server, $hosts['a'])['instance']);
+            $labelBackup = $this->control($server, <<<'PHP'
+$job = App\Models\BackupJob::findOrFail($input['job']);
+$run = app(App\Actions\Backup\CreateBackupRun::class)->handle($job, 'manual');
+app(App\Actions\Runs\DispatchQueuedRun::class)->handle($run);
+$result = ['id' => $run->id];
+PHP, ['job' => $labelJob['id']]);
+            $completedLabelBackup = $this->waitForRun($server, 'backup', $labelBackup['id']);
+            $this->assertSame($hosts['a'], $completedLabelBackup['host']);
+            $this->assertGreaterThan(0, $completedLabelBackup['size']);
+            $labelArchive = $this->control($server, <<<'PHP'
+$s3 = new Aws\S3\S3Client(['version' => 'latest', 'region' => 'us-east-1', 'endpoint' => $input['endpoint'], 'use_path_style_endpoint' => true, 'credentials' => ['key' => 'backup', 'secret' => $input['password']]]);
+$archive = gzdecode((string) $s3->getObject(['Bucket' => 'execution-backups', 'Key' => $input['key']])['Body']);
+$result = ['has_a' => str_contains($archive, $input['marker']), 'has_b' => str_contains($archive, $input['sentinel'])];
+PHP, ['endpoint' => $endpoint, 'password' => $password, 'key' => $completedLabelBackup['key'], 'marker' => $marker, 'sentinel' => $sentinel]);
+            $this->assertSame(['has_a' => true, 'has_b' => false], $labelArchive);
+
+            $this->control($server, <<<'PHP'
+$result = app(App\Services\Agents\AgentLifecycle::class)->setMaintenance(App\Models\DockerHost::findOrFail($input['host']), true);
+PHP, ['host' => $hosts['a']]);
+            $this->waitFor(function () use ($server, $hosts): bool {
+                return $this->control($server, <<<'PHP'
+$result = app(App\Services\Agents\AgentLifecycle::class)->state(App\Models\DockerHost::findOrFail($input['host']));
+PHP, ['host' => $hosts['a']])['maintenance_ready'];
+            }, 'real agent maintenance acknowledgment after label backup cleanup', 90,
+                fn (): array => $this->labelDiagnostics($server, $agents['a'], $hosts['a'], $labelVolume));
+            $maintenance = $this->control($server, <<<'PHP'
+$before = App\Models\BackupRun::count();
+$blocked = false;
+try {
+    app(App\Actions\Backup\CreateBackupRun::class)->handle(App\Models\BackupJob::findOrFail($input['job']), 'manual');
+} catch (Illuminate\Validation\ValidationException) {
+    $blocked = true;
+}
+$result = ['blocked' => $blocked, 'no_new_run' => $before === App\Models\BackupRun::count()];
+PHP, ['job' => $labelJob['id']]);
+            $this->assertSame(['blocked' => true, 'no_new_run' => true], $maintenance);
+
+            $beforeRemoval = $this->hostIdentity($server, $hosts['a']);
+            $this->docker(['exec', $engines['a'], 'docker', 'rm', '-f', 'label-managed-app']);
+            $this->docker(['restart', $agents['a']]);
+            $removed = [];
+            $this->waitFor(function () use ($server, $hosts, $labelJob, $labelVolume, $beforeRemoval, &$removed): bool {
+                $removed = $this->control($server, <<<'PHP'
+$job = App\Models\BackupJob::findOrFail($input['job']);
+$host = App\Models\DockerHost::findOrFail($input['host']);
+$result = ['sequence' => $host->agent_inventory_sequence, 'status' => $job->status, 'error' => $job->label_reconciliation_error,
+    'pending' => $job->pending_label_reconciliation !== null, 'history' => $job->runs()->where('status', 'success')->count(),
+    'foreign_label_jobs' => App\Models\BackupJob::where('docker_host_id', $input['other'])->where('volume_name', $input['volume'])->where('configuration_source', 'docker_label')->count()];
+PHP, ['job' => $labelJob['id'], 'host' => $hosts['a'], 'other' => $hosts['b'], 'volume' => $labelVolume]);
+
+                return $removed['sequence'] > $beforeRemoval['sequence'] && $removed['status'] === 'error';
+            }, 'complete inventory retires only the removed agent label definition', 90,
+                fn (): array => $this->labelDiagnostics($server, $agents['a'], $hosts['a'], $labelVolume));
+            $this->assertSame('Docker label definition is no longer active.', $removed['error']);
+            $this->assertFalse($removed['pending']);
+            $this->assertSame(1, $removed['history']);
+            $this->assertSame(0, $removed['foreign_label_jobs']);
+            $this->assertSame($marker, $this->readMarker($engines['a'], $labelVolume));
+            $this->assertSame($sentinel, $this->readMarker($engines['b'], $labelVolume));
+            $resumed = $this->control($server, <<<'PHP'
+$result = app(App\Services\Agents\AgentLifecycle::class)->setMaintenance(App\Models\DockerHost::findOrFail($input['host']), false);
+PHP, ['host' => $hosts['a']]);
+            $this->assertFalse($resumed['maintenance_requested']);
         } finally {
             $this->cleanup();
         }
@@ -359,7 +453,7 @@ PHP;
         return json_decode($output, true, flags: JSON_THROW_ON_ERROR);
     }
 
-    private function waitFor(callable $ready, string $stage, int $seconds): void
+    private function waitFor(callable $ready, string $stage, int $seconds, ?callable $diagnostics = null): void
     {
         $deadline = microtime(true) + $seconds;
         do {
@@ -368,7 +462,47 @@ PHP;
             }
             usleep(500000);
         } while (microtime(true) < $deadline);
-        $this->fail('Timed out waiting for '.$stage.'.');
+        $details = $diagnostics === null ? '' : ' Diagnostics: '.json_encode($diagnostics(), JSON_THROW_ON_ERROR);
+        $this->fail('Timed out waiting for '.$stage.'.'.$details);
+    }
+
+    /** Only allowlisted metadata and known credential-free log messages leave the isolated runtime. */
+    private function labelDiagnostics(string $server, string $agent, int $hostId, string $volume): array
+    {
+        $serverState = $this->control($server, <<<'PHP'
+$host = App\Models\DockerHost::findOrFail($input['host']);
+$settings = App\Models\DockerLabelBackupSetting::current($host->id);
+$result = [
+    'host' => $host->only(['agent_inventory_sequence', 'last_inventory_at', 'last_seen_at', 'docker_status', 'agent_capabilities']),
+    'settings' => $settings->only(['enabled', 'last_synced_at', 'last_sync_error']),
+    'maintenance' => app(App\Services\Agents\AgentLifecycle::class)->state($host),
+    'volume_present' => App\Models\DockerVolume::where('docker_host_id', $host->id)->where('name', $input['volume'])->where('exists', true)->exists(),
+    'jobs' => App\Models\BackupJob::where('docker_host_id', $host->id)->where('volume_name', $input['volume'])->get(['id', 'configuration_source', 'status', 'label_reconciliation_error'])->toArray(),
+];
+PHP, ['host' => $hostId, 'volume' => $volume]);
+        $agentState = $this->control($agent, <<<'PHP'
+try {
+    $inventory = app(App\Actions\Docker\CollectAgentInventory::class)->handle(fn () => null);
+    $result = ['collection_succeeded' => true, 'volumes' => count($inventory['volumes']), 'containers' => count($inventory['containers']),
+        'label_inventory_complete' => $inventory['label_inventory']['complete'] ?? null,
+        'label_containers' => count($inventory['label_inventory']['containers'] ?? []),
+        'fixture' => collect($inventory['label_inventory']['containers'] ?? [])->where('name', 'label-managed-app')->map(fn ($container) => [
+            'name' => $container['name'], 'running' => $container['running'], 'mounts' => $container['mounts'],
+            'enabled' => ($container['labels']['dev.darkdragon14.volumevault.enable'] ?? null) === 'true',
+            'mount_selector_matches' => ($container['labels']['dev.darkdragon14.volumevault.backup.mount'] ?? null) === '/data',
+        ])->values()->all()];
+} catch (Throwable $exception) {
+    $result = ['collection_succeeded' => false, 'exception_class' => get_class($exception)];
+}
+PHP);
+        $logs = new Process(['docker', 'logs', '--tail', '50', $agent]);
+        $logs->setTimeout(10)->run();
+        $messages = [];
+        foreach (['Docker inventory unavailable.', 'Agent cycle failed; check connectivity, enrollment, and Docker availability.', 'Agent state is unavailable; exiting to reload the persisted identity.', 'Agent protocol is incompatible with the orchestrator; install a compatible agent image.'] as $message) {
+            $messages[$message] = substr_count($logs->getOutput().$logs->getErrorOutput(), $message);
+        }
+
+        return ['server' => $serverState, 'agent_inventory' => $agentState, 'agent_log_message_counts' => $messages];
     }
 
     /** @param list<string> $arguments */
