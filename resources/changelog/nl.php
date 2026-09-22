@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unified_host_operations' => [
+        'title' => 'Uniforme bewerkingen voor Docker-hosts',
+        'description' => 'Dashboard, inventarissen, taken en geschiedenis tonen standaard alle hosts met hostfilter en zichtbare identiteit. Herstel filtert op doelhost; groepstotalen blijven volledig. Vernieuwen leest geaccepteerde inventarissen en lokale synchronisatie kiest expliciet de lokale host. Bulkback-ups van externe stacks blijven niet ondersteund en onbekende containeraantallen worden als onbekend weergegeven.',
+    ],
     'restore_volume_ownership' => [
         'title' => 'Eigendom van nieuwe herstelvolumes controleren',
         'description' => 'Herstel naar nieuwe volumes houdt het doel vast met een hulpcontainer en controleert het willekeurige eigendomslabel voordat precies die container start. Doelvolumes na een mislukking worden nooit automatisch verwijderd. Inspecteer ze en verwijder ze zo nodig handmatig, of probeer opnieuw met een andere doelnaam; de uitvoeringslogboeken geven de vervolgstappen aan.',

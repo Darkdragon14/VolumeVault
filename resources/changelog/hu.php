@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unified_host_operations' => [
+        'title' => 'Egységes műveletek Docker-gazdagépeken',
+        'description' => 'Az irányítópult, leltárak, feladatok és előzmények alapértelmezetten minden gazdagépet mutatnak szűrővel és látható azonosítással. A visszaállítások cél szerint szűrhetők; a csoportösszesítések teljesek maradnak. A frissítés elfogadott leltárt olvas, a helyi szinkronizálás kifejezetten a helyi gazdagépet célozza. Távoli vermek tömeges mentése nem támogatott; az ismeretlen konténerszám ismeretlenként jelenik meg.',
+    ],
     'restore_volume_ownership' => [
         'title' => 'Az új visszaállítási kötetek tulajdonjogának ellenőrzése',
         'description' => 'Az új kötetre történő visszaállítás segédkonténerrel rögzíti a célt, és ugyanennek a konténernek az indítása előtt ellenőrzi a véletlen tulajdonosi címkét. A sikertelen visszaállítás célköteteit soha nem törli automatikusan. Vizsgálja meg, és szükség esetén kézzel törölje őket, vagy próbálja újra másik célnévvel; a futási napló ismerteti a teendőket.',

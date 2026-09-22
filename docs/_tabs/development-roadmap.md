@@ -36,7 +36,7 @@ docker run --rm -v "$PWD:/app" -w /app composer:2 php artisan test
 ## Current Limitations
 
 - No external identity provider support yet.
-- A Docker TCP endpoint, such as a socket proxy for the local engine, can be configured through `DOCKER_HOST`; multi-host execution uses agents rather than a central list of remote Docker endpoints. Remote backups, restores, remote/mixed backup groups, host-scoped label reconciliation, `destination-v1` operations and `archive-relay-v1` host-local archive transfers are available. This is not full local/remote feature parity: unified inventory views and the secondary workflow audit remain pending.
+- A Docker TCP endpoint, such as a socket proxy for the local engine, can be configured through `DOCKER_HOST`; multi-host execution uses agents rather than a central list of remote Docker endpoints. Remote backups, restores, remote/mixed backup groups, host-scoped label reconciliation, `destination-v1` operations and `archive-relay-v1` host-local archive transfers are available. Unified operational views now default to all hosts with host filters and historical source/target identities. This is not full local/remote feature parity: remote stack bulk backup remains unsupported and the secondary workflow audit remains pending. Stack discovery uses persisted volume labels, unknown container counts remain unknown, and remote refresh reads the last accepted inventory rather than dispatching a sync command.
 - No Kubernetes support.
 - Hybrid notifications use the Shoutrrr Docker image; orchestrator-only notifications use the bundled native CLI without a daemon.
 - Backup archive extraction assumes the archive layout produced by the configured `offen/docker-volume-backup` mount path.

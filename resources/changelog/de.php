@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unified_host_operations' => [
+        'title' => 'Einheitliche Ansichten für alle Docker-Hosts',
+        'description' => 'Dashboard, Inventar, Jobs und Verlauf zeigen standardmäßig alle Hosts mit Hostfilter und sichtbarer Identität. Wiederherstellungen filtern nach Zielhost; Gruppensummen bleiben vollständig. Aktualisieren liest gespeicherte Inventarstände, lokaler Sync adressiert den lokalen Host. Sammelbackups entfernter Stacks bleiben nicht unterstützt; unbekannte Containerzahlen werden als unbekannt angezeigt.',
+    ],
     'restore_volume_ownership' => [
         'title' => 'Eigentümerschaft neuer Wiederherstellungsvolumes prüfen',
         'description' => 'Wiederherstellungen in neue Volumes binden das Ziel an einen Entpack-Hilfscontainer und prüfen vor dessen Start das zufällige Eigentumslabel. Zielvolumes fehlgeschlagener Wiederherstellungen werden niemals automatisch gelöscht. Prüfen und bei Bedarf manuell entfernen oder mit einem anderen Zielnamen erneut versuchen; die Laufprotokolle erklären die nächsten Schritte.',

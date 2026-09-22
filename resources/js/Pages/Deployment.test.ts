@@ -52,7 +52,7 @@ describe('Shared deployment mode', () => {
     });
 
     it.each([
-        ['volumes', Volumes, { volumes: [] }, 'Sync volumes'],
+        ['volumes', Volumes, { volumes: [] }, 'hostScope.syncLocal'],
         ['jobs', BackupJobs, { jobs: pagination, defaultPerPage: 25 }, 'New backup job'],
         ['groups', BackupGroups, { groups: pagination, defaultPerPage: 25 }, 'New backup group'],
         ['stacks', Stacks, {
@@ -61,21 +61,27 @@ describe('Shared deployment mode', () => {
         }, 'Back up stack'],
     ])('hides local %s actions reactively without removing inventory/history', async (_name, component, props, label) => {
         const wrapper = mount(component as any, {
-            props,
+            props: { ...props, ...(_name !== 'groups' ? { hosts: [{ id: 1, name: 'Local', canSync: true }], filters: { docker_host_id: null } } : {}), ...(_name === 'stacks' ? { stacks: [{ ...props.stacks[0], canBackup: true }] } : {}) },
             global: { stubs: { AppLayout: layout, Pagination: true } },
         });
         wrappers.push(wrapper);
         expect(wrapper.text()).toContain(label);
         for (const flag of [false, 0, '0', 'false']) {
             inertia.page.props.deployment = { mode: 'orchestrator', local_execution_enabled: flag };
+            if (_name === 'volumes') await wrapper.setProps({ hosts: [{ id: 1, name: 'Local', canSync: false }] });
+            if (_name === 'stacks') await wrapper.setProps({ stacks: [{ ...props.stacks[0], canBackup: false }] });
             await nextTick();
             expect(wrapper.text()).not.toContain(label);
             expect(wrapper.find('main').exists()).toBe(true);
         }
         inertia.page.props.deployment = { mode: 'hybrid', local_execution_enabled: true };
+        if (_name === 'volumes') await wrapper.setProps({ hosts: [{ id: 1, name: 'Local', canSync: true }] });
+        if (_name === 'stacks') await wrapper.setProps({ stacks: [{ ...props.stacks[0], canBackup: true }] });
         await nextTick();
         expect(wrapper.text()).toContain(label);
         inertia.page.props.can.runDockerActions = false;
+        if (_name === 'volumes') await wrapper.setProps({ hosts: [{ id: 1, name: 'Local', canSync: false }] });
+        if (_name === 'stacks') await wrapper.setProps({ stacks: [{ ...props.stacks[0], canBackup: false }] });
         await nextTick();
         expect(wrapper.text()).not.toContain(label);
         expect(inertia.post).not.toHaveBeenCalled();

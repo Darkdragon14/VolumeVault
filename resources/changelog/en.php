@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unified_host_operations' => [
+        'title' => 'Unified operations across Docker hosts',
+        'description' => 'Dashboard, inventories, jobs and histories default to all hosts with an optional host filter and visible host identity. Restore history filters by target; matching groups retain whole-group totals. Refresh reads accepted inventory snapshots, local sync explicitly targets the local host, and remote stack bulk backup remains unsupported. Unknown container counts are shown as unknown.',
+    ],
     'restore_volume_ownership' => [
         'title' => 'Verify ownership of new restore volumes',
         'description' => 'New-volume restores pin the target with an extraction helper and verify its random ownership label before starting that exact helper. Failed target volumes are never automatically deleted. Inspect them and remove them manually if appropriate, or retry with a different target name; run logs explain the next steps.',

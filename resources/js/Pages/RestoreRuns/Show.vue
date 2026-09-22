@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
+import HostIdentity from '@/Components/HostIdentity.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { Head, Link, usePoll } from '@inertiajs/vue3';
 import { watch } from 'vue';
@@ -29,6 +30,8 @@ const { t, formatDate } = useI18n();
 
         <section class="card p-4 sm:p-5">
             <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div><dt class="label">{{ t('hostWorkflow.sourceHost') }}</dt><dd><HostIdentity :host="run.source_docker_host" /></dd></div>
+                <div><dt class="label">{{ t('hostWorkflow.targetHost') }}</dt><dd><HostIdentity :host="run.target_docker_host" /></dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="run.status" /></dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Mode') }}</dt><dd class="mt-1 text-white">{{ t(run.mode) }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ run.source_volume_name }}</dd></div>

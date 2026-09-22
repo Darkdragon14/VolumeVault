@@ -21,7 +21,7 @@ class LocalInventoryPresentationTest extends TestCase
         $this->createInventory();
         $user = User::factory()->user()->create();
 
-        $this->actingAs($user)->get('/volumes')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->actingAs($user)->get('/volumes?docker_host_id=1')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Volumes/Index')
             ->has('volumes', 4)
             ->where('volumes.0.name', 'app_backed')
@@ -41,7 +41,7 @@ class LocalInventoryPresentationTest extends TestCase
         );
 
         $token = $user->createToken('read-inventory', ['read'])->plainTextToken;
-        $response = $this->withToken($token)->getJson('/api/v1/volumes')->assertOk()
+        $response = $this->withToken($token)->getJson('/api/v1/volumes?docker_host_id=1')->assertOk()
             ->assertJsonCount(4, 'data')
             ->assertJsonPath('data.0.name', 'app_backed')
             ->assertJsonPath('data.0.related_jobs_count', 1)
@@ -61,7 +61,7 @@ class LocalInventoryPresentationTest extends TestCase
     {
         $this->createInventory();
 
-        $this->actingAs(User::factory()->user()->create())->get('/stacks')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->actingAs(User::factory()->user()->create())->get('/stacks?docker_host_id=1')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Stacks/Index')
             ->has('stacks', 1)
             ->where('stacks.0.name', 'app')
@@ -87,7 +87,7 @@ class LocalInventoryPresentationTest extends TestCase
         $this->createInventory();
         $user = User::factory()->user()->create();
 
-        $this->actingAs($user)->get('/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->actingAs($user)->get('/dashboard?docker_host_id=1')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Dashboard')
             ->where('stats.total_volumes', 4)
             ->where('stats.existing_volumes', 3)
@@ -98,7 +98,7 @@ class LocalInventoryPresentationTest extends TestCase
         );
 
         $token = $user->createToken('read-inventory', ['read'])->plainTextToken;
-        $this->withToken($token)->getJson('/api/v1/dashboard')->assertOk()
+        $this->withToken($token)->getJson('/api/v1/dashboard?docker_host_id=1')->assertOk()
             ->assertJsonPath('data.stats.total_volumes', 4)
             ->assertJsonPath('data.stats.existing_volumes', 3)
             ->assertJsonPath('data.stats.missing_volumes', 1)
@@ -119,9 +119,9 @@ class LocalInventoryPresentationTest extends TestCase
         ]);
         $user = User::factory()->user()->create();
 
-        $this->actingAs($user)->get('/volumes')->assertOk()->assertInertia(fn (Assert $page) => $page->has('volumes', 0));
-        $this->get('/stacks')->assertOk()->assertInertia(fn (Assert $page) => $page->has('stacks', 0));
-        $this->get('/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->actingAs($user)->get('/volumes?docker_host_id=1')->assertOk()->assertInertia(fn (Assert $page) => $page->has('volumes', 0));
+        $this->get('/stacks?docker_host_id=1')->assertOk()->assertInertia(fn (Assert $page) => $page->has('stacks', 0));
+        $this->get('/dashboard?docker_host_id=1')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('stats.total_volumes', 0)
             ->where('stats.existing_volumes', 0)
             ->where('stats.missing_volumes', 0)
@@ -131,8 +131,8 @@ class LocalInventoryPresentationTest extends TestCase
         );
 
         $token = $user->createToken('read-inventory', ['read'])->plainTextToken;
-        $this->withToken($token)->getJson('/api/v1/volumes')->assertOk()->assertJsonCount(0, 'data');
-        $this->withToken($token)->getJson('/api/v1/dashboard')->assertOk()
+        $this->withToken($token)->getJson('/api/v1/volumes?docker_host_id=1')->assertOk()->assertJsonCount(0, 'data');
+        $this->withToken($token)->getJson('/api/v1/dashboard?docker_host_id=1')->assertOk()
             ->assertJsonPath('data.stats.total_volumes', 0)
             ->assertJsonPath('data.stats.existing_volumes', 0)
             ->assertJsonPath('data.stats.missing_volumes', 0)

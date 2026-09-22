@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unified_host_operations' => [
+        'title' => 'Operazioni unificate tra host Docker',
+        'description' => 'Dashboard, inventari, processi e cronologie mostrano tutti gli host per impostazione predefinita, con filtro e identità visibili. I ripristini si filtrano per destinazione e i totali dei gruppi restano completi. Aggiorna legge gli inventari accettati; la sincronizzazione locale indica esplicitamente l’host locale. I backup in blocco degli stack remoti restano non supportati e i conteggi sconosciuti sono indicati come tali.',
+    ],
     'restore_volume_ownership' => [
         'title' => 'Verifica della proprietà dei nuovi volumi di ripristino',
         'description' => 'I ripristini in nuovi volumi vincolano la destinazione a un contenitore ausiliario e verificano l’etichetta di proprietà casuale prima di avviare quello stesso contenitore. I volumi di destinazione dopo un errore non vengono mai eliminati automaticamente. Ispezionarli e rimuoverli manualmente se opportuno, oppure riprovare con un altro nome; i log indicano i passi successivi.',

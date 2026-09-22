@@ -12,6 +12,14 @@ This makes the project friendly to automation tools, monitoring scripts, dashboa
 
 Volumes, jobs and backup runs include `docker_host_id`; restore runs include `source_docker_host_id` and `target_docker_host_id`. Backup job creation accepts `docker_host_id` (default `1`, the built-in local host); updates preserve the current host when omitted. Changing a source or host is refused while a run or cleanup remains outstanding. Inventory validation always uses the selected host. Remote jobs can be standalone or grouped, including groups spanning multiple agents or local and remote members. Remote Docker-label reconciliation requires agents advertising `docker-labels-v1`.
 
+### Operational host scope
+
+Dashboard, volume, stack, backup-job and run lists default to **all hosts**. Omit `docker_host_id` for all hosts, or supply an existing integer host ID (`1` is local); the literal `all` is rejected. Collections return safe `hosts` summaries and `filters.docker_host_id` alongside `data`; the dashboard places these inside `data`.
+
+Backup histories use the execution host captured on each run. Restore histories filter by `target_docker_host_id` and expose both `source_docker_host` and `target_docker_host`. Matching a historical group member includes its entire group; aggregate counts are whole-group counts. Volume and stack identities include the host, and volume `create_job_url` includes both volume name and host ID.
+
+Respect record/host `canSync`, `canBackup` and `backup_unavailable_reason`. The UI explicitly sends `{ "async": true, "docker_host_id": 1 }` when synchronizing local volumes. `POST /api/v1/volumes/sync` preserves the legacy synchronous local sync and HTTP `200` response when the body is omitted. Queued synchronization is opt-in: send `{ "async": true, "docker_host_id": 1 }` for an HTTP `202` response. Remote inventory refresh only reads the last accepted agent snapshot; it does not dispatch a sync command. Stack metadata comes from persisted Compose/Swarm volume labels (`inventory_basis: volume_labels`), with `container_count: null` meaning unknown. Remote stack bulk backup is unavailable (`remote_stack_backup_unsupported`); individual remote volume jobs remain supported when eligible.
+
 ### Docker-label backup settings
 
 Administrators can read `GET /api/v1/settings/docker-label-backups?docker_host_id=2` with the `read` token ability and update `PUT /api/v1/settings/docker-label-backups` with the `write` ability. Include `docker_host_id` in the update body; omitting the selector defaults to the built-in local host (`1`) for both endpoints. Send the full settings fields when updating, including `enabled`, `backup_destination_id` and schedule/retention/filter/notification defaults.

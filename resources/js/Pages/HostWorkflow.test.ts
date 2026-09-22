@@ -55,7 +55,7 @@ const volumes = [
 ];
 const wrappers: ReturnType<typeof mount>[] = [];
 const render = (component: any, props: any) => {
-    const wrapper = mount(component, { props, global: { stubs: {
+    const wrapper = mount(component, { props: { ...([VolumeIndex, StackIndex, JobIndex, JobShow].includes(component) ? { hosts: [{ ...remote, canBackup: true }], filters: { docker_host_id: null } } : {}), ...props }, global: { stubs: {
         AppLayout: { template: '<main><slot name="title-actions" /><slot name="actions" /><slot /></main>' },
         InfoTooltip: true, Pagination: true, StatusBadge: true,
     } } });
@@ -88,7 +88,7 @@ describe('Host-scoped backup and restore workflows', () => {
     it('includes the local host in both volume shortcut links', () => {
         inertia.page.props.deployment = { mode: 'hybrid', local_execution_enabled: true };
         inertia.page.props.can.runDockerActions = true;
-        const wrapper = render(VolumeIndex, { volumes: [{ name: 'app_data', docker_host_id: 1, exists: true, backup_jobs: [] }] });
+        const wrapper = render(VolumeIndex, { volumes: [{ name: 'app_data', docker_host_id: 1, exists: true, backup_jobs: [], canBackup: true, create_job_url: '/backup-jobs/create?volume=app_data&docker_host_id=1' }] });
         const links = wrapper.findAll('a[href^="/backup-jobs/create?"]');
         expect(links).toHaveLength(2);
         for (const link of links) expect(link.attributes('href')).toBe('/backup-jobs/create?volume=app_data&docker_host_id=1');
@@ -318,7 +318,7 @@ describe('Host-scoped backup and restore workflows', () => {
         expect(button(wrapper, 'Run now').attributes('disabled')).toBeUndefined();
         await button(wrapper, 'Run now').trigger('click');
         expect(inertia.post).toHaveBeenCalledWith('/backup-jobs/7/run');
-        await wrapper.setProps({ job: { ...job, docker_host: { ...remote, maintenance_requested: true } } });
+        await wrapper.setProps({ hosts: [{ ...remote, maintenance_requested: true, canBackup: false }] });
         expect(button(wrapper, 'Run now').attributes('disabled')).toBeDefined();
     });
 

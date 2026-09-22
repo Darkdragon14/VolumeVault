@@ -4,7 +4,9 @@ namespace App\Services\Volumes;
 
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
+use App\Services\Agents\OperationalHostScope;
 use Illuminate\Support\Collection;
 
 class VolumeBackupSummaries
@@ -25,9 +27,10 @@ class VolumeBackupSummaries
      * @param  Collection<int, DockerVolume>  $volumes
      * @return Collection<int, array<string, mixed>>
      */
-    public function forVolumes(Collection $volumes): Collection
+    public function forVolumes(Collection $volumes, ?OperationalHostScope $scope = null): Collection
     {
         $volumes = $volumes->values();
+        $scope ??= app(OperationalHostScope::class);
         $volumeNames = $volumes->pluck('name')->filter()->values();
         $hostIds = $volumes->pluck('docker_host_id')->unique()->values();
 
@@ -70,13 +73,20 @@ class VolumeBackupSummaries
                 ->get()
                 ->groupBy(fn (BackupRun $run): string => $run->docker_host_id.':'.$run->summary_volume_name);
 
-        return $volumes->map(function (DockerVolume $volume) use ($jobsByVolume, $runsByVolume): array {
+        return $volumes->map(function (DockerVolume $volume) use ($jobsByVolume, $runsByVolume, $scope): array {
             $key = $volume->docker_host_id.':'.$volume->name;
             $jobs = $jobsByVolume->get($key, collect());
             $lastSuccessfulRun = $runsByVolume->get($key, collect())->first();
+            $host = $scope->summary((int) $volume->docker_host_id);
 
             return [
                 ...$volume->toArray(),
+                'identity' => $key,
+                'docker_host' => $host,
+                'canSync' => $host['canSync'] ?? false,
+                'canBackup' => $volume->getAttribute('exists') && ($host['canBackup'] ?? false),
+                'backup_unavailable_reason' => ! $volume->getAttribute('exists') ? 'volume_missing' : ($host['backup_unavailable_reason'] ?? null),
+                'create_job_url' => route('backup-jobs.create', ['volume' => $volume->name, 'docker_host_id' => $volume->docker_host_id]),
                 'stack_name' => $this->stackName($volume),
                 'related_jobs_count' => $jobs->count(),
                 'backup_state' => $this->backupState($jobs->count(), $lastSuccessfulRun),
@@ -92,9 +102,9 @@ class VolumeBackupSummaries
      * @param  Collection<int, DockerVolume>  $volumes
      * @return Collection<int, array<string, mixed>>
      */
-    public function forStacks(Collection $volumes): Collection
+    public function forStacks(Collection $volumes, ?OperationalHostScope $scope = null): Collection
     {
-        return $this->forVolumes($volumes)
+        return $this->forVolumes($volumes, $scope)
             ->groupBy(fn (array $volume): string => $volume['docker_host_id'].':'.($volume['stack_name'] ?? ''))
             ->map(function (Collection $volumes): array {
                 $existingVolumes = $volumes->where('exists', true);
@@ -106,7 +116,14 @@ class VolumeBackupSummaries
 
                 return [
                     'name' => $volumes->first()['stack_name'],
+                    'inventory_basis' => 'volume_labels',
+                    'container_count' => null,
                     'docker_host_id' => $volumes->first()['docker_host_id'],
+                    'identity' => $volumes->first()['docker_host_id'].':'.($volumes->first()['stack_name'] ?? ''),
+                    'docker_host' => $volumes->first()['docker_host'],
+                    'canSync' => $volumes->first()['canSync'],
+                    'canBackup' => $volumes->first()['docker_host_id'] === DockerHost::LOCAL_ID && $existingVolumes->contains('canBackup', true),
+                    'backup_unavailable_reason' => $volumes->first()['docker_host_id'] !== DockerHost::LOCAL_ID ? 'remote_stack_backup_unsupported' : ($volumes->first()['docker_host']['backup_unavailable_reason'] ?? ($existingVolumes->isEmpty() ? 'no_volumes' : null)),
                     'total_volumes' => $volumes->count(),
                     'existing_volumes' => $existingVolumes->count(),
                     'missing_volumes' => $volumes->where('exists', false)->count(),

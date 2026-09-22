@@ -28,6 +28,7 @@ use App\Models\DockerVolume;
 use App\Models\JobAlertConfig;
 use App\Models\NotificationChannel;
 use App\Services\Agents\AgentExecution;
+use App\Services\Agents\OperationalHostScope;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use App\Support\DeploymentMode;
 use Illuminate\Http\Request;
@@ -49,11 +50,11 @@ class BackupJobController extends Controller
         private readonly DeleteBackupJob $deleteBackupJob,
     ) {}
 
-    public function index(Request $request): Response
+    public function index(Request $request, OperationalHostScope $scope): Response
     {
         $perPage = $this->perPageForRequest($request);
 
-        $query = BackupJob::with(['destination', 'notificationChannels', 'dockerHost']);
+        $query = $scope->query(BackupJob::class)->with(['destination', 'notificationChannels', 'dockerHost']);
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search): void {
@@ -73,7 +74,8 @@ class BackupJobController extends Controller
         ($this->applyBackupJobSort)($query, $request->query('sort'), $request->query('direction'));
 
         return Inertia::render('BackupJobs/Index', [
-            'jobs' => $this->paginateForInertia($query, $perPage, fn (BackupJob $job): array => $this->serializeJob($job)),
+            ...$scope->props(),
+            'jobs' => $this->paginateForInertia($query, $perPage, fn (BackupJob $job): array => [...$this->serializeJob($job), 'docker_host' => $scope->summary($job->docker_host_id)]),
             'defaultPerPage' => $request->user()->default_per_page ?? 10,
         ]);
     }
@@ -127,20 +129,21 @@ class BackupJobController extends Controller
         return redirect()->route('backup-jobs.index')->with('success', 'Backup job created.');
     }
 
-    public function show(Request $request, BackupJob $backupJob): Response
+    public function show(Request $request, BackupJob $backupJob, OperationalHostScope $scope): Response
     {
-        $backupJob->load(['destination', 'notificationChannels']);
+        $backupJob->load(['destination', 'notificationChannels', 'dockerHost']);
         $perPage = $this->perPageForRequest($request);
 
         return Inertia::render('BackupJobs/Show', [
+            ...$scope->props(),
             'job' => $this->serializeJob($backupJob),
-            'lastSuccessfulBackup' => $backupJob->runs()
+            'lastSuccessfulBackup' => $scope->apply($backupJob->runs()->getQuery())
                 ->where('status', BackupRun::STATUS_SUCCESS)
                 ->orderByDesc('finished_at')
                 ->orderByDesc('created_at')
-                ->first(['id', 'finished_at', 'backup_key', 'backup_size_bytes']),
-            'runs' => $this->paginateForInertia($backupJob->runs()->with('initiatedBy:id,name,email'), $perPage, null, 'runs_page'),
-            'restoreRuns' => $this->paginateForInertia($backupJob->restoreRuns()->with('initiatedBy:id,name,email'), $perPage, null, 'restores_page'),
+                ->first(['id', 'docker_host_id', 'source_type_snapshot', 'source_volume_name', 'source_host_path', 'finished_at', 'backup_key', 'backup_size_bytes']),
+            'runs' => $this->paginateForInertia($scope->apply($backupJob->runs()->getQuery())->with('job', 'initiatedBy:id,name,email'), $perPage, $scope->serialize(...), 'runs_page'),
+            'restoreRuns' => $this->paginateForInertia($scope->apply($backupJob->restoreRuns()->getQuery())->with('initiatedBy:id,name,email'), $perPage, $scope->serialize(...), 'restores_page'),
         ]);
     }
 

@@ -240,7 +240,7 @@ class AgentLifecycleTest extends TestCase
     }
 
     #[DataProvider('deploymentModes')]
-    public function test_shared_deployment_and_localhost_metrics(string $mode, bool $enabled): void
+    public function test_shared_deployment_retains_local_inventory_snapshots_when_execution_is_disabled(string $mode, bool $enabled): void
     {
         $this->admin();
         config(['volumevault.mode' => $mode]);
@@ -249,7 +249,9 @@ class AgentLifecycleTest extends TestCase
             ->where('deployment.mode', $mode)->where('deployment.local_execution_enabled', $enabled)
             ->where('hosts.0.role', $mode)->where('hosts.0.local_execution_enabled', $enabled)
             ->where('hosts.0.container_count', null)->where('hosts.0.agent_version', 'v2.3.0')
-            ->where('hosts.0.volume_count', $enabled ? 1 : 0));
+            ->where('hosts.0.volume_count', 1)
+            ->where('hosts.0.canSync', $enabled)
+            ->where('hosts.0.availability', $enabled ? 'available' : 'local_execution_disabled'));
     }
 
     public static function deploymentModes(): array

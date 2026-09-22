@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
+import HostScope from '@/Components/HostScope.vue';
+import HostIdentity from '@/Components/HostIdentity.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { useDeployment } from '@/Composables/useDeployment';
 import Pagination from '@/Components/Pagination.vue';
@@ -14,6 +16,8 @@ interface PaginatedData<T> {
 }
 
 const props = defineProps<{
+    hosts: any[];
+    filters: { docker_host_id: number | null };
     job: any;
     lastSuccessfulBackup?: any | null;
     runs: PaginatedData<any>;
@@ -22,9 +26,10 @@ const props = defineProps<{
 
 const activeTab = ref<'runs' | 'restores'>('runs');
 
-const { canManageBackups, canExecute, resourceHost, localExecutionEnabled } = useDeployment();
+const { canManageBackups, localExecutionEnabled } = useDeployment();
 const canManageJob = computed(() => canManageBackups.value && (Number(props.job.docker_host_id ?? 1) !== 1 || localExecutionEnabled.value));
-const canRunJob = computed(() => canExecute(resourceHost(props.job), 'backup-v1'));
+const jobHost = computed(() => props.hosts?.find(host => host.id === props.job.docker_host_id));
+const canRunJob = computed(() => jobHost.value?.canBackup === true);
 const { t, formatDate } = useI18n();
 const sourceLabel = (job: any) => job.source_label || job.host_path || job.volume_name || t('Unknown');
 const sourceTypeLabel = (job: any) => job.source_type === 'host_path' ? t('Host path') : t('Docker volume');
@@ -53,7 +58,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
             <section class="card p-4 sm:p-5 lg:col-span-2">
                 <h2 class="mb-4 text-lg font-semibold">{{ t('Job info') }}</h2>
                 <dl class="grid gap-4 sm:grid-cols-2">
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('hostWorkflow.sourceHost') }}</dt><dd class="mt-1 break-words text-white">{{ resourceHost(job)?.name ?? `#${job.docker_host_id ?? 1}` }}</dd></div>
+                    <div><dt class="text-xs uppercase text-slate-400">{{ t('hostWorkflow.sourceHost') }}</dt><dd class="mt-1 break-words text-white"><HostIdentity :host="jobHost" :reason="jobHost?.backup_unavailable_reason" /></dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="job.status" /></dd></div>
                     <div v-if="job.configuration_source === 'docker_label'"><dt class="text-xs uppercase text-slate-400">{{ t('Configuration') }}</dt><dd class="mt-1 text-sky-200">{{ t('Managed by Docker labels') }}</dd></div>
                     <div><dt class="text-xs uppercase text-slate-400">{{ t('Source type') }}</dt><dd class="mt-1 text-white">{{ sourceTypeLabel(job) }}</dd></div>
@@ -74,6 +79,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
             </section>
         </div>
 
+        <HostScope :hosts="hosts" :filters="filters" preserve-state />
         <section class="card mt-6 overflow-hidden">
             <div class="flex gap-1 border-b border-white/10 p-2" role="tablist">
                 <button
@@ -102,6 +108,8 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                 <div v-if="runs.data.length">
                     <div class="divide-y divide-white/10 md:hidden">
                         <article v-for="run in runs.data" :key="run.id" class="space-y-3 p-4">
+                            <HostIdentity :host="run.docker_host" />
+                            <p class="break-all text-sm text-slate-400">{{ run.source_name }}</p>
                             <div class="flex items-center justify-between gap-3">
                                 <StatusBadge :status="run.status" />
                                 <Link :href="`/backup-runs/${run.id}`" class="text-sm text-sky-300 hover:text-sky-200">{{ t('View logs') }}</Link>
@@ -122,7 +130,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                         </thead>
                         <tbody class="divide-y divide-white/10">
                             <tr v-for="run in runs.data" :key="run.id">
-                                <td class="px-4 py-3"><StatusBadge :status="run.status" /></td>
+                                <td class="px-4 py-3"><StatusBadge :status="run.status" /><HostIdentity :host="run.docker_host" /><p class="break-all text-xs text-slate-400">{{ run.source_name }}</p></td>
                                 <td class="px-4 py-3 text-slate-300">{{ t(run.trigger) }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ run.initiated_by?.name ?? '—' }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ formatDate(run.started_at) }}</td>
@@ -133,7 +141,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                         </tbody>
                     </table>
                     </div>
-                    <Pagination :data="runs" :base-url="`/backup-jobs/${job.id}`" page-param="runs_page" />
+                    <Pagination :data="runs" :base-url="`/backup-jobs/${job.id}`" page-param="runs_page" :extra-params="{ docker_host_id: filters?.docker_host_id ?? undefined }" />
                 </div>
                 <p v-else class="p-5 text-sm text-slate-400">{{ t('No runs yet.') }}</p>
             </div>
@@ -142,6 +150,8 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                 <div v-if="restoreRuns.data.length">
                     <div class="divide-y divide-white/10 md:hidden">
                         <article v-for="run in restoreRuns.data" :key="run.id" class="space-y-3 p-4">
+                            <p class="text-xs text-slate-400">{{ t('hostWorkflow.sourceHost') }}</p><HostIdentity :host="run.source_docker_host" />
+                            <p class="text-xs text-slate-400">{{ t('hostWorkflow.targetHost') }}</p><HostIdentity :host="run.target_docker_host" />
                             <div class="flex items-center justify-between gap-3">
                                 <StatusBadge :status="run.status" />
                                 <Link :href="`/restore-runs/${run.id}`" class="text-sm text-sky-300 hover:text-sky-200">{{ t('View details') }}</Link>
@@ -165,8 +175,8 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                             <tr v-for="run in restoreRuns.data" :key="run.id">
                                 <td class="px-4 py-3"><StatusBadge :status="run.status" /></td>
                                 <td class="px-4 py-3 text-slate-300">{{ t(run.mode) }}</td>
-                                <td class="px-4 py-3 break-all text-slate-300">{{ run.source_volume_name }}</td>
-                                <td class="px-4 py-3 break-all text-slate-300">{{ run.target_volume_name }}</td>
+                                <td class="px-4 py-3 break-all text-slate-300">{{ run.source_volume_name }}<HostIdentity :host="run.source_docker_host" /></td>
+                                <td class="px-4 py-3 break-all text-slate-300">{{ run.target_volume_name }}<HostIdentity :host="run.target_docker_host" /></td>
                                 <td class="px-4 py-3 text-slate-300">{{ run.initiated_by?.name ?? '—' }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ formatDate(run.started_at) }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ run.duration_seconds ?? '-' }}s</td>
@@ -175,7 +185,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                         </tbody>
                     </table>
                     </div>
-                    <Pagination :data="restoreRuns" :base-url="`/backup-jobs/${job.id}`" page-param="restores_page" />
+                    <Pagination :data="restoreRuns" :base-url="`/backup-jobs/${job.id}`" page-param="restores_page" :extra-params="{ docker_host_id: filters?.docker_host_id ?? undefined }" />
                 </div>
                 <p v-else class="p-5 text-sm text-slate-400">{{ t('No restores yet.') }}</p>
             </div>

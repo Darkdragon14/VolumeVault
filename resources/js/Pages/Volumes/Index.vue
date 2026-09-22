@@ -2,16 +2,17 @@
 import StatusBadge from '@/Components/StatusBadge.vue';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { useDeployment } from '@/Composables/useDeployment';
+import HostScope from '@/Components/HostScope.vue';
+import HostIdentity from '@/Components/HostIdentity.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { computed, ref } from 'vue';
 import { matchesSearch, readFiltersFromUrl, uniqueSortedOptions, useListFilters, useUrlFilters } from '@/Composables/useListFilters';
 import { formatBytes } from '@/Composables/useFormatBytes';
 
-const props = defineProps<{ volumes: any[] }>();
+const props = defineProps<{ volumes: any[]; hosts: any[]; filters: { docker_host_id: number | null } }>();
 
-const { localDockerPermissions: can } = useDeployment();
+const syncHost = computed(() => props.hosts?.find(host => host.canSync && (!props.filters.docker_host_id || host.id === props.filters.docker_host_id)));
 const { t, formatDate } = useI18n();
 const search = ref('');
 const statusFilter = ref('');
@@ -54,8 +55,8 @@ const backupStateClass = (state: string) => ({
     unprotected: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
 }[state] || 'border-slate-300/20 bg-slate-300/10 text-slate-200');
 
-const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURIComponent(volumeName)}`;
-const sync = () => router.post('/volumes/sync');
+const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volume.name)}&docker_host_id=${volume.docker_host_id}`;
+const sync = () => syncHost.value && router.post('/volumes/sync', { async: true, docker_host_id: 1 });
 </script>
 
 <template>
@@ -74,10 +75,11 @@ const sync = () => router.post('/volumes/sync');
                         </button>
                     </div>
                 </div>
-                <button v-if="can.runDockerActions" class="btn-primary shrink-0" @click="sync">{{ t('Sync volumes') }}</button>
+                <button v-if="syncHost" class="btn-primary shrink-0" @click="sync">{{ t('hostScope.syncLocal') }}</button>
             </div>
         </template>
 
+        <HostScope :hosts="hosts" :filters="filters" :query="{ search, status: statusFilter, driver: driverFilter, stack: stackFilter, backup_status: backupFilter }" />
         <div v-if="volumes.length && filtersVisible" class="card mb-4 p-4">
             <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <label class="space-y-1">
@@ -124,6 +126,7 @@ const sync = () => router.post('/volumes/sync');
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <h2 class="break-all font-semibold text-white">{{ volume.name }}</h2>
+                                <HostIdentity :host="volume.docker_host" :reason="volume.backup_unavailable_reason" />
                                 <p class="mt-1 break-words text-sm text-slate-400">{{ volume.stack_name || t('No stack') }}</p>
                             </div>
                             <div class="flex shrink-0 flex-col items-end gap-2">
@@ -138,8 +141,8 @@ const sync = () => router.post('/volumes/sync');
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Last seen') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(volume.last_seen_at) }}</dd></div>
                         </dl>
                         <div class="flex flex-wrap gap-2">
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}&docker_host_id=${volume.docker_host_id ?? 1}`" />
-                            <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume.name)" />
+                            <ActionIcon v-if="volume.canBackup" :label="t('Create backup job')" icon="archive" :href="volume.create_job_url" />
+                            <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume)" />
                         </div>
                     </article>
                 </div>
@@ -158,7 +161,7 @@ const sync = () => router.post('/volumes/sync');
                         </thead>
                         <tbody class="divide-y divide-white/10">
                             <tr v-for="volume in filteredVolumes" :key="volume.id" class="hover:bg-slate-100 dark:hover:bg-white/[0.03]">
-                                <td class="px-4 py-3 font-medium text-white">{{ volume.name }}</td>
+                                <td class="px-4 py-3 font-medium text-white">{{ volume.name }}<HostIdentity :host="volume.docker_host" :reason="volume.backup_unavailable_reason" /></td>
                                 <td class="px-4 py-3 text-slate-300">{{ volume.stack_name || t('No stack') }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ volume.driver || t('Unknown') }}</td>
                                 <td class="px-4 py-3"><StatusBadge :status="volume.exists ? 'active' : 'error'" /></td>
@@ -170,8 +173,8 @@ const sync = () => router.post('/volumes/sync');
                                 <td class="px-4 py-3 text-slate-300">{{ formatDate(volume.last_seen_at) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}&docker_host_id=${volume.docker_host_id ?? 1}`" />
-                                        <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume.name)" />
+                                        <ActionIcon v-if="volume.canBackup" :label="t('Create backup job')" icon="archive" :href="volume.create_job_url" />
+                                        <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume)" />
                                     </div>
                                 </td>
                             </tr>
@@ -186,7 +189,7 @@ const sync = () => router.post('/volumes/sync');
             <div v-else class="p-10 text-center">
                 <p class="text-lg font-semibold">{{ t('No Docker volumes found.') }}</p>
                 <p class="mt-2 text-sm text-slate-400">{{ t('Make sure VolumeVault can access the Docker socket.') }}</p>
-                <button v-if="can.runDockerActions" class="btn-primary mt-5" @click="sync">{{ t('Sync volumes') }}</button>
+                <button v-if="syncHost" class="btn-primary mt-5" @click="sync">{{ t('hostScope.syncLocal') }}</button>
             </div>
         </div>
     </AppLayout>

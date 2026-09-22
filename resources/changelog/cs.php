@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unified_host_operations' => [
+        'title' => 'Sjednocené operace hostitelů Dockeru',
+        'description' => 'Přehled, inventáře, úlohy a historie standardně zobrazují všechny hostitele s filtrem a viditelnou identitou. Obnovy se filtrují podle cíle; součty skupin zůstávají úplné. Obnovení čte přijaté inventáře a místní synchronizace výslovně cílí na místního hostitele. Hromadné zálohy vzdálených stacků nejsou podporovány a neznámé počty kontejnerů jsou označeny jako neznámé.',
+    ],
     'restore_volume_ownership' => [
         'title' => 'Ověření vlastnictví nových svazků pro obnovu',
         'description' => 'Obnova do nového svazku zajistí cíl pomocným kontejnerem a před spuštěním právě tohoto kontejneru ověří náhodný štítek vlastnictví. Cílové svazky po selhání se nikdy automaticky nemažou. Zkontrolujte je a případně ručně odstraňte, nebo obnovu opakujte s jiným názvem cíle; protokoly běhu vysvětlují další postup.',

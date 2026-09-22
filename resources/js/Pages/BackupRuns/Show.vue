@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
+import HostIdentity from '@/Components/HostIdentity.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { useDeployment } from '@/Composables/useDeployment';
 import { Head, Link, usePoll } from '@inertiajs/vue3';
@@ -27,6 +28,8 @@ usePoll(2000, { only: ['run'] }, { mode: 'rest' });
 
         <section class="card p-4 sm:p-5">
             <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div><dt class="label">{{ t('hostWorkflow.sourceHost') }}</dt><dd><HostIdentity :host="run.docker_host" /></dd></div>
+                <div><dt class="label">{{ t('Source') }}</dt><dd class="break-all">{{ run.source_name }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Job') }}</dt><dd class="mt-1 break-words text-white">{{ run.job.name }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="run.status" /></dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Trigger') }}</dt><dd class="mt-1 text-white">{{ t(run.trigger) }}</dd></div>

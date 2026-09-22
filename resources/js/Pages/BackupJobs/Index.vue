@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
+import HostScope from '@/Components/HostScope.vue';
+import HostIdentity from '@/Components/HostIdentity.vue';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { useDeployment } from '@/Composables/useDeployment';
 import Pagination from '@/Components/Pagination.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
-import { ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 import { readFiltersFromUrl } from '@/Composables/useListFilters';
 
 interface PaginatedData<T> {
@@ -15,13 +17,15 @@ interface PaginatedData<T> {
 }
 
 const props = defineProps<{
+    hosts: any[];
+    filters: { docker_host_id: number | null };
     jobs: PaginatedData<any>;
     defaultPerPage: number;
 }>();
 
-const { canManageBackups, canExecute, resourceHost, localExecutionEnabled } = useDeployment();
+const { canManageBackups, localExecutionEnabled } = useDeployment();
 const canManageJob = (job: any) => canManageBackups.value && (Number(job.docker_host_id ?? 1) !== 1 || localExecutionEnabled.value);
-const canRunJob = (job: any) => canExecute(resourceHost(job), 'backup-v1');
+const canRunJob = (job: any) => job.docker_host?.canBackup === true;
 const { t, formatDate, timezone } = useI18n();
 const search = ref('');
 const statusFilter = ref('');
@@ -29,6 +33,7 @@ const destinationFilter = ref('');
 const sort = ref('created_at');
 const direction = ref('desc');
 const filtersVisible = ref(false);
+const hostNavigationPending = ref(false);
 
 readFiltersFromUrl({ search, status: statusFilter, destination: destinationFilter, sort, direction });
 
@@ -44,7 +49,9 @@ const statuses = ['active', 'paused', 'error', 'running'];
 const sourceLabel = (job: any) => job.source_label || job.host_path || job.volume_name || t('Unknown');
 
 const applyFilters = () => {
+    if (hostNavigationPending.value) return;
     router.get('/backup-jobs', {
+        docker_host_id: props.filters?.docker_host_id ?? undefined,
         search: search.value || undefined,
         status: statusFilter.value || undefined,
         destination: destinationFilter.value || undefined,
@@ -55,12 +62,16 @@ const applyFilters = () => {
 };
 
 let searchTimeout: ReturnType<typeof setTimeout>;
+const cancelPendingSearch = () => clearTimeout(searchTimeout);
+onBeforeUnmount(cancelPendingSearch);
 const onSearchInput = () => {
     clearTimeout(searchTimeout);
+    if (hostNavigationPending.value) return;
     searchTimeout = setTimeout(applyFilters, 300);
 };
 
 const resetFilters = () => {
+    if (hostNavigationPending.value) return;
     search.value = '';
     statusFilter.value = '';
     destinationFilter.value = '';
@@ -68,6 +79,7 @@ const resetFilters = () => {
 };
 
 const sortBy = (field: string) => {
+    if (hostNavigationPending.value) return;
     if (sort.value === field) {
         direction.value = direction.value === 'asc' ? 'desc' : 'asc';
     } else {
@@ -103,7 +115,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
         <template #actions>
             <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                 <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-                    <input v-model="search" class="input sm:w-72" data-list-search :aria-label="t('Search')" :placeholder="t('Search jobs, sources, destinations')" @input="onSearchInput">
+                    <input v-model="search" :disabled="hostNavigationPending" class="input sm:w-72" data-list-search :aria-label="t('Search')" :placeholder="t('Search jobs, sources, destinations')" @input="onSearchInput">
                     <div class="flex items-center gap-3">
                         <button type="button" class="btn-secondary gap-2" :aria-expanded="filtersVisible" :aria-label="filtersVisible ? t('Hide filters') : t('Show filters')" @click="filtersVisible = !filtersVisible">
                             <span>{{ t('Filters') }}</span>
@@ -121,24 +133,25 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
             </div>
         </template>
 
+        <HostScope :hosts="hosts" :filters="filters" :query="{ search, status: statusFilter, destination: destinationFilter, sort, direction }" @before-navigate="cancelPendingSearch" @navigating="hostNavigationPending = $event" />
         <p class="mb-3 text-sm text-slate-400">{{ t('Times are shown in {timezone}.', { timezone }) }}</p>
 
         <div v-if="filtersVisible" class="card mb-4 p-4">
             <div class="grid gap-3 md:grid-cols-2">
                 <label class="space-y-1">
                     <span class="label">{{ t('Status') }}</span>
-                    <select v-model="statusFilter" class="input" @change="applyFilters">
+                    <select v-model="statusFilter" :disabled="hostNavigationPending" class="input" @change="applyFilters">
                         <option value="">{{ t('All statuses') }}</option>
                         <option v-for="status in statuses" :key="status" :value="status">{{ t(status) }}</option>
                     </select>
                 </label>
                 <label class="space-y-1">
                     <span class="label">{{ t('Destination') }}</span>
-                    <input v-model="destinationFilter" class="input" :placeholder="t('Filter by destination')" @input="onSearchInput">
+                    <input v-model="destinationFilter" :disabled="hostNavigationPending" class="input" :placeholder="t('Filter by destination')" @input="onSearchInput">
                 </label>
             </div>
             <div class="mt-3 flex flex-wrap items-center gap-3">
-                <button type="button" class="btn-secondary" @click="resetFilters">{{ t('Reset filters') }}</button>
+                <button type="button" class="btn-secondary" :disabled="hostNavigationPending" @click="resetFilters">{{ t('Reset filters') }}</button>
             </div>
         </div>
 
@@ -147,7 +160,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                 <div class="grid grid-cols-2 gap-3 border-b border-white/10 p-4 md:hidden">
                     <label class="space-y-1">
                         <span class="label">{{ t('Sort by') }}</span>
-                        <select v-model="sort" class="input" @change="applyFilters">
+                        <select v-model="sort" :disabled="hostNavigationPending" class="input" @change="applyFilters">
                             <option value="created_at">{{ t('Recently created') }}</option>
                             <option value="name">{{ t('Name') }}</option>
                             <option value="next_run_at">{{ t('Next run') }}</option>
@@ -156,7 +169,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                     </label>
                     <label class="space-y-1">
                         <span class="label">{{ t('Direction') }}</span>
-                        <select v-model="direction" class="input" @change="applyFilters">
+                        <select v-model="direction" :disabled="hostNavigationPending" class="input" @change="applyFilters">
                             <option value="asc">{{ t('Ascending') }}</option>
                             <option value="desc">{{ t('Descending') }}</option>
                         </select>
@@ -167,6 +180,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <h2 class="break-words font-semibold text-white">{{ job.name }}</h2>
+                                <HostIdentity :host="job.docker_host" :reason="job.docker_host?.backup_unavailable_reason" />
                                 <span v-if="job.configuration_source === 'docker_label'" class="mt-1 inline-flex rounded-full bg-sky-400/10 px-2 py-0.5 text-xs text-sky-200">{{ t('Managed by Docker labels') }}</span>
                                 <p class="mt-1 break-all text-sm text-slate-400">{{ sourceLabel(job) }}</p>
                             </div>
@@ -195,7 +209,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
                             <tr>
                                 <th class="px-4 py-3" :aria-sort="ariaSort('name')">
-                                    <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('name')">
+                                    <button type="button" :disabled="hostNavigationPending" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('name')">
                                         <span>{{ t('Name') }}</span>
                                         <svg v-if="sort === 'name'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
                                         <svg v-else class="h-3 w-3 opacity-60" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4 3-3 3 3M6 1v10m-3-3 3 3 3-3" /></svg>
@@ -206,14 +220,14 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                                 <th class="px-4 py-3">{{ t('Schedule') }}</th>
                                 <th class="px-4 py-3">{{ t('Status') }}</th>
                                 <th class="px-4 py-3" :aria-sort="ariaSort('last_run_at')">
-                                    <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('last_run_at')">
+                                    <button type="button" :disabled="hostNavigationPending" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('last_run_at')">
                                         <span>{{ t('Last run') }}</span>
                                         <svg v-if="sort === 'last_run_at'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
                                         <svg v-else class="h-3 w-3 opacity-60" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4 3-3 3 3M6 1v10m-3-3 3 3 3-3" /></svg>
                                     </button>
                                 </th>
                                 <th class="px-4 py-3" :aria-sort="ariaSort('next_run_at')">
-                                    <button type="button" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('next_run_at')">
+                                    <button type="button" :disabled="hostNavigationPending" class="inline-flex items-center gap-2 hover:text-white" @click="sortBy('next_run_at')">
                                         <span>{{ t('Next run') }}</span>
                                         <svg v-if="sort === 'next_run_at'" class="h-3 w-3 transition" :class="direction === 'desc' ? 'rotate-180' : ''" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 10V2M2.5 5.5 6 2l3.5 3.5" /></svg>
                                         <svg v-else class="h-3 w-3 opacity-60" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 4 3-3 3 3M6 1v10m-3-3 3 3 3-3" /></svg>
@@ -225,7 +239,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         <tbody class="divide-y divide-white/10">
                             <tr v-for="job in jobs.data" :key="job.id" class="cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewJob(job.id)" @keydown="onJobKeydown($event, job.id)">
                                 <td class="px-4 py-3 font-medium text-white"><span>{{ job.name }}</span><span v-if="job.configuration_source === 'docker_label'" class="mt-1 block text-xs font-normal text-sky-200">{{ t('Managed by Docker labels') }}</span></td>
-                                <td class="px-4 py-3 text-slate-300">{{ sourceLabel(job) }}</td>
+                                <td class="px-4 py-3 text-slate-300">{{ sourceLabel(job) }}<HostIdentity :host="job.docker_host" :reason="job.docker_host?.backup_unavailable_reason" /></td>
                                 <td class="px-4 py-3 text-slate-300">{{ job.destination?.name || t('Missing') }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ job.schedule_summary }}</td>
                                 <td class="px-4 py-3"><StatusBadge :status="job.status" /></td>
@@ -245,7 +259,7 @@ const onJobKeydown = (event: KeyboardEvent, id: number) => {
                         </tbody>
                     </table>
                 </div>
-                <Pagination :data="jobs" base-url="/backup-jobs" :extra-params="{ search: search || undefined, status: statusFilter || undefined, destination: destinationFilter || undefined, sort, direction }" />
+                <Pagination :disabled="hostNavigationPending" :data="jobs" base-url="/backup-jobs" :extra-params="{ docker_host_id: filters?.docker_host_id ?? undefined, search: search || undefined, status: statusFilter || undefined, destination: destinationFilter || undefined, sort, direction }" />
             </div>
             <div v-else class="p-10 text-center">
                 <p class="text-lg font-semibold">{{ t('No backup jobs yet.') }}</p>

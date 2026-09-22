@@ -20,6 +20,14 @@ Changing the target host resets overwrite mode, safety-backup choice and typed c
 
 ## Backup Jobs
 
+### Working across hosts
+
+Dashboard, Volumes, Stacks, Backup jobs and job histories open with **All hosts** selected. Choose a Docker host to narrow the view; switching hosts resets pagination while retaining search and other filters. Host names and IDs distinguish identical volume or Compose project names on different machines. Volume shortcuts preserve the selected volume’s host.
+
+**Refresh** reads the last accepted inventory snapshot and shows its timestamp and host availability. It does not command a remote agent to synchronize. **Sync local host** explicitly queues local inventory synchronization when allowed; wait for an agent inventory for remote changes. Offline snapshots remain visible. Stack metadata uses saved Compose/Swarm volume labels; unknown container counts are shown as unknown rather than zero. Remote stack bulk backup is not supported yet; configure individual volume jobs instead. The remaining secondary-workflow parity audit is still pending.
+
+Backup history identifies the run’s historical execution host and source, even if the job later changes. Restore history identifies both source and target and filters by the target host. Dashboard groups match current members for job groups and historical members for group runs; totals include the entire matching group.
+
 To create a backup job:
 
 1. Make sure Docker volumes have been synced from the Volumes screen.

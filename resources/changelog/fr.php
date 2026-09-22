@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unified_host_operations' => [
+        'title' => 'Opérations unifiées entre les hôtes Docker',
+        'description' => 'Tableau de bord, inventaires, tâches et historiques affichent tous les hôtes par défaut avec filtre et identité visibles. Les restaurations filtrent par cible et les totaux des groupes restent complets. Actualiser lit les inventaires acceptés ; la synchronisation locale cible explicitement le serveur local. Les sauvegardes en lot des stacks distantes restent indisponibles et les nombres de conteneurs inconnus sont indiqués comme tels.',
+    ],
     'restore_volume_ownership' => [
         'title' => 'Vérifier la propriété des nouveaux volumes de restauration',
         'description' => 'Les restaurations dans un nouveau volume fixent la cible avec un conteneur auxiliaire et vérifient son étiquette de propriété aléatoire avant de démarrer ce même conteneur. Les volumes cibles après échec ne sont jamais supprimés automatiquement. Inspectez-les puis supprimez-les manuellement si nécessaire, ou réessayez avec un autre nom ; les journaux indiquent la marche à suivre.',

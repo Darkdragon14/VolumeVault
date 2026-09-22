@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'unified_host_operations' => [
+        'title' => 'Operaciones unificadas entre hosts Docker',
+        'description' => 'Panel, inventarios, tareas e historiales muestran todos los hosts por defecto, con filtro e identidad visibles. Las restauraciones se filtran por destino y los totales de grupos permanecen completos. Actualizar lee inventarios aceptados; la sincronización local selecciona explícitamente el host local. Las copias masivas de stacks remotas siguen sin admitirse y los recuentos desconocidos se indican como tales.',
+    ],
     'restore_volume_ownership' => [
         'title' => 'Verificar la propiedad de los nuevos volúmenes de restauración',
         'description' => 'Las restauraciones en volúmenes nuevos fijan el destino mediante un contenedor auxiliar y verifican su etiqueta de propiedad aleatoria antes de iniciar ese mismo contenedor. Los volúmenes de destino tras un fallo nunca se eliminan automáticamente. Inspecciónelos y elimínelos manualmente si procede, o reintente con otro nombre; los registros explican los pasos siguientes.',

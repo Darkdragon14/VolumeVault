@@ -233,7 +233,7 @@ class OrchestratorModeTest extends TestCase
         }
     }
 
-    public function test_operational_inventory_is_empty_but_history_remains_readable(): void
+    public function test_operational_snapshots_and_history_remain_readable_without_local_execution(): void
     {
         $job = $this->job();
         $run = $this->backupRun($job);
@@ -241,15 +241,15 @@ class OrchestratorModeTest extends TestCase
         $this->actingAs($user)->withToken($user->createToken('history', ['read'])->plainTextToken);
         $this->mock(DockerProcess::class)->shouldNotReceive('run');
 
-        $this->get('/volumes')->assertOk()->assertInertia(fn (Assert $page) => $page->has('volumes', 0));
-        $this->get('/stacks')->assertOk()->assertInertia(fn (Assert $page) => $page->has('stacks', 0));
-        $this->get('/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page->where('stats.total_volumes', 0));
+        $this->get('/volumes')->assertOk()->assertInertia(fn (Assert $page) => $page->has('volumes', 1)->where('volumes.0.canBackup', false)->where('volumes.0.canSync', false));
+        $this->get('/stacks')->assertOk()->assertInertia(fn (Assert $page) => $page->has('stacks', 1)->where('stacks.0.canBackup', false));
+        $this->get('/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page->where('stats.total_volumes', 1));
         $this->get('/backup-jobs/create')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->has('volumes', 0)->has('containers', 0)->has('destinations', 0));
         $this->get('/destinations/create')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->has('hosts', 0)->where('providers', fn ($providers): bool => $providers->contains('value', 'local')));
-        $this->getJson('/api/v1/volumes')->assertOk()->assertJsonCount(0, 'data');
-        $this->getJson('/api/v1/dashboard')->assertOk()->assertJsonPath('data.stats.total_volumes', 0);
+        $this->getJson('/api/v1/volumes')->assertOk()->assertJsonCount(1, 'data');
+        $this->getJson('/api/v1/dashboard')->assertOk()->assertJsonPath('data.stats.total_volumes', 1);
         $this->getJson("/api/v1/backup-runs/{$run->id}")->assertOk();
         $this->get("/backup-jobs/{$job->id}")->assertOk();
         $this->assertDatabaseCount('docker_volumes', 1);
