@@ -8,7 +8,7 @@ class AgentCompatibility
 {
     public const PROTOCOL_VERSION = 1;
 
-    public const CAPABILITIES = ['inventory-v1', 'maintenance-v1', 'backup-v1', 'restore-v1', 'docker-labels-v1'];
+    public const CAPABILITIES = ['inventory-v1', 'maintenance-v1', 'backup-v1', 'restore-v1', 'docker-labels-v1', 'destination-v1'];
 
     public function status(DockerHost $host): string
     {

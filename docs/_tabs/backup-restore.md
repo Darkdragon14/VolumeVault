@@ -12,6 +12,12 @@ Restore runs download and verify the selected archive through VolumeVault's dest
 
 Docker commands are built with array arguments through Symfony Process. Secrets are passed as process environment variables or temporary mounted secret files and are not logged by VolumeVault.
 
+### Browsing archives on the restore target
+
+The restore archive selector can browse the destination through the selected target host when it supports `destination-v1`. It shows asynchronous progress, failures and freshness, and loads additional pages without changing provider keys. Each listed archive retains the receipt from the page that returned that exact key. A receipt must match the current destination locator and target host and remain within its 30-minute freshness window when the restore is submitted.
+
+Changing the target host clears the selection and receipt, reloads the listing, and resets overwrite mode, safety-backup choice and typed confirmation. Selecting a historical run still loads its server-resolved source/destination snapshot before proceeding; validation errors preserve the current form. Older agents can continue restoring known successful historical records without a listing receipt. This fallback does not enable arbitrary archive browsing or transfer archives between host-local destinations. Restore to a new volume remains the default.
+
 ## Backup Jobs
 
 To create a backup job:

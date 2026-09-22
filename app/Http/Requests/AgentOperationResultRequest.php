@@ -6,6 +6,14 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class AgentOperationResultRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $raw = json_decode($this->getContent(), true);
+        if (is_array($raw['result'] ?? null)) {
+            $this->merge(['result' => $raw['result']]);
+        }
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -13,6 +21,19 @@ class AgentOperationResultRequest extends FormRequest
 
     public function rules(): array
     {
+        if ($this->input('result.data') !== null || $this->exists('result.data')) {
+            return [
+                'token' => ['required', 'string', 'regex:/\A[a-f0-9]{64}\z/'],
+                'result' => ['required', 'array:status,data,logs,error_message,cleanup_complete,finished_at,duration_seconds'],
+                'result.status' => ['required', 'in:success,failed'],
+                'result.data' => ['present', 'nullable', 'array'],
+                'result.logs' => ['nullable', 'string', 'max:262144'],
+                'result.error_message' => ['nullable', 'string', 'max:1000'],
+                'result.cleanup_complete' => ['required', 'boolean:strict', 'accepted'],
+                'result.finished_at' => ['required', 'date'],
+                'result.duration_seconds' => ['required', 'integer:strict', 'min:0'],
+            ];
+        }
         return [
             'token' => ['required', 'string', 'regex:/\A[a-f0-9]{64}\z/'],
             'result' => ['required', 'array:status,logs,error_message,backup_key,backup_size_bytes,target_volume_name,cleanup_complete,finished_at,duration_seconds,safety_backup'],

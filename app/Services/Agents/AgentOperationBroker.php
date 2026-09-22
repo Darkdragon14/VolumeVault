@@ -36,11 +36,22 @@ class AgentOperationBroker
                 return null;
             }
             $operation = AgentOperation::where('docker_host_id', $host->id)->where('status', 'pending')
-                ->where(fn ($query) => $query->where('kind', 'restore')
+                ->where(fn ($query) => $query->whereIn('kind', app(AgentExecution::class)->supportsHost($locked, 'destination-v1') ? ['restore', 'destination'] : ['restore'])
                     ->orWhereHas('backupRun.job', fn ($jobs) => $jobs->where('status', '!=', BackupJob::STATUS_PAUSED)))
                 ->orderBy('created_at')->orderBy('id')->lockForUpdate()->first();
             if (! $operation) {
                 return null;
+            }
+            if ($operation->kind === 'destination') {
+                if (! app(AgentExecution::class)->supportsHost($locked, 'destination-v1')) {
+                    return null;
+                }
+                $operation->forceFill([
+                    'status' => 'running', 'delivery_token' => bin2hex(random_bytes(32)),
+                    'owner_instance_id' => $locked->agent_instance_id, 'claimed_at' => now(), 'last_progress_at' => now(),
+                ])->save();
+
+                return $this->envelope($operation);
             }
             app(AgentExecution::class)->validateHost($locked->id, $operation->kind === 'backup' ? 'backup-v1' : 'restore-v1');
             $run = $operation->kind === 'backup' ? $operation->backupRun : $operation->restoreRun;
@@ -94,6 +105,9 @@ class AgentOperationBroker
                 return;
             }
             $operation->update(['last_progress_at' => now()]);
+            if ($operation->kind === 'destination') {
+                return;
+            }
             $run = $operation->kind === 'backup' ? $operation->backupRun : $operation->restoreRun;
             $run?->newQuery()->whereKey($run->id)->where('status', 'running')->update(['last_heartbeat_at' => now()]);
         });
@@ -107,6 +121,12 @@ class AgentOperationBroker
                 return [];
             }
             abort_unless($operation->status === 'running' && $result['cleanup_complete'] === true, 409, 'Operation is not ready to finish.');
+            if ($operation->kind === 'destination') {
+                app(\App\Services\BackupDestinations\DestinationOperations::class)->complete($operation, $result);
+
+                return [];
+            }
+            abort_if(array_key_exists('data', $result), 422, 'Unexpected destination result.');
             $run = $operation->kind === 'backup' ? $operation->backupRun : $operation->restoreRun;
             abort_unless($run && $run->status === 'running', 409, 'Operation run is not active.');
             $job = BackupJob::query()->lockForUpdate()->findOrFail($run->backup_job_id);
@@ -168,6 +188,9 @@ class AgentOperationBroker
         }, attempts: 3);
         app(ProcessRunFinalization::class)->dispatch($finalizations);
         $operation = AgentOperation::where('docker_host_id', $host->id)->findOrFail($id);
+        if ($operation->kind === 'destination') {
+            return;
+        }
         $job = ($operation->kind === 'backup' ? $operation->backupRun : $operation->restoreRun)?->job;
         if ($job) {
             app(ApplyPendingDockerLabelReconciliation::class)->handle($job);

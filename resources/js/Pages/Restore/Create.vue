@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { destinationMatchesHost, hostId, isHostLocalDestination, useDeployment, type ExecutionHost } from '@/Composables/useDeployment';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
+import { operationHostAvailable, useDestinationOperations, type DestinationOperationHost } from '@/Composables/useDestinationOperations';
 
 const { localExecutionEnabled, executionHosts, canExecute, canManageBackups } = useDeployment();
 
 const props = defineProps<{
     job: any;
     hosts?: ExecutionHost[];
+    destinationOperationHosts?: DestinationOperationHost[];
+    destinationOperations?: { destination_id: number; selected_docker_host_id: number; default_docker_host_id: number };
     volumes?: { docker_host_id?: number; name: string }[];
     sourceDockerHostId?: number;
     targetDockerHostId?: number;
@@ -40,11 +43,17 @@ const localDateKey = (value?: string | null): string => value
 
 const isDockerVolumeSource = computed(() => props.isDockerVolumeSource);
 const sourceVolumeName = computed(() => props.sourceVolumeName ?? '');
+const contextQuery = new URL(usePage().url ?? '/', 'http://localhost').searchParams;
+const requestedTargetHost = props.destinationOperations && contextQuery.has('docker_host_id')
+    ? Number(props.destinationOperations.selected_docker_host_id) : null;
+const contextReceipt = ref(props.destinationOperations ? contextQuery.get('destination_operation_id') : null);
+let initialReceipt = contextReceipt.value;
 
 const form = useForm({
-    target_docker_host_id: props.targetDockerHostId ?? hostId(props.job),
+    target_docker_host_id: requestedTargetHost ?? props.targetDockerHostId ?? hostId(props.job),
     backup_run_id: props.backupRunId ?? null,
     selected_backup_key: '',
+    destination_operation_id: null as string | null,
     mode: 'new_volume',
     target_volume_name: props.generatedTargetVolumeName ?? '',
     backup_before_overwrite: false,
@@ -54,6 +63,33 @@ const form = useForm({
 const hosts = computed(() => executionHosts(props.hosts));
 const sourceHostId = computed(() => props.sourceDockerHostId ?? hostId(props.job));
 const targetHost = computed(() => hosts.value.find((host) => Number(host.id) === Number(form.target_docker_host_id)));
+const listingContext = computed(() => ({ destination: props.restoreDestination, hostId: Number(form.target_docker_host_id), backupRunId: props.backupRunId }));
+const listing = useDestinationOperations(listingContext);
+const { objects: listedObjects, nextCursor, pending: listingPending, error: listingError, operation: listingOperation, fresh: listingFresh } = listing;
+const listingAvailable = computed(() => !!props.destinationOperations && operationHostAvailable(
+    props.destinationOperationHosts?.find((host) => Number(host.id) === Number(form.target_docker_host_id)), props.restoreDestination,
+));
+const backups = computed(() => {
+    if (!props.destinationOperations || !listingAvailable.value) return props.backups;
+    const listed = listedObjects.value.map((object) => ({ ...props.backups.find((backup) => backup.key === object.key), ...object }));
+    if (props.backupRunId && listingOperation.value?.status === 'completed' && listingOperation.value.result?.status === 'success') return listed;
+    return [...listed,
+        ...props.backups.filter((backup) => (backup.backup_run_id || (props.backupRunId && backup.key === props.preselectedBackupKey)) && !listedObjects.value.some((object) => object.key === backup.key))];
+});
+const selectedReceipt = computed(() => { listing.now.value; return listing.receiptFor(form.selected_backup_key); });
+const receiptRequired = computed(() => (listingAvailable.value && props.backupRunId != null)
+    || !!selectedBackup.value?.receipt || (!!contextReceipt.value && form.selected_backup_key === props.preselectedBackupKey));
+const receiptValid = computed(() => !receiptRequired.value || !!selectedReceipt.value);
+const refreshListing = () => { form.selected_backup_key = ''; form.destination_operation_id = null; contextReceipt.value = null; void listing.run('list'); };
+watch(selectedReceipt, (receipt) => { form.destination_operation_id = receipt; }, { flush: 'sync' });
+watch([() => JSON.stringify(listingContext.value), listingAvailable], () => {
+    const receipt = initialReceipt;
+    initialReceipt = null;
+    if (listingAvailable.value && !props.backupRunUnverifiable) {
+        if (receipt) void listing.resume(receipt);
+        else void listing.run('list');
+    }
+}, { immediate: true });
 const sameHost = computed(() => Number(form.target_docker_host_id) === Number(sourceHostId.value));
 const targetAvailable = (host: ExecutionHost) => canExecute(host, 'restore-v1') && destinationMatchesHost(props.restoreDestination, host.id);
 const workflowVisible = computed(() => canManageBackups.value && (localExecutionEnabled.value || hosts.value.length > 0));
@@ -61,6 +97,13 @@ const targetExists = computed(() => !isInPlace.value && (props.volumes ?? []).so
 const targetValid = computed(() => !!targetHost.value && targetAvailable(targetHost.value) && !targetExists.value
     && !!form.target_volume_name.trim() && (!isInPlace.value || sameHost.value));
 watch(() => form.target_docker_host_id, () => {
+    form.destination_operation_id = null;
+    contextReceipt.value = null;
+    initialReceipt = null;
+    if (props.destinationOperations) {
+        form.selected_backup_key = '';
+        step.value = 1;
+    }
     form.mode = 'new_volume';
     form.confirmation_text = '';
     form.backup_before_overwrite = false;
@@ -138,6 +181,7 @@ const confirmWarning = computed(() => {
 const search = ref('');
 const dateFilter = ref('');
 const showAll = ref(false);
+const hasOtherBackups = computed(() => props.hasOtherBackups || backups.value.some((backup) => !backup.belongs_to_job));
 
 const scopedBackups = computed(() => {
     if (props.backupRunUnverifiable) {
@@ -145,14 +189,17 @@ const scopedBackups = computed(() => {
     }
 
     if (props.backupRunId && props.preselectedBackupKey) {
-        return props.backups.filter((backup) => backup.key === props.preselectedBackupKey);
+        return backups.value.filter((backup) => backup.key === props.preselectedBackupKey);
     }
 
-    if (showAll.value || !props.hasOtherBackups) {
-        return props.backups;
+    if (showAll.value || !hasOtherBackups.value) {
+        return backups.value;
     }
 
-    return props.backups.filter((backup) => backup.belongs_to_job);
+    return backups.value.filter((backup) => backup.belongs_to_job);
+});
+watch(showAll, (enabled) => {
+    if (!enabled && !scopedBackups.value.some((backup) => backup.key === form.selected_backup_key)) form.selected_backup_key = '';
 });
 
 const visibleBackups = computed(() => {
@@ -171,9 +218,17 @@ const visibleBackups = computed(() => {
 // the badge is stable regardless of the active filters.
 const latestKey = computed(() => scopedBackups.value[0]?.key ?? null);
 
-const selectedBackup = computed(() => props.backups.find((backup) => backup.key === form.selected_backup_key));
+const selectedBackup = computed(() => scopedBackups.value.find((backup) => backup.key === form.selected_backup_key));
 const sourceContextReady = computed(() => form.backup_run_id === (props.backupRunId ?? null));
 const loadingContext = ref(false);
+watch(receiptValid, (valid) => {
+    if (!valid) {
+        step.value = 1;
+        form.mode = 'new_volume';
+        form.confirmation_text = '';
+        form.backup_before_overwrite = false;
+    }
+});
 watch(selectedBackup, (backup) => {
     form.backup_run_id = backup?.backup_run_id ?? (backup?.key === props.preselectedBackupKey ? props.backupRunId ?? null : null);
     form.mode = 'new_volume';
@@ -183,27 +238,35 @@ watch(selectedBackup, (backup) => {
 }, { flush: 'sync' });
 
 const continueSelection = () => {
-    if (!selectedBackup.value || props.backupRunUnverifiable || loadingContext.value) return;
+    listing.now.value = Date.now();
+    if (!selectedBackup.value || !receiptValid.value || props.backupRunUnverifiable || loadingContext.value) return;
     if (sourceContextReady.value) {
         step.value = 2;
         return;
     }
 
     loadingContext.value = true;
-    router.get(`/backup-jobs/${props.job.id}/restore`, { backup_run_id: form.backup_run_id }, {
+    router.get(`/backup-jobs/${props.job.id}/restore`, {
+        backup_run_id: form.backup_run_id,
+        ...(props.destinationOperations ? { docker_host_id: form.target_docker_host_id } : {}),
+        ...(selectedReceipt.value && (selectedBackup.value.receipt?.backup_run_id ?? null) === form.backup_run_id
+            ? { destination_operation_id: selectedReceipt.value } : {}),
+    }, {
         preserveState: 'errors',
         onError: (errors) => { form.errors = errors; step.value = 1; },
         onFinish: () => { loadingContext.value = false; },
     });
 };
 const submit = () => {
-    if (!sourceContextReady.value || loadingContext.value || !targetValid.value || !confirmationMatches.value || !selectedBackup.value || props.backupRunUnverifiable || safetyBackupBlocked.value) {
+    listing.now.value = Date.now();
+    form.destination_operation_id = listing.receiptFor(form.selected_backup_key);
+    if (!sourceContextReady.value || !receiptValid.value || loadingContext.value || !targetValid.value || !confirmationMatches.value || !selectedBackup.value || props.backupRunUnverifiable || safetyBackupBlocked.value) {
         return;
     }
 
     form.post(`/backup-jobs/${props.job.id}/restore`, {
         onError: (errors) => {
-            if (errors.selected_backup_key || errors.backup_run_id) {
+            if (errors.selected_backup_key || errors.backup_run_id || errors.destination_operation_id) {
                 step.value = 1;
             } else if (errors.backup_before_overwrite || errors.target_docker_host_id || errors.target_volume_name || errors.mode) {
                 step.value = 2;
@@ -241,12 +304,28 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
 
         <section v-if="workflowVisible && step === 1" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Select backup') }}</h2>
-            <p class="mt-1 text-sm text-slate-400">{{ t('Backups are listed newest first from {name}.', { name: restoreDestination?.name }) }}</p>
-            <p v-if="listError" class="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ listError }}</p>
+            <p v-if="!destinationOperations" class="mt-1 text-sm text-slate-400">{{ t('Backups are listed newest first from {name}.', { name: restoreDestination?.name }) }}</p>
+            <p v-else class="mt-1 text-sm text-slate-400">{{ restoreDestination?.name }}</p>
+            <p v-if="listError && listingOperation?.result?.status !== 'success'" class="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ listError }}</p>
             <p v-if="backupRunUnverifiable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('This historical Dropbox backup has no stable file ID. Its identity cannot be verified, so restoring this run is unavailable.') }}</p>
             <p v-if="form.errors.selected_backup_key" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.selected_backup_key }}</p>
             <p v-if="form.errors.backup_run_id" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.backup_run_id }}</p>
             <p v-if="form.errors.destination" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.destination }}</p>
+            <p v-if="form.errors.destination_operation_id" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.destination_operation_id }}</p>
+            <div v-if="destinationOperations" class="mt-4 space-y-3">
+                <label class="block space-y-2">
+                    <span class="label">{{ t('hostWorkflow.targetHost') }}</span>
+                    <select v-model="form.target_docker_host_id" class="input" data-listing-host>
+                        <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!targetAvailable(host)">{{ host.name }}</option>
+                    </select>
+                </label>
+                <p v-if="!listingAvailable" role="status" class="text-sm text-amber-600 dark:text-amber-200">{{ t('destinationOperations.history') }}</p>
+                <button v-if="listingAvailable" type="button" class="btn-secondary" :disabled="listingPending || backupRunUnverifiable" @click="refreshListing">{{ t('destinationOperations.browse') }}</button>
+                <p v-if="listingPending" role="status">{{ t(listingOperation?.status === 'running' ? 'destinationOperations.running' : 'destinationOperations.pending') }}</p>
+                <p v-if="listingError" role="alert" class="text-sm text-rose-600 dark:text-rose-300">{{ t(listingError) }}</p>
+                <p v-if="listingOperation?.result?.status === 'success'" class="text-sm text-slate-400">{{ listingFresh ? t('destinationOperations.fresh', { date: formatDate(listingOperation.fresh_until) }) : t('destinationOperations.stale') }}</p>
+                <p v-if="!receiptValid" role="alert" class="text-sm text-amber-600 dark:text-amber-200">{{ t('destinationOperations.stale') }}</p>
+            </div>
 
             <div v-if="backups.length && !backupRunUnverifiable" class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label class="block flex-1 space-y-1">
@@ -276,16 +355,18 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
                     <span class="min-w-0 flex-1">
                         <span class="flex flex-wrap items-center gap-2">
                             <span class="block break-all font-medium text-white">{{ backup.display_name || backup.key }}</span>
-                            <span v-if="backup.key === latestKey" class="rounded-full bg-emerald-300/15 px-2 py-0.5 text-xs font-medium text-emerald-200">{{ t('latest') }}</span>
+                            <span v-if="!backup.receipt && backup.key === latestKey" class="rounded-full bg-emerald-300/15 px-2 py-0.5 text-xs font-medium text-emerald-200">{{ t('latest') }}</span>
                         </span>
+                        <code v-if="backup.receipt" class="mt-1 block break-all text-xs text-slate-400">{{ backup.key }}</code>
                         <span class="mt-1 block text-xs text-slate-400">{{ formatDate(backup.last_modified) }} / {{ formatBytes(backup.size) }}</span>
                     </span>
                 </label>
             </div>
             <p v-else-if="backups.length && !backupRunUnverifiable" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backups match the current filters.') }}</p>
-            <p v-else-if="!backupRunUnverifiable" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backup objects found. Run a backup first or check the destination path.') }}</p>
+            <p v-else-if="!backupRunUnverifiable && !listingPending" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backup objects found. Run a backup first or check the destination path.') }}</p>
 
-            <button class="btn-primary mt-5" :disabled="loadingContext || backupRunUnverifiable || !form.selected_backup_key" @click="continueSelection">{{ t('Continue') }}</button>
+            <button v-if="nextCursor" type="button" class="btn-secondary mt-5" :disabled="listingPending" @click="listing.run('list', true)">{{ t('destinationOperations.more') }}</button>
+            <button class="btn-primary mt-5" :disabled="loadingContext || !receiptValid || backupRunUnverifiable || !form.selected_backup_key" @click="continueSelection">{{ t('Continue') }}</button>
         </section>
 
         <section v-if="workflowVisible && step === 2" class="card p-4 sm:p-6">
@@ -369,7 +450,7 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
 
             <div class="mt-5 flex flex-wrap gap-3">
                 <button class="btn-secondary" @click="step = 2">{{ t('Back') }}</button>
-                <button class="btn-primary" :disabled="form.processing || !confirmationMatches || safetyBackupBlocked || !targetValid" @click="submit">{{ t('Queue restore') }}</button>
+                <button class="btn-primary" :disabled="form.processing || !receiptValid || !confirmationMatches || safetyBackupBlocked || !targetValid" @click="submit">{{ t('Queue restore') }}</button>
             </div>
         </section>
 

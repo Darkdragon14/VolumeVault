@@ -46,7 +46,7 @@ class DestinationStorageLimitCheck implements AlertCheckAction
             ->orderBy('id')
             ->get()
             ->each(function (BackupDestination $destination) use ($rule, &$findings): void {
-                if (DeploymentMode::isOrchestrator() && $destination->isHostBound()) {
+                if (DeploymentMode::isOrchestrator() && $destination->isHostBound() && (int) $destination->docker_host_id === \App\Models\DockerHost::LOCAL_ID) {
                     $this->erroredSubjectKeys[] = $destination->getMorphClass().':'.$destination->getKey();
 
                     return;

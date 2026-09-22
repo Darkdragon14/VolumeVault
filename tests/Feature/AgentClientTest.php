@@ -333,6 +333,51 @@ class AgentClientTest extends TestCase
         Http::assertSentCount(4);
     }
 
+    public function test_acknowledgement_publishes_idle_state_before_pulling_the_next_operation(): void
+    {
+        $active = 1;
+        $advertised = null;
+        $events = [];
+        $receipt = ['id' => (string) Str::uuid(), 'token' => str_repeat('a', 64), 'result' => ['status' => 'success']];
+        $next = ['id' => (string) Str::uuid()];
+        $client = $this->mock(AgentClient::class);
+        $client->shouldReceive('enroll')->once();
+        $client->shouldReceive('heartbeat')->twice()->andReturnUsing(function (bool $available, int $count) use (&$advertised, &$events): void {
+            $this->assertTrue($available);
+            $advertised = $count;
+            $events[] = 'heartbeat:'.$count;
+        });
+        $client->shouldReceive('completeOperation')->once()->with($receipt)->andReturnUsing(function () use (&$events): void {
+            $events[] = 'complete';
+        });
+        $client->shouldReceive('pullOperation')->once()->andReturnUsing(function () use (&$advertised, &$events, $next): ?array {
+            $events[] = 'pull';
+
+            return $advertised === 0 ? $next : null;
+        });
+        $client->shouldReceive('inventory')->once();
+        $supervisor = $this->mock(\App\Services\Agents\AgentOperationSupervisor::class);
+        $supervisor->shouldReceive('tick')->twice();
+        $supervisor->shouldReceive('activeCount')->andReturnUsing(function () use (&$active): int {
+            return $active;
+        });
+        $supervisor->shouldReceive('current')->twice()->andReturnNull();
+        $supervisor->shouldReceive('pendingResult')->once()->andReturn($receipt);
+        $supervisor->shouldReceive('acknowledge')->once()->with($receipt['id'])->andReturnUsing(function () use (&$active, &$events): void {
+            $active = 0;
+            $events[] = 'acknowledge';
+        });
+        $supervisor->shouldReceive('accept')->once()->with($next)->andReturnUsing(function () use (&$events): void {
+            $events[] = 'accept';
+        });
+        $collector = $this->mock(CollectAgentInventory::class);
+        $collector->shouldReceive('available')->once()->andReturnTrue();
+        $collector->shouldReceive('handle')->once()->andReturn(['volumes' => [], 'containers' => []]);
+        $loop = new AgentLoop($client, $collector, app(HostPathPolicy::class), $supervisor);
+        $this->assertTrue($loop->cycle());
+        $this->assertSame(['heartbeat:1', 'complete', 'acknowledge', 'heartbeat:0', 'pull', 'accept'], $events);
+    }
+
     public function test_slow_inventory_keeps_sending_heartbeats_before_the_offline_threshold(): void
     {
         $heartbeatTimes = [];

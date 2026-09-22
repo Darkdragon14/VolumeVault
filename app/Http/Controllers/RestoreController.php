@@ -27,7 +27,7 @@ class RestoreController extends Controller
     public function create(Request $request, BackupJob $backupJob, ListBackupObjects $listBackupObjects, GenerateRestoreVolumeName $generateRestoreVolumeName, ResolveRestoreDestination $resolveRestoreDestination): Response
     {
         $backupJob->load('destination');
-        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer']]);
+        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer'], 'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id']]);
         $backupRunId = isset($validated['backup_run_id']) ? (int) $validated['backup_run_id'] : null;
         $restoreDestination = $resolveRestoreDestination->handle($backupJob, $backupRunId);
         if ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id === DockerHost::LOCAL_ID) {
@@ -40,7 +40,7 @@ class RestoreController extends Controller
         $backupRunUnverifiable = ListBackupObjects::isRunUnverifiable($restoreDestination, $selectedBackupRun);
 
         try {
-            $backups = $backupRunUnverifiable ? [] : ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== DockerHost::LOCAL_ID
+            $backups = $backupRunUnverifiable ? [] : (($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== DockerHost::LOCAL_ID) || (int) ($validated['docker_host_id'] ?? 1) !== 1
                 ? $resolveRestoreDestination->knownRemoteBackups($backupJob, $restoreDestination, $selectedBackupRun)
                 : $listBackupObjects->handleForRun($restoreDestination, $selectedBackupRun));
         } catch (Throwable) {
@@ -52,6 +52,7 @@ class RestoreController extends Controller
         $preselectedBackupKey = $selectedBackupRun?->backup_key ?? $request->query('backup');
 
         return Inertia::render('Restore/Create', [
+            'destinationOperationHosts' => app(\App\Services\BackupDestinations\DestinationOperations::class)->hostOptions(),
             'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => app(AgentExecution::class)->summary($host, includePaths: true)),
             'volumes' => DockerVolume::where('exists', true)->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))->get(['docker_host_id', 'name']),
             'sourceDockerHostId' => $selectedBackupRun?->docker_host_id ?? $backupJob->docker_host_id,
@@ -62,6 +63,13 @@ class RestoreController extends Controller
                 'is_docker_volume_source' => $backupJob->isDockerVolumeSource(),
             ],
             'restoreDestination' => [...$restoreDestination->safeForFrontend(), 'docker_host_id' => $restoreDestination->docker_host_id],
+            'destinationOperations' => [
+                'destination_id' => $restoreDestination->id,
+                'default_docker_host_id' => $restoreDestination->isHostBound() ? $restoreDestination->docker_host_id : DockerHost::LOCAL_ID,
+                'selected_docker_host_id' => $validated['docker_host_id'] ?? ($restoreDestination->isHostBound() ? $restoreDestination->docker_host_id : DockerHost::LOCAL_ID),
+                'required_agent_capability' => 'destination-v1',
+                'restore_receipt_field' => 'destination_operation_id',
+            ],
             'backups' => $backups,
             // Whether some objects in the destination don't belong to this job, so
             // the wizard knows to offer a "show all backups" escape hatch.
@@ -125,7 +133,7 @@ class RestoreController extends Controller
 
     public function listBackups(Request $request, BackupJob $backupJob, ListBackupObjects $listBackupObjects, ResolveRestoreDestination $resolveRestoreDestination): JsonResponse
     {
-        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer']]);
+        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer'], 'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'], 'cursor' => ['nullable', 'string', 'max:32768'], 'limit' => ['sometimes', 'integer', 'min:1', 'max:1000']]);
         $destination = $resolveRestoreDestination->handle(
             $backupJob,
             isset($validated['backup_run_id']) ? (int) $validated['backup_run_id'] : null,
@@ -139,8 +147,14 @@ class RestoreController extends Controller
             return response()->json(['message' => ListBackupObjects::UNVERIFIABLE_RUN_MESSAGE], 422);
         }
 
-        if ($destination->isHostBound() && (int) $destination->docker_host_id !== DockerHost::LOCAL_ID) {
-            return response()->json(['backups' => $resolveRestoreDestination->knownRemoteBackups($backupJob, $destination, $run)]);
+        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        if (! isset($validated['docker_host_id']) && $destination->isHostBound() && (int) $destination->docker_host_id !== DockerHost::LOCAL_ID
+            && ! app(AgentExecution::class)->supportsHost($destination->dockerHost, 'destination-v1')) {
+            return response()->json(['backups' => $resolveRestoreDestination->knownRemoteBackups($backupJob, $destination, $run), 'listing_supported' => false]);
+        }
+        $hostId = $operations->hostId($destination, isset($validated['docker_host_id']) ? (int) $validated['docker_host_id'] : null);
+        if ($hostId !== DockerHost::LOCAL_ID) {
+            return response()->json(['data' => $operations->safe($operations->create($destination, 'list', $hostId, $validated['cursor'] ?? null, (int) ($validated['limit'] ?? 1000), $run?->id))], 202);
         }
 
         if ($destination->isHostBound()) {

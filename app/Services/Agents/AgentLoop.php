@@ -111,6 +111,7 @@ class AgentLoop
         if ($receipt = $this->operations->pendingResult()) {
             $this->client->completeOperation($receipt);
             $this->operations->acknowledge($receipt['id']);
+            $this->heartbeat($available);
         }
         if ($available && ! $this->stopping && $this->operations->activeCount() === 0
             && (! $this->singleCycle || ! $this->singleOperationAccepted)) {

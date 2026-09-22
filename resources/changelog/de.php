@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_destination_operations' => [
+        'title' => 'Ziele über Agenten testen und durchsuchen',
+        'description' => 'Wählen Sie einen Host, um gespeicherte Ziele zu testen, Speicher zu messen und Archive seitenweise mit Fortschritt, Fehlern und Aktualität anzuzeigen. Agenten benötigen destination-v1; gemeinsame Speicher verwenden standardmäßig weiterhin den zentralen Host, lokale Speicher ihren Besitzer. Wiederherstellungen binden Archivschlüssel an aktuelle Nachweise des Zielhosts. Ältere Agenten unterstützen weiterhin historische Wiederherstellungen.',
+    ],
     'remote_docker_label_backups' => [
         'title' => 'Docker-Label-Backups auf entfernten Hosts',
         'description' => 'Label-Backup-Vorgaben lassen sich pro Host über Einstellungen oder API konfigurieren, auch im reinen Orchestrator-Betrieb. Agenten mit docker-labels-v1 gleichen Deklarationen bei vollständigen Inventaren mit aktiven gemeinsamen oder hosteigenen Zielen ab. Ältere oder unvollständige Inventare erhalten bestehende Jobs und zeigen Synchronisierungsfehler an.',

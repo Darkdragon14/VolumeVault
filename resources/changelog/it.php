@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_destination_operations' => [
+        'title' => 'Testare ed esplorare le destinazioni tramite agenti',
+        'description' => 'Scegli un host per testare destinazioni salvate, misurare lo spazio ed esplorare archivi paginati con avanzamento, errori e validità visibili. Gli agenti richiedono destination-v1; lo spazio condiviso usa ancora l’host centrale per impostazione predefinita e quello locale resta sul proprio host. I ripristini associano le chiavi a ricevute recenti dell’host di destinazione; gli agenti meno recenti mantengono il ripristino dalla cronologia.',
+    ],
     'remote_docker_label_backups' => [
         'title' => 'Backup tramite etichette Docker su host remoti',
         'description' => 'Configura i valori predefiniti per host dalle impostazioni o tramite API, anche in modalità solo orchestratore. Gli agenti docker-labels-v1 elaborano le dichiarazioni con inventari completi e destinazioni attive condivise o dello stesso host. Gli inventari obsoleti o incompleti preservano i processi esistenti e segnalano errori di sincronizzazione.',

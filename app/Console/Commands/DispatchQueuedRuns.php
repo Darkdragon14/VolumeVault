@@ -22,6 +22,18 @@ class DispatchQueuedRuns extends Command
     {
         $dispatched = 0;
 
+        \App\Models\AgentOperation::where('kind', 'destination')->where('docker_host_id', DockerHost::LOCAL_ID)
+            ->where(fn ($query) => $query->where('status', 'pending')->orWhere(fn ($query) => $query->where('status', 'running')
+                ->where(fn ($query) => $query->whereNull('last_progress_at')->orWhere('last_progress_at', '<=', now()->subMinutes(\App\Jobs\RunDestinationOperation::RECOVERY_MINUTES)))))
+            ->each(function (\App\Models\AgentOperation $operation) use (&$dispatched): void {
+                if ($operation->status === 'pending' && in_array($operation->payload['destination']['provider'], ['local', 'docker_volume'], true)
+                    && (! DeploymentMode::localExecutionEnabled() || app(\App\Services\Agents\HostWorkAdmission::class)->isMaintained(DockerHost::LOCAL_ID))) {
+                    return;
+                }
+                \App\Jobs\RunDestinationOperation::dispatch($operation->id);
+                $dispatched++;
+            });
+
         $this->eligible(BackupRun::query()
             ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->whereNull('backup_group_run_id')

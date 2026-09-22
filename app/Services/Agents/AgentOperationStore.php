@@ -116,12 +116,15 @@ class AgentOperationStore
         });
     }
 
-    public function markExecuting(string $id): void
+    public function markExecuting(string $id, ?string $helperName = null): void
     {
-        $this->locked(function () use ($id): void {
+        $this->locked(function () use ($id, $helperName): void {
             $entry = $this->read($id) ?? throw new RuntimeException('Unknown operation.');
             if ($entry['phase'] === 'accepted') {
                 $entry['phase'] = 'executing';
+                if ($helperName !== null) {
+                    $entry['helper_name'] = $helperName;
+                }
                 $this->write($id, $entry);
             }
         });

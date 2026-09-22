@@ -23,6 +23,13 @@ use Throwable;
 
 class DestinationStorage
 {
+    private ?string $operationHelperName = null;
+
+    public function useOperationHelper(?string $name): void
+    {
+        $this->operationHelperName = $name;
+    }
+
     /** phpseclib's NET_SFTP_TYPE_DIRECTORY — only defined once an SFTP instance is constructed, so we mirror it here. */
     private const SFTP_TYPE_DIRECTORY = 2;
 
@@ -67,6 +74,17 @@ class DestinationStorage
             BackupDestination::PROVIDER_DOCKER_VOLUME => $this->testDockerVolume($destination),
             default => throw new RuntimeException('Unsupported backup destination provider.'),
         };
+    }
+
+    public function testReadOnly(BackupDestination $destination): void
+    {
+        if ($destination->provider === BackupDestination::PROVIDER_DOCKER_VOLUME) {
+            $this->guardOutbound($destination);
+            $this->listDockerVolume($destination, 1);
+
+            return;
+        }
+        $this->test($destination);
     }
 
     public function listBackupObjects(BackupDestination $destination): array
@@ -167,10 +185,120 @@ class DestinationStorage
     /** @return array{used_bytes: int, object_count: int} */
     public function storageUsage(BackupDestination $destination): array
     {
+        if ($destination->isHostBound() && (int) $destination->docker_host_id !== \App\Models\DockerHost::LOCAL_ID) {
+            return app(DestinationOperations::class)->usage($destination);
+        }
         LocalDockerExecution::assertDestination($destination);
         $cacheKey = 'destination_storage_usage_bytes_'.$destination->id;
 
         return Cache::remember($cacheKey, now()->addMinutes(30), fn (): array => $this->aggregateUsage($destination));
+    }
+
+    public function freshStorageUsage(BackupDestination $destination): array
+    {
+        return $this->aggregateUsage($destination);
+    }
+
+    /** Pages contain at most 1000 objects; provider tokens never enter diagnostics. */
+    public function listBackupObjectsPage(BackupDestination $destination, ?string $cursor = null, int $limit = 1000): array
+    {
+        $this->guardOutbound($destination);
+        if ($limit < 1 || $limit > 1000) {
+            throw new RuntimeException('Invalid listing page size.');
+        }
+        if (in_array($destination->provider, BackupDestination::S3_PROVIDERS, true)) {
+            $params = ['Bucket' => $destination->setting('bucket'), 'Prefix' => trim((string) $destination->setting('path_prefix'), '/'), 'MaxKeys' => $limit];
+            if ($cursor !== null) {
+                $params['ContinuationToken'] = $cursor;
+            }
+            $page = $this->s3ClientFactory->make($destination)->listObjectsV2($params);
+            $objects = [];
+            foreach ($page['Contents'] ?? [] as $object) {
+                $objects[] = ['key' => (string) $object['Key'], 'display_name' => (string) $object['Key'], 'size' => (int) ($object['Size'] ?? 0), 'last_modified' => isset($object['LastModified']) ? $object['LastModified']->format(DATE_ATOM) : null];
+            }
+            $next = ($page['IsTruncated'] ?? false) ? ($page['NextContinuationToken'] ?? null) : null;
+        } elseif (in_array($destination->provider, [BackupDestination::PROVIDER_AZURE_BLOB, BackupDestination::PROVIDER_GOOGLE_DRIVE, BackupDestination::PROVIDER_DROPBOX], true)) {
+            [$objects, $next] = $this->cloudObjectPage($destination, $cursor, $limit);
+        } else {
+            if ($cursor !== null && (! ctype_digit($cursor) || strlen($cursor) > 7)) {
+                throw new RuntimeException('Invalid listing cursor.');
+            }
+            $offset = (int) ($cursor ?? 0);
+            $count = $offset + $limit + 1;
+            $all = match ($destination->provider) {
+                BackupDestination::PROVIDER_WEBDAV => $this->listWebDav($destination, $count),
+                BackupDestination::PROVIDER_SSH => $this->listSftp($destination, $count),
+                BackupDestination::PROVIDER_AZURE_BLOB => $this->listAzure($destination, $count),
+                BackupDestination::PROVIDER_DROPBOX => $this->listDropbox($destination, $count),
+                BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->listGoogleDrive($destination, $count),
+                BackupDestination::PROVIDER_LOCAL => $this->listLocal($destination, $count),
+                BackupDestination::PROVIDER_DOCKER_VOLUME => $this->listDockerVolume($destination, $count),
+                default => throw new RuntimeException('Unsupported destination.'),
+            };
+            $next = count($all) > $offset + $limit ? (string) ($offset + $limit) : null;
+            $objects = array_slice($all, $offset, $limit);
+        }
+
+        return ['objects' => array_values(array_filter($objects, fn (array $object): bool => $this->plausibleBackupKey($object['display_name']))), 'next_cursor' => $next];
+    }
+
+    /** @return array{array, ?string} */
+    private function cloudObjectPage(BackupDestination $destination, ?string $cursor, int $limit): array
+    {
+        $objects = [];
+        if ($destination->provider === BackupDestination::PROVIDER_AZURE_BLOB) {
+            $query = ['restype' => 'container', 'comp' => 'list', 'maxresults' => (string) $limit];
+            if ($cursor !== null) {
+                $query['marker'] = $cursor;
+            }
+            $xml = simplexml_load_string($this->azureContainerRequest($destination, 'GET', $query)->body());
+            if ($xml === false) {
+                throw new RuntimeException('Invalid Azure listing.');
+            }
+            foreach ($xml->Blobs->Blob ?? [] as $blob) {
+                $objects[] = ['key' => (string) $blob->Name, 'display_name' => (string) $blob->Name, 'size' => (int) $blob->Properties->{'Content-Length'}, 'last_modified' => date(DATE_ATOM, strtotime((string) $blob->Properties->{'Last-Modified'}))];
+            }
+
+            return [$objects, ((string) ($xml->NextMarker ?? '')) ?: null];
+        }
+        if ($destination->provider === BackupDestination::PROVIDER_GOOGLE_DRIVE) {
+            $query = [
+                'q' => "'".$destination->setting('folder_id')."' in parents and trashed = false",
+                'fields' => 'nextPageToken,files(id,name,size,modifiedTime,mimeType)', 'orderBy' => 'modifiedTime desc',
+                'pageSize' => $limit, 'supportsAllDrives' => 'true', 'includeItemsFromAllDrives' => 'true',
+            ];
+            if ($cursor !== null) {
+                $query['pageToken'] = $cursor;
+            }
+            $response = Http::withToken($this->googleDriveToken($destination))->get($this->googleDriveEndpoint($destination).'/files', $query);
+            if ($response->failed()) {
+                throw new RuntimeException('Google Drive listing failed.');
+            }
+            foreach ($response->json('files') ?? [] as $file) {
+                if (($file['mimeType'] ?? null) === 'application/vnd.google-apps.folder') {
+                    continue;
+                }
+                $objects[] = ['key' => (string) $file['id'], 'display_name' => (string) $file['name'], 'size' => (int) ($file['size'] ?? 0), 'last_modified' => $file['modifiedTime'] ?? null];
+            }
+
+            return [$objects, $response->json('nextPageToken') ?: null];
+        }
+        $request = Http::withToken($this->dropboxToken($destination));
+        $response = $cursor === null
+            ? $request->post('https://api.dropboxapi.com/2/files/list_folder', ['path' => $this->dropboxPath($destination), 'recursive' => true, 'include_deleted' => false, 'limit' => $limit])
+            : $request->post('https://api.dropboxapi.com/2/files/list_folder/continue', ['cursor' => $cursor]);
+        $this->ensureDropboxOk($response);
+        foreach ($response->json('entries') ?? [] as $entry) {
+            if (($entry['.tag'] ?? null) !== 'file' || ! is_string($entry['id'] ?? null) || ! str_starts_with($entry['id'], 'id:')) {
+                continue;
+            }
+            $name = $this->dropboxDisplayName($destination, $entry);
+            if ($name !== null) {
+                $objects[] = ['key' => $entry['id'], 'display_name' => $name, 'size' => (int) ($entry['size'] ?? 0), 'last_modified' => $entry['server_modified'] ?? null];
+            }
+        }
+
+        return [$objects, $response->json('has_more') ? $response->json('cursor') : null];
     }
 
     /**
@@ -1770,6 +1898,10 @@ SH;
             '-c', $script, 'sh', $dir, (string) $limit,
         ];
 
+        if ($this->operationHelperName !== null) {
+            array_splice($command, 3, 0, ['--name', $this->operationHelperName]);
+        }
+
         $result = $this->dockerProcess->run($command, 120);
 
         if (! $result->successful()) {
@@ -1840,6 +1972,10 @@ SH;
             RunBackupContainer::IMAGE,
             '-c', $script, 'sh', $dir,
         ];
+
+        if ($this->operationHelperName !== null) {
+            array_splice($command, 3, 0, ['--name', $this->operationHelperName]);
+        }
 
         $result = $this->dockerProcess->run($command, 300);
 
@@ -1924,13 +2060,17 @@ SH;
     {
         [$volume, $dir] = $this->dockerVolumeTarget($destination);
         $path = $dir.'/'.DockerVolumeName::assertKey($key);
-        $result = $this->dockerProcess->run([
+        $command = [
             'docker', 'run', '--rm',
             '-v', $volume.':'.DockerVolumeName::MOUNT_POINT.':ro',
             '--entrypoint', 'test',
             RunBackupContainer::IMAGE,
             '-f', $path,
-        ], 120);
+        ];
+        if ($this->operationHelperName !== null) {
+            array_splice($command, 3, 0, ['--name', $this->operationHelperName]);
+        }
+        $result = $this->dockerProcess->run($command, 120);
 
         if ($result->exitCode === 1 && ! $result->timedOut) {
             return false;

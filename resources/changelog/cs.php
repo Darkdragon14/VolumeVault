@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_destination_operations' => [
+        'title' => 'Testování a procházení úložišť pomocí agentů',
+        'description' => 'Vyberte hostitele pro testování uložených cílů, měření úložiště a stránkované procházení archivů s průběhem, chybami a platností výsledků. Agenti vyžadují destination-v1; sdílené úložiště stále používá jako výchozí centrálního hostitele a místní zůstává u vlastníka. Obnovení váže klíče archivů na čerstvá potvrzení cílového hostitele, zatímco starší agenti zachovávají obnovení z historie.',
+    ],
     'remote_docker_label_backups' => [
         'title' => 'Zálohy podle štítků Dockeru na vzdálených hostitelích',
         'description' => 'Nastavte výchozí hodnoty pro každého hostitele v nastavení nebo přes API, i v režimu samostatného orchestrátoru. Agenti docker-labels-v1 zpracovávají deklarace při úplných inventářích s aktivními sdílenými cíli nebo cíli stejného hostitele. Starší či neúplné inventáře zachovají existující úlohy a zobrazí chyby synchronizace.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_destination_operations' => [
+        'title' => 'Célhelyek tesztelése és böngészése ügynökökkel',
+        'description' => 'Válasszon gazdagépet a mentett célhelyek teszteléséhez, a tárhely méréséhez és az archívumok lapozható böngészéséhez, látható állapottal, hibákkal és érvényességgel. Az ügynökökhöz destination-v1 szükséges; a megosztott tároló alapértelmezése a központi gép, a helyié a tulajdonos. A visszaállítás az archívumkulcsokat a célgép friss igazolásaihoz köti, a régebbi ügynökök pedig továbbra is támogatják az előzményekből történő visszaállítást.',
+    ],
     'remote_docker_label_backups' => [
         'title' => 'Docker-címkealapú mentések távoli gazdagépeken',
         'description' => 'Állítsa be az alapértékeket gazdagépenként a Beállításokban vagy az API-n keresztül, csak vezérlőként működő telepítésnél is. A docker-labels-v1 ügynökök teljes leltár esetén dolgozzák fel a deklarációkat aktív megosztott vagy azonos gazdagépen lévő célokkal. A régi vagy hiányos leltárak megőrzik a meglévő feladatokat és jelzik a szinkronizálási hibákat.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_destination_operations' => [
+        'title' => 'Probar y explorar destinos mediante agentes',
+        'description' => 'Elige un host para probar destinos guardados, medir almacenamiento y explorar archivos paginados con progreso, errores y vigencia visibles. Los agentes requieren destination-v1; el almacenamiento compartido sigue usando el host central por defecto y el local permanece con su propietario. Las restauraciones vinculan las claves a comprobantes recientes del host de destino, mientras los agentes antiguos conservan la restauración desde el historial.',
+    ],
     'remote_docker_label_backups' => [
         'title' => 'Copias por etiquetas Docker en hosts remotos',
         'description' => 'Configura los valores predeterminados por host desde los ajustes o la API, también en modo solo orquestador. Los agentes docker-labels-v1 procesan las declaraciones con inventarios completos y destinos activos compartidos o del mismo host. Los inventarios antiguos o incompletos conservan los trabajos existentes y muestran errores de sincronización.',

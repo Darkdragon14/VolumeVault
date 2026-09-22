@@ -31,7 +31,10 @@ class AgentLifecycle
                 ->orWhereHas('memberRuns', fn ($runs) => $runs->where('docker_host_id', $host->id));
         })->count();
 
-        return max($backups + $restores + $groups, (int) ($host->agent_active_operations ?? 0));
+        $destinations = \App\Models\AgentOperation::where('docker_host_id', $host->id)->where('kind', 'destination')->where('status', 'running')->get()
+            ->filter(fn ($operation): bool => ! $host->isLocal() || in_array($operation->payload['destination']['provider'] ?? null, ['local', 'docker_volume'], true))->count();
+
+        return max($backups + $restores + $groups + $destinations, (int) ($host->agent_active_operations ?? 0));
     }
 
     /** @return array{maintenance_requested: bool, maintenance_ready: bool, active_operations: int} */

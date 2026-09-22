@@ -39,6 +39,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/host-path-allowlist', HostPathAllowlistController::class)->middleware('admin');
         Route::get('/destinations', [DestinationController::class, 'index'])->middleware('admin');
         Route::get('/destinations/{destination}', [DestinationController::class, 'show'])->middleware('admin');
+        Route::get('/destinations/{destination}/operations/{operation}', [\App\Http\Controllers\DestinationOperationController::class, 'show'])->middleware('admin');
         Route::get('/notifications', [NotificationChannelController::class, 'index'])->middleware('admin');
         Route::get('/notifications/{notification}', [NotificationChannelController::class, 'show'])->middleware('admin');
     });
@@ -66,6 +67,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/destinations/{destination}', [DestinationController::class, 'update']);
         Route::delete('/destinations/{destination}', [DestinationController::class, 'destroy']);
         Route::post('/destinations/{destination}/test', [DestinationController::class, 'test']);
+        Route::post('/destinations/{destination}/operations', [\App\Http\Controllers\DestinationOperationController::class, 'store']);
         Route::put('/notifications/{notification}', [NotificationChannelController::class, 'update']);
         Route::post('/notifications/{notification}/test', [NotificationChannelController::class, 'test']);
     });

@@ -268,7 +268,7 @@ class BackupJobController extends Controller
 
     public function backups(Request $request, BackupJob $backupJob, ListBackupObjects $listBackupObjects, ResolveRestoreDestination $resolveRestoreDestination): JsonResponse
     {
-        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer']]);
+        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer'], 'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'], 'cursor' => ['nullable', 'string', 'max:32768'], 'limit' => ['sometimes', 'integer', 'min:1', 'max:1000']]);
         $destination = $resolveRestoreDestination->handle(
             $backupJob,
             isset($validated['backup_run_id']) ? (int) $validated['backup_run_id'] : null,
@@ -282,8 +282,14 @@ class BackupJobController extends Controller
             return response()->json(['message' => ListBackupObjects::UNVERIFIABLE_RUN_MESSAGE], 422);
         }
 
-        if ($destination->isHostBound() && (int) $destination->docker_host_id !== DockerHost::LOCAL_ID) {
-            return response()->json(['data' => $resolveRestoreDestination->knownRemoteBackups($backupJob, $destination, $run)]);
+        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        if (! isset($validated['docker_host_id']) && $destination->isHostBound() && (int) $destination->docker_host_id !== DockerHost::LOCAL_ID
+            && ! app(\App\Services\Agents\AgentExecution::class)->supportsHost($destination->dockerHost, 'destination-v1')) {
+            return response()->json(['data' => $resolveRestoreDestination->knownRemoteBackups($backupJob, $destination, $run), 'listing_supported' => false]);
+        }
+        $hostId = $operations->hostId($destination, isset($validated['docker_host_id']) ? (int) $validated['docker_host_id'] : null);
+        if ($hostId !== DockerHost::LOCAL_ID) {
+            return response()->json(['data' => $operations->safe($operations->create($destination, 'list', $hostId, $validated['cursor'] ?? null, (int) ($validated['limit'] ?? 1000), $run?->id))], 202);
         }
 
         if ($destination->isHostBound()) {

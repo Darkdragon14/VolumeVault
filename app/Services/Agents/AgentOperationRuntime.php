@@ -47,6 +47,32 @@ class AgentOperationRuntime
             $redactor = $this->redactor = new AgentOperationRedactor($operation);
             app()->instance(AppendRunLog::class, new AgentOperationRunLog($redactor));
             $this->protectPersistedErrors();
+            if ($operation['kind'] === 'destination') {
+                $execute = app(\App\Services\BackupDestinations\ExecuteDestinationOperation::class);
+                try {
+                    if ($operation['phase'] === 'accepted') {
+                        app(AgentOperationSpecification::class)->validateLocalPolicy($operation);
+                        $helper = $operation['spec']['destination']['provider'] === 'docker_volume'
+                            ? \App\Actions\Docker\CleanupDestinationOperationHelper::name($id) : null;
+                        $this->store->markExecuting($id, $helper);
+                        $result = $execute->handle($operation['spec'], $id);
+                    } else {
+                        if ($operation['spec']['destination']['provider'] === 'docker_volume'
+                            && ($operation['helper_name'] ?? null) !== \App\Actions\Docker\CleanupDestinationOperationHelper::name($id)) {
+                            return false;
+                        }
+                        $result = $execute->recover($operation['spec'], $id);
+                    }
+                } catch (\Throwable) {
+                    $result = $execute->recover($operation['spec'], $id);
+                }
+                if (! $result['cleanup_complete']) {
+                    return false;
+                }
+                $this->store->finish($id, $result);
+
+                return true;
+            }
             $runClass = $operation['kind'] === 'backup' ? BackupRun::class : RestoreRun::class;
             if ($operation['phase'] === 'accepted') {
                 try {

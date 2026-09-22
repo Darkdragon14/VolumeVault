@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DestinationOperations from '@/Components/DestinationOperations.vue';
+import type { DestinationOperationHost } from '@/Composables/useDestinationOperations';
 import { isHostLocalDestination, useDeployment, type ExecutionHost } from '@/Composables/useDeployment';
 import PasswordInput from '@/Components/PasswordInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -16,6 +18,7 @@ type ProviderOption = {
 const props = defineProps<{
     destination: any | null;
     hosts?: ExecutionHost[];
+    destinationOperationHosts?: DestinationOperationHost[];
     providers: ProviderOption[];
 }>();
 
@@ -486,5 +489,6 @@ const fetchHostKey = async () => {
                 <Link href="/destinations" class="btn-secondary">{{ t('Cancel') }}</Link>
             </div>
         </form>
+        <DestinationOperations v-if="destination" :destination="destination" :hosts="destinationOperationHosts ?? []" />
     </AppLayout>
 </template>

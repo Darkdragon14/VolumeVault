@@ -264,6 +264,30 @@ class RemoteHostWorkflowTest extends TestCase
         $this->postJson($url, $data)->assertAccepted()->assertJsonPath('data.target_docker_host_id', $b->id);
     }
 
+    public function test_agent_listing_receipt_authorizes_unrecorded_archive_without_central_storage_access(): void
+    {
+        $host = $this->host();
+        $host->forceFill(['agent_capabilities' => [...$host->agent_capabilities, 'destination-v1']])->save();
+        $destination = $this->localDestination($host);
+        $job = $this->job($host, $destination);
+        $this->getJson('/api/v1/backup-jobs/'.$job->id.'/backups')->assertAccepted()->assertJsonPath('data.action', 'list')->assertJsonPath('data.docker_host_id', $host->id);
+        $this->getJson('/backup-jobs/'.$job->id.'/backups')->assertAccepted()->assertJsonPath('data.action', 'list');
+        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        $operation = $operations->create($destination, 'list');
+        $operations->complete($operation, [
+            'status' => 'success', 'data' => ['objects' => [['key' => 'unrecorded.tar.gz', 'display_name' => 'unrecorded.tar.gz', 'size' => 17, 'last_modified' => null]], 'next_cursor' => null],
+            'logs' => '', 'cleanup_complete' => true, 'duration_seconds' => 1, 'finished_at' => now()->toIso8601String(),
+        ]);
+        $this->mock(ListBackupObjects::class)->shouldNotReceive('contains');
+        $this->mock(DispatchQueuedRun::class)->shouldReceive('handle')->once()->andReturnFalse();
+        $data = ['destination_operation_id' => $operation->id, 'selected_backup_key' => 'unrecorded.tar.gz', 'mode' => RestoreRun::MODE_NEW_VOLUME, 'target_volume_name' => 'restored-from-list'];
+        $url = '/api/v1/backup-jobs/'.$job->id.'/restore';
+        $this->postJson($url, [...$data, 'selected_backup_key' => 'foreign.tar.gz'])->assertUnprocessable()->assertJsonValidationErrors('selected_backup_key');
+        $this->postJson($url, $data)->assertAccepted();
+        $this->travel(31)->minutes();
+        $this->postJson($url, [...$data, 'target_volume_name' => 'stale-list'])->assertUnprocessable()->assertJsonValidationErrors('selected_backup_key');
+    }
+
     public function test_restore_target_maintenance_and_local_mode_are_enforced_independently_of_source(): void
     {
         $a = $this->host();
@@ -383,6 +407,61 @@ class RemoteHostWorkflowTest extends TestCase
             'agent_capabilities' => ['inventory-v1', 'backup-v1', 'restore-v1'], 'last_seen_at' => now()->subDay(),
             'agent_host_path_allowlist' => ['/srv/remote/'], 'agent_containers' => [['names' => '/app', 'id' => str_repeat('a', 12)]],
         ]);
+    }
+
+    public function test_historical_dropbox_listing_uses_server_resolved_stable_id_outside_the_configured_folder(): void
+    {
+        $host = $this->host();
+        $host->forceFill(['agent_capabilities' => [...$host->agent_capabilities, 'destination-v1']])->save();
+        $destination = $this->destination();
+        $destination->update(['provider' => 'dropbox', 'settings' => ['remote_path' => '/original-folder'],
+            'secrets' => ['app_key' => 'dropbox-key', 'app_secret' => 'dropbox-secret', 'refresh_token' => 'dropbox-refresh']]);
+        $job = $this->job($host, $destination);
+        $backup = $this->successfulBackup($job);
+        $backup->update(['backup_key' => 'id:stable-archive']);
+        $url = '/api/v1/destinations/'.$destination->id.'/operations';
+        $payload = ['action' => 'list', 'docker_host_id' => $host->id, 'backup_run_id' => $backup->id];
+        $id = $this->postJson($url, $payload)->assertAccepted()->assertJsonPath('data.backup_run_id', $backup->id)->json('data.id');
+        $operation = AgentOperation::findOrFail($id);
+        $this->assertSame('id:stable-archive', $operation->payload['selected_backup']['key']);
+        $backup->update(['backup_key' => 'id:changed-after-admission']);
+        \Illuminate\Support\Facades\Http::preventStrayRequests();
+        \Illuminate\Support\Facades\Http::fake([
+            'https://api.dropboxapi.com/oauth2/token' => \Illuminate\Support\Facades\Http::response(['access_token' => 'temporary-secret']),
+            'https://api.dropboxapi.com/2/files/get_metadata' => \Illuminate\Support\Facades\Http::response([
+                '.tag' => 'file', 'id' => 'id:stable-archive', 'name' => 'moved.tar.gz', 'path_display' => '/elsewhere/moved.tar.gz',
+                'path_lower' => '/elsewhere/moved.tar.gz', 'size' => 21, 'server_modified' => '2026-09-22T10:00:00Z',
+            ]),
+        ]);
+        $result = app(\App\Services\BackupDestinations\ExecuteDestinationOperation::class)->handle($operation->payload, $operation->id);
+        $this->assertSame('success', $result['status']);
+        $this->assertSame('id:stable-archive', $result['data']['objects'][0]['key']);
+        $this->assertSame('moved.tar.gz', $result['data']['objects'][0]['display_name']);
+        $this->assertNull($result['data']['next_cursor']);
+        \Illuminate\Support\Facades\Http::assertSentCount(2);
+        \Illuminate\Support\Facades\Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/get_metadata') && $request['path'] === 'id:stable-archive');
+        $backup->update(['backup_key' => 'id:stable-archive']);
+        $forged = $result;
+        $forged['data']['objects'][0]['key'] = 'id:foreign-archive';
+        try {
+            app(\App\Services\BackupDestinations\DestinationOperations::class)->complete($operation, $forged);
+            $this->fail('Foreign historical archive identity accepted');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+            $this->assertSame(422, $exception->getStatusCode());
+            $this->assertSame('pending', $operation->fresh()->status);
+        }
+        app(\App\Services\BackupDestinations\DestinationOperations::class)->complete($operation, $result);
+        $this->mock(ListBackupObjects::class)->shouldNotReceive('contains');
+        $this->mock(DispatchQueuedRun::class)->shouldReceive('handle')->once()->andReturnFalse();
+        $this->postJson('/api/v1/backup-jobs/'.$job->id.'/restore', [
+            'backup_run_id' => $backup->id, 'destination_operation_id' => $id, 'selected_backup_key' => 'id:stable-archive',
+            'mode' => RestoreRun::MODE_NEW_VOLUME, 'target_volume_name' => 'restored-moved-archive',
+        ])->assertAccepted();
+        $this->postJson($url, [...$payload, 'selected_backup_key' => 'id:arbitrary'])->assertUnprocessable();
+        $other = $this->destination();
+        $this->postJson('/api/v1/destinations/'.$other->id.'/operations', $payload)->assertUnprocessable();
+        $destination->update(['settings' => ['remote_path' => '/changed-locator']]);
+        $this->postJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('destination');
     }
 
     private function destination(): BackupDestination

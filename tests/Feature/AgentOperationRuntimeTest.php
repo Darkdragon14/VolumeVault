@@ -101,6 +101,97 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertSame(1, BackupRun::count());
     }
 
+    public function test_destination_runtime_uses_private_database_and_durable_receipt_before_cleanup(): void
+    {
+        $operation = self::operation();
+        $operation['kind'] = 'destination';
+        $operation['spec'] = ['version' => 1, 'destination' => $operation['spec']['destination'], 'action' => 'list', 'limit' => 1000, 'cursor' => null];
+        $store = app(AgentOperationStore::class);
+        $store->accept($operation);
+        $this->mock(DestinationStorage::class)->shouldReceive('listBackupObjectsPage')->once()->andReturn([
+            'objects' => [['key' => 'test-access.tar.gz', 'display_name' => 'test-access.tar.gz', 'size' => 17, 'last_modified' => null]], 'next_cursor' => null,
+        ]);
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $receipt = $store->read($operation['id']);
+        $this->assertSame('success', $receipt['result']['status']);
+        $this->assertSame('test-access.tar.gz', $receipt['result']['data']['objects'][0]['key']);
+        $this->assertFileExists($store->directory($operation['id']).'/runtime.sqlite');
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $store->acknowledge($operation['id']);
+        $this->assertSame('acknowledged', $store->read($operation['id'])['phase']);
+        $this->assertDirectoryDoesNotExist($store->directory($operation['id']));
+        $store->accept($operation);
+        $this->assertSame([], $store->active());
+    }
+
+    public function test_destination_local_policy_failure_is_durably_reported_without_leaking_credentials(): void
+    {
+        $operation = self::operation();
+        $operation['kind'] = 'destination';
+        $operation['spec'] = ['version' => 1, 'destination' => [...$operation['spec']['destination'], 'endpoint' => 'http://127.0.0.1'], 'action' => 'test', 'limit' => 1, 'cursor' => null];
+        $store = app(AgentOperationStore::class);
+        $store->accept($operation);
+        $this->mock(DestinationStorage::class)->shouldNotReceive('testReadOnly');
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $receipt = $store->read($operation['id']);
+        $this->assertSame('failed', $receipt['result']['status']);
+        $this->assertTrue($receipt['result']['cleanup_complete']);
+        $this->assertStringNotContainsString('test-secret', json_encode($receipt['result']));
+    }
+
+    public function test_destination_helper_identity_is_durable_and_recovery_never_replays_a_timed_out_helper(): void
+    {
+        $operation = self::operation();
+        $operation['kind'] = 'destination';
+        $operation['spec'] = ['version' => 1, 'destination' => ['name' => 'Docker archives', 'provider' => 'docker_volume', 'settings' => ['volume_name' => 'archives']], 'action' => 'stats', 'limit' => 1000, 'cursor' => null];
+        $store = app(AgentOperationStore::class);
+        $store->accept($operation);
+        $process = new class($store, $operation['id']) extends DockerProcess
+        {
+            public int $launches = 0;
+            public bool $removeWorks = false;
+            public bool $confirmedAbsent = false;
+
+            public function __construct(private AgentOperationStore $store, private string $id) {}
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                if ($command[1] === 'run') {
+                    $receipt = $this->store->read($this->id);
+                    \PHPUnit\Framework\Assert::assertSame('executing', $receipt['phase']);
+                    \PHPUnit\Framework\Assert::assertContains($receipt['helper_name'], $command);
+                    $this->launches++;
+
+                    return new DockerProcessResult($command, 124, '', 'test-secret timeout', true);
+                }
+                if ($command[1] === 'rm' && ! $this->removeWorks) {
+                    return new DockerProcessResult($command, 1, '', 'daemon unavailable');
+                }
+                if ($command[1] === 'container') {
+                    return $this->confirmedAbsent ? new DockerProcessResult($command, 1, '', 'Error: No such container: '.end($command))
+                        : new DockerProcessResult($command, 0, '[{}]', '');
+                }
+
+                return new DockerProcessResult($command, 0, '{}', '');
+            }
+        };
+        app()->instance(DockerProcess::class, $process);
+        $this->assertFalse(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $this->assertSame('executing', $store->read($operation['id'])['phase']);
+        $this->assertArrayNotHasKey('result', $store->read($operation['id']));
+        $process->removeWorks = true;
+        $this->assertFalse(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $process->confirmedAbsent = true;
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $this->assertSame(1, $process->launches);
+        $receipt = $store->read($operation['id']);
+        $this->assertSame('failed', $receipt['result']['status']);
+        $this->assertTrue($receipt['result']['cleanup_complete']);
+        $this->assertStringNotContainsString('test-secret', json_encode($receipt['result']));
+        $store->acknowledge($operation['id']);
+        $this->assertDirectoryDoesNotExist($store->directory($operation['id']));
+    }
+
     public function test_restore_on_b_does_not_inspect_original_source_on_a(): void
     {
         $operation = self::operation('restore');

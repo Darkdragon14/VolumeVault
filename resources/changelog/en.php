@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_destination_operations' => [
+        'title' => 'Test and browse destinations through agents',
+        'description' => 'Choose a host to test saved destinations, measure storage and browse paginated archives with visible progress, errors and freshness. Agents require destination-v1; shared storage still defaults to the central host and local storage stays with its owner. Restores bind listed archive keys to fresh receipts from the target host, while older agents retain historical restore support.',
+    ],
     'remote_docker_label_backups' => [
         'title' => 'Docker label backups on remote hosts',
         'description' => 'Configure label backup defaults per host in Settings or the API, including orchestrator-only deployments. Agents with docker-labels-v1 reconcile declarations on complete inventories using active shared or same-host destinations. Older or incomplete inventories preserve existing jobs and surface synchronization errors.',

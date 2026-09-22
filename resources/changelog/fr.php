@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_destination_operations' => [
+        'title' => 'Tester et parcourir les destinations via les agents',
+        'description' => 'Choisissez un hôte pour tester les destinations enregistrées, mesurer le stockage et parcourir les archives paginées avec progression, erreurs et validité visibles. Les agents nécessitent destination-v1 ; le stockage partagé utilise toujours l’hôte central par défaut et le stockage local son propriétaire. Les restaurations associent les clés aux reçus récents de l’hôte cible, tandis que les anciens agents conservent la restauration depuis l’historique.',
+    ],
     'remote_docker_label_backups' => [
         'title' => 'Sauvegardes par labels Docker sur les hôtes distants',
         'description' => 'Configurez les valeurs par défaut par hôte dans les paramètres ou via l’API, y compris en mode orchestrateur seul. Les agents docker-labels-v1 traitent les déclarations lors des inventaires complets avec des destinations actives partagées ou du même hôte. Les inventaires anciens ou incomplets préservent les tâches existantes et signalent les erreurs de synchronisation.',

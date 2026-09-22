@@ -49,7 +49,7 @@ class CreateRestoreRun
             if ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== $targetHostId) {
                 throw ValidationException::withMessages(['target_docker_host_id' => 'Archive transfer between host-local destinations not yet supported.']);
             }
-            if ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== DockerHost::LOCAL_ID && $selectedBackupRun === null) {
+            if ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== DockerHost::LOCAL_ID && $selectedBackupRun === null && empty($data['destination_operation_id'])) {
                 throw ValidationException::withMessages(['backup_run_id' => 'Select a known successful backup run for an agent-owned local destination.']);
             }
             $selectedBackupKey = $this->validateSelectedBackupKey(
@@ -60,7 +60,9 @@ class CreateRestoreRun
             $validatedBackupRunKey = $selectedBackupRun?->backup_key;
             $restoreDestinationId = (int) $restoreDestination->id;
             $restoreDestinationFingerprint = $this->destinationFingerprint($restoreDestination);
-            $selectedBackupKeyAvailability = $this->selectedBackupKeyAvailability(
+            $selectedBackupKeyAvailability = isset($data['destination_operation_id'])
+                ? ['available' => app(\App\Services\BackupDestinations\DestinationOperations::class)->verifies($restoreDestination, $targetHostId, $data['destination_operation_id'], $selectedBackupKey), 'exception' => null]
+                : $this->selectedBackupKeyAvailability(
                 $restoreDestination,
                 $selectedBackupKey,
                 $selectedBackupRun !== null,

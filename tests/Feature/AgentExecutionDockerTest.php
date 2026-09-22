@@ -123,6 +123,7 @@ PHP, ['side' => $side]);
                     '-e', 'VOLUMEVAULT_ORCHESTRATOR_URL=https://orchestrator:8443',
                     '-e', 'VOLUMEVAULT_AGENT_ENROLLMENT_TOKEN='.$enrollment['token'],
                     '-e', 'VOLUMEVAULT_AGENT_CA='.$enrollment['ca'],
+                    '-e', 'VOLUMEVAULT_HOST_PATH_ALLOWLIST=/app/storage/destination-probe',
                     '-e', 'VOLUMEVAULT_SSRF_ALLOWED_IPS='.$subnet,
                 ]);
             }
@@ -189,6 +190,50 @@ foreach ($s3->getPaginator('ListObjectsV2', ['Bucket' => 'execution-backups']) a
 $result = ['keys' => $keys];
 PHP, ['endpoint' => $endpoint, 'password' => $password]);
             $this->assertSame([$completedBackup['key']], $objects['keys']);
+
+            $this->docker(['exec', $agents['a'], 'php', '-r', 'mkdir("/app/storage/destination-probe", 0700, true); file_put_contents("/app/storage/destination-probe/agent-only.tar.gz", "agent-only-archive"); chown("/app/storage/destination-probe", "www-data"); chown("/app/storage/destination-probe/agent-only.tar.gz", "www-data");']);
+            $destinationStarted = microtime(true);
+            $destinationOperations = $this->control($server, <<<'PHP'
+$network = App\Models\BackupDestination::where('name', 'Isolated MinIO')->firstOrFail();
+$local = App\Models\BackupDestination::create(['name' => 'Agent-only archives', 'provider' => 'local', 'bucket' => '', 'access_key_id' => '', 'secret_access_key' => '', 'docker_host_id' => $input['a'], 'settings' => ['archive_path' => '/app/storage/destination-probe'], 'is_active' => true]);
+$operations = app(App\Services\BackupDestinations\DestinationOperations::class);
+$ids = [];
+foreach (['test', 'list', 'stats'] as $action) {
+    $ids['network_'.$action] = $operations->create($network, $action, $input['b'])->id;
+    $ids['local_'.$action] = $operations->create($local, $action)->id;
+}
+$result = ['ids' => $ids];
+PHP, ['a' => $hosts['a'], 'b' => $hosts['b']]);
+            $destinationReceipts = [];
+            $this->waitFor(function () use ($server, $destinationOperations, &$destinationReceipts): bool {
+                $destinationReceipts = $this->control($server, <<<'PHP'
+$result = [];
+foreach ($input['ids'] as $name => $id) {
+    $operation = App\Models\AgentOperation::findOrFail($id);
+    $result[$name] = ['status' => $operation->status, 'receipt' => $operation->result, 'host' => $operation->docker_host_id,
+        'queue_seconds' => $operation->claimed_at ? $operation->claimed_at->timestamp - $operation->created_at->timestamp : null,
+        'roundtrip_seconds' => $operation->completed_at ? $operation->completed_at->timestamp - $operation->created_at->timestamp : null];
+}
+PHP, $destinationOperations);
+
+                return count(array_filter($destinationReceipts, fn (array $receipt): bool => $receipt['status'] === 'completed')) === 6;
+            }, 'real agents test, list and measure local and MinIO destinations', 180,
+                fn (): array => $this->destinationDiagnostics($server, $agents, $destinationOperations['ids']));
+            if (getenv('VOLUMEVAULT_AGENT_TEST_DIAGNOSTICS') === '1') {
+                $timings = [];
+                foreach ($destinationReceipts as $name => $receipt) {
+                    $timings[$name] = ['queue_seconds' => $receipt['queue_seconds'], 'roundtrip_seconds' => $receipt['roundtrip_seconds'], 'execution_seconds' => $receipt['receipt']['duration_seconds'] ?? null];
+                }
+                fwrite(STDERR, 'Destination operation timings: '.json_encode(['stage_seconds' => round(microtime(true) - $destinationStarted, 1), 'operations' => $timings], JSON_THROW_ON_ERROR).PHP_EOL);
+            }
+            foreach ($destinationReceipts as $name => $receipt) {
+                $this->assertSame('success', $receipt['receipt']['status'], $name);
+                $this->assertSame(str_starts_with($name, 'local_') ? $hosts['a'] : $hosts['b'], $receipt['host']);
+            }
+            $this->assertSame('agent-only.tar.gz', $destinationReceipts['local_list']['receipt']['data']['objects'][0]['key']);
+            $this->assertSame(18, $destinationReceipts['local_stats']['receipt']['data']['used_bytes']);
+            $this->assertSame($completedBackup['key'], $destinationReceipts['network_list']['receipt']['data']['objects'][0]['key']);
+            $this->assertGreaterThan(0, $destinationReceipts['network_stats']['receipt']['data']['used_bytes']);
 
             $group = $this->control($server, <<<'PHP'
 $group = App\Models\BackupJobGroup::create(['name' => 'Two real agents', 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'], 'status' => 'active', 'failure_policy' => 'continue', 'notifications_enabled' => false]);
@@ -354,14 +399,23 @@ PHP, ['host' => $hosts['a']]);
     {
         $save = new Process(['docker', 'image', 'save', self::OFFEN_IMAGE]);
         $load = new Process(['docker', 'exec', '-i', $engine, 'docker', 'image', 'load']);
+        $archive = tmpfile();
+        $this->assertIsResource($archive);
         try {
-            $save->setTimeout(120)->start();
-            $load->setInput($save->getIterator(Process::ITER_SKIP_ERR));
+            $save->setTimeout(120)->run(function (string $type, string $chunk) use ($archive): void {
+                if ($type === Process::OUT) {
+                    fwrite($archive, $chunk);
+                }
+            });
+            $this->assertTrue($save->isSuccessful(), 'Exporting the local Offen image failed.');
+            rewind($archive);
+            $load->setInput($archive);
             $load->setTimeout(120)->run();
             $this->assertTrue($save->isSuccessful() && $load->isSuccessful(), 'Streaming the local Offen image into DinD failed.');
         } finally {
             $save->stop();
             $load->stop();
+            fclose($archive);
         }
     }
 
@@ -448,9 +502,23 @@ $app = require 'bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 $input = json_decode(getenv('EXECUTION_TEST_INPUT'), true, flags: JSON_THROW_ON_ERROR);
 PHP;
-        $output = $this->docker(['exec', '-w', '/app', '-e', 'EXECUTION_TEST_INPUT='.json_encode($input, JSON_THROW_ON_ERROR), $container, 'php', '-r', $bootstrap."\n".$code."\necho json_encode(\$result, JSON_THROW_ON_ERROR);"]);
+        $failure = <<<'PHP'
+} catch (Throwable $exception) {
+    $categories = [];
+    foreach (['no such table', 'database is locked', 'readonly database', 'Permission denied', 'No application encryption key', 'Connection refused'] as $category) {
+        if (str_contains($exception->getMessage(), $category)) {
+            $categories[] = $category;
+        }
+    }
+    echo json_encode(['_control_error' => get_class($exception), 'code' => (string) $exception->getCode(),
+        'source' => basename($exception->getFile()).':'.$exception->getLine(), 'categories' => $categories], JSON_THROW_ON_ERROR);
+}
+PHP;
+        $output = $this->docker(['exec', '-w', '/app', '-e', 'EXECUTION_TEST_INPUT='.json_encode($input, JSON_THROW_ON_ERROR), $container, 'php', '-r', "try {\n".$bootstrap."\n".$code."\necho json_encode(\$result, JSON_THROW_ON_ERROR);\n".$failure]);
+        $result = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertArrayNotHasKey('_control_error', $result, 'Isolated control failed: '.json_encode(isset($result['_control_error']) ? $result : [], JSON_THROW_ON_ERROR));
 
-        return json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+        return $result;
     }
 
     private function waitFor(callable $ready, string $stage, int $seconds, ?callable $diagnostics = null): void
@@ -464,6 +532,61 @@ PHP;
         } while (microtime(true) < $deadline);
         $details = $diagnostics === null ? '' : ' Diagnostics: '.json_encode($diagnostics(), JSON_THROW_ON_ERROR);
         $this->fail('Timed out waiting for '.$stage.'.'.$details);
+    }
+
+    /** Only status fields, validation field names and fixed diagnostics may leave the agents. */
+    private function destinationDiagnostics(string $server, array $agents, array $ids): array
+    {
+        $central = $this->control($server, <<<'PHP'
+$result = [];
+foreach ($input['ids'] as $name => $id) {
+    $operation = App\Models\AgentOperation::findOrFail($id);
+    $host = App\Models\DockerHost::findOrFail($operation->docker_host_id);
+    $safeErrors = ['Destination operation failed. Check credentials, reachability and host policy.', 'Destination operation rejected by agent-local policy.'];
+    $result[$name] = [...$operation->only(['id', 'status', 'claimed_at', 'last_progress_at', 'completed_at']),
+        'outcome' => $operation->result['status'] ?? null,
+        'error' => in_array($operation->result['error_message'] ?? null, $safeErrors, true) ? $operation->result['error_message'] : null,
+        'host' => $host->only(['last_seen_at', 'agent_active_operations', 'agent_capabilities', 'maintenance_requested_at'])];
+}
+PHP, ['ids' => $ids]);
+        $journals = [];
+        foreach ($agents as $side => $agent) {
+            $journals[$side] = $this->control($agent, <<<'PHP'
+$store = app(App\Services\Agents\AgentOperationStore::class);
+$result = [];
+foreach ($input['ids'] as $name => $id) {
+    try {
+        $entry = $store->read($id);
+        $state = ['phase' => $entry['phase'] ?? null, 'outcome' => $entry['result']['status'] ?? null,
+            'cleanup_complete' => $entry['result']['cleanup_complete'] ?? null,
+            'runtime_database' => is_file($store->directory($id).'/runtime.sqlite')];
+        $safeErrors = ['Destination operation failed. Check credentials, reachability and host policy.', 'Destination operation rejected by agent-local policy.'];
+        $state['error'] = in_array($entry['result']['error_message'] ?? null, $safeErrors, true) ? $entry['result']['error_message'] : null;
+        if (isset($entry['spec'], $entry['result'])) {
+            try {
+                app(App\Services\BackupDestinations\DestinationOperations::class)->validateResult($entry['spec']['action'], $entry['result'], $entry['spec']['limit']);
+                $state['result_valid'] = true;
+            } catch (Illuminate\Validation\ValidationException $exception) {
+                $state['validation_fields'] = array_keys($exception->errors());
+            } catch (Throwable $exception) {
+                $state['validation_exception'] = get_class($exception);
+            }
+        }
+        $result[$name] = $state;
+    } catch (Throwable $exception) {
+        $result[$name] = ['exception_class' => get_class($exception),
+            'journal_unreadable' => $exception->getMessage() === 'Operation journal is unreadable; recovery required.'];
+    }
+}
+PHP, ['ids' => $ids]);
+            $logs = new Process(['docker', 'logs', '--tail', '50', $agent]);
+            $logs->setTimeout(10)->run();
+            foreach (['Agent cycle failed; check connectivity, enrollment, and Docker availability.', 'Agent state is unavailable; exiting to reload the persisted identity.'] as $message) {
+                $journals[$side]['log_counts'][$message] = substr_count($logs->getOutput().$logs->getErrorOutput(), $message);
+            }
+        }
+
+        return ['central' => $central, 'agents' => $journals];
     }
 
     /** Only allowlisted metadata and known credential-free log messages leave the isolated runtime. */

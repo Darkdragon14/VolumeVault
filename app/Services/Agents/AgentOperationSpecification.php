@@ -57,6 +57,22 @@ class AgentOperationSpecification
                 'spec.run.backup_before_overwrite' => ['sometimes', 'boolean:strict'],
                 'spec.run.confirmation_text' => ['nullable', 'string', 'max:255'],
             ];
+            if (($operation['kind'] ?? null) === 'destination') {
+                $rules = array_filter($rules, fn (string $key): bool => ! str_starts_with($key, 'spec.job') && ! str_starts_with($key, 'spec.run') && $key !== 'spec.safety_destination', ARRAY_FILTER_USE_KEY);
+                $rules['kind'] = ['required', 'in:destination'];
+                $rules['spec'] = ['required', 'array:version,destination,action,cursor,limit,selected_backup'];
+                $rules['spec.action'] = ['required', 'in:test,list,stats'];
+                $rules['spec.cursor'] = ['nullable', 'string', 'max:16384', 'prohibited_unless:spec.action,list'];
+                if (isset($operation['spec']['selected_backup'])) {
+                    $rules['spec.cursor'][] = 'prohibited';
+                }
+                $rules['spec.limit'] = ['required', 'integer:strict', 'min:1', 'max:1000'];
+                $rules['spec.selected_backup'] = ['sometimes', 'array:key,display_name,size,last_modified', 'prohibited_unless:spec.action,list'];
+                $rules['spec.selected_backup.key'] = ['required_with:spec.selected_backup', 'string', 'max:4096'];
+                $rules['spec.selected_backup.display_name'] = ['required_with:spec.selected_backup', 'string', 'max:4096'];
+                $rules['spec.selected_backup.size'] = ['nullable', 'integer:strict', 'min:0'];
+                $rules['spec.selected_backup.last_modified'] = ['nullable', 'string', 'max:64', 'date'];
+            }
             if (array_diff(array_keys($operation), ['id', 'token', 'kind', 'spec']) !== [] || ($operation['spec']['version'] ?? null) !== 1) {
                 throw new RuntimeException;
             }
@@ -104,7 +120,9 @@ class AgentOperationSpecification
                 });
                 $validator->validate();
             }
-            $this->validateSourceAndTarget($operation);
+            if ($operation['kind'] !== 'destination') {
+                $this->validateSourceAndTarget($operation);
+            }
         } catch (\Throwable) {
             // Validation exceptions can contain credential-bearing URLs/values.
             throw new RuntimeException('Agent operation specification is invalid.');

@@ -36,7 +36,7 @@ docker run --rm -v "$PWD:/app" -w /app composer:2 php artisan test
 ## Current Limitations
 
 - No external identity provider support yet.
-- A Docker TCP endpoint, such as a socket proxy for the local engine, can be configured through `DOCKER_HOST`; multi-host execution uses agents rather than a central list of remote Docker endpoints. Remote backups, restores, remote/mixed backup groups and host-scoped label reconciliation are available; agent-side destination operations and host-local archive relaying remain pending.
+- A Docker TCP endpoint, such as a socket proxy for the local engine, can be configured through `DOCKER_HOST`; multi-host execution uses agents rather than a central list of remote Docker endpoints. Remote backups, restores, remote/mixed backup groups, host-scoped label reconciliation and `destination-v1` testing/browsing/storage measurements are available. Host-local archive relaying remains pending.
 - No Kubernetes support.
 - Hybrid notifications use the Shoutrrr Docker image; orchestrator-only notifications use the bundled native CLI without a daemon.
 - Backup archive extraction assumes the archive layout produced by the configured `offen/docker-volume-backup` mount path.

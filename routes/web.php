@@ -104,6 +104,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/destinations/host-key', [DestinationController::class, 'hostKey'])->name('destinations.host-key');
         Route::patch('/destinations/{destination}/active', [DestinationController::class, 'updateActive'])->name('destinations.active');
         Route::post('/destinations/{destination}/test', [DestinationController::class, 'test'])->name('destinations.test');
+        Route::post('/destinations/{destination}/operations', [\App\Http\Controllers\DestinationOperationController::class, 'store'])->name('destinations.operations.store');
+        Route::get('/destinations/{destination}/operations/{operation}', [\App\Http\Controllers\DestinationOperationController::class, 'show'])->name('destinations.operations.show');
 
         Route::get('/installation-save', [InstallationSaveController::class, 'index'])->name('installation-save.index');
         Route::get('/installation-save/download', [InstallationSaveController::class, 'download'])->name('installation-save.download');

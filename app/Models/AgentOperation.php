@@ -13,12 +13,12 @@ class AgentOperation extends Model
 
     protected $guarded = [];
 
-    protected $hidden = ['payload', 'context', 'delivery_token', 'owner_instance_id'];
+    protected $hidden = ['payload', 'context', 'delivery_token', 'owner_instance_id', 'result'];
 
     protected function casts(): array
     {
         return [
-            'payload' => 'encrypted:array', 'context' => 'encrypted:array', 'delivery_token' => 'encrypted',
+            'payload' => 'encrypted:array', 'context' => 'encrypted:array', 'delivery_token' => 'encrypted', 'result' => 'encrypted:array',
             'claimed_at' => 'datetime', 'last_progress_at' => 'datetime', 'completed_at' => 'datetime',
         ];
     }

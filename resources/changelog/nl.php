@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_destination_operations' => [
+        'title' => 'Bestemmingen testen en doorzoeken via agents',
+        'description' => 'Kies een host om opgeslagen bestemmingen te testen, opslag te meten en archieven per pagina te bekijken met zichtbare voortgang, fouten en geldigheid. Agents vereisen destination-v1; gedeelde opslag gebruikt standaard nog de centrale host en lokale opslag blijft bij de eigenaar. Herstel koppelt archiefsleutels aan recente bewijzen van de doelhost; oudere agents behouden herstel vanuit de geschiedenis.',
+    ],
     'remote_docker_label_backups' => [
         'title' => 'Docker-labelback-ups op externe hosts',
         'description' => 'Configureer standaardwaarden per host via Instellingen of de API, ook bij een zelfstandige orchestrator. Agents met docker-labels-v1 verwerken declaraties bij volledige inventarissen met actieve gedeelde bestemmingen of bestemmingen op dezelfde host. Oudere of onvolledige inventarissen behouden bestaande taken en tonen synchronisatiefouten.',

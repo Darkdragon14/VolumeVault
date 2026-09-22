@@ -87,6 +87,46 @@ class AgentOperationProtocolTest extends TestCase
         Process::assertNothingRan();
     }
 
+    public function test_destination_protocol_encrypts_assignment_and_validates_receipt_before_idempotent_completion(): void
+    {
+        [$host, $body, $token] = $this->registered();
+        $body['capabilities'][] = 'destination-v1';
+        $host->forceFill(['agent_capabilities' => $body['capabilities']])->save();
+        $destination = $this->backup($host)->job->destination;
+        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        $requested = $operations->create($destination, 'stats', $host->id);
+        $operation = $this->pull($body, $token);
+        $this->assertSame('destination', $operation['kind']);
+        $this->assertSame($requested->id, $operation['id']);
+        $this->assertSame($operation, $this->pull($body, $token));
+        $receipt = ['status' => 'success', 'logs' => 'broker-private-secret', 'data' => ['used_bytes' => 42, 'object_count' => 1], 'cleanup_complete' => true, 'duration_seconds' => 1, 'finished_at' => now()->toIso8601String()];
+        $payload = [...$body, 'token' => $operation['token'], 'result' => $receipt];
+        $url = 'operations/'.$operation['id'].'/complete';
+        $this->sendAgent($url, $token, [...$payload, 'result' => [...$receipt, 'data' => ['used_bytes' => -1, 'object_count' => 1]]])->assertUnprocessable();
+        $this->assertSame('running', $requested->fresh()->status);
+        $this->sendAgent($url, $token, $payload)->assertOk();
+        $this->sendAgent($url, $token, $payload)->assertOk();
+        $this->assertSame('[redacted]', $requested->fresh()->result['logs']);
+        $this->assertSame(42, $requested->fresh()->result['data']['used_bytes']);
+    }
+
+    public function test_destination_listing_transport_preserves_whitespace_and_secret_substrings_in_resource_identity(): void
+    {
+        [$host, $body, $token] = $this->registered();
+        $body['capabilities'][] = 'destination-v1';
+        $host->forceFill(['agent_capabilities' => $body['capabilities']])->save();
+        $destination = $this->backup($host)->job->destination;
+        $requested = app(\App\Services\BackupDestinations\DestinationOperations::class)->create($destination, 'list', $host->id);
+        $operation = $this->pull($body, $token);
+        $key = ' broker-access-secret/archive.tar.gz';
+        $receipt = ['status' => 'success', 'logs' => 'broker-private-secret', 'data' => ['objects' => [['key' => $key, 'display_name' => $key, 'size' => 42, 'last_modified' => null]], 'next_cursor' => ' opaque-token '], 'cleanup_complete' => true, 'duration_seconds' => 1, 'finished_at' => now()->toIso8601String()];
+        $this->sendAgent('operations/'.$operation['id'].'/complete', $token, [...$body, 'token' => $operation['token'], 'result' => $receipt])->assertOk();
+        $this->assertSame($key, $requested->fresh()->result['data']['objects'][0]['key']);
+        $this->assertSame($key, $requested->fresh()->result['data']['objects'][0]['display_name']);
+        $this->assertSame(' opaque-token ', $requested->fresh()->result['data']['next_cursor']);
+        $this->assertSame('[redacted]', $requested->fresh()->result['logs']);
+    }
+
     public function test_inventory_created_label_job_executes_and_completion_applies_deferred_settings(): void
     {
         [$host, $body, $token] = $this->registered();

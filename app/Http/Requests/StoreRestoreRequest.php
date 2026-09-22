@@ -16,6 +16,16 @@ use Illuminate\Validation\Validator;
 
 class StoreRestoreRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if ($this->isJson()) {
+            $raw = json_decode($this->getContent(), true);
+            if (is_string($raw['selected_backup_key'] ?? null)) {
+                $this->merge(['selected_backup_key' => $raw['selected_backup_key']]);
+            }
+        }
+    }
+
     public function authorize(): bool
     {
         return (bool) $this->user()?->isAdmin();
@@ -26,6 +36,7 @@ class StoreRestoreRequest extends FormRequest
         return [
             'target_docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'],
             'backup_run_id' => ['nullable', 'integer'],
+            'destination_operation_id' => ['nullable', 'uuid'],
             'selected_backup_key' => ['required', 'string', 'max:2048'],
             'mode' => ['required', 'string', Rule::in([
                 RestoreRun::MODE_NEW_VOLUME,

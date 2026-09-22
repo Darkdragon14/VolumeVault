@@ -26,7 +26,7 @@ Agent heartbeats additionally report protocol/capabilities and active operation 
 
 Groups may contain local, remote or mixed-host members. Each member retains its own host-scoped source and destination: local filesystem and Docker-volume destinations must belong to that member's host. Remote members reuse `backup-v1`; there is no group-specific agent protocol. Group detail members and group-run member records expose `docker_host_id` and a safe `docker_host` identity (`id`, `name`, `is_local`).
 
-Remote/mixed runs snapshot membership, sources and the `continue`/`stop` failure policy and use a durable central coordinator. Execution is sequential: each member completes its configured stop/backup/restart cycle before the next member is dispatched. A failed member makes the aggregate outcome fail; `continue` processes remaining members and `stop` skips them. Notifications remain one group start and one aggregate success/failure notification, not per-member notifications. This is not a consistent cross-host snapshot and does not stop all containers together. Purely local groups retain their synchronous execution path. Group support does not add cross-host host-local archive relaying or agent-side destination browsing/testing operations.
+Remote/mixed runs snapshot membership, sources and the `continue`/`stop` failure policy and use a durable central coordinator. Execution is sequential: each member completes its configured stop/backup/restart cycle before the next member is dispatched. A failed member makes the aggregate outcome fail; `continue` processes remaining members and `stop` skips them. Notifications remain one group start and one aggregate success/failure notification, not per-member notifications. This is not a consistent cross-host snapshot and does not stop all containers together. Purely local groups retain their synchronous execution path. Cross-host relaying of host-local archives remains unavailable; destination browsing/testing uses the separate `destination-v1` capability below.
 
 Host-local destinations (`local` and `docker_volume`) accept `docker_host_id`, defaulting to `1` on creation and preserving the owner on update. A backup job cannot use another host's local destination. Network destinations have no host owner. Remote bind paths are checked lexically against the agent's reported allowlist without mounting or resolving them centrally; the agent revalidates its authoritative policy at execution. Destination secrets remain encrypted and are never returned or prefilled.
 
@@ -51,13 +51,56 @@ Write operations still require an admin user, and secrets are never returned in 
 
 `GET /api/v1/backup-jobs` accepts `sort=created_at|name|next_run_at|last_run_at` and `direction=asc|desc`. Date sorts always place jobs without a date last and use the job name as a stable tie-breaker.
 
-When restoring, `selected_backup_key` must be one of the keys returned by `GET /api/v1/backup-jobs/{id}/backups` - it is checked against the destination listing, so arbitrary or path-traversal keys are rejected. Volume names (`volume_name`, `target_volume_name`) must match `^[A-Za-z0-9_.-]+$`.
+When restoring, `selected_backup_key` must be an exact provider key from a verified listing or a known historical record. A destination operation listing can provide a host-bound receipt as described below. Keys are opaque: do not normalize case, trim them, replace them with display names, or reconstruct Dropbox IDs. Volume names (`volume_name`, `target_volume_name`) must match `^[A-Za-z0-9_.-]+$`.
+
+### Asynchronous destination operations
+
+Administrators with the `write` token ability can submit `POST /api/v1/destinations/{id}/operations`:
+
+```json
+{ "action": "list", "docker_host_id": 2, "limit": 100, "cursor": null }
+```
+
+- `action` is required: `test`, `stats`, or `list`.
+- `backup_run_id` is optional and allowed only for `list`. It requests an exact historical archive lookup using the run's server-resolved destination snapshot and provider identity, including a Dropbox stable file ID even if the archive moved outside the configured folder. The result contains zero or one object and `next_cursor: null`; do not combine this lookup with a pagination cursor. The operation response includes `backup_run_id` (or `null` for generic listings). Clients must match this run context when resuming or polling a listing receipt and use the resolved run ID after historical-context navigation. Arbitrary `selected_backup_key` or `selected_backup` request parameters are prohibited.
+- `docker_host_id` is optional. Shared network destinations default to central host `1`; host-local destinations default to their owner and reject any other host. Remote execution requires a registered compatible agent advertising `destination-v1` and accepting work outside maintenance.
+- `limit` is an integer from **1–1000**, default **1000**, for each list page.
+- `cursor` is optional and only meaningful for `list`. Pass `result.data.next_cursor` unchanged when requesting the next page with the **same destination, locator, host and limit**. Cursors expire one hour after the listing operation completes; invalid, changed-context or expired cursors return validation errors. Restart listing without a cursor to recover.
+
+The response is **202**, with `{ "data": operation }`. Poll `GET /api/v1/destinations/{id}/operations/{operation}` using the `read` ability. Its `data` includes:
+
+```json
+{
+  "id": "operation-uuid",
+  "destination_id": 9,
+  "docker_host_id": 2,
+  "action": "list",
+  "status": "pending",
+  "result": null,
+  "locator_current": true,
+  "fresh_until": null
+}
+```
+
+Status progresses through `pending`, `running`, and `completed`. Offline agents may leave work pending. Completion does **not** imply success: inspect `result.status` (`success` or `failed`) and any `result.error_message`. Successful `result.data` is action-specific:
+
+| Action | Data |
+| --- | --- |
+| `test` | `{ "ok": true }` |
+| `stats` | `{ "used_bytes": 1234, "object_count": 10 }` |
+| `list` | `{ "objects": [{ "key": "opaque-key", "display_name": "backup.tar.gz", "size": 1234, "last_modified": null }], "next_cursor": null }` |
+
+`last_modified` may instead contain a date string. Failed results have `data: null`. Results are limited to **2 MiB**, and lists to the requested limit (at most **1000 objects per page**). Use smaller pages if necessary. Offset-based pagination over changing directories is **not a snapshot**: concurrent additions/removals can cause skipped or repeated objects. Clients should deduplicate by exact key, not display name.
+
+`locator_current: false` means the destination location changed since the operation was created. `fresh_until` is the claim time (or creation time for unclaimed operations) plus **30 minutes**, exposed after completion. Polling or reusing a cursor does not extend freshness. For a restore chosen from a listing, send `destination_operation_id` with `selected_backup_key` and `target_docker_host_id` to the restore endpoint. The receipt must be a successful fresh **list** operation matching the destination's current locator, target host and exact key on that receipt's page. Keep the original page receipt when selecting an archive after fetching later pages. Refresh and reselect if expired; a stats/test operation is not a restore receipt.
+
+The authenticated web UI uses the same JSON contract at `POST /destinations/{id}/operations` and `GET /destinations/{id}/operations/{operation}` with session authentication and CSRF protection. These JSON calls do not use Inertia page navigation.
 
 `POST /api/v1/backup-jobs/{id}/restore` accepts these restore modes:
 
 The optional `target_docker_host_id` defaults to the job's current host. With a shared network destination, `new_volume` can restore an archive from host A onto host B, including the same volume name when absent on B. The source host and source name come from the selected historical `backup_run_id`, not the job's current configuration. In-place restores require an available volume on the target and exact typed confirmation. A safety backup additionally requires the job and its current destination to be usable on that target host.
 
-Network archive keys are still verified centrally against the destination listing. For an agent-owned local destination, supply a successful `backup_run_id` with its exact `selected_backup_key` and unchanged destination locator. Listing endpoints return known matching runs with `backup_run_id` and `verification_deferred: true`; actual archive existence is checked by the agent before modifying the target. Host-local archives cannot be restored onto another host: archive transfer between host-local destinations is not yet supported.
+Without a destination-operation receipt, network archive keys retain central verification. For an agent-owned local destination, a successful historical `backup_run_id` with its exact `selected_backup_key` and unchanged destination locator remains supported without a receipt, including older agents. The backup-list endpoint can return known matching runs with `backup_run_id`, `verification_deferred: true` and `listing_supported: false` for the older-agent fallback; actual archive existence is checked by the agent before modifying the target. When selecting a compatible remote host via `docker_host_id`, listing can instead return a `202` operation to poll. Host-local archives cannot be restored onto another host: archive transfer between host-local destinations is not yet supported.
 
 - `new_volume`: restore into a fresh Docker volume. Provide `target_volume_name`; this is the safest mode and is also the only mode available for host-path backup jobs.
 - `inplace`: overwrite the source Docker volume. This is available only for Docker-volume backup jobs and requires `confirmation_text` to exactly match the source volume name.
@@ -115,6 +158,8 @@ GET    /api/v1/destinations/{id}
 PUT    /api/v1/destinations/{id}
 DELETE /api/v1/destinations/{id}
 POST   /api/v1/destinations/{id}/test
+POST   /api/v1/destinations/{id}/operations
+GET    /api/v1/destinations/{id}/operations/{operation}
 GET    /api/v1/notifications
 GET    /api/v1/notifications/{id}
 POST   /api/v1/notifications/{id}/test

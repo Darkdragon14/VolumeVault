@@ -78,7 +78,7 @@ class DispatchAgentOperation
         return $spec;
     }
 
-    private function destination(BackupDestination $destination): array
+    public function destination(BackupDestination $destination): array
     {
         $data = [];
         foreach (['name', 'provider', 'endpoint', 'region', 'bucket', 'path_prefix', 'access_key_id', 'secret_access_key', 'use_path_style_endpoint', 'settings', 'secrets'] as $field) {

@@ -76,8 +76,14 @@ class DestinationController extends Controller
         return response()->json(status: 204);
     }
 
-    public function test(BackupDestination $destination, TestBackupDestination $testBackupDestination): JsonResponse
+    public function test(Request $request, BackupDestination $destination, TestBackupDestination $testBackupDestination): JsonResponse
     {
+        $data = $request->validate(['docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id']]);
+        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        $hostId = $operations->hostId($destination, isset($data['docker_host_id']) ? (int) $data['docker_host_id'] : null);
+        if ($hostId !== \App\Models\DockerHost::LOCAL_ID) {
+            return response()->json(['data' => $operations->safe($operations->create($destination, 'test', $hostId))], 202);
+        }
         $result = $testBackupDestination->handle($destination);
 
         return response()->json(['data' => $result], $result['ok'] ? 200 : 422);
