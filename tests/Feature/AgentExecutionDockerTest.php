@@ -27,6 +27,76 @@ class AgentExecutionDockerTest extends TestCase
     /** @var array<int, string> */
     private array $agentContainers = [];
 
+    private function verifyRemoteStack(string $server, array $engines, array $agents, array $hosts, string $endpoint, string $password): void
+    {
+        $markers = ['stack-data' => 'stack-data-'.bin2hex(random_bytes(16)), 'stack-logs' => 'stack-logs-'.bin2hex(random_bytes(16))];
+        $sentinel = 'foreign-stack-'.bin2hex(random_bytes(16));
+        foreach ($engines as $side => $engine) {
+            foreach ($markers as $volume => $marker) {
+                $this->docker(['exec', $engine, 'docker', 'volume', 'create', '--label', 'com.docker.compose.project=real-stack', $volume]);
+                $this->writeMarker($engine, $volume, $side === 'a' ? $marker : $sentinel);
+            }
+            $before = $this->hostIdentity($server, $hosts[$side]);
+            $this->docker(['restart', $agents[$side]]);
+            $this->waitFor(fn (): bool => $this->hostIdentity($server, $hosts[$side])['sequence'] > $before['sequence'], 'stack volume inventory on '.$side, 90);
+        }
+
+        $stack = $this->control($server, <<<'PHP'
+$volumes = App\Models\DockerVolume::whereIn('docker_host_id', $input['hosts'])->whereIn('name', $input['volumes'])->get();
+$destination = App\Models\BackupDestination::where('name', 'Isolated MinIO')->firstOrFail();
+$summary = app(App\Actions\Backup\BackupStack::class)->handle('real-stack', ['docker_host_id' => $input['a'], 'backup_destination_id' => $destination->id, 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00']]);
+$jobs = App\Models\BackupJob::whereIn('volume_name', $input['volumes'])->get();
+$result = ['summary' => $summary, 'jobs' => $jobs->modelKeys(), 'hosts' => $jobs->pluck('docker_host_id')->all(), 'runs' => App\Models\BackupRun::whereIn('backup_job_id', $jobs->modelKeys())->pluck('id')->all(), 'inventory' => $volumes->count(), 'projects' => $volumes->map(fn ($volume) => $volume->labels['com.docker.compose.project'] ?? null)->all()];
+PHP, ['a' => $hosts['a'], 'hosts' => array_values($hosts), 'volumes' => array_keys($markers)]);
+        $this->assertSame(['created' => 2, 'queued' => 2, 'skipped' => 0, 'grouped' => 0], $stack['summary']);
+        $this->assertSame(4, $stack['inventory']);
+        $this->assertSame(array_fill(0, 4, 'real-stack'), $stack['projects']);
+        $this->assertSame([$hosts['a'], $hosts['a']], $stack['hosts']);
+        foreach ($stack['runs'] as $runId) {
+            $this->waitForRun($server, 'backup', $runId);
+        }
+
+        $group = $this->control($server, <<<'PHP'
+$group = app(App\Actions\Backup\CreateInlineBackupGroup::class)->handle(['name' => 'Real stack group', 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'], 'notifications_enabled' => false], 'Stack execution test group.');
+App\Models\BackupJob::whereIn('id', $input['jobs'])->update(['backup_job_group_id' => $group->id, 'next_run_at' => null]);
+$summary = app(App\Actions\Backup\BackupStack::class)->handle('real-stack', ['docker_host_id' => $input['a']]);
+$run = app(App\Actions\Backup\CreateBackupGroupRun::class)->handle($group, 'manual');
+app(App\Actions\Runs\DispatchQueuedRun::class)->handle($run);
+$result = ['summary' => $summary, 'id' => $run->id, 'children' => $run->member_run_ids];
+PHP, ['jobs' => $stack['jobs'], 'a' => $hosts['a']]);
+        $this->assertSame(['created' => 0, 'queued' => 0, 'skipped' => 0, 'grouped' => 2], $group['summary']);
+        $this->waitFor(function () use ($server, $group): bool {
+            $state = $this->control($server, <<<'PHP'
+Illuminate\Support\Facades\Artisan::call('volumevault:dispatch-queued-runs');
+$run = App\Models\BackupGroupRun::findOrFail($input['id']);
+$result = ['status' => $run->status, 'succeeded' => $run->succeeded_members];
+PHP, ['id' => $group['id']]);
+            $this->assertNotContains($state['status'], ['failed', 'cancelled']);
+
+            return $state['status'] === 'success' && $state['succeeded'] === 2;
+        }, 'real remote stack group completion', 180);
+
+        $archives = $this->control($server, <<<'PHP'
+$s3 = new Aws\S3\S3Client(['version' => 'latest', 'region' => 'us-east-1', 'endpoint' => $input['endpoint'], 'use_path_style_endpoint' => true, 'credentials' => ['key' => 'backup', 'secret' => $input['password']]]);
+$runs = App\Models\BackupRun::whereIn('id', $input['runs'])->orderBy('id')->get();
+$checks = [];
+foreach ($runs as $run) {
+    $archive = gzdecode((string) $s3->getObject(['Bucket' => 'execution-backups', 'Key' => $run->backup_key])['Body']);
+    $checks[] = str_contains($archive, $input['markers'][$run->source_volume_name]) && ! str_contains($archive, $input['sentinel']);
+}
+$children = $runs->whereNotNull('backup_group_run_id')->values();
+$result = ['checks' => $checks, 'hosts' => $runs->pluck('docker_host_id')->all(), 'keys' => $runs->pluck('backup_key')->all(), 'sequential' => $children[0]->finished_at->lessThanOrEqualTo($children[1]->started_at)];
+PHP, ['runs' => [...$stack['runs'], ...$group['children']], 'markers' => $markers, 'sentinel' => $sentinel, 'endpoint' => $endpoint, 'password' => $password]);
+        $this->assertSame(array_fill(0, 4, true), $archives['checks']);
+        $this->assertSame(array_fill(0, 4, $hosts['a']), $archives['hosts']);
+        $this->assertCount(4, array_unique($archives['keys']));
+        $this->assertTrue($archives['sequential']);
+        foreach ($markers as $volume => $marker) {
+            $this->assertSame($marker, $this->readMarker($engines['a'], $volume));
+            $this->assertSame($sentinel, $this->readMarker($engines['b'], $volume));
+        }
+    }
+
     public function test_agent_a_backs_up_to_s3_and_agent_b_restores_on_a_distinct_engine(): void
     {
         if (getenv('VOLUMEVAULT_AGENT_EXECUTION_DOCKER_TEST') !== '1') {
@@ -283,6 +353,8 @@ PHP, ['children' => $group['children'], 'endpoint' => $endpoint, 'password' => $
             $this->assertCount(2, array_unique($archives['keys']));
             $this->assertTrue($archives['sequential']);
             $this->assertSame(2, $archives['operations']);
+
+            $this->verifyRemoteStack($server, $engines, $agents, $hosts, $endpoint, $password);
 
             $labelVolume = 'label-managed-data';
             $this->writeMarker($engines['a'], $labelVolume, $marker);

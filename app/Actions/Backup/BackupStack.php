@@ -11,10 +11,13 @@ use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
 use App\Models\User;
-use App\Services\Docker\LocalDockerExecution;
+use App\Services\Agents\AgentExecution;
+use App\Services\Agents\HostWorkAdmission;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use App\Services\Volumes\VolumeBackupSummaries;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
@@ -49,10 +52,33 @@ class BackupStack
      */
     public function handle(?string $stackName, array $input, ?User $initiatedBy = null): array
     {
-        LocalDockerExecution::validate();
+        $dockerHostId = (int) ($input['docker_host_id'] ?? DockerHost::LOCAL_ID);
+        $result = Cache::lock('stack-backup-'.$dockerHostId.'-'.hash('sha256', $stackName ?? ''), 30)
+            ->block(5, fn (): array => DB::transaction(function () use ($stackName, $input, $initiatedBy, $dockerHostId): array {
+                $result = $this->reserveRuns($stackName, $input, $initiatedBy);
+                DockerHost::query()->whereKey($dockerHostId)->lockForUpdate()->first();
+                app(AgentExecution::class)->validateHost($dockerHostId, 'backup-v1');
+                app(HostWorkAdmission::class)->assertAccepting($dockerHostId);
+
+                return $result;
+            }, attempts: 3));
+
+        foreach ($result['runs'] as $run) {
+            $this->dispatchQueuedRun->handle($run);
+        }
+        unset($result['runs']);
+
+        return $result;
+    }
+
+    private function reserveRuns(?string $stackName, array $input, ?User $initiatedBy): array
+    {
+        $dockerHostId = (int) ($input['docker_host_id'] ?? DockerHost::LOCAL_ID);
+        app(AgentExecution::class)->validateHost($dockerHostId, 'backup-v1');
+        app(HostWorkAdmission::class)->assertAccepting($dockerHostId);
 
         $volumeNames = DockerVolume::query()
-            ->where('docker_host_id', DockerHost::LOCAL_ID)
+            ->where('docker_host_id', $dockerHostId)
             ->where('exists', true)
             ->get()
             ->filter(fn (DockerVolume $volume): bool => $this->summaries->stackName($volume) === $stackName)
@@ -64,14 +90,15 @@ class BackupStack
             ]);
         }
 
-        $reservations = $this->createMissingJobs($volumeNames, $input);
-        $result = $this->queueRuns($volumeNames, $reservations['pending_job_ids'], $initiatedBy);
+        $reservations = $this->createMissingJobs($volumeNames, $input, $dockerHostId, $stackName);
+        $result = $this->queueRuns($volumeNames, $reservations['pending_job_ids'], $initiatedBy, $dockerHostId);
 
         return [
             'created' => $reservations['created'],
             'queued' => $result['queued'],
             'skipped' => $result['skipped'],
             'grouped' => $result['grouped'],
+            'runs' => $result['runs'],
         ];
     }
 
@@ -83,16 +110,20 @@ class BackupStack
      * @param  array<string, mixed>  $input
      * @return array{created: int, pending_job_ids: array<int, int>}
      */
-    private function createMissingJobs(Collection $volumeNames, array $input): array
+    private function createMissingJobs(Collection $volumeNames, array $input, int $dockerHostId, ?string $stackName): array
     {
         $defaultChannelId = NotificationChannel::where('is_default', true)->orderBy('id')->value('id');
         $channelIds = $defaultChannelId ? [(int) $defaultChannelId] : [];
         $destinationIds = empty($input['backup_destination_id']) ? [] : [(int) $input['backup_destination_id']];
 
-        return $this->withLocks->handle(
+        return $this->withLocks->handleOnHost(
             $destinationIds,
-            function ($destinations, $settings, $managedJobs, $volumes, $notificationChannels) use ($volumeNames, $input, $channelIds): array {
-                if ($volumeNames->contains(fn (string $volumeName): bool => ! $volumes->get($volumeName)?->exists)) {
+            function ($destinations, $settings, $managedJobs, $volumes, $notificationChannels) use ($volumeNames, $input, $channelIds, $dockerHostId, $stackName): array {
+                app(AgentExecution::class)->validateHost($dockerHostId, 'backup-v1');
+                app(HostWorkAdmission::class)->assertAccepting($dockerHostId);
+
+                if ($volumeNames->contains(fn (string $volumeName): bool => ! $volumes->get($volumeName)?->getAttribute('exists')
+                    || $this->summaries->stackName($volumes->get($volumeName)) !== $stackName)) {
                     throw ValidationException::withMessages([
                         'volumes' => 'A selected Docker volume no longer exists.',
                     ]);
@@ -108,7 +139,7 @@ class BackupStack
                         && $job->label_reconciliation_error === null;
                 });
                 $covered = BackupJob::query()
-                    ->where('docker_host_id', DockerHost::LOCAL_ID)
+                    ->where('docker_host_id', $dockerHostId)
                     ->reservingDockerVolumes()
                     ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
                     ->whereIn('volume_name', $volumeNames->all())
@@ -145,6 +176,13 @@ class BackupStack
                     ]);
                 }
 
+                $destination = $destinations->get((int) $input['backup_destination_id']);
+                if ($destination->isHostBound() && (int) $destination->docker_host_id !== $dockerHostId) {
+                    throw ValidationException::withMessages([
+                        'backup_destination_id' => 'The destination belongs to another Docker host.',
+                    ]);
+                }
+
                 if ($notificationChannels->keys()->map(fn ($id): int => (int) $id)->sort()->values()->all()
                     !== collect($channelIds)->sort()->values()->all()) {
                     throw ValidationException::withMessages([
@@ -152,9 +190,9 @@ class BackupStack
                     ]);
                 }
 
-                $missing->each(function (string $volumeName) use ($input, $scheduleType, $scheduleConfig, $timezone, $channelIds, $notificationChannels): void {
+                $missing->each(function (string $volumeName) use ($input, $scheduleType, $scheduleConfig, $timezone, $channelIds, $notificationChannels, $dockerHostId): void {
                     $job = BackupJob::create([
-                        'docker_host_id' => DockerHost::LOCAL_ID,
+                        'docker_host_id' => $dockerHostId,
                         'name' => $volumeName,
                         'source_type' => BackupJob::SOURCE_TYPE_DOCKER_VOLUME,
                         'volume_name' => $volumeName,
@@ -167,7 +205,7 @@ class BackupStack
                         'next_run_at' => $this->scheduleCalculator->nextRunAt($scheduleType, $scheduleConfig, null, $timezone),
                     ]);
 
-                    $job->notificationChannels()->sync($notificationChannels->only($channelIds)->keys()->all());
+                    $job->notificationChannels()->sync($notificationChannels->only($channelIds)->modelKeys());
                     ActivityLog::record('backup_job_created', 'Backup job created.', $job);
                 });
 
@@ -178,6 +216,7 @@ class BackupStack
             },
             $volumeNames->all(),
             $channelIds,
+            dockerHostId: $dockerHostId,
         );
     }
 
@@ -188,12 +227,12 @@ class BackupStack
      *
      * @param  Collection<int, string>  $volumeNames
      * @param  array<int, int>  $pendingJobIds
-     * @return array{queued: int, skipped: int, grouped: int}
+     * @return array{queued: int, skipped: int, grouped: int, runs: list<BackupRun>}
      */
-    private function queueRuns(Collection $volumeNames, array $pendingJobIds, ?User $initiatedBy): array
+    private function queueRuns(Collection $volumeNames, array $pendingJobIds, ?User $initiatedBy, int $dockerHostId): array
     {
         $jobs = BackupJob::query()
-            ->where('docker_host_id', DockerHost::LOCAL_ID)
+            ->where('docker_host_id', $dockerHostId)
             ->where('source_type', BackupJob::SOURCE_TYPE_DOCKER_VOLUME)
             ->where(function ($query): void {
                 $query->where('configuration_source', '!=', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)
@@ -203,12 +242,15 @@ class BackupStack
                 $query->whereIn('volume_name', $volumeNames->all())
                     ->orWhereIn('id', $pendingJobIds);
             })
-            ->with('group')
+            ->with(['group', 'destination'])
+            ->orderBy('id')
+            ->lockForUpdate()
             ->get();
 
         $queued = 0;
         $skipped = 0;
         $grouped = 0;
+        $runs = [];
 
         foreach ($jobs as $job) {
             // A grouped volume is owned by its group (its own schedule and
@@ -231,13 +273,21 @@ class BackupStack
 
             try {
                 $run = $this->createBackupRun->handle($job, BackupRun::TRIGGER_MANUAL, $initiatedBy, $volumeNames->all());
-                $this->dispatchQueuedRun->handle($run);
+                $runs[] = $run;
                 $queued++;
-            } catch (ValidationException) {
+            } catch (ValidationException $exception) {
+                if ($dockerHostId !== DockerHost::LOCAL_ID && isset($exception->errors()['destination'])
+                    && $job->destination?->is_active && $job->destination->isHostBound()
+                    && (int) $job->destination->docker_host_id !== $dockerHostId) {
+                    throw ValidationException::withMessages([
+                        'backup_destination_id' => 'A stack job has a destination belonging to another Docker host.',
+                    ]);
+                }
+
                 $skipped++;
             }
         }
 
-        return ['queued' => $queued, 'skipped' => $skipped, 'grouped' => $grouped];
+        return ['queued' => $queued, 'skipped' => $skipped, 'grouped' => $grouped, 'runs' => $runs];
     }
 }

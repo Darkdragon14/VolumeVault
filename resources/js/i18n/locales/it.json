@@ -12,7 +12,7 @@
   "hostScope.unsupported": "L’host non supporta i backup.",
   "hostScope.offline": "L’agente è offline.",
   "hostScope.permission": "Non hai il permesso di eseguire backup.",
-  "hostScope.remoteStack": "I backup in blocco degli stack remoti non sono supportati. Configura processi per singoli volumi.",
+  "stackBackup.details": "Crea i processi mancanti su questo host con la destinazione e la pianificazione indicate, poi accoda quelli idonei. I processi esistenti mantengono impostazioni e notifiche; le prenotazioni tramite etichette vengono rispettate. I processi raggruppati seguono la pianificazione del gruppo e quelli non disponibili vengono saltati. I nuovi processi usano il canale di notifica predefinito.",
     "archiveRelay.title": "Trasferimento archivio",
     "archiveRelay.description": "Gli archivi locali vengono elencati dall’host proprietario. Il relay centrale consente il ripristino in un nuovo volume su un altro host; i lati remoti richiedono archive-relay-v1.",
     "archiveRelay.missingCapability": "Questa destinazione non è disponibile. Entrambi i lati remoti richiedono archive-relay-v1 e il ripristino; verificare capacità e manutenzione.",

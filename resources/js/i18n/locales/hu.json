@@ -12,7 +12,7 @@
   "hostScope.unsupported": "A gazdagép nem támogatja a mentést.",
   "hostScope.offline": "Az ügynök offline.",
   "hostScope.permission": "Nincs jogosultsága mentéshez.",
-  "hostScope.remoteStack": "Távoli vermek tömeges mentése nem támogatott. Állítson be külön kötetfeladatokat.",
+  "stackBackup.details": "Hiányzó feladatok létrehozása ezen a gazdagépen az alábbi céllal és ütemezéssel, majd a futtatható feladatok sorba állítása. A meglévő feladatok beállításai és értesítései megmaradnak; a címkés foglalások érvényben maradnak. A csoportos feladatok a csoport ütemezését követik, a nem elérhető feladatok kimaradnak. Az új feladatok az alapértelmezett értesítési csatornát használják.",
     "archiveRelay.title": "Archívumátvitel",
     "archiveRelay.description": "A helyi archívumokat a tulajdonos gép listázza. A központi közvetítővel másik gép új kötetére állíthatók vissza; a távoli oldalakhoz archive-relay-v1 szükséges.",
     "archiveRelay.missingCapability": "Ez a cél nem érhető el. Mindkét távoli oldalhoz archive-relay-v1 és visszaállítási támogatás szükséges; ellenőrizze a képességeket és a karbantartást.",

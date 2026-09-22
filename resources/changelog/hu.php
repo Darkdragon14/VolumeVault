@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'remote_stack_backups' => [
+        'title' => 'Távoli vermek tömeges mentése',
+        'description' => 'Verem mentése a kiválasztott Docker-gazdagépen, orchestrator módban is. A párbeszédablak azonosítja a gazdagépet, és megosztott vagy saját célokat kínál. A beállítások, értesítések, címkés foglalások és csoportütemezések megmaradnak; az összegzés mutatja a létrehozott, sorba állított, kihagyott és csoportos elemeket. Hét további munkafolyamat-hiányosság később következik; a helyi és távoli funkciók még nem teljesen egyenértékűek.',
+    ],
     'unified_host_operations' => [
         'title' => 'Egységes műveletek Docker-gazdagépeken',
-        'description' => 'Az irányítópult, leltárak, feladatok és előzmények alapértelmezetten minden gazdagépet mutatnak szűrővel és látható azonosítással. A visszaállítások cél szerint szűrhetők; a csoportösszesítések teljesek maradnak. A frissítés elfogadott leltárt olvas, a helyi szinkronizálás kifejezetten a helyi gazdagépet célozza. Távoli vermek tömeges mentése nem támogatott; az ismeretlen konténerszám ismeretlenként jelenik meg.',
+        'description' => 'Az irányítópult, leltárak, feladatok és előzmények alapértelmezetten minden gazdagépet mutatnak szűrővel és látható azonosítással. A visszaállítások cél szerint szűrhetők; a csoportösszesítések teljesek maradnak. A frissítés elfogadott leltárt olvas, a helyi szinkronizálás kifejezetten a helyi gazdagépet célozza. Az ismeretlen konténerszám ismeretlenként jelenik meg.',
     ],
     'restore_volume_ownership' => [
         'title' => 'Az új visszaállítási kötetek tulajdonjogának ellenőrzése',

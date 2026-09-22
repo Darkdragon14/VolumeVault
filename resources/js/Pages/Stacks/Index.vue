@@ -244,10 +244,11 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
         </div>
 
         <div v-if="backupTarget?.canBackup" class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4" @click.self="closeBackup">
-            <div class="card w-full max-w-lg p-5">
-                <h2 class="text-lg font-semibold text-white">{{ t('Back up stack') }}</h2>
+            <div role="dialog" aria-modal="true" aria-labelledby="stack-backup-title" class="card w-full max-w-lg p-5">
+                <h2 id="stack-backup-title" class="text-lg font-semibold text-white">{{ t('Back up stack') }}</h2>
                 <p class="mt-1 break-words text-sm text-slate-400">{{ backupTarget.name || t('No stack') }}</p>
-                <p class="mt-3 text-sm text-slate-300">{{ t('A backup job is created with the destination and schedule below for every volume in this stack that does not have one yet, then a backup run is queued for the whole stack. Existing jobs keep their own schedule.') }}</p>
+                <HostIdentity :host="backupTarget.docker_host" />
+                <p class="mt-3 text-sm text-slate-300">{{ t('stackBackup.details') }}</p>
 
                 <div class="mt-4 space-y-4">
                     <label class="block space-y-1">

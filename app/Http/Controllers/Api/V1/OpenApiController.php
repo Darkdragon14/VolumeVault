@@ -507,7 +507,7 @@ class OpenApiController extends Controller
             'StackBackupRequest' => [
                 'type' => 'object',
                 'properties' => [
-                    'docker_host_id' => ['type' => 'integer', 'enum' => [1], 'default' => 1, 'description' => 'Only local stack execution is supported. Explicit remote host IDs are rejected.'],
+                    'docker_host_id' => ['type' => 'integer', 'default' => 1, 'description' => 'Host owning the stack volume inventory. Omitted means local, regardless of view filters. Remote hosts must be registered compatible agents supporting backup-v1 and not in maintenance; offline agents can queue work. Stack names never select volumes on other hosts.'],
                     'stack' => ['type' => ['string', 'null'], 'maxLength' => 255, 'description' => 'Compose or Swarm stack name (com.docker.compose.project / com.docker.stack.namespace). Null or omitted targets the "no stack" group of volumes that carry no stack label.'],
                     'backup_destination_id' => ['type' => ['integer', 'null'], 'description' => 'Destination for jobs created on the fly. Required only when the stack has volumes without a backup job; ignored when every volume is already covered.'],
                     'schedule_type' => ['type' => ['string', 'null'], 'enum' => ['hourly', 'daily', 'weekly', 'cron'], 'description' => 'Schedule for jobs created on the fly. Required only when the stack has volumes without a backup job. Existing jobs keep their own schedule.'],

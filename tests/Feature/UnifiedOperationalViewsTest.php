@@ -43,7 +43,7 @@ class UnifiedOperationalViewsTest extends TestCase
         $this->assertFalse($volumes[$first->id]['canBackup']);
         $this->withToken($token)->getJson('/api/v1/stacks?docker_host_id='.$first->id)->assertOk()
             ->assertJsonCount(1, 'data')->assertJsonPath('data.0.canBackup', false)
-            ->assertJsonPath('data.0.backup_unavailable_reason', 'remote_stack_backup_unsupported');
+            ->assertJsonPath('data.0.backup_unavailable_reason', 'permission_denied');
         $this->withToken($token)->getJson('/api/v1/dashboard')->assertOk()
             ->assertJsonPath('data.stats.total_volumes', 3)->assertJsonPath('data.stats.backed_up_volumes', 1);
         $this->withToken($token)->getJson('/api/v1/dashboard?docker_host_id='.$second->id)->assertOk()
@@ -65,6 +65,40 @@ class UnifiedOperationalViewsTest extends TestCase
         $this->assertSame('local_execution_disabled', $hosts[1]['availability']);
         $this->assertTrue($hosts[$host->id]['canBackup']);
         $this->assertFalse($hosts[$host->id]['canSync']);
+    }
+
+    public function test_orchestrator_stack_props_include_eligible_agent_owned_and_shared_destinations(): void
+    {
+        [$host, $other] = $this->inventory();
+        config(['volumevault.mode' => 'orchestrator']);
+        $host->forceFill(['last_seen_at' => now()->subDay()])->save();
+        $unregistered = DockerHost::factory()->create();
+        $expectedIds = [];
+        foreach ([
+            ['Remote filesystem', 'local', $host->id, true, true],
+            ['Remote volume', 'docker_volume', $host->id, true, true],
+            ['Other remote filesystem', 'local', $other->id, true, true],
+            ['Shared S3', 'aws_s3', null, true, true],
+            ['Central filesystem', 'local', DockerHost::LOCAL_ID, true, false],
+            ['Central volume', 'docker_volume', DockerHost::LOCAL_ID, true, false],
+            ['Inactive remote', 'local', $host->id, false, false],
+            ['Unregistered remote', 'docker_volume', $unregistered->id, true, false],
+        ] as [$name, $provider, $hostId, $active, $visible]) {
+            $destination = BackupDestination::create([
+                'name' => $name, 'provider' => $provider, 'docker_host_id' => $hostId,
+                'bucket' => 'backups', 'access_key_id' => 'access', 'secret_access_key' => 'secret',
+                'is_active' => $active,
+            ]);
+            if ($visible) {
+                $expectedIds[] = $destination->id;
+            }
+        }
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->get('/stacks?docker_host_id='.$host->id)
+            ->assertOk()->assertInertia(fn (Assert $page) => $page
+                ->has('destinations', 4)
+                ->where('destinations', fn ($destinations): bool => collect($destinations)->pluck('id')->sort()->values()->all() === $expectedIds));
     }
 
     public function test_run_filters_use_historical_execution_and_restore_target_hosts(): void
@@ -148,10 +182,14 @@ class UnifiedOperationalViewsTest extends TestCase
         $host->forceFill(['maintenance_requested_at' => now()])->save();
         $this->withToken($token)->getJson('/api/v1/volumes?docker_host_id='.$host->id)->assertOk()
             ->assertJsonPath('data.0.canBackup', false)->assertJsonPath('data.0.backup_unavailable_reason', 'maintenance');
+        $this->withToken($token)->getJson('/api/v1/stacks?docker_host_id='.$host->id)->assertOk()
+            ->assertJsonPath('data.0.canBackup', false)->assertJsonPath('data.0.backup_unavailable_reason', 'maintenance');
         $host->forceFill(['maintenance_requested_at' => null])->save();
         DockerVolume::where('docker_host_id', $host->id)->update(['exists' => false]);
         $this->withToken($token)->getJson('/api/v1/volumes?docker_host_id='.$host->id)->assertOk()
             ->assertJsonPath('data.0.canBackup', false)->assertJsonPath('data.0.backup_unavailable_reason', 'volume_missing');
+        $this->withToken($token)->getJson('/api/v1/stacks?docker_host_id='.$host->id)->assertOk()
+            ->assertJsonPath('data.0.canBackup', false)->assertJsonPath('data.0.backup_unavailable_reason', 'no_volumes');
         $readToken = $user->createToken('read', ['read'])->plainTextToken;
         app('auth')->forgetGuards();
         $this->withToken($readToken)->getJson('/api/v1/volumes?docker_host_id=1')->assertOk()->assertJsonPath('data.0.canBackup', false)->assertJsonPath('data.0.canSync', false);
@@ -191,6 +229,23 @@ class UnifiedOperationalViewsTest extends TestCase
             ->assertJsonPath('data.0.docker_host.availability', 'agent_offline')
             ->assertJsonPath('data.0.canBackup', true)
             ->assertJsonPath('data.0.backup_unavailable_reason', null);
+        $this->withToken($token)->getJson('/api/v1/stacks?docker_host_id='.$host->id)->assertOk()
+            ->assertJsonPath('data.0.canBackup', true)
+            ->assertJsonPath('data.0.backup_unavailable_reason', null)
+            ->assertJsonPath('data.0.inventory_basis', 'volume_labels');
+    }
+
+    public function test_remote_stack_eligibility_requires_backup_v1_and_openapi_advertises_host_selection(): void
+    {
+        [$host] = $this->inventory();
+        $host->forceFill(['agent_capabilities' => ['inventory-v1']])->save();
+        $token = User::factory()->admin()->create()->createToken('write', ['read', 'write'])->plainTextToken;
+        $this->withToken($token)->getJson('/api/v1/stacks?docker_host_id='.$host->id)->assertOk()
+            ->assertJsonPath('data.0.canBackup', false)->assertJsonPath('data.0.backup_unavailable_reason', 'backup_unsupported');
+        $schema = $this->getJson('/api/v1/openapi.json')->assertOk()->json('components.schemas.StackBackupRequest.properties.docker_host_id');
+        $this->assertSame(1, $schema['default']);
+        $this->assertArrayNotHasKey('enum', $schema);
+        $this->assertStringContainsString('backup-v1', $schema['description']);
     }
 
     public function test_next_schedule_serializes_cast_dates_as_exact_utc_instants_in_non_utc_timezone(): void

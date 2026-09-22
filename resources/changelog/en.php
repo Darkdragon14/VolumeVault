@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'remote_stack_backups' => [
+        'title' => 'Bulk backups for remote stacks',
+        'description' => 'Back up a stack on its selected Docker host, including in orchestrator mode. The dialog identifies the host and offers shared or same-host destinations. Existing settings, notifications, label reservations and group schedules are preserved, with created, queued, skipped and grouped totals. Seven other workflow gaps remain for a later batch; this is not full local/remote parity.',
+    ],
     'unified_host_operations' => [
         'title' => 'Unified operations across Docker hosts',
-        'description' => 'Dashboard, inventories, jobs and histories default to all hosts with an optional host filter and visible host identity. Restore history filters by target; matching groups retain whole-group totals. Refresh reads accepted inventory snapshots, local sync explicitly targets the local host, and remote stack bulk backup remains unsupported. Unknown container counts are shown as unknown.',
+        'description' => 'Dashboard, inventories, jobs and histories default to all hosts with an optional host filter and visible host identity. Restore history filters by target; matching groups retain whole-group totals. Refresh reads accepted inventory snapshots and local sync explicitly targets the local host. Unknown container counts are shown as unknown.',
     ],
     'restore_volume_ownership' => [
         'title' => 'Verify ownership of new restore volumes',

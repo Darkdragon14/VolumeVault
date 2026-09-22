@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'remote_stack_backups' => [
+        'title' => 'Copias masivas de stacks remotas',
+        'description' => 'Respalda una stack en su host Docker seleccionado, también en modo orquestador. El diálogo identifica el host y ofrece destinos compartidos o de ese host. Se conservan ajustes, notificaciones, reservas por etiquetas y horarios de grupos, con totales de elementos creados, en cola, omitidos y agrupados. Quedan otras siete carencias para una próxima fase; la paridad local/remota aún no es completa.',
+    ],
     'unified_host_operations' => [
         'title' => 'Operaciones unificadas entre hosts Docker',
-        'description' => 'Panel, inventarios, tareas e historiales muestran todos los hosts por defecto, con filtro e identidad visibles. Las restauraciones se filtran por destino y los totales de grupos permanecen completos. Actualizar lee inventarios aceptados; la sincronización local selecciona explícitamente el host local. Las copias masivas de stacks remotas siguen sin admitirse y los recuentos desconocidos se indican como tales.',
+        'description' => 'Panel, inventarios, tareas e historiales muestran todos los hosts por defecto, con filtro e identidad visibles. Las restauraciones se filtran por destino y los totales de grupos permanecen completos. Actualizar lee inventarios aceptados; la sincronización local selecciona explícitamente el host local. Los recuentos desconocidos se indican como tales.',
     ],
     'restore_volume_ownership' => [
         'title' => 'Verificar la propiedad de los nuevos volúmenes de restauración',

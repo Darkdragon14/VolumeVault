@@ -39,6 +39,8 @@ it('translates host scope labels and reasons in all nine locales', () => {
     const keys = Object.keys(locales['../i18n/locales/en.json']).filter(key => key.startsWith('hostScope.'));
     for (const locale of Object.values(locales)) {
         for (const key of keys) expect(locale[key]?.length).toBeGreaterThan(0);
+        expect(locale['stackBackup.details']?.length).toBeGreaterThan(0);
+        expect(locale).not.toHaveProperty('hostScope.remoteStack');
     }
 });
 
@@ -73,14 +75,63 @@ it('keeps homonymous volume shortcuts host-qualified and sync explicitly local',
     expect(wrapper.findAll('a[href*="/create?"]')).toHaveLength(0);
 });
 
-it('distinguishes same-name stacks and disables remote bulk backups with unknown counts', async () => {
-    const stacks = hosts.map(host => ({ name: 'app', identity: `${host.id}:app`, docker_host_id: host.id, docker_host: host, volumes: [volume(host.id)], existing_volumes: 1, total_volumes: 1, container_count: null, canBackup: host.id === 1, backup_unavailable_reason: host.id === 2 ? 'remote_stack_backup_unsupported' : null }));
+it('distinguishes same-name stacks and honors server bulk backup availability with unknown counts', async () => {
+    const stacks = hosts.map(host => ({ name: 'app', identity: `${host.id}:app`, docker_host_id: host.id, docker_host: host, volumes: [volume(host.id)], existing_volumes: 1, total_volumes: 1, container_count: null, canBackup: true }));
     const wrapper = render(Stacks, { hosts, filters, stacks, destinations: [{ id: 1 }], timezones: [], appTimezone: 'UTC' });
-    expect(wrapper.text()).toContain('hostScope.remoteStack');
     expect(wrapper.text()).toContain('hostScope.containers: Unknown');
-    expect(wrapper.findAll('button').filter(button => button.text() === 'Back up stack')).toHaveLength(1);
-    await wrapper.setProps({ stacks: [stacks[1]] });
+    expect(wrapper.findAll('button').filter(button => button.text() === 'Back up stack')).toHaveLength(2);
+    await wrapper.setProps({ stacks: [{ ...stacks[1], canBackup: false, backup_unavailable_reason: 'host_maintenance' }] });
     expect(wrapper.findAll('button').filter(button => button.text() === 'Back up stack')).toHaveLength(0);
+});
+
+it.each([null, 2])('targets remote stack A explicitly in scope %s and excludes host B destinations', async (scope) => {
+    inertia.page.url = '/stacks';
+    const remoteHosts = [{ ...hosts[1], name: 'Remote A' }, { ...hosts[1], id: 3, name: 'Remote B' }];
+    const stacks = remoteHosts.map(host => ({ name: 'same-project', identity: `${host.id}:same-project`, docker_host_id: host.id, docker_host: host, volumes: [{ ...volume(host.id), name: `data-${host.id}` }], existing_volumes: 1, canBackup: true }));
+    const destinations = [
+        { id: 31, name: 'B archive', provider: 'local', docker_host_id: 3 },
+        { id: 11, name: 'Central archive', provider: 'docker_volume', docker_host_id: 1 },
+        { id: 21, name: 'A archive', provider: 'local', docker_host_id: 2 },
+        { id: 22, name: 'A volume archive', provider: 'docker_volume', docker_host_id: 2 },
+        { id: 40, name: 'Shared archive', provider: 'aws_s3', docker_host_id: null },
+    ];
+    const wrapper = render(Stacks, { hosts: remoteHosts, filters: { docker_host_id: scope }, stacks: scope ? [stacks[0]] : stacks, destinations, timezones: [], appTimezone: 'UTC' });
+    const sections = wrapper.findAll('section').filter(section => section.find('h2').exists());
+    expect(sections[0].text()).toContain('data-2');
+    expect(sections[0].text()).not.toContain('data-3');
+    await sections[0].findAll('button').find(button => button.text() === 'Back up stack')!.trigger('click');
+    const dialog = wrapper.find('[role="dialog"]');
+    expect(dialog.text()).toContain('Remote A · #2');
+    expect(dialog.text()).not.toContain('Remote B');
+    expect(dialog.text()).toContain('stackBackup.details');
+    expect(dialog.find('select').findAll('option').map(option => option.attributes('value'))).toEqual(['21', '22', '40']);
+    await dialog.findAll('button').find(button => button.text() === 'Start backup')!.trigger('click');
+    expect(inertia.post).toHaveBeenCalledOnce();
+    expect(inertia.post.mock.lastCall?.slice(0, 2)).toEqual(['/stacks/backup', {
+        stack: 'same-project', docker_host_id: 2, backup_destination_id: 21,
+        schedule_type: 'daily', schedule_config: { time: '02:00', everyHours: 6, dayOfWeek: 'sunday', expression: '0 2 * * *' }, timezone: '',
+    }]);
+    inertia.post.mock.lastCall![2].onSuccess();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    if (!scope) {
+        await sections[1].findAll('button').find(button => button.text() === 'Back up stack')!.trigger('click');
+        const secondDialog = wrapper.find('[role="dialog"]');
+        expect(secondDialog.text()).toContain('Remote B · #3');
+        expect(secondDialog.find('select').findAll('option').map(option => option.attributes('value'))).toEqual(['31', '40']);
+        await secondDialog.findAll('button').find(button => button.text() === 'Start backup')!.trigger('click');
+        expect(inertia.post.mock.lastCall?.[1]).toMatchObject({ stack: 'same-project', docker_host_id: 3, backup_destination_id: 31 });
+    }
+});
+
+it('runs existing remote jobs without destination or schedule overrides', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const stack = { name: null, identity: '2:', docker_host_id: 2, docker_host: hosts[1], volumes: [volume(2)], existing_volumes: 1, configured_job_volumes: 1, canBackup: true };
+    const wrapper = render(Stacks, { hosts, filters, stacks: [stack], destinations: [], timezones: [], appTimezone: 'UTC' });
+    await wrapper.findAll('button').find(button => button.text() === 'Run all jobs')!.trigger('click');
+    expect(inertia.post.mock.lastCall?.slice(0, 2)).toEqual(['/stacks/backup', { stack: null, docker_host_id: 2 }]);
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    confirm.mockRestore();
 });
 
 it('retains host scope in job pagination and honors server backup availability', async () => {

@@ -10,7 +10,6 @@ const reasons: Record<string, string> = {
     backup_unsupported: 'hostScope.unsupported',
     agent_offline: 'hostScope.offline',
     permission_denied: 'hostScope.permission',
-    remote_stack_backup_unsupported: 'hostScope.remoteStack',
 };
 </script>
 

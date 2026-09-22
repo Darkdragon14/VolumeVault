@@ -4,7 +4,6 @@ namespace App\Services\Volumes;
 
 use App\Models\BackupJob;
 use App\Models\BackupRun;
-use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Services\Agents\OperationalHostScope;
 use Illuminate\Support\Collection;
@@ -122,8 +121,8 @@ class VolumeBackupSummaries
                     'identity' => $volumes->first()['docker_host_id'].':'.($volumes->first()['stack_name'] ?? ''),
                     'docker_host' => $volumes->first()['docker_host'],
                     'canSync' => $volumes->first()['canSync'],
-                    'canBackup' => $volumes->first()['docker_host_id'] === DockerHost::LOCAL_ID && $existingVolumes->contains('canBackup', true),
-                    'backup_unavailable_reason' => $volumes->first()['docker_host_id'] !== DockerHost::LOCAL_ID ? 'remote_stack_backup_unsupported' : ($volumes->first()['docker_host']['backup_unavailable_reason'] ?? ($existingVolumes->isEmpty() ? 'no_volumes' : null)),
+                    'canBackup' => $existingVolumes->contains('canBackup', true),
+                    'backup_unavailable_reason' => $volumes->first()['docker_host']['backup_unavailable_reason'] ?? ($existingVolumes->isEmpty() ? 'no_volumes' : null),
                     'total_volumes' => $volumes->count(),
                     'existing_volumes' => $existingVolumes->count(),
                     'missing_volumes' => $volumes->where('exists', false)->count(),

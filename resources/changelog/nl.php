@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'remote_stack_backups' => [
+        'title' => 'Bulkback-ups van externe stacks',
+        'description' => 'Maak een back-up van een stack op de geselecteerde Docker-host, ook in orchestrator-modus. Het dialoogvenster toont de host en gedeelde of hosteigen bestemmingen. Instellingen, meldingen, labelreserveringen en groepsplanningen blijven behouden, met totalen voor aangemaakte, ingeplande, overgeslagen en gegroepeerde items. Zeven andere workflowtekorten volgen later; volledige lokale/externe gelijkwaardigheid is nog niet bereikt.',
+    ],
     'unified_host_operations' => [
         'title' => 'Uniforme bewerkingen voor Docker-hosts',
-        'description' => 'Dashboard, inventarissen, taken en geschiedenis tonen standaard alle hosts met hostfilter en zichtbare identiteit. Herstel filtert op doelhost; groepstotalen blijven volledig. Vernieuwen leest geaccepteerde inventarissen en lokale synchronisatie kiest expliciet de lokale host. Bulkback-ups van externe stacks blijven niet ondersteund en onbekende containeraantallen worden als onbekend weergegeven.',
+        'description' => 'Dashboard, inventarissen, taken en geschiedenis tonen standaard alle hosts met hostfilter en zichtbare identiteit. Herstel filtert op doelhost; groepstotalen blijven volledig. Vernieuwen leest geaccepteerde inventarissen en lokale synchronisatie kiest expliciet de lokale host. Onbekende containeraantallen worden als onbekend weergegeven.',
     ],
     'restore_volume_ownership' => [
         'title' => 'Eigendom van nieuwe herstelvolumes controleren',

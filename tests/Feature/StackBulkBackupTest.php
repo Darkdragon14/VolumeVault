@@ -13,18 +13,332 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
+use App\Models\NotificationChannel;
 use App\Models\User;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use App\Services\Volumes\VolumeBackupSummaries;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class StackBulkBackupTest extends TestCase
 {
     use RefreshDatabase;
+
+    #[DataProvider('stackHostModes')]
+    public function test_stack_skips_inactive_and_paused_jobs_and_reports_group_owned_jobs_without_blocking_healthy_jobs(bool $remote): void
+    {
+        Queue::fake();
+        $hostId = $remote ? $this->agent()->id : DockerHost::LOCAL_ID;
+        $healthy = $this->destination();
+        $inactive = $this->destination('Inactive', false);
+        $foreign = $this->destination('Foreign');
+        $foreign->update(['provider' => 'local', 'docker_host_id' => $this->agent()->id, 'settings' => ['archive_path' => '/backups']]);
+        $group = BackupJobGroup::create(['name' => 'Group', 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'], 'status' => 'active', 'failure_policy' => 'continue']);
+        foreach ([
+            ['healthy', $healthy, false, false],
+            ['inactive', $inactive, false, false],
+            ['paused', $foreign, true, false],
+            ['grouped', $foreign, false, true],
+            ['inactive-grouped', $inactive, false, true],
+            ['paused-grouped', $inactive, true, true],
+        ] as [$name, $destination, $paused, $grouped]) {
+            $this->volume($name, 'app', $hostId);
+            $job = $this->job($destination, $name, $hostId);
+            $job->update(['status' => $paused ? BackupJob::STATUS_PAUSED : BackupJob::STATUS_ACTIVE, 'backup_job_group_id' => $grouped ? $group->id : null]);
+        }
+        $this->volume('new-data', 'app', $hostId);
+
+        $result = app(BackupStack::class)->handle('app', [
+            'docker_host_id' => $hostId, 'backup_destination_id' => $healthy->id,
+            'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'],
+        ]);
+
+        $this->assertSame(['created' => 1, 'queued' => 2, 'skipped' => 3, 'grouped' => 2], $result);
+        $this->assertSame(['healthy', 'new-data'], BackupRun::orderBy('source_volume_name')->pluck('source_volume_name')->all());
+        $this->assertSame([$hostId], BackupRun::pluck('docker_host_id')->unique()->values()->all());
+        $this->assertDatabaseCount('backup_jobs', 7);
+        $this->assertDatabaseCount('backup_group_runs', 0);
+        $this->assertSame(3, $group->members()->count());
+    }
+
+    public static function stackHostModes(): array
+    {
+        return ['local' => [false], 'remote' => [true]];
+    }
+
+    public function test_remote_stack_identity_reuses_only_its_jobs_and_is_idempotent_while_offline(): void
+    {
+        Queue::fake();
+        $host = $this->agent();
+        $other = $this->agent();
+        $destination = $this->destination();
+        $channel = NotificationChannel::create(['name' => 'Default', 'service' => 'ntfy', 'is_default' => true, 'url' => 'ntfy://example.com/backups']);
+        foreach ([DockerHost::LOCAL_ID, $host->id, $other->id] as $hostId) {
+            $this->volume('data', 'app', $hostId);
+            $this->volume('logs', 'app', $hostId);
+        }
+        $this->volume('missing', 'app', $host->id)->update(['exists' => false]);
+        $this->volume('unrelated', 'other', $host->id);
+        $existing = $this->job($destination, 'data', $host->id);
+        $local = $this->job($destination, 'data');
+        $foreign = $this->job($destination, 'logs', $other->id);
+        $original = $existing->only(['backup_destination_id', 'schedule_type', 'schedule_config']);
+        $token = User::factory()->admin()->create()->createToken('write', ['read', 'write'])->plainTextToken;
+        $payload = ['docker_host_id' => $host->id, 'stack' => 'app', 'backup_destination_id' => $destination->id, 'schedule_type' => 'hourly', 'schedule_config' => ['everyHours' => 2]];
+
+        $this->withToken($token)->postJson('/api/v1/stacks/backup', $payload)->assertAccepted()
+            ->assertExactJson(['data' => ['created' => 1, 'queued' => 2, 'skipped' => 0, 'grouped' => 0]]);
+        $this->withToken($token)->postJson('/api/v1/stacks/backup', $payload)->assertAccepted()
+            ->assertExactJson(['data' => ['created' => 0, 'queued' => 0, 'skipped' => 2, 'grouped' => 0]]);
+
+        $this->assertSame($original, $existing->refresh()->only(array_keys($original)));
+        $created = BackupJob::where('docker_host_id', $host->id)->where('volume_name', 'logs')->sole();
+        $this->assertSame([$channel->id], $created->notificationChannels->modelKeys());
+        $this->assertSame('hourly', $created->schedule_type);
+        $this->assertSame([$host->id], BackupRun::pluck('docker_host_id')->unique()->all());
+        $this->assertDatabaseCount('backup_jobs', 4);
+        $this->assertDatabaseCount('backup_runs', 2);
+        $this->assertDatabaseCount('agent_operations', 2);
+        $this->assertDatabaseCount('backup_job_groups', 0);
+        $this->assertSame(0, $local->runs()->count());
+        $this->assertSame(0, $foreign->runs()->count());
+        Queue::assertNothingPushed();
+    }
+
+    public function test_remote_stack_rejects_foreign_destination_without_partial_writes(): void
+    {
+        Queue::fake();
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id);
+        $destination = BackupDestination::create(['name' => 'Local', 'provider' => 'local', 'bucket' => '', 'access_key_id' => '', 'secret_access_key' => '', 'settings' => ['archive_path' => '/backups'], 'is_active' => true]);
+        $this->actingAs(User::factory()->admin()->create())->postJson('/stacks/backup', [
+            'stack' => 'app', 'docker_host_id' => $host->id,
+            'backup_destination_id' => $destination->id, 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('backup_destination_id');
+        $this->assertDatabaseCount('backup_jobs', 0);
+        $this->assertDatabaseCount('backup_runs', 0);
+        $this->assertDatabaseCount('backup_job_groups', 0);
+        $this->assertDatabaseCount('agent_operations', 0);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_remote_stack_rolls_back_missing_jobs_when_an_existing_job_has_a_foreign_destination(): void
+    {
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id);
+        $this->volume('logs', 'app', $host->id);
+        $foreign = BackupDestination::create(['name' => 'Local', 'provider' => 'local', 'bucket' => '', 'access_key_id' => '', 'secret_access_key' => '', 'settings' => ['archive_path' => '/backups'], 'is_active' => true]);
+        $this->job($foreign, 'data', $host->id);
+        $this->actingAs(User::factory()->admin()->create())->postJson('/stacks/backup', [
+            'stack' => 'app', 'docker_host_id' => $host->id,
+            'backup_destination_id' => $this->destination()->id, 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('backup_destination_id');
+        $this->assertDatabaseCount('backup_jobs', 1);
+        $this->assertDatabaseCount('backup_runs', 0);
+        $this->assertDatabaseCount('agent_operations', 0);
+    }
+
+    public function test_hidden_or_unavailable_remote_hosts_cannot_be_admitted_by_manual_requests(): void
+    {
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id);
+        $destination = $this->destination();
+        $payload = ['stack' => 'app', 'docker_host_id' => $host->id, 'backup_destination_id' => $destination->id, 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00']];
+        $this->actingAs(User::factory()->admin()->create());
+        foreach ([
+            ['maintenance_requested_at' => now()],
+            ['agent_registered_at' => null],
+            ['agent_revoked_at' => now()],
+            ['agent_protocol_version' => 999],
+            ['agent_capabilities' => ['inventory-v1']],
+        ] as $attributes) {
+            $original = $host->getAttributes();
+            $host->forceFill($attributes)->save();
+            $this->postJson('/stacks/backup', $payload)->assertUnprocessable()->assertJsonValidationErrors('docker_host_id');
+            $host->setRawAttributes($original)->save();
+        }
+        $this->assertDatabaseCount('backup_jobs', 0);
+        $this->assertDatabaseCount('backup_runs', 0);
+        $this->assertDatabaseCount('backup_job_groups', 0);
+    }
+
+    public function test_orchestrator_remote_stack_works_but_omitted_host_still_means_local(): void
+    {
+        config(['volumevault.mode' => 'orchestrator']);
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id);
+        $this->volume('data', 'app');
+        $this->job($this->destination(), 'data', $host->id);
+        $this->actingAs(User::factory()->admin()->create());
+        $this->postJson('/stacks/backup', ['stack' => 'app'])->assertUnprocessable();
+        $this->postJson('/stacks/backup', ['stack' => 'app', 'docker_host_id' => $host->id])->assertRedirect();
+        $this->assertSame($host->id, BackupRun::sole()->docker_host_id);
+    }
+
+    public function test_remote_label_reservations_and_group_members_keep_the_existing_stack_semantics(): void
+    {
+        $host = $this->agent();
+        $destination = $this->destination();
+        foreach (['managed', 'pending', 'grouped'] as $name) {
+            $this->volume($name, 'app', $host->id);
+        }
+        $managed = $this->job($destination, 'managed', $host->id);
+        $managed->update(['configuration_source' => 'docker_label', 'configuration_key' => hash('sha256', 'managed')]);
+        $pending = $this->job($destination, 'old', $host->id);
+        $pending->update(['configuration_source' => 'docker_label', 'configuration_key' => hash('sha256', 'pending'), 'pending_label_reconciliation' => ['action' => 'apply', 'payload' => ['volume_name' => 'pending']]]);
+        $group = BackupJobGroup::create(['name' => 'Group', 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'], 'status' => 'active', 'failure_policy' => 'continue']);
+        $member = $this->job($destination, 'grouped', $host->id);
+        $member->update(['backup_job_group_id' => $group->id]);
+
+        $result = app(BackupStack::class)->handle('app', ['docker_host_id' => $host->id]);
+
+        $this->assertSame(['created' => 0, 'queued' => 1, 'skipped' => 1, 'grouped' => 1], $result);
+        $this->assertSame($managed->id, BackupRun::sole()->backup_job_id);
+        $this->assertSame('old', $pending->refresh()->volume_name);
+        $this->assertSame($group->id, $member->refresh()->backup_job_group_id);
+        $this->assertDatabaseCount('backup_jobs', 3);
+        $this->assertDatabaseCount('backup_group_runs', 0);
+    }
+
+    public function test_remote_stack_accepts_its_own_host_local_destination(): void
+    {
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id);
+        $destination = $this->destination();
+        $destination->update(['provider' => 'local', 'docker_host_id' => $host->id, 'settings' => ['archive_path' => '/backups']]);
+        $summary = app(BackupStack::class)->handle('app', [
+            'docker_host_id' => $host->id, 'backup_destination_id' => $destination->id,
+            'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'],
+        ]);
+        $this->assertSame(1, $summary['queued']);
+        $this->assertSame($destination->id, BackupRun::sole()->backup_destination_id_snapshot);
+    }
+
+    public function test_remote_stack_requires_admin_and_write_ability_even_when_host_is_explicit(): void
+    {
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id);
+        foreach ([['admin', ['read']], ['user', ['read', 'write']]] as [$role, $abilities]) {
+            $user = User::factory()->$role()->create();
+            $token = $user->createToken('stack', $abilities)->plainTextToken;
+            app('auth')->forgetGuards();
+            $this->withToken($token)->postJson('/api/v1/stacks/backup', ['docker_host_id' => $host->id, 'stack' => 'app'])->assertForbidden();
+        }
+        $this->assertDatabaseCount('backup_jobs', 0);
+        $this->assertDatabaseCount('backup_runs', 0);
+    }
+
+    public function test_missing_remote_inventory_is_not_treated_as_an_existing_eloquent_model(): void
+    {
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id)->update(['exists' => false]);
+        $this->actingAs(User::factory()->admin()->create())->postJson('/stacks/backup', [
+            'docker_host_id' => $host->id, 'stack' => 'app', 'backup_destination_id' => $this->destination()->id,
+            'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('stack');
+        $this->assertDatabaseCount('backup_jobs', 0);
+        $this->assertDatabaseCount('backup_runs', 0);
+    }
+
+    public function test_maintenance_during_stack_admission_rolls_back_jobs_and_runs_before_dispatch(): void
+    {
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id);
+        $destination = $this->destination();
+        $createRun = new class(app(BackupScheduleCalculator::class), app(WithDockerLabelMutationLocks::class)) extends CreateBackupRun
+        {
+            public function handle(BackupJob $job, string $trigger, ?User $initiatedBy = null, ?array $allowedVolumeNames = null): BackupRun
+            {
+                $run = parent::handle($job, $trigger, $initiatedBy, $allowedVolumeNames);
+                DockerHost::whereKey($job->docker_host_id)->update(['maintenance_requested_at' => now()]);
+
+                return $run;
+            }
+        };
+        $action = new BackupStack(app(BackupScheduleCalculator::class), $createRun, app(VolumeBackupSummaries::class), app(WithDockerLabelMutationLocks::class), app(DispatchQueuedRun::class));
+        try {
+            $action->handle('app', ['docker_host_id' => $host->id, 'backup_destination_id' => $destination->id, 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00']]);
+            $this->fail('Expected maintenance to reject stack admission.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('docker_host_id', $exception->errors());
+        }
+        $this->assertDatabaseCount('backup_jobs', 0);
+        $this->assertDatabaseCount('backup_runs', 0);
+        $this->assertDatabaseCount('agent_operations', 0);
+    }
+
+    public function test_stack_admission_lock_serializes_creation_and_is_scoped_to_the_host(): void
+    {
+        $host = $this->agent();
+        $other = $this->agent();
+        $destination = $this->destination();
+        $this->volume('data', 'app', $host->id);
+        $this->volume('data', 'app', $other->id);
+        $input = ['backup_destination_id' => $destination->id, 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00']];
+        $lock = Cache::lock('stack-backup-'.$host->id.'-'.hash('sha256', 'app'), 30);
+        $this->assertTrue($lock->get());
+        try {
+            $result = app(BackupStack::class)->handle('app', [...$input, 'docker_host_id' => $other->id]);
+            $this->assertSame(1, $result['created']);
+            try {
+                app(BackupStack::class)->handle('app', [...$input, 'docker_host_id' => $host->id]);
+                $this->fail('A competing stack admission must wait for the lock.');
+            } catch (LockTimeoutException) {
+                $this->assertDatabaseMissing('backup_jobs', ['docker_host_id' => $host->id]);
+                $this->assertDatabaseMissing('backup_runs', ['docker_host_id' => $host->id]);
+            }
+        } finally {
+            $lock->release();
+        }
+        $result = app(BackupStack::class)->handle('app', [...$input, 'docker_host_id' => $host->id]);
+        $this->assertSame(1, $result['created']);
+        $result = app(BackupStack::class)->handle('app', [...$input, 'docker_host_id' => $host->id]);
+        $this->assertSame(['created' => 0, 'queued' => 0, 'skipped' => 1, 'grouped' => 0], $result);
+        $this->assertDatabaseCount('backup_jobs', 2);
+        $this->assertDatabaseCount('backup_runs', 2);
+        $this->assertDatabaseCount('backup_job_groups', 0);
+    }
+
+    public function test_volume_disappearing_between_inventory_selection_and_mutation_aborts_creation(): void
+    {
+        $host = $this->agent();
+        $this->volume('data', 'app', $host->id);
+        $destination = $this->destination();
+        $locks = new class extends WithDockerLabelMutationLocks
+        {
+            public function handleOnHost(array $destinationIds, callable $callback, array $volumeNames = [], array $notificationChannelIds = [], array $explicitJobIds = [], int $dockerHostId = DockerHost::LOCAL_ID): mixed
+            {
+                DockerVolume::where('docker_host_id', $dockerHostId)->whereIn('name', $volumeNames)->update(['exists' => false]);
+
+                return parent::handleOnHost($destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds, $dockerHostId);
+            }
+        };
+        $action = new BackupStack(app(BackupScheduleCalculator::class), app(CreateBackupRun::class), app(VolumeBackupSummaries::class), $locks, app(DispatchQueuedRun::class));
+        try {
+            $action->handle('app', ['docker_host_id' => $host->id, 'backup_destination_id' => $destination->id, 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00']]);
+            $this->fail('Expected inventory source availability to be rechecked.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('volumes', $exception->errors());
+        }
+        $this->assertDatabaseCount('backup_jobs', 0);
+        $this->assertDatabaseCount('backup_runs', 0);
+    }
+
+    private function agent(): DockerHost
+    {
+        return DockerHost::factory()->create([
+            'agent_registered_at' => now()->subDay(), 'last_seen_at' => now()->subDay(),
+            'last_inventory_at' => now()->subDay(), 'agent_protocol_version' => 1,
+            'agent_capabilities' => ['inventory-v1', 'backup-v1'],
+        ]);
+    }
 
     public function test_backing_up_a_stack_creates_missing_jobs_and_queues_runs(): void
     {
@@ -639,18 +953,20 @@ class StackBulkBackupTest extends TestCase
         ]);
     }
 
-    private function volume(string $name, string $stack): DockerVolume
+    private function volume(string $name, string $stack, int $dockerHostId = DockerHost::LOCAL_ID): DockerVolume
     {
         return DockerVolume::create([
+            'docker_host_id' => $dockerHostId,
             'name' => $name,
             'exists' => true,
             'labels' => ['com.docker.compose.project' => $stack],
         ]);
     }
 
-    private function job(BackupDestination $destination, string $volumeName): BackupJob
+    private function job(BackupDestination $destination, string $volumeName, int $dockerHostId = DockerHost::LOCAL_ID): BackupJob
     {
         return BackupJob::create([
+            'docker_host_id' => $dockerHostId,
             'name' => 'Backup '.$volumeName,
             'volume_name' => $volumeName,
             'backup_destination_id' => $destination->id,

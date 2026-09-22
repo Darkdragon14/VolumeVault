@@ -12,7 +12,7 @@
   "hostScope.unsupported": "Hostitel nepodporuje zálohování.",
   "hostScope.offline": "Agent je offline.",
   "hostScope.permission": "Nemáte oprávnění k zálohování.",
-  "hostScope.remoteStack": "Hromadné zálohování vzdálených stacků není podporováno. Nastavte úlohy pro jednotlivé svazky.",
+  "stackBackup.details": "Vytvořit chybějící úlohy na tomto hostiteli s níže uvedeným cílem a plánem a zařadit způsobilé úlohy do fronty. Existující úlohy si ponechají nastavení a oznámení; rezervace pomocí štítků se respektují. Skupinové úlohy se řídí plánem skupiny a nedostupné úlohy se přeskočí. Nové úlohy používají výchozí kanál oznámení.",
     "archiveRelay.title": "Přenos archivu",
     "archiveRelay.description": "Lokální archivy vypisuje jejich vlastník. Centrální přenos umožňuje obnovu do nového svazku na jiném hostiteli; vzdálené strany vyžadují archive-relay-v1.",
     "archiveRelay.missingCapability": "Tento cíl není dostupný. Obě vzdálené strany vyžadují archive-relay-v1 a podporu obnovy; zkontrolujte schopnosti a údržbu.",

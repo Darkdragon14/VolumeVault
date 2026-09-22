@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'remote_stack_backups' => [
+        'title' => 'Sauvegardes en lot des stacks distantes',
+        'description' => 'Sauvegardez une stack sur son hôte Docker sélectionné, même en mode orchestrateur. Le dialogue identifie cet hôte et propose des destinations partagées ou lui appartenant. Les paramètres, notifications, réservations par labels et planifications de groupe sont conservés, avec les totaux créés, en file, ignorés et groupés. Sept autres lacunes restent à traiter ultérieurement ; la parité locale/distante n’est pas complète.',
+    ],
     'unified_host_operations' => [
         'title' => 'Opérations unifiées entre les hôtes Docker',
-        'description' => 'Tableau de bord, inventaires, tâches et historiques affichent tous les hôtes par défaut avec filtre et identité visibles. Les restaurations filtrent par cible et les totaux des groupes restent complets. Actualiser lit les inventaires acceptés ; la synchronisation locale cible explicitement le serveur local. Les sauvegardes en lot des stacks distantes restent indisponibles et les nombres de conteneurs inconnus sont indiqués comme tels.',
+        'description' => 'Tableau de bord, inventaires, tâches et historiques affichent tous les hôtes par défaut avec filtre et identité visibles. Les restaurations filtrent par cible et les totaux des groupes restent complets. Actualiser lit les inventaires acceptés ; la synchronisation locale cible explicitement le serveur local. Les nombres de conteneurs inconnus sont indiqués comme tels.',
     ],
     'restore_volume_ownership' => [
         'title' => 'Vérifier la propriété des nouveaux volumes de restauration',

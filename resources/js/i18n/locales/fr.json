@@ -12,7 +12,7 @@
   "hostScope.unsupported": "L’hôte ne prend pas en charge les sauvegardes.",
   "hostScope.offline": "L’agent est hors ligne.",
   "hostScope.permission": "Vous n’avez pas la permission de sauvegarder.",
-  "hostScope.remoteStack": "La sauvegarde en lot des stacks distantes n’est pas prise en charge. Configurez des tâches par volume.",
+  "stackBackup.details": "Créer les tâches manquantes sur cet hôte avec la destination et la planification ci-dessous, puis mettre en file les tâches admissibles. Les tâches existantes conservent leurs paramètres et notifications ; les réservations par labels sont respectées. Les tâches groupées suivent leur planification de groupe et les tâches indisponibles sont ignorées. Les nouvelles tâches utilisent le canal de notification par défaut.",
     "archiveRelay.title": "Transfert d’archive",
     "archiveRelay.description": "Les archives locales sont listées par leur hôte propriétaire. Le relais central permet une restauration dans un nouveau volume sur un autre hôte ; les côtés distants nécessitent archive-relay-v1.",
     "archiveRelay.missingCapability": "Cette cible est indisponible. Les deux côtés distants nécessitent archive-relay-v1 et la restauration ; vérifiez les capacités et la maintenance.",

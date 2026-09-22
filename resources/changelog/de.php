@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'remote_stack_backups' => [
+        'title' => 'Sammelbackups für entfernte Stacks',
+        'description' => 'Stacks auf ihrem ausgewählten Docker-Host sichern, auch im Orchestrator-Modus. Der Dialog zeigt den Host und gemeinsame oder hosteigene Ziele. Bestehende Einstellungen, Benachrichtigungen, Label-Reservierungen und Gruppenzeitpläne bleiben erhalten; erstellte, eingereihte, übersprungene und gruppierte Elemente werden zusammengefasst. Sieben weitere Workflow-Lücken folgen später; vollständige lokale/entfernte Funktionsgleichheit besteht noch nicht.',
+    ],
     'unified_host_operations' => [
         'title' => 'Einheitliche Ansichten für alle Docker-Hosts',
-        'description' => 'Dashboard, Inventar, Jobs und Verlauf zeigen standardmäßig alle Hosts mit Hostfilter und sichtbarer Identität. Wiederherstellungen filtern nach Zielhost; Gruppensummen bleiben vollständig. Aktualisieren liest gespeicherte Inventarstände, lokaler Sync adressiert den lokalen Host. Sammelbackups entfernter Stacks bleiben nicht unterstützt; unbekannte Containerzahlen werden als unbekannt angezeigt.',
+        'description' => 'Dashboard, Inventar, Jobs und Verlauf zeigen standardmäßig alle Hosts mit Hostfilter und sichtbarer Identität. Wiederherstellungen filtern nach Zielhost; Gruppensummen bleiben vollständig. Aktualisieren liest gespeicherte Inventarstände, lokaler Sync adressiert den lokalen Host. Unbekannte Containerzahlen werden als unbekannt angezeigt.',
     ],
     'restore_volume_ownership' => [
         'title' => 'Eigentümerschaft neuer Wiederherstellungsvolumes prüfen',

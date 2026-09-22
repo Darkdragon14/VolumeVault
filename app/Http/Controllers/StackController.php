@@ -25,9 +25,12 @@ class StackController extends Controller
             ...$scope->props(),
             'stacks' => $volumeBackupSummaries->forStacks($volumes, $scope),
             'destinations' => request()->user()?->isAdmin() ? BackupDestination::where('is_active', true)
-                ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->whereNotIn('provider', [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME]))
                 ->orderBy('name')
                 ->get()
+                ->filter(fn (BackupDestination $destination): bool => ! DeploymentMode::isOrchestrator()
+                    || ! $destination->isHostBound()
+                    || ($scope->summary((int) $destination->docker_host_id)['canBackup'] ?? false))
+                ->values()
                 ->map->safeForFrontend() : [],
             'timezones' => \DateTimeZone::listIdentifiers(),
             'appTimezone' => config('app.timezone'),

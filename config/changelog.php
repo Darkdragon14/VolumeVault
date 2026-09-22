@@ -2,6 +2,7 @@
 
 return [
     'unreleased' => [
+        ['type' => 'feature', 'key' => 'remote_stack_backups'],
         ['type' => 'feature', 'key' => 'unified_host_operations'],
         ['type' => 'change', 'key' => 'restore_volume_ownership'],
         ['type' => 'feature', 'key' => 'cross_host_archive_relay'],

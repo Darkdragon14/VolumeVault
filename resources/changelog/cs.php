@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'remote_stack_backups' => [
+        'title' => 'Hromadné zálohy vzdálených stacků',
+        'description' => 'Zálohujte stack na vybraném hostiteli Dockeru, i v režimu orchestrátoru. Dialog identifikuje hostitele a nabízí sdílené cíle nebo cíle stejného hostitele. Nastavení, oznámení, rezervace štítků a plány skupin zůstávají zachovány se součty vytvořených, zařazených, přeskočených a seskupených položek. Sedm dalších nedostatků pracovních postupů se vyřeší později; místní a vzdálené funkce ještě nejsou plně rovnocenné.',
+    ],
     'unified_host_operations' => [
         'title' => 'Sjednocené operace hostitelů Dockeru',
-        'description' => 'Přehled, inventáře, úlohy a historie standardně zobrazují všechny hostitele s filtrem a viditelnou identitou. Obnovy se filtrují podle cíle; součty skupin zůstávají úplné. Obnovení čte přijaté inventáře a místní synchronizace výslovně cílí na místního hostitele. Hromadné zálohy vzdálených stacků nejsou podporovány a neznámé počty kontejnerů jsou označeny jako neznámé.',
+        'description' => 'Přehled, inventáře, úlohy a historie standardně zobrazují všechny hostitele s filtrem a viditelnou identitou. Obnovy se filtrují podle cíle; součty skupin zůstávají úplné. Obnovení čte přijaté inventáře a místní synchronizace výslovně cílí na místního hostitele. Neznámé počty kontejnerů jsou označeny jako neznámé.',
     ],
     'restore_volume_ownership' => [
         'title' => 'Ověření vlastnictví nových svazků pro obnovu',

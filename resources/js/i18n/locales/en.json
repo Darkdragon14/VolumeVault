@@ -12,7 +12,7 @@
   "hostScope.unsupported": "Host does not support backups.",
   "hostScope.offline": "Agent is offline.",
   "hostScope.permission": "You do not have backup permission.",
-  "hostScope.remoteStack": "Remote stack bulk backups are not supported. Configure individual volume jobs instead.",
+  "stackBackup.details": "Create missing jobs on this host with the destination and schedule below, then queue eligible jobs. Existing jobs keep their settings and notifications; label reservations are respected. Grouped jobs stay on their group schedule and unavailable jobs are skipped. New jobs use the default notification channel.",
     "archiveRelay.title": "Archive transfer",
     "archiveRelay.description": "Host-local archives are listed by their owner. Restore to a new volume on another host through the central relay; remote sides require archive-relay-v1.",
     "archiveRelay.missingCapability": "This target is unavailable. Both remote sides require archive-relay-v1 and restore support; check host capabilities and maintenance.",

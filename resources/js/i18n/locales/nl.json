@@ -12,7 +12,7 @@
   "hostScope.unsupported": "Host ondersteunt geen back-ups.",
   "hostScope.offline": "Agent is offline.",
   "hostScope.permission": "Je hebt geen toestemming voor back-ups.",
-  "hostScope.remoteStack": "Bulkback-ups van externe stacks worden niet ondersteund. Configureer afzonderlijke volumetaken.",
+  "stackBackup.details": "Maak ontbrekende taken op deze host met de onderstaande bestemming en planning en zet geschikte taken in de wachtrij. Bestaande taken behouden hun instellingen en meldingen; labelreserveringen worden gerespecteerd. Groepstaken volgen hun groepsplanning en niet-beschikbare taken worden overgeslagen. Nieuwe taken gebruiken het standaardmeldingskanaal.",
     "archiveRelay.title": "Archiefoverdracht",
     "archiveRelay.description": "De eigenaar toont hostlokale archieven. Via het centrale relais kunt u herstellen naar een nieuw volume op een andere host; externe kanten vereisen archive-relay-v1.",
     "archiveRelay.missingCapability": "Dit doel is niet beschikbaar. Beide externe kanten vereisen archive-relay-v1 en herstelondersteuning; controleer mogelijkheden en onderhoud.",

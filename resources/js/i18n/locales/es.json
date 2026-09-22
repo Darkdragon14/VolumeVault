@@ -12,7 +12,7 @@
   "hostScope.unsupported": "El host no admite copias de seguridad.",
   "hostScope.offline": "El agente está desconectado.",
   "hostScope.permission": "No tiene permiso para realizar copias de seguridad.",
-  "hostScope.remoteStack": "No se admiten copias masivas de stacks remotas. Configure tareas individuales por volumen.",
+  "stackBackup.details": "Crear las tareas que faltan en este host con el destino y horario indicados y poner en cola las tareas aptas. Las tareas existentes conservan sus ajustes y notificaciones; se respetan las reservas por etiquetas. Las tareas agrupadas mantienen el horario del grupo y se omiten las no disponibles. Las nuevas tareas usan el canal de notificación predeterminado.",
     "archiveRelay.title": "Transferencia de archivo",
     "archiveRelay.description": "El host propietario lista los archivos locales. El relevo central permite restaurarlos en un volumen nuevo en otro host; los lados remotos requieren archive-relay-v1.",
     "archiveRelay.missingCapability": "Este destino no está disponible. Ambos lados remotos requieren archive-relay-v1 y restauración; compruebe las capacidades y el mantenimiento.",

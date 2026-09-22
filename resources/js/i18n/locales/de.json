@@ -12,7 +12,7 @@
   "hostScope.unsupported": "Host unterstützt keine Backups.",
   "hostScope.offline": "Agent ist offline.",
   "hostScope.permission": "Keine Berechtigung für Backups.",
-  "hostScope.remoteStack": "Sammelbackups entfernter Stacks werden nicht unterstützt. Einzelne Volume-Jobs konfigurieren.",
+  "stackBackup.details": "Fehlende Jobs auf diesem Host mit dem folgenden Ziel und Zeitplan erstellen und ausführbare Jobs einreihen. Bestehende Jobs behalten Einstellungen und Benachrichtigungen; Label-Reservierungen werden berücksichtigt. Gruppenjobs folgen ihrem Gruppenzeitplan, nicht verfügbare Jobs werden übersprungen. Neue Jobs nutzen den Standard-Benachrichtigungskanal.",
     "archiveRelay.title": "Archivübertragung",
     "archiveRelay.description": "Hostlokale Archive werden beim Eigentümer aufgelistet. Die zentrale Weiterleitung stellt sie auf einem anderen Host in einem neuen Volume wieder her; entfernte Seiten benötigen archive-relay-v1.",
     "archiveRelay.missingCapability": "Dieses Ziel ist nicht verfügbar. Beide entfernten Seiten benötigen archive-relay-v1 und Wiederherstellungsunterstützung; Fähigkeiten und Wartungsstatus prüfen.",

@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'remote_stack_backups' => [
+        'title' => 'Backup in blocco degli stack remoti',
+        'description' => 'Esegui il backup di uno stack sul suo host Docker selezionato, anche in modalità orchestratore. Il dialogo identifica l’host e offre destinazioni condivise o dello stesso host. Impostazioni, notifiche, prenotazioni tramite etichette e pianificazioni di gruppo sono preservate, con totali creati, accodati, saltati e raggruppati. Altre sette lacune saranno affrontate in seguito; la parità locale/remota non è completa.',
+    ],
     'unified_host_operations' => [
         'title' => 'Operazioni unificate tra host Docker',
-        'description' => 'Dashboard, inventari, processi e cronologie mostrano tutti gli host per impostazione predefinita, con filtro e identità visibili. I ripristini si filtrano per destinazione e i totali dei gruppi restano completi. Aggiorna legge gli inventari accettati; la sincronizzazione locale indica esplicitamente l’host locale. I backup in blocco degli stack remoti restano non supportati e i conteggi sconosciuti sono indicati come tali.',
+        'description' => 'Dashboard, inventari, processi e cronologie mostrano tutti gli host per impostazione predefinita, con filtro e identità visibili. I ripristini si filtrano per destinazione e i totali dei gruppi restano completi. Aggiorna legge gli inventari accettati; la sincronizzazione locale indica esplicitamente l’host locale. I conteggi sconosciuti sono indicati come tali.',
     ],
     'restore_volume_ownership' => [
         'title' => 'Verifica della proprietà dei nuovi volumi di ripristino',
