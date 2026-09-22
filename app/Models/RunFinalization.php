@@ -24,6 +24,11 @@ class RunFinalization extends Model
 
     public const MAX_ATTEMPTS = 5;
 
+    public const NOTIFICATION_SNAPSHOT_FIELDS = [
+        'name', 'service', 'url', 'notification_level', 'title_template', 'body_template',
+        'restore_title_template', 'restore_body_template',
+    ];
+
     protected $fillable = [
         'backup_run_id',
         'restore_run_id',
@@ -41,7 +46,11 @@ class RunFinalization extends Model
         'finished_at',
         'last_error',
         'context',
+        'remote_metadata_payload',
+        'notification_snapshot',
     ];
+
+    protected $hidden = ['remote_metadata_payload', 'notification_snapshot'];
 
     protected $attributes = [
         'status' => self::STATUS_PENDING,
@@ -57,6 +66,8 @@ class RunFinalization extends Model
             'enqueued_at' => 'datetime',
             'finished_at' => 'datetime',
             'context' => 'array',
+            'remote_metadata_payload' => 'encrypted:array',
+            'notification_snapshot' => 'encrypted:array',
         ];
     }
 

@@ -26,6 +26,23 @@ class AgentOperationSpecification
     {
         try {
             app(AgentOperationStore::class)->assertId($operation['id'] ?? '');
+            if (($operation['kind'] ?? null) === 'destination' && ($operation['spec']['action'] ?? null) === 'host_key') {
+                Validator::make($operation, [
+                    'id' => ['required', 'uuid'], 'token' => ['required', 'regex:/\A[0-9a-f]{64}\z/'],
+                    'kind' => ['required', 'in:destination'], 'spec' => ['required', 'array:version,action,destination,limit'],
+                    'spec.version' => ['required', 'integer:strict', 'in:1'], 'spec.action' => ['required', 'in:host_key'],
+                    'spec.limit' => ['required', 'integer:strict', 'in:1'],
+                    'spec.destination' => ['required', 'array:provider,host,port'],
+                    'spec.destination.provider' => ['required', 'in:ssh'],
+                    'spec.destination.host' => ['required', new \App\Services\BackupDestinations\SftpEndpointHost],
+                    'spec.destination.port' => ['required', 'integer:strict', 'min:1', 'max:65535'],
+                ])->validate();
+                if (array_diff(array_keys($operation), ['id', 'token', 'kind', 'spec']) !== []) {
+                    throw new RuntimeException;
+                }
+
+                return;
+            }
             $rules = [
                 'id' => ['required', 'uuid'],
                 'token' => ['required', 'regex:/\A[0-9a-f]{64}\z/'],
@@ -64,8 +81,12 @@ class AgentOperationSpecification
             if (($operation['kind'] ?? null) === 'destination') {
                 $rules = array_filter($rules, fn (string $key): bool => ! str_starts_with($key, 'spec.job') && ! str_starts_with($key, 'spec.run') && $key !== 'spec.safety_destination', ARRAY_FILTER_USE_KEY);
                 $rules['kind'] = ['required', 'in:destination'];
-                $rules['spec'] = ['required', 'array:version,destination,action,cursor,limit,selected_backup'];
-                $rules['spec.action'] = ['required', 'in:test,list,stats'];
+                $rules['spec'] = ['required', 'array:version,destination,action,cursor,limit,selected_backup,archive'];
+                $rules['spec.action'] = ['required', 'in:test,list,stats,metadata'];
+                $rules['spec.archive'] = ['required_if:spec.action,metadata', 'array:filename,key,size', 'prohibited_unless:spec.action,metadata'];
+                $rules['spec.archive.filename'] = ['required_with:spec.archive', 'string', 'max:255', 'regex:/\A[a-zA-Z0-9][a-zA-Z0-9_.-]*\z/'];
+                $rules['spec.archive.key'] = ['nullable', 'string', 'max:4096'];
+                $rules['spec.archive.size'] = ['nullable', 'integer:strict', 'min:0'];
                 $rules['spec.cursor'] = ['nullable', 'string', 'max:16384', 'prohibited_unless:spec.action,list'];
                 if (isset($operation['spec']['selected_backup'])) {
                     $rules['spec.cursor'][] = 'prohibited';
@@ -155,6 +176,11 @@ class AgentOperationSpecification
     public function validateLocalPolicy(array $operation): void
     {
         try {
+            if ($operation['kind'] === 'destination' && $operation['spec']['action'] === 'host_key') {
+                app(OutboundHostGuard::class)->assertHostAllowed($operation['spec']['destination']['host']);
+
+                return;
+            }
             if ($operation['kind'] === 'restore' && isset($operation['spec']['relay'])) {
                 if ($operation['spec']['relay']['size_bytes'] > (int) config('volumevault.archive_relay.max_bytes')) {
                     throw new RuntimeException;

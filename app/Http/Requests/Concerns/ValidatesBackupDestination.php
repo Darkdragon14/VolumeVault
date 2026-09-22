@@ -21,6 +21,7 @@ trait ValidatesBackupDestination
     {
         return [
             'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'],
+            'storage_measurement_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'],
             'name' => ['required', 'string', 'max:255'],
             'provider' => ['required', 'string', Rule::in(BackupDestination::PROVIDERS)],
             'endpoint' => ['nullable', 'string', 'max:2048'],
@@ -122,6 +123,18 @@ trait ValidatesBackupDestination
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            if (! $validator->errors()->has('storage_measurement_host_id') && $this->input('storage_measurement_host_id') !== null) {
+                $measurementHost = (int) $this->input('storage_measurement_host_id');
+                if (in_array($this->input('provider'), [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME], true) && $measurementHost !== $this->destinationHostId()) {
+                    $validator->errors()->add('storage_measurement_host_id', 'Host-bound storage must be measured on its owning host.');
+                } elseif (! in_array($this->input('provider'), [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME], true) && $measurementHost !== DockerHost::LOCAL_ID) {
+                    try {
+                        app(AgentExecution::class)->validateHost($measurementHost, 'destination-v1');
+                    } catch (\Illuminate\Validation\ValidationException) {
+                        $validator->errors()->add('storage_measurement_host_id', 'Select a compatible agent supporting destination operations.');
+                    }
+                }
+            }
             if (! $validator->errors()->has('docker_host_id') && in_array($this->input('provider'), [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME], true)) {
                 app(AgentExecution::class)->validateHost($this->destinationHostId(), 'backup-v1');
             }

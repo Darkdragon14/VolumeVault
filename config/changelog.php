@@ -2,6 +2,7 @@
 
 return [
     'unreleased' => [
+        ['type' => 'change', 'key' => 'audit_remote_workflow_parity'],
         ['type' => 'feature', 'key' => 'remote_stack_backups'],
         ['type' => 'feature', 'key' => 'unified_host_operations'],
         ['type' => 'change', 'key' => 'restore_volume_ownership'],

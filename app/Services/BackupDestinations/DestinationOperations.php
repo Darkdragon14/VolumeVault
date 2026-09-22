@@ -27,6 +27,7 @@ class DestinationOperations
         return DockerHost::orderBy('name')->get()->map(fn (DockerHost $host): array => [
             ...app(AgentExecution::class)->summary($host),
             'supports_destination_operations' => $host->isLocal() || app(AgentExecution::class)->supportsHost($host, 'destination-v1'),
+            'supports_sftp_host_key' => $host->isLocal() || (app(AgentExecution::class)->supportsHost($host, 'destination-v1') && app(AgentExecution::class)->supportsHost($host, 'sftp-host-key-v1')),
             'supports_host_bound_destinations' => app(AgentExecution::class)->supportsHost($host, 'destination-v1'),
         ])->all();
     }
@@ -91,13 +92,34 @@ class DestinationOperations
                 'id' => $id, 'docker_host_id' => $hostId, 'kind' => 'destination', 'status' => 'pending',
                 'backup_destination_id' => $destination->id, 'destination_action' => $action,
                 'locator_fingerprint' => $destination->locatorFingerprint(), 'payload' => $spec,
-                'context' => ['destination_name' => $destination->name, 'provider' => $destination->provider, 'limit' => $limit, 'backup_run_id' => $backupRunId],
+                'context' => ['destination_name' => $destination->name, 'provider' => $destination->provider, 'limit' => $limit, 'backup_run_id' => $backupRunId,
+                    'storage_measurement_fingerprint' => $destination->storageMeasurementFingerprint()],
             ]);
             if ($hostId === DockerHost::LOCAL_ID) {
                 RunDestinationOperation::dispatch($id)->afterCommit();
             }
 
             return $operation;
+        });
+    }
+
+    public function createHostKey(string $host, int $port, int $hostId): AgentOperation
+    {
+        Validator::make(['host' => $host], ['host' => ['required', new SftpEndpointHost]])->validate();
+        return DB::transaction(function () use ($host, $port, $hostId): AgentOperation {
+            app(AgentExecution::class)->validateHost($hostId, 'sftp-host-key-v1');
+            app(AgentExecution::class)->validateHost($hostId, 'destination-v1');
+            DockerHost::query()->whereKey($hostId)->lockForUpdate()->firstOrFail();
+            app(HostWorkAdmission::class)->assertAccepting($hostId);
+            $id = (string) Str::uuid();
+            $spec = ['version' => 1, 'action' => 'host_key', 'limit' => 1, 'destination' => ['provider' => 'ssh', 'host' => $host, 'port' => $port]];
+            app(AgentOperationSpecification::class)->validate(['id' => $id, 'token' => str_repeat('0', 64), 'kind' => 'destination', 'spec' => $spec]);
+
+            return AgentOperation::create([
+                'id' => $id, 'docker_host_id' => $hostId, 'kind' => 'destination', 'status' => 'pending',
+                'destination_action' => 'host_key', 'payload' => $spec,
+                'context' => ['destination_name' => $host, 'host' => $host, 'port' => $port, 'provider' => 'ssh', 'limit' => 1],
+            ]);
         });
     }
 
@@ -124,6 +146,8 @@ class DestinationOperations
             'data' => ['present', 'nullable', 'array'],
         ];
         $dataRules = match ($action) {
+            'metadata' => ['data' => ['required', 'array:backup_key,backup_size_bytes'], 'data.backup_key' => ['required', 'string', 'max:4096'], 'data.backup_size_bytes' => ['present', 'nullable', 'integer:strict', 'min:0']],
+            'host_key' => ['data' => ['required', 'array:key,fingerprint'], 'data.key' => ['required', 'string', 'max:4096'], 'data.fingerprint' => ['required', 'string', 'max:128']],
             'test' => ['data' => ['required', 'array:ok'], 'data.ok' => ['required', 'boolean:strict', 'accepted']],
             'stats' => ['data' => ['required', 'array:used_bytes,object_count'], 'data.used_bytes' => ['required', 'integer:strict', 'min:0'], 'data.object_count' => ['required', 'integer:strict', 'min:0']],
             'list' => [
@@ -154,6 +178,7 @@ class DestinationOperations
 
         return [
             'id' => $operation->id, 'destination_id' => $operation->backup_destination_id,
+            'endpoint' => $operation->destination_action === 'host_key' ? ['host' => $operation->context['host'], 'port' => $operation->context['port']] : null,
             'docker_host_id' => $operation->docker_host_id, 'action' => $operation->destination_action,
             'backup_run_id' => $operation->context['backup_run_id'] ?? null,
             'status' => $operation->status, 'destination_name' => $operation->context['destination_name'],
@@ -165,14 +190,15 @@ class DestinationOperations
 
     public function usage(BackupDestination $destination): array
     {
-        $hostId = $this->hostId($destination);
+        $hostId = $this->hostId($destination, $destination->storageMeasurementHostId());
         $query = AgentOperation::where('backup_destination_id', $destination->id)->where('docker_host_id', $hostId)
             ->where('locator_fingerprint', $destination->locatorFingerprint())->where('destination_action', 'stats');
-        $latest = (clone $query)->where('status', 'completed')->latest('completed_at')->first();
+        $current = fn (AgentOperation $operation): bool => ($operation->context['storage_measurement_fingerprint'] ?? null) === $destination->storageMeasurementFingerprint();
+        $latest = (clone $query)->where('status', 'completed')->latest('completed_at')->cursor()->first($current);
         if ($latest && ($latest->claimed_at ?? $latest->created_at)->gt(now()->subMinutes(30)) && $latest->result['status'] === 'success') {
             return $latest->result['data'];
         }
-        if (! (clone $query)->whereIn('status', ['pending', 'running'])->exists()) {
+        if (! (clone $query)->whereIn('status', ['pending', 'running'])->cursor()->contains($current)) {
             $this->create($destination, 'stats', $hostId);
         }
         throw new \RuntimeException('Destination storage measurement is pending or stale.');

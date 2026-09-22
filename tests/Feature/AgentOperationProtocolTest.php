@@ -261,7 +261,7 @@ class AgentOperationProtocolTest extends TestCase
         $this->assertSame('success', $run->status);
         $this->assertSame(BackupJob::STATUS_ACTIVE, $run->job->fresh()->status);
         $this->assertNotNull($run->job->fresh()->last_success_at);
-        $this->assertDatabaseCount('run_finalizations', 1);
+        $this->assertDatabaseCount('run_finalizations', 2);
         $history = $run->getAttributes();
         $finalizations = RunFinalization::all()->toArray();
         $this->travel(2)->minutes();

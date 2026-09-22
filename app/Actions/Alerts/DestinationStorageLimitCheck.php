@@ -96,6 +96,8 @@ class DestinationStorageLimitCheck implements AlertCheckAction
                     'message' => 'Destination "'.$destination->name.'" is using '.FormatBytes::format($usedBytes).' of backup storage.',
                     'context' => [
                         'destination_id' => $destination->id,
+                        'storage_measurement_host_id' => $destination->storageMeasurementHostId(),
+                        'storage_measurement_fingerprint' => $destination->storageMeasurementFingerprint(),
                         'destination' => $destination->name,
                         'provider' => $destination->provider,
                         'target' => $destination->targetLabel(),
@@ -163,7 +165,7 @@ class DestinationStorageLimitCheck implements AlertCheckAction
     /** @return array{previous_used_bytes: int|null, delta_bytes: int|null} */
     private function recordUsageDelta(BackupDestination $destination, int $usedBytes): array
     {
-        $cacheKey = 'destination_storage_delta_baseline_'.$destination->id;
+        $cacheKey = 'destination_storage_delta_baseline_'.$destination->id.'_'.$destination->storageMeasurementFingerprint();
         $previousUsedBytes = Cache::get($cacheKey);
 
         Cache::put($cacheKey, $usedBytes, now()->addDays(30));

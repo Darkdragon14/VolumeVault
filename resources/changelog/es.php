@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'audit_remote_workflow_parity' => [
+        'title' => 'Integradas las correcciones de los flujos remotos secundarios',
+        'description' => 'Descubre claves SFTP sin guardar el destino mediante agentes compatibles, elige un ejecutor para los umbrales automáticos y consulta la vigencia y procedencia de las políticas de rutas. Los avisos de inicio y metadatos remotos tienen reintentos duraderos, instantáneas cifradas y finalización ordenada de grupos. Las copias de instalación siguen siendo centrales; la importación vuelve a cifrar operaciones, bloques del relé e instantáneas de salida conservando las asignaciones, sin retroceder los agentes. Las siete carencias están implementadas; las actualizaciones manuales, la conectividad aportada por el usuario, el relé entre hosts solo a volúmenes nuevos y las copias de instalación centrales siguen siendo límites intencionados de v1. No se afirma que todos los controles principales hayan superado una revisión independiente.',
+    ],
     'remote_stack_backups' => [
         'title' => 'Copias masivas de stacks remotas',
-        'description' => 'Respalda una stack en su host Docker seleccionado, también en modo orquestador. El diálogo identifica el host y ofrece destinos compartidos o de ese host. Se conservan ajustes, notificaciones, reservas por etiquetas y horarios de grupos, con totales de elementos creados, en cola, omitidos y agrupados. Quedan otras siete carencias para una próxima fase; la paridad local/remota aún no es completa.',
+        'description' => 'Respalda una stack en su host Docker seleccionado, también en modo orquestador. El diálogo identifica el host y ofrece destinos compartidos o de ese host. Se conservan ajustes, notificaciones, reservas por etiquetas y horarios de grupos, con totales de elementos creados, en cola, omitidos y agrupados.',
     ],
     'unified_host_operations' => [
         'title' => 'Operaciones unificadas entre hosts Docker',
@@ -15,7 +19,7 @@ return [
     ],
     'cross_host_archive_relay' => [
         'title' => 'Restaurar archivos locales en otro host',
-        'description' => 'El relevo central cifrado transfiere archivos a un volumen nuevo en otro host, incluido el modo híbrido local/remoto. Los lados remotos requieren archive-relay-v1. Las listas y los recibos vigentes siguen vinculados al propietario; los detalles muestran progreso, caducidad, errores y limpieza. Se conserva el original. Valores predeterminados: 10 GiB por archivo, 50 GiB de almacenamiento y 24 horas. Quedan pendientes las vistas unificadas y la auditoría de flujos secundarios.',
+        'description' => 'El relevo central cifrado transfiere archivos a un volumen nuevo en otro host, incluido el modo híbrido local/remoto. Los lados remotos requieren archive-relay-v1. Las listas y los recibos vigentes siguen vinculados al propietario; los detalles muestran progreso, caducidad, errores y limpieza. Se conserva el original. Valores predeterminados: 10 GiB por archivo, 50 GiB de almacenamiento y 24 horas.',
     ],
     'agent_destination_operations' => [
         'title' => 'Probar y explorar destinos mediante agentes',

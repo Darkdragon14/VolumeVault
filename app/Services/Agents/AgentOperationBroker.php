@@ -44,6 +44,17 @@ class AgentOperationBroker
                 return null;
             }
             if (in_array($operation->kind, ['destination', 'archive_export'], true)) {
+                $capability = match ($operation->destination_action) {
+                    'host_key' => 'sftp-host-key-v1',
+                    'metadata' => 'archive-metadata-v1',
+                    default => $operation->kind === 'archive_export' ? 'archive-relay-v1' : 'destination-v1',
+                };
+                if (! app(AgentExecution::class)->supportsHost($locked, $capability)) {
+                    $operation->update(['status' => 'cancelled', 'completed_at' => now(), 'payload' => null,
+                        'result' => ['status' => 'failed', 'error_message' => 'Agent does not support '.$capability.'.']]);
+
+                    return null;
+                }
                 if (! app(AgentExecution::class)->supportsHost($locked, $operation->kind === 'archive_export' ? 'archive-relay-v1' : 'destination-v1')) {
                     return null;
                 }
@@ -84,6 +95,11 @@ class AgentOperationBroker
             }
             if ($run instanceof BackupRun) {
                 $job->forceFill(['status' => BackupJob::STATUS_RUNNING, 'last_run_at' => now()])->save();
+                $ids = app(CreateRunFinalizations::class)->createBackupStartNotifications($run, $job);
+                DB::afterCommit(fn () => app(ProcessRunFinalization::class)->dispatch($ids));
+            } elseif ($run instanceof RestoreRun) {
+                $ids = app(CreateRunFinalizations::class)->createRestoreNotifications($run, $job, started: true);
+                DB::afterCommit(fn () => app(ProcessRunFinalization::class)->dispatch($ids));
             }
             $operation->forceFill([
                 'status' => 'running', 'payload' => $payload, 'delivery_token' => $token,
@@ -207,6 +223,17 @@ class AgentOperationBroker
             $run->save();
             $creator = app(CreateRunFinalizations::class);
             $ids = $run instanceof BackupRun ? $creator->createBackupNotifications($run, $job) : $creator->createRestoreNotifications($run, $job);
+            if ($run instanceof BackupRun && $status === 'success' && ($run->backup_key === null || $run->backup_size_bytes === null)) {
+                $metadata = $creator->createMetadata($run);
+                $metadata->update([
+                    'remote_metadata_payload' => ['version' => 1, 'action' => 'metadata', 'limit' => 1,
+                        'destination' => $operation->payload['destination'],
+                        'archive' => ['filename' => $operation->payload['run']['backup_filename'], 'key' => $run->backup_key, 'size' => $run->backup_size_bytes]],
+                    'context' => ['docker_host_id' => $operation->docker_host_id],
+                ]);
+                $run->update(['archive_metadata_pending' => true]);
+                $ids[] = $metadata->id;
+            }
             $operation->forceFill(['status' => 'completed', 'completed_at' => now(), 'payload' => null])->save();
             ActivityLog::record('agent_operation_finished', 'Agent operation finished: '.$status.'.', $run);
 

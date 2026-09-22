@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'audit_remote_workflow_parity' => [
+        'title' => 'Correcties voor secundaire externe werkstromen voltooid',
+        'description' => 'Ontdek SFTP-hostsleutels zonder opgeslagen bestemming via geschikte agents, sla een uitvoerder voor automatische opslagdrempels op en bekijk ouderdom en herkomst van padbeleid. Externe startmeldingen en archiefmetadata gebruiken duurzame herhalingen met versleutelde snapshots en geordende groepsafronding. Installatieback-ups blijven centraal; import versleutelt agentbewerkingen, relayblokken en outbox-snapshots opnieuw met behoud van toewijzingen, zonder agents terug te draaien. De zeven hiaten zijn geïmplementeerd; handmatige updates, eigen netwerkconnectiviteit, relay tussen hosts uitsluitend naar nieuwe volumes en centrale installatieback-ups blijven bewuste v1-grenzen. Dit verklaart niet dat alle hoofdbediening onafhankelijk is beoordeeld.',
+    ],
     'remote_stack_backups' => [
         'title' => 'Bulkback-ups van externe stacks',
-        'description' => 'Maak een back-up van een stack op de geselecteerde Docker-host, ook in orchestrator-modus. Het dialoogvenster toont de host en gedeelde of hosteigen bestemmingen. Instellingen, meldingen, labelreserveringen en groepsplanningen blijven behouden, met totalen voor aangemaakte, ingeplande, overgeslagen en gegroepeerde items. Zeven andere workflowtekorten volgen later; volledige lokale/externe gelijkwaardigheid is nog niet bereikt.',
+        'description' => 'Maak een back-up van een stack op de geselecteerde Docker-host, ook in orchestrator-modus. Het dialoogvenster toont de host en gedeelde of hosteigen bestemmingen. Instellingen, meldingen, labelreserveringen en groepsplanningen blijven behouden, met totalen voor aangemaakte, ingeplande, overgeslagen en gegroepeerde items.',
     ],
     'unified_host_operations' => [
         'title' => 'Uniforme bewerkingen voor Docker-hosts',
@@ -15,7 +19,7 @@ return [
     ],
     'cross_host_archive_relay' => [
         'title' => 'Hostlokale archieven op een andere host herstellen',
-        'description' => 'Het versleutelde centrale relais draagt archieven over naar een nieuw volume op een andere host, ook lokaal/extern in hybride modus. Externe kanten vereisen archive-relay-v1. Lijsten en geldige ontvangstbewijzen blijven bij de eigenaar; details tonen voortgang, verloop, fouten en opruiming. Het origineel blijft behouden. Standaard: 10 GiB per archief, 50 GiB opslag en 24 uur. Gecombineerde inventarisweergaven en de controle van secundaire workflows moeten nog worden afgerond.',
+        'description' => 'Het versleutelde centrale relais draagt archieven over naar een nieuw volume op een andere host, ook lokaal/extern in hybride modus. Externe kanten vereisen archive-relay-v1. Lijsten en geldige ontvangstbewijzen blijven bij de eigenaar; details tonen voortgang, verloop, fouten en opruiming. Het origineel blijft behouden. Standaard: 10 GiB per archief, 50 GiB opslag en 24 uur.',
     ],
     'agent_destination_operations' => [
         'title' => 'Bestemmingen testen en doorzoeken via agents',

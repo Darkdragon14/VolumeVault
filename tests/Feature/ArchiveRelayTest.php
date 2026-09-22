@@ -70,6 +70,9 @@ class ArchiveRelayTest extends TestCase
     public function test_remote_relay_is_ordered_encrypted_integrity_checked_and_cleaned_only_after_durable_target_completion(): void
     {
         [$run, $source, $target] = $this->restore();
+        $run->job->update(['notifications_enabled' => true]);
+        $channel = \App\Models\NotificationChannel::create(['name' => 'Restore events', 'service' => 'advanced', 'url' => 'ntfy://notify.test/restore', 'notification_level' => 'info', 'is_active' => true]);
+        $run->job->notificationChannels()->attach($channel);
         $relay = $run->archiveRelay;
         $this->assertFalse(app(DispatchQueuedRun::class)->handle($run));
         $this->assertNull(app(AgentOperationBroker::class)->pull($target));
@@ -89,6 +92,7 @@ class ArchiveRelayTest extends TestCase
         $this->assertSame(0600, fileperms($storage->directory($relay->id).'/0') & 0777);
         $this->assertSame(0700, fileperms($storage->directory($relay->id)) & 0777);
         $this->assertNull($run->fresh()->started_at);
+        $this->assertSame(0, $run->finalizations()->where('type', 'started_notification')->count());
         $send(ArchiveRelayStorage::CHUNK_BYTES, substr($archive, ArchiveRelayStorage::CHUNK_BYTES));
         $source->forceFill(['maintenance_requested_at' => now()])->save();
         app(AgentOperationBroker::class)->complete($source, $export['id'], $export['token'], $this->receipt());
@@ -96,6 +100,8 @@ class ArchiveRelayTest extends TestCase
         $this->assertSame('ready', $relay->fresh()->status);
         $this->assertTrue(app(DispatchQueuedRun::class)->handle($run));
         $restore = app(AgentOperationBroker::class)->pull($target);
+        $this->assertSame($restore, app(AgentOperationBroker::class)->pull($target));
+        $this->assertSame(1, $run->finalizations()->where('type', 'started_notification')->count());
         $this->assertSame('restore', $restore['kind']);
         app(AgentOperationSpecification::class)->validate($restore);
         $this->assertSame($hash, $restore['spec']['relay']['sha256']);

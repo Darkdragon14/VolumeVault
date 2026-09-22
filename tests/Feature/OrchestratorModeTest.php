@@ -193,8 +193,7 @@ class OrchestratorModeTest extends TestCase
         foreach ($events as $event) {
             $name = ($event->command ?? '').' '.($event->description ?? '');
             $local = str_contains($name, 'SyncDockerVolumes')
-                || str_contains($name, 'reconcile-stale-runs')
-                || str_contains($name, 'host-path-allowlist:audit');
+                || str_contains($name, 'reconcile-stale-runs');
 
             $this->assertSame(! $local, $event->filtersPass($this->app), $name);
         }

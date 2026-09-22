@@ -122,6 +122,12 @@ Secure saves exclude runtime-only data such as sessions, cache, queued jobs, tem
 
 To migrate an installation, start a fresh VolumeVault instance, choose `Import existing installation` during onboarding, upload the `.vvsave`, and provide the previous installation `APP_KEY`. Imported destination, notification, and user two-factor secrets are re-encrypted with the new instance key after restore.
 
+Installation-save creation and upload run **centrally**, not on the executor selected for destination measurements or browsing. Network destinations must be reachable under the central server's egress policy. The destination picker is filtered by the backend: active network destinations are eligible, and central-owned filesystem/Docker-volume destinations are available only in hybrid mode. Agent-owned local storage is not an installation-save upload target.
+
+Import also re-encrypts persisted agent-operation payloads, context, delivery tokens and results; relay destination snapshots and encrypted relay chunks; and metadata/notification outbox snapshots with the new `APP_KEY`. Agent assignments and pending finalizations are preserved rather than cleared to make import appear idle. Relay storage must be under the saved private storage path and match the new installation's configured path. Missing/incomplete chunks or digest failures reject the import before replacing live storage. Keep the previous key available until import succeeds and keep the new key securely backed up afterwards.
+
+A `.vvsave` restores **central state**, not remote agent runtimes, local agent encryption keys or anti-replay journals. It cannot rewind an agent or external storage to the snapshot time. Preserve each agent's identity volume and reconcile outstanding assignments and remote state after recovery; do not delete journals to force old work to execute again. External notification delivery is retryable, not exactly once across disaster recovery.
+
 ## Safety Notes
 
 - Always test restore before trusting backups.

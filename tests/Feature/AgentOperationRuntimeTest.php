@@ -108,6 +108,41 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertSame(1, BackupRun::count());
     }
 
+    public function test_metadata_only_operations_survive_native_worker_restart_without_backup_execution(): void
+    {
+        $directory = $this->root.'/archives';
+        File::ensureDirectoryExists($directory);
+        $store = app(AgentOperationStore::class);
+        $spec = ['version' => 1, 'action' => 'metadata', 'limit' => 1,
+            'destination' => ['name' => 'Archive', 'provider' => 'local', 'settings' => ['archive_path' => $directory], 'secrets' => []],
+            'archive' => ['filename' => 'frozen.tar.gz', 'key' => null, 'size' => null]];
+        $execute = function (string $id): void {
+            $process = new \Symfony\Component\Process\Process([PHP_BINARY, base_path('artisan'), 'volumevault:agent-execute', $id], base_path(), [
+                'VOLUMEVAULT_AGENT_STATE_DIRECTORY' => $this->root,
+                'VOLUMEVAULT_HOST_PATH_ALLOWLIST' => $this->root,
+                'APP_ENV' => 'testing',
+            ]);
+            $process->setTimeout(60)->mustRun();
+        };
+        $first = ['id' => (string) Str::uuid(), 'token' => str_repeat('a', 64), 'kind' => 'destination', 'spec' => $spec];
+        $store->accept($first);
+        $execute($first['id']);
+        $this->assertSame('failed', $store->read($first['id'])['result']['status']);
+        File::put($directory.'/frozen.tar.gz', gzencode('archive contents'));
+        $second = [...$first, 'id' => (string) Str::uuid()];
+        $store->acknowledge($first['id']);
+        $store->accept($second);
+        $execute($second['id']);
+        $result = $store->read($second['id'])['result'];
+        $this->assertSame('success', $result['status']);
+        $this->assertSame('frozen.tar.gz', $result['data']['backup_key']);
+        $this->assertSame(filesize($directory.'/frozen.tar.gz'), $result['data']['backup_size_bytes']);
+        $execute($second['id']);
+        $this->assertSame($result, $store->read($second['id'])['result']);
+        $database = new \PDO('sqlite:'.$store->directory($second['id']).'/runtime.sqlite');
+        $this->assertSame(0, (int) $database->query('select count(*) from backup_runs')->fetchColumn());
+    }
+
     public function test_export_runtime_uploads_with_real_client_from_child_state_while_parent_loop_is_open(): void
     {
         config([

@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'audit_remote_workflow_parity' => [
+        'title' => 'Dokončeny opravy vedlejších vzdálených postupů',
+        'description' => 'Zjišťujte SFTP klíče bez uloženého cíle přes kompatibilní agenty, uložte vykonavatele automatických limitů úložiště a sledujte stáří a původ zásad cest. Vzdálená oznámení zahájení a metadata archivů používají trvalé opakování, šifrované snímky a uspořádané dokončení skupin. Zálohy instalace běží centrálně; import znovu šifruje operace agentů, bloky přenosu a odchozí snímky se zachováním přiřazení, bez vracení agentů do minulosti. Sedm nedostatků je implementováno; ruční aktualizace, vlastní síťové propojení, přenos mezi hostiteli jen do nových svazků a centrální zálohy instalace zůstávají záměrnými hranicemi v1. Nejde o potvrzení nezávislé kontroly všech hlavních ovládacích prvků.',
+    ],
     'remote_stack_backups' => [
         'title' => 'Hromadné zálohy vzdálených stacků',
-        'description' => 'Zálohujte stack na vybraném hostiteli Dockeru, i v režimu orchestrátoru. Dialog identifikuje hostitele a nabízí sdílené cíle nebo cíle stejného hostitele. Nastavení, oznámení, rezervace štítků a plány skupin zůstávají zachovány se součty vytvořených, zařazených, přeskočených a seskupených položek. Sedm dalších nedostatků pracovních postupů se vyřeší později; místní a vzdálené funkce ještě nejsou plně rovnocenné.',
+        'description' => 'Zálohujte stack na vybraném hostiteli Dockeru, i v režimu orchestrátoru. Dialog identifikuje hostitele a nabízí sdílené cíle nebo cíle stejného hostitele. Nastavení, oznámení, rezervace štítků a plány skupin zůstávají zachovány se součty vytvořených, zařazených, přeskočených a seskupených položek.',
     ],
     'unified_host_operations' => [
         'title' => 'Sjednocené operace hostitelů Dockeru',
@@ -15,7 +19,7 @@ return [
     ],
     'cross_host_archive_relay' => [
         'title' => 'Obnova lokálních archivů na jiném hostiteli',
-        'description' => 'Šifrovaný centrální přenos doručí archiv do nového svazku na jiném hostiteli, i v hybridním místním/vzdáleném režimu. Vzdálené strany vyžadují archive-relay-v1. Seznamy a platná potvrzení zůstávají u vlastníka; podrobnosti zobrazují průběh, platnost, chyby a úklid. Originál je zachován. Výchozí hodnoty: 10 GiB na archiv, 50 GiB úložiště a 24 hodin. Sjednocené pohledy a audit vedlejších postupů ještě nejsou dokončeny.',
+        'description' => 'Šifrovaný centrální přenos doručí archiv do nového svazku na jiném hostiteli, i v hybridním místním/vzdáleném režimu. Vzdálené strany vyžadují archive-relay-v1. Seznamy a platná potvrzení zůstávají u vlastníka; podrobnosti zobrazují průběh, platnost, chyby a úklid. Originál je zachován. Výchozí hodnoty: 10 GiB na archiv, 50 GiB úložiště a 24 hodin.',
     ],
     'agent_destination_operations' => [
         'title' => 'Testování a procházení úložišť pomocí agentů',

@@ -39,7 +39,7 @@ class AgentRegistry
                 'agent_active_operations' => null,
             ])->save();
             ActivityLog::record('agent_enrollment_issued', 'Agent enrollment issued.', $locked);
-        });
+        }, attempts: 3);
 
         $arguments = [
             'docker', 'run', '-d', '--name', 'volumevault-agent-'.substr($host->uuid, 0, 8),

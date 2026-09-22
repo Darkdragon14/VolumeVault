@@ -16,6 +16,7 @@ use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Docker\DockerProcess;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
@@ -39,6 +40,12 @@ class DockerHostAttributionTest extends TestCase
         $destination = $this->destination();
         $destination->update(['provider' => BackupDestination::PROVIDER_LOCAL, 'settings' => ['archive_path' => '/backups']]);
         $networkDestination = $this->destination();
+        // This fixture represents destinations predating storage measurement configuration.
+        DB::table('backup_destinations')->whereIn('id', [$destination->id, $networkDestination->id])->update([
+            'storage_measurement_host_id' => null,
+            'storage_measurement_revision' => null,
+        ]);
+        $destination->refresh();
         $job = $this->job($destination);
         $volume = DockerVolume::create(['name' => 'shared']);
         $backup = app(CreateBackupRunRecord::class)->handle($job, ['trigger' => 'manual', 'status' => 'success', 'logs' => 'Historical backup']);
@@ -47,12 +54,15 @@ class DockerHostAttributionTest extends TestCase
         $fingerprint = $destination->locatorFingerprint();
         $migration = require database_path('migrations/2026_09_17_101431_add_docker_host_attribution.php');
         $labelSettingsMigration = require database_path('migrations/2026_09_18_151946_scope_docker_label_backup_settings_to_hosts.php');
+        $measurementMigration = require database_path('migrations/2026_09_22_153149_add_storage_measurement_host_to_backup_destinations.php');
 
+        $measurementMigration->down();
         $labelSettingsMigration->down();
         $migration->down();
         $this->assertFalse(Schema::hasTable('docker_hosts'));
         $migration->up();
         $labelSettingsMigration->up();
+        $measurementMigration->up();
 
         $this->assertTrue(DockerHost::findOrFail(DockerHost::LOCAL_ID)->isLocal());
         foreach ([$job, $volume, $backup, $destination] as $model) {
@@ -65,6 +75,16 @@ class DockerHostAttributionTest extends TestCase
         $this->assertSame($encryptedSecret, $destination->getRawOriginal('secret_access_key'));
         $this->assertSame($fingerprint, $destination->locatorFingerprint());
         $this->assertSame($job->id, $backup->backup_job_id);
+        foreach ([$destination, $networkDestination] as $restoredDestination) {
+            $this->assertNull($restoredDestination->refresh()->storage_measurement_host_id);
+            $this->assertNull($restoredDestination->storage_measurement_revision);
+            $this->assertSame(DockerHost::LOCAL_ID, $restoredDestination->storageMeasurementHostId());
+        }
+        $this->assertDatabaseCount('backup_destinations', 2);
+        $this->assertDatabaseCount('backup_jobs', 1);
+        $this->assertDatabaseCount('docker_volumes', 1);
+        $this->assertDatabaseCount('backup_runs', 1);
+        $this->assertDatabaseCount('restore_runs', 1);
     }
 
     public function test_new_records_default_to_local_and_network_destinations_have_no_owner(): void

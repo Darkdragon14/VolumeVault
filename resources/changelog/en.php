@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'audit_remote_workflow_parity' => [
+        'title' => 'Complete the remote secondary-workflow audit fixes',
+        'description' => 'Discover unsaved SFTP host keys through capable agents, save an executor for automated storage thresholds, and inspect host-path policy freshness and provenance. Remote start notifications and archive metadata use durable retries with encrypted snapshots and ordered group completion. Installation saves execute centrally; imports rotate encrypted agent operations, relay chunks and outbox snapshots while preserving assignments, without rewinding agents. The seven audit gaps are implemented; manual updates, user-provided networking, new-volume cross-host relay and central installation saves remain intentional v1 boundaries. This does not claim every main control has passed independent review.',
+    ],
     'remote_stack_backups' => [
         'title' => 'Bulk backups for remote stacks',
-        'description' => 'Back up a stack on its selected Docker host, including in orchestrator mode. The dialog identifies the host and offers shared or same-host destinations. Existing settings, notifications, label reservations and group schedules are preserved, with created, queued, skipped and grouped totals. Seven other workflow gaps remain for a later batch; this is not full local/remote parity.',
+        'description' => 'Back up a stack on its selected Docker host, including in orchestrator mode. The dialog identifies the host and offers shared or same-host destinations. Existing settings, notifications, label reservations and group schedules are preserved, with created, queued, skipped and grouped totals.',
     ],
     'unified_host_operations' => [
         'title' => 'Unified operations across Docker hosts',
@@ -15,7 +19,7 @@ return [
     ],
     'cross_host_archive_relay' => [
         'title' => 'Restore host-local archives on another host',
-        'description' => 'Transfer archives through the encrypted central relay into a new volume on another host, including local/remote hybrid restores. Remote sides require archive-relay-v1. Listings and fresh receipts stay with the archive owner; restore details show transfer progress, expiry, errors and cleanup. The original archive is preserved. Defaults are 10 GiB per archive, 50 GiB relay storage and a 24-hour lifetime. Unified inventory views and the remaining secondary workflow audit are still pending.',
+        'description' => 'Transfer archives through the encrypted central relay into a new volume on another host, including local/remote hybrid restores. Remote sides require archive-relay-v1. Listings and fresh receipts stay with the archive owner; restore details show transfer progress, expiry, errors and cleanup. The original archive is preserved. Defaults are 10 GiB per archive, 50 GiB relay storage and a 24-hour lifetime.',
     ],
     'agent_destination_operations' => [
         'title' => 'Test and browse destinations through agents',

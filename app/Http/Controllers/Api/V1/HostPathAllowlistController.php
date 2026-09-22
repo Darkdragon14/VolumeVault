@@ -3,22 +3,21 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Services\BackupSources\HostPathPolicy;
+use App\Models\DockerHost;
+use App\Services\BackupSources\HostPathAllowlistAudit;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class HostPathAllowlistController extends Controller
 {
-    public function __invoke(HostPathPolicy $policy): JsonResponse
+    public function __invoke(Request $request, HostPathAllowlistAudit $audit): JsonResponse
     {
-        $prefixes = $policy->allowedPrefixes();
+        $validated = $request->validate([
+            'docker_host_id' => ['sometimes', 'integer', 'min:1', 'exists:docker_hosts,id'],
+        ]);
 
         return response()->json([
-            'data' => [
-                // Fail-closed: with no prefix configured, host-path backup
-                // sources and local destinations are refused entirely.
-                'configured' => $prefixes !== [],
-                'prefixes' => $prefixes,
-            ],
+            'data' => $audit->inspect((int) ($validated['docker_host_id'] ?? DockerHost::LOCAL_ID)),
         ]);
     }
 }

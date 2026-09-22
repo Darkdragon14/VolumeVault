@@ -467,6 +467,17 @@ class GroupedBackupTest extends TestCase
 
         app(RunBackupGroup::class)->handle($run);
 
+        $this->assertNotContains('SUCCESS_URL', $docker->shoutrrrUrls, 'finish waits for member metadata');
+        $metadata = \App\Models\RunFinalization::whereIn('backup_run_id', $run->memberRuns()->pluck('id'))
+            ->where('type', \App\Models\RunFinalization::TYPE_ARCHIVE_METADATA)->get();
+        foreach ($metadata as $finalization) {
+            $finalization->update(['attempts' => \App\Models\RunFinalization::MAX_ATTEMPTS, 'available_at' => now()]);
+            app(\App\Actions\Runs\ProcessRunFinalization::class)->handle($finalization->id);
+        }
+        foreach ($run->finalizations()->pluck('id') as $id) {
+            app(\App\Actions\Runs\ProcessRunFinalization::class)->handle($id);
+        }
+
         $urls = $docker->shoutrrrUrls;
         $this->assertSame(1, collect($urls)->filter(fn (string $u): bool => $u === 'START_URL')->count(), 'exactly one start ping');
         $this->assertSame(1, collect($urls)->filter(fn (string $u): bool => $u === 'SUCCESS_URL')->count(), 'exactly one success ping');

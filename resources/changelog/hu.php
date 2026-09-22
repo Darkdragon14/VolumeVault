@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'audit_remote_workflow_parity' => [
+        'title' => 'Elkészültek a másodlagos távoli munkafolyamatok javításai',
+        'description' => 'SFTP-gazdakulcsok felderítése mentett cél nélkül, kompatibilis ügynökökkel; mentett végrehajtó az automatikus tárhelyküszöbökhöz; útvonalszabályzatok frissessége és eredete. A távoli indítási értesítések és archívummetaadatok tartós újrapróbálást, titkosított pillanatképeket és rendezett csoportlezárást kapnak. A telepítésmentések központilag futnak; az import újratitkosítja az ügynökműveleteket, közvetítőblokkokat és kimenő pillanatképeket, megőrizve a hozzárendeléseket, az ügynökök visszaállítása nélkül. A hét hiányosság megvalósítása elkészült; a kézi frissítés, saját hálózati kapcsolat, gazdák közötti átvitel csak új kötetbe és a központi telepítésmentés szándékos v1-korlát marad. Ez nem jelenti az összes fő vezérlő független felülvizsgálatát.',
+    ],
     'remote_stack_backups' => [
         'title' => 'Távoli vermek tömeges mentése',
-        'description' => 'Verem mentése a kiválasztott Docker-gazdagépen, orchestrator módban is. A párbeszédablak azonosítja a gazdagépet, és megosztott vagy saját célokat kínál. A beállítások, értesítések, címkés foglalások és csoportütemezések megmaradnak; az összegzés mutatja a létrehozott, sorba állított, kihagyott és csoportos elemeket. Hét további munkafolyamat-hiányosság később következik; a helyi és távoli funkciók még nem teljesen egyenértékűek.',
+        'description' => 'Verem mentése a kiválasztott Docker-gazdagépen, orchestrator módban is. A párbeszédablak azonosítja a gazdagépet, és megosztott vagy saját célokat kínál. A beállítások, értesítések, címkés foglalások és csoportütemezések megmaradnak; az összegzés mutatja a létrehozott, sorba állított, kihagyott és csoportos elemeket.',
     ],
     'unified_host_operations' => [
         'title' => 'Egységes műveletek Docker-gazdagépeken',
@@ -15,7 +19,7 @@ return [
     ],
     'cross_host_archive_relay' => [
         'title' => 'Helyi archívumok visszaállítása másik gépre',
-        'description' => 'A titkosított központi közvetítő másik gép új kötetére továbbítja az archívumot, helyi/távoli hibrid módban is. A távoli oldalakhoz archive-relay-v1 szükséges. A listák és érvényes nyugták a tulajdonoshoz kötődnek; a részletek mutatják az előrehaladást, lejáratot, hibákat és tisztítást. Az eredeti megmarad. Alapértékek: archívumonként 10 GiB, 50 GiB tárhely és 24 óra. Az egységes nézetek és a másodlagos folyamatok auditja még hátravan.',
+        'description' => 'A titkosított központi közvetítő másik gép új kötetére továbbítja az archívumot, helyi/távoli hibrid módban is. A távoli oldalakhoz archive-relay-v1 szükséges. A listák és érvényes nyugták a tulajdonoshoz kötődnek; a részletek mutatják az előrehaladást, lejáratot, hibákat és tisztítást. Az eredeti megmarad. Alapértékek: archívumonként 10 GiB, 50 GiB tárhely és 24 óra.',
     ],
     'agent_destination_operations' => [
         'title' => 'Célhelyek tesztelése és böngészése ügynökökkel',

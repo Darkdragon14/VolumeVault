@@ -39,6 +39,8 @@ class NormalizeDestinationData
         $legacy = $this->legacyColumns($provider, $settings);
 
         $payload = [
+            'storage_measurement_host_id' => array_key_exists('storage_measurement_host_id', $data)
+                ? $data['storage_measurement_host_id'] : $destination?->storage_measurement_host_id,
             'docker_host_id' => in_array($provider, [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME], true)
                 ? (int) ($data['docker_host_id'] ?? $destination?->docker_host_id ?? DockerHost::LOCAL_ID)
                 : null,

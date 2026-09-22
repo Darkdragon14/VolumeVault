@@ -40,6 +40,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/restore-runs/{restoreRun}', [RestoreRunController::class, 'show']);
         Route::get('/host-path-allowlist', HostPathAllowlistController::class)->middleware('admin');
         Route::get('/destinations', [DestinationController::class, 'index'])->middleware('admin');
+        Route::get('/destinations/host-key/operations/{operation}', [DestinationController::class, 'hostKeyOperation'])->middleware('admin');
         Route::get('/destinations/{destination}', [DestinationController::class, 'show'])->middleware('admin');
         Route::get('/destinations/{destination}/operations/{operation}', [DestinationOperationController::class, 'show'])->middleware('admin');
         Route::get('/notifications', [NotificationChannelController::class, 'index'])->middleware('admin');

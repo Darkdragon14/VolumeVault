@@ -3,6 +3,7 @@ import { destinationMatchesHost, isHostLocalDestination, type ExecutionHost } fr
 
 export type DestinationOperationHost = ExecutionHost & {
     supports_destination_operations: boolean;
+    supports_sftp_host_key?: boolean;
     supports_host_bound_destinations?: boolean;
 };
 export type DestinationObject = { key: string; display_name: string; size: number; last_modified: string | null };

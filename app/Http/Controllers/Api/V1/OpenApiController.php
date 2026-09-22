@@ -56,8 +56,8 @@ class OpenApiController extends Controller
             ],
             '/dashboard' => ['get' => $this->operation('Read dashboard stats across all hosts by default. Group aggregates describe whole groups with a member in scope. Safe hosts and filters are inside data.', ['read'], queryParameters: [$this->hostScopeParameter()])],
             '/volumes' => ['get' => $this->operation('List accepted Docker volume inventory across all hosts by default. Identities combine host ID and volume name. Includes safe hosts and filters alongside data.', ['read'], queryParameters: [$this->hostScopeParameter()])],
-            '/stacks' => ['get' => $this->operation('List host-qualified stacks derived from stored Compose/Swarm volume labels. Remote stack backup is unsupported; complete container labels and mounts are not persisted.', ['read'], queryParameters: [$this->hostScopeParameter()])],
-            '/host-path-allowlist' => ['get' => $this->operation('Read the configured host-path allowlist (prefixes that host-path backup sources and local destinations may use). Empty/not configured means host paths are refused (fail-closed).', ['read'], null, false, true)],
+            '/stacks' => ['get' => $this->operation('List host-qualified stacks derived from stored Compose/Swarm volume labels. Remote stack backups are queued on the explicitly selected registered agent, which requires backup-v1. Listing defaults to all hosts; POST /stacks/backup defaults to local host 1.', ['read'], queryParameters: [$this->hostScopeParameter()])],
+            '/host-path-allowlist' => ['get' => $this->hostPathAllowlistOperation()],
             '/volumes/sync' => ['post' => $this->volumeSyncOperation()],
             '/stacks/backup' => ['post' => $this->operation('Back up a whole stack at once. For every Docker volume in the stack that has no backup job yet, a job is created using the given destination and schedule; then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, omit destination/schedule to just queue a run for every job. Volumes whose job belongs to a backup group are reported under "grouped" and are not run here — they back up on their group\'s own schedule. The 202 response is { data: { created, queued, skipped, grouped } }.', ['write'], ['$ref' => '#/components/schemas/StackBackupRequest'], false, true, 202)],
             '/backup-jobs' => [
@@ -115,7 +115,10 @@ class OpenApiController extends Controller
                 'delete' => $this->operation('Delete a backup destination.', ['write'], null, true, true, 204),
             ],
             '/destinations/{id}/test' => ['post' => $this->operation('Test a backup destination.', ['write'], null, true, true)],
-            '/destinations/host-key' => ['post' => $this->operation('Read the SSH host key a server presents, to pin it as settings.host_key (trust on first use). Connects without authenticating.', ['write'], ['$ref' => '#/components/schemas/HostKeyRequest'], false, true)],
+            '/destinations/host-key' => ['post' => $this->hostKeyDiscoveryOperation()],
+            '/destinations/host-key/operations/{operation}' => ['get' => $this->operation('Poll unsaved SSH discovery. Admin/read required. data.result.data contains key and fingerprint on success; data.endpoint contains the immutable host and port. Only host_key operations without a saved destination are accepted.', ['read'], admin: true, queryParameters: [
+                ['name' => 'operation', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']],
+            ])],
             '/notifications' => ['get' => $this->operation('List notification channels without plaintext URLs.', ['read'], null, false, true)],
             '/notifications/{id}' => [
                 'get' => $this->operation('Read one notification channel without plaintext URL.', ['read'], null, true, true),
@@ -148,6 +151,36 @@ class OpenApiController extends Controller
         ];
 
         return $operation;
+    }
+
+    private function hostKeyDiscoveryOperation(): array
+    {
+        $operation = $this->operation('Discover an unsaved SSH endpoint without credentials. Omit docker_host_id (or use 1) for the legacy central 200 response data:{key,fingerprint}. An explicit agent requires both destination-v1 and sftp-host-key-v1 and returns 202; poll the standalone host-key operation. Agent-local outbound policy applies; there is no central fallback.', ['write'], ['$ref' => '#/components/schemas/HostKeyRequest'], admin: true);
+        $operation['responses']['202'] = ['description' => 'Agent discovery queued. The data object includes id (UUID), status, docker_host_id, action=host_key, and immutable endpoint:{host,port}. Poll GET /destinations/host-key/operations/{id} for result.data:{key,fingerprint}.'];
+
+        return $operation;
+    }
+
+    private function hostPathAllowlistOperation(): array
+    {
+        $properties = [
+            'docker_host_id' => ['type' => 'integer'], 'host_name' => ['type' => 'string'],
+            'configuration_target' => ['type' => 'string', 'enum' => ['local', 'remote_agent']],
+            'policy_status' => ['type' => 'string', 'enum' => ['known', 'policy_unknown', 'local_disabled']],
+            'reported_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+            'freshness' => ['type' => 'string', 'enum' => ['current', 'fresh', 'stale', 'unavailable']],
+            'configured' => ['type' => ['boolean', 'null']],
+            'status' => ['type' => 'string', 'enum' => ['allowed', 'blocked', 'policy_unknown', 'local_disabled']],
+            'suggested_env_line' => ['type' => ['string', 'null']],
+            'suggested_allowlist' => ['type' => ['array', 'null'], 'items' => ['type' => 'string']],
+        ];
+        foreach (['prefixes', 'paths_in_use', 'blocked_paths', 'unknown_paths'] as $field) {
+            $properties[$field] = ['type' => 'array', 'items' => ['type' => 'string']];
+        }
+
+        return $this->operation('Inspect the selected host-path allowlist policy; docker_host_id defaults to local host 1. Requires admin/read. Paths and suggestions are scoped to that host. A known empty allowlist refuses all paths; policy_unknown means unavailable, stale, offline or missing agent inventory, not an empty policy. Local execution disabled reports local_disabled. Remote policies are advisory stored inventory, fresh for 15 minutes only while the agent is online; the executing agent enforces its actual policy.', ['read'], admin: true,
+            queryParameters: [['name' => 'docker_host_id', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'minimum' => 1, 'default' => 1]]],
+            response: ['type' => 'object', 'required' => ['data'], 'properties' => ['data' => ['type' => 'object', 'required' => array_keys($properties), 'properties' => $properties]]]);
     }
 
     private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true, array $queryParameters = [], ?array $response = null): array
@@ -549,8 +582,9 @@ class OpenApiController extends Controller
                 'type' => 'object',
                 'required' => ['host'],
                 'properties' => [
-                    'host' => ['type' => 'string', 'description' => 'SSH server hostname or IP.'],
+                    'host' => ['type' => 'string', 'description' => 'Bare IPv4/IPv6 address (including ::1) or DNS/container hostname (underscores allowed). URLs, userinfo, paths, controls and bracketed IPv6 are rejected. Agent-local outbound IP policy still applies.'],
                     'port' => ['type' => ['integer', 'null'], 'minimum' => 1, 'maximum' => 65535, 'default' => 22],
+                    'docker_host_id' => ['type' => ['integer', 'null'], 'description' => 'Explicit executor. Null/1 selects central; a remote host must advertise both destination-v1 and sftp-host-key-v1.'],
                 ],
             ],
             'NotificationChannelUpdateRequest' => [
@@ -594,6 +628,7 @@ class OpenApiController extends Controller
             'name' => ['type' => 'string'],
             'provider' => ['type' => 'string', 'enum' => BackupDestination::PROVIDERS],
             'docker_host_id' => ['type' => ['integer', 'null'], 'description' => 'Owner of a local filesystem or Docker-volume destination. Network destinations are shared and have no host owner.'],
+            'storage_measurement_host_id' => ['type' => ['integer', 'null'], 'description' => 'Automatic storage measurement executor. Null/1 means central for network destinations; agents require destination-v1. Host-bound destinations always use their owner and reject a different executor. Omitted on update preserves the selection; null explicitly resets network destinations to central. Changes invalidate usage and delta baselines. This does not change manual operation defaults.'],
             'endpoint' => ['type' => ['string', 'null'], 'format' => 'uri'],
             'region' => ['type' => ['string', 'null']],
             'bucket' => ['type' => ['string', 'null'], 'description' => 'Legacy S3 bucket field. Use settings for non-S3 providers.'],

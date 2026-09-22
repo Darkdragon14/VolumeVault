@@ -102,6 +102,7 @@ Route::middleware('auth')->group(function () {
 
         Route::resource('destinations', DestinationController::class)->except(['show']);
         Route::post('/destinations/host-key', [DestinationController::class, 'hostKey'])->name('destinations.host-key');
+        Route::get('/destinations/host-key/operations/{operation}', [DestinationController::class, 'hostKeyOperation'])->name('destinations.host-key.operations.show');
         Route::patch('/destinations/{destination}/active', [DestinationController::class, 'updateActive'])->name('destinations.active');
         Route::post('/destinations/{destination}/test', [DestinationController::class, 'test'])->name('destinations.test');
         Route::post('/destinations/{destination}/operations', [\App\Http\Controllers\DestinationOperationController::class, 'store'])->name('destinations.operations.store');

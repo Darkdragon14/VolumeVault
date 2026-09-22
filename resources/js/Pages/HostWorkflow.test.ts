@@ -13,6 +13,7 @@ import GroupIndex from './BackupGroups/Index.vue';
 import GroupShow from './BackupGroups/Show.vue';
 import GroupRunShow from './BackupGroups/RunShow.vue';
 import StackIndex from './Stacks/Index.vue';
+import InstallationSaves from './InstallationSaves/Index.vue';
 import { hostSupports } from '@/Composables/useDeployment';
 
 const inertia = vi.hoisted(() => ({ page: null as any, form: null as any, submitted: vi.fn(), post: vi.fn() }));
@@ -25,6 +26,7 @@ vi.mock('@inertiajs/vue3', () => ({
     useForm: (data: any) => {
         let transform = (value: any) => value;
         const form = reactive({ ...data, errors: {}, processing: false,
+            clearErrors: vi.fn(),
             transform: (callback: any) => { transform = callback; return form; },
             post: (url: string) => inertia.submitted(url, transform(Object.fromEntries(Object.keys(data).map((key) => [key, form[key]])))),
             put: (url: string) => form.post(url),
@@ -85,6 +87,53 @@ beforeEach(() => {
 afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
 
 describe('Host-scoped backup and restore workflows', () => {
+    it('explains central installation saves and key rotation while using the backend-filtered destinations', async () => {
+        const wrapper = render(InstallationSaves, { destinations: [destinations[3]] });
+        expect(wrapper.text()).toContain('remoteAudit.saveCentral');
+        expect(wrapper.text()).toContain('remoteAudit.importRecovery');
+        expect(wrapper.text()).toContain('Keep APP_KEY outside the save.');
+        expect(wrapper.findAll('option').map(option => option.text())).toEqual(['Shared S3 /']);
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.submitted).toHaveBeenCalledWith('/installation-save/upload', { backup_destination_id: 4 });
+    });
+
+    it('shows local policy configuration and local-disabled separately from unknown inventory', async () => {
+        inertia.page.props.deployment = { mode: 'hybrid', local_execution_enabled: true };
+        const wrapper = render(JobForm, { ...jobProps(), hosts: [{ ...local, host_path_policy: { status: 'known', freshness: 'current', reported_at: null, prefixes: ['/srv'] } }] });
+        await wrapper.get('input[value="host_path"]').setValue();
+        const policy = wrapper.get('[data-testid="host-path-policy"]');
+        expect(policy.text()).toContain('remoteAudit.centralPolicy');
+        expect(policy.text()).toContain('remoteAudit.current');
+        expect(policy.text()).toContain('/srv');
+        await wrapper.setProps({ hosts: [{ ...local, host_path_policy: { status: 'local_disabled', freshness: 'current', reported_at: null, prefixes: [] } }] });
+        expect(policy.text()).toContain('remoteAudit.disabledPolicy');
+        expect(policy.text()).not.toContain('remoteAudit.unknownPolicy');
+        expect(policy.text()).not.toContain('remoteAudit.emptyPolicy');
+    });
+
+    it.each([false, true])('shows selected-host policy provenance and distinguishes empty, stale and unknown on edit=%s', async (editing) => {
+        const wrapper = render(JobForm, { ...jobProps(), job: editing ? { id: 7, docker_host_id: 2, source_type: 'host_path', host_path: '/srv/data' } : null,
+            hosts: [{ ...remote, host_path_policy: { status: 'known', freshness: 'fresh', reported_at: '2026-09-22T12:00:00Z', prefixes: [] } },
+                { ...other, host_path_policy: { status: 'unknown', freshness: 'stale', reported_at: '2026-09-21T12:00:00Z', prefixes: [] } }],
+        });
+        await wrapper.get('input[value="host_path"]').setValue();
+        expect(wrapper.get('[data-testid="host-path-policy"]').text()).toContain('remoteAudit.emptyPolicy');
+        expect(wrapper.get('[data-testid="host-path-policy"]').text()).toContain('Agent A');
+        expect(wrapper.get('[data-testid="host-path-policy"]').text()).toContain('2026-09-22T12:00:00Z');
+        await wrapper.get('[data-source-host]').setValue('3');
+        const policy = wrapper.get('[data-testid="host-path-policy"]');
+        expect(policy.text()).toContain('remoteAudit.unknownPolicy');
+        expect(policy.text()).toContain('remoteAudit.stale');
+        expect(policy.text()).toContain('remoteAudit.agentPolicy');
+        expect(policy.text()).not.toContain('remoteAudit.emptyPolicy');
+        inertia.form.host_path = '/srv/data';
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.submitted).toHaveBeenCalledWith(editing ? '/backup-jobs/7' : '/backup-jobs', expect.objectContaining({ docker_host_id: 3, host_path: '/srv/data' }));
+        await wrapper.setProps({ hosts: [{ ...other, host_path_policy: { status: 'unknown', freshness: 'unavailable', reported_at: null, prefixes: [] } }] });
+        expect(policy.text()).toContain('remoteAudit.unavailable');
+        expect(policy.text()).toContain('remoteAudit.noReport');
+    });
+
     it('includes the local host in both volume shortcut links', () => {
         inertia.page.props.deployment = { mode: 'hybrid', local_execution_enabled: true };
         inertia.page.props.can.runDockerActions = true;
@@ -256,7 +305,7 @@ describe('Host-scoped backup and restore workflows', () => {
     });
 
     it('shows remote path allowlists from the selected host', async () => {
-        const wrapper = render(JobForm, { ...jobProps(), hosts: [{ ...remote, host_path_allowlist: ['/srv/data'] }] });
+        const wrapper = render(JobForm, { ...jobProps(), hosts: [{ ...remote, host_path_policy: { status: 'known', freshness: 'fresh', reported_at: '2026-09-22T12:00:00Z', prefixes: ['/srv/data'] } }] });
         await wrapper.get('input[value="host_path"]').setValue();
         expect(wrapper.text()).toContain('/srv/data');
     });
@@ -368,10 +417,14 @@ describe('Host-scoped backup and restore workflows', () => {
 
     it('translates every host workflow label in all nine UI locales', () => {
         const locales = import.meta.glob('../i18n/locales/*.json', { eager: true, import: 'default' }) as Record<string, Record<string, string>>;
-        const keys = Object.keys(locales['../i18n/locales/en.json']).filter((key) => key.startsWith('hostWorkflow.'));
+        const keys = Object.keys(locales['../i18n/locales/en.json']).filter((key) => key.startsWith('hostWorkflow.') || key.startsWith('remoteAudit.'));
         expect(Object.keys(locales)).toHaveLength(9);
         for (const [locale, messages] of Object.entries(locales)) {
             for (const key of keys) expect(messages[key], `${locale}: ${key}`).toBeTruthy();
+            for (const key of keys.filter(key => key.startsWith('remoteAudit.'))) {
+                expect(messages[key], `${locale}: ${key}`).not.toBe(key);
+                if (!locale.endsWith('/en.json')) expect(messages[key], `${locale}: ${key}`).not.toBe(locales['../i18n/locales/en.json'][key]);
+            }
         }
     });
 });

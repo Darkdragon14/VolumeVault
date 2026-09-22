@@ -102,7 +102,7 @@ const selectedHost = computed(() => hosts.value.find((host) => Number(host.id) =
 const isRemote = computed(() => Number(form.docker_host_id) !== 1);
 const hostVolumes = computed(() => props.volumes.filter((volume) => hostId(volume) === Number(form.docker_host_id)));
 const hostDestinations = computed(() => props.destinations.filter((destination) => destinationMatchesHost(destination, form.docker_host_id)));
-const hostPathAllowlist = computed(() => selectedHost.value?.host_path_allowlist ?? selectedHost.value?.agent_host_path_allowlist);
+const hostPathPolicy = computed(() => selectedHost.value?.host_path_policy ?? { status: 'unknown', reported_at: null, freshness: 'unavailable', prefixes: [] });
 watch(hostDestinations, (destinations) => {
     if (!destinations.some((destination) => destination.id === form.backup_destination_id)) form.backup_destination_id = destinations[0]?.id ?? '';
 }, { immediate: true });
@@ -384,8 +384,13 @@ const submit = () => {
                 <label v-else class="space-y-2">
                     <span class="label">{{ t('Host path') }}</span>
                     <input v-model="form.host_path" class="input font-mono" required placeholder="/srv/app-data">
-                    <p class="text-sm text-slate-300">{{ t('The path must be an existing directory on the Docker host. If VOLUMEVAULT_HOST_PATH_ALLOWLIST is set, it must match one of the allowed prefixes.') }}</p>
-                    <p v-if="isRemote" class="break-words text-sm text-slate-400">{{ hostPathAllowlist ? t('hostWorkflow.allowlist', { paths: hostPathAllowlist.join(', ') || '—' }) : t('hostWorkflow.allowlistUnknown') }}</p>
+                    <p class="text-sm text-slate-300">{{ t('remoteAudit.pathRuntime') }}</p>
+                    <div class="space-y-1 break-words text-sm text-slate-400" data-testid="host-path-policy">
+                        <p>{{ selectedHost?.name }} — {{ t(isRemote ? 'remoteAudit.agentPolicy' : 'remoteAudit.centralPolicy') }}</p>
+                        <p v-if="hostPathPolicy.status === 'known'">{{ hostPathPolicy.prefixes.length ? t('hostWorkflow.allowlist', { paths: hostPathPolicy.prefixes.join(', ') }) : t('remoteAudit.emptyPolicy') }}</p>
+                        <p v-else>{{ t(hostPathPolicy.status === 'local_disabled' ? 'remoteAudit.disabledPolicy' : 'remoteAudit.unknownPolicy') }}</p>
+                        <p>{{ t(`remoteAudit.${hostPathPolicy.freshness}`) }} · {{ hostPathPolicy.reported_at || t('remoteAudit.noReport') }}</p>
+                    </div>
                     <span v-if="form.errors.host_path" class="text-sm text-rose-300">{{ translateError(form.errors.host_path) }}</span>
                 </label>
 

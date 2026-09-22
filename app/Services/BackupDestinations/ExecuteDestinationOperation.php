@@ -20,7 +20,27 @@ class ExecuteDestinationOperation
             if ($docker) {
                 $storage->useOperationHelper(CleanupDestinationOperationHelper::name($operationId));
             }
-            if ($spec['action'] === 'test') {
+            if ($spec['action'] === 'host_key') {
+                $data = $storage->probeHostKey($spec['destination']['host'], $spec['destination']['port']);
+            } elseif ($spec['action'] === 'metadata') {
+                if ($destination->provider === BackupDestination::PROVIDER_DROPBOX) {
+                    if (! str_starts_with((string) ($spec['archive']['key'] ?? ''), 'id:')) {
+                        throw new \RuntimeException('Dropbox upload did not capture a stable file ID.');
+                    }
+                    $object = $storage->findBackupObjectByKey($destination, $spec['archive']['key']);
+                    if ($object === null || ($object['key'] ?? null) !== $spec['archive']['key'] || ! isset($object['size'])) {
+                        throw new \RuntimeException('Dropbox archive metadata could not be detected by stable file ID.');
+                    }
+                    $data = ['backup_key' => $spec['archive']['key'], 'backup_size_bytes' => (int) $object['size']];
+                } else {
+                    $object = $storage->findBackupObjectByFilename($destination, $spec['archive']['filename']);
+                    if ($object === null) {
+                        throw new \RuntimeException('Backup archive metadata could not be detected.');
+                    }
+                    $data = ['backup_key' => (string) ($object['key'] ?? $object['display_name'] ?? $spec['archive']['filename']),
+                        'backup_size_bytes' => array_key_exists('size', $object) ? (int) $object['size'] : null];
+                }
+            } elseif ($spec['action'] === 'test') {
                 $storage->testReadOnly($destination);
                 $data = ['ok' => true];
             } elseif ($spec['action'] === 'list' && isset($spec['selected_backup'])) {

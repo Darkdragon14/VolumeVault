@@ -96,6 +96,17 @@ class SendShoutrrrNotification
      * (a start is not a failure), mirroring restore start. Webhook channels ping
      * their start URL — the piece Healthchecks needs to measure run duration.
      */
+    public function sendBackupRunStartedToChannel(BackupRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('job.destination', 'snapshotDestination', 'initiatedBy');
+        $run = clone $run;
+        $run->status = BackupRun::STATUS_RUNNING;
+        $result = $this->send($channel, $this->backupRunTitle($run, $channel), $this->backupRunMessage($run, $channel), NotificationEvent::Start);
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Backup start notification delivery failed.');
+        }
+    }
+
     public function sendBackupRunStarted(BackupRun $run, ?callable $afterEach = null): void
     {
         $run->loadMissing('job.destination', 'snapshotDestination', 'initiatedBy');
@@ -242,6 +253,17 @@ class SendShoutrrrNotification
             if ($afterEach !== null) {
                 $afterEach();
             }
+        }
+    }
+
+    public function sendRestoreRunStartedToChannel(RestoreRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('job.destination', 'initiatedBy');
+        $run = clone $run;
+        $run->status = RestoreRun::STATUS_RUNNING;
+        $result = $this->send($channel, $this->restoreRunTitle($run, $channel), $this->restoreRunMessage($run, $channel), NotificationEvent::Start);
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Restore start notification delivery failed.');
         }
     }
 

@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'audit_remote_workflow_parity' => [
+        'title' => 'Correctifs des flux secondaires distants intégrés',
+        'description' => 'Découvrez les clés SFTP sans destination enregistrée via les agents compatibles, choisissez un exécuteur pour les seuils de stockage automatiques et consultez la fraîcheur et la provenance des politiques de chemins. Les notifications de début et métadonnées distantes bénéficient de reprises durables, de snapshots chiffrés et de fins de groupe ordonnées. Les sauvegardes d’installation restent centrales ; l’import rechiffre opérations, blocs de relais et snapshots de sortie en conservant les affectations, sans remonter les agents dans le temps. Les sept lacunes sont implémentées ; mises à jour manuelles, connectivité fournie par l’utilisateur, relais inter-hôtes vers de nouveaux volumes et sauvegardes d’installation centrales restent des limites v1 voulues. Cela ne certifie pas une revue indépendante de toutes les commandes principales.',
+    ],
     'remote_stack_backups' => [
         'title' => 'Sauvegardes en lot des stacks distantes',
-        'description' => 'Sauvegardez une stack sur son hôte Docker sélectionné, même en mode orchestrateur. Le dialogue identifie cet hôte et propose des destinations partagées ou lui appartenant. Les paramètres, notifications, réservations par labels et planifications de groupe sont conservés, avec les totaux créés, en file, ignorés et groupés. Sept autres lacunes restent à traiter ultérieurement ; la parité locale/distante n’est pas complète.',
+        'description' => 'Sauvegardez une stack sur son hôte Docker sélectionné, même en mode orchestrateur. Le dialogue identifie cet hôte et propose des destinations partagées ou lui appartenant. Les paramètres, notifications, réservations par labels et planifications de groupe sont conservés, avec les totaux créés, en file, ignorés et groupés.',
     ],
     'unified_host_operations' => [
         'title' => 'Opérations unifiées entre les hôtes Docker',
@@ -15,7 +19,7 @@ return [
     ],
     'cross_host_archive_relay' => [
         'title' => 'Restaurer une archive locale sur un autre hôte',
-        'description' => 'Le relais central chiffré transfère les archives vers un nouveau volume sur un autre hôte, y compris en mode hybride local/distant. Les côtés distants nécessitent archive-relay-v1. Listes et reçus récents restent liés au propriétaire ; les détails affichent progression, expiration, erreurs et nettoyage. L’original est conservé. Par défaut : 10 Gio par archive, 50 Gio de stockage et 24 heures. Les vues unifiées et l’audit des workflows secondaires restent à terminer.',
+        'description' => 'Le relais central chiffré transfère les archives vers un nouveau volume sur un autre hôte, y compris en mode hybride local/distant. Les côtés distants nécessitent archive-relay-v1. Listes et reçus récents restent liés au propriétaire ; les détails affichent progression, expiration, erreurs et nettoyage. L’original est conservé. Par défaut : 10 Gio par archive, 50 Gio de stockage et 24 heures.',
     ],
     'agent_destination_operations' => [
         'title' => 'Tester et parcourir les destinations via les agents',

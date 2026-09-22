@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'audit_remote_workflow_parity' => [
+        'title' => 'Integrate le correzioni dei flussi remoti secondari',
+        'description' => 'Rileva chiavi SFTP senza salvare la destinazione tramite agenti compatibili, scegli un esecutore per le soglie automatiche e consulta aggiornamento e provenienza delle regole dei percorsi. Notifiche di avvio e metadati remoti usano tentativi persistenti, istantanee cifrate e completamento ordinato dei gruppi. I salvataggi di installazione restano centrali; l’importazione ricifra operazioni, blocchi del relay e istantanee in uscita conservando le assegnazioni, senza riportare indietro gli agenti. Le sette lacune sono implementate; aggiornamenti manuali, rete fornita dall’utente, relay tra host solo verso nuovi volumi e salvataggi centrali restano limiti intenzionali di v1. Questo non certifica una revisione indipendente di tutti i controlli principali.',
+    ],
     'remote_stack_backups' => [
         'title' => 'Backup in blocco degli stack remoti',
-        'description' => 'Esegui il backup di uno stack sul suo host Docker selezionato, anche in modalità orchestratore. Il dialogo identifica l’host e offre destinazioni condivise o dello stesso host. Impostazioni, notifiche, prenotazioni tramite etichette e pianificazioni di gruppo sono preservate, con totali creati, accodati, saltati e raggruppati. Altre sette lacune saranno affrontate in seguito; la parità locale/remota non è completa.',
+        'description' => 'Esegui il backup di uno stack sul suo host Docker selezionato, anche in modalità orchestratore. Il dialogo identifica l’host e offre destinazioni condivise o dello stesso host. Impostazioni, notifiche, prenotazioni tramite etichette e pianificazioni di gruppo sono preservate, con totali creati, accodati, saltati e raggruppati.',
     ],
     'unified_host_operations' => [
         'title' => 'Operazioni unificate tra host Docker',
@@ -15,7 +19,7 @@ return [
     ],
     'cross_host_archive_relay' => [
         'title' => 'Ripristino di archivi locali su un altro host',
-        'description' => 'Il relay centrale crittografato trasferisce gli archivi in un nuovo volume su un altro host, anche in modalità ibrida locale/remota. I lati remoti richiedono archive-relay-v1. Elenchi e ricevute valide restano associati al proprietario; i dettagli mostrano avanzamento, scadenza, errori e pulizia. L’originale è conservato. Valori predefiniti: 10 GiB per archivio, 50 GiB di spazio e 24 ore. Restano da completare le viste unificate e la verifica dei flussi secondari.',
+        'description' => 'Il relay centrale crittografato trasferisce gli archivi in un nuovo volume su un altro host, anche in modalità ibrida locale/remota. I lati remoti richiedono archive-relay-v1. Elenchi e ricevute valide restano associati al proprietario; i dettagli mostrano avanzamento, scadenza, errori e pulizia. L’originale è conservato. Valori predefiniti: 10 GiB per archivio, 50 GiB di spazio e 24 ore.',
     ],
     'agent_destination_operations' => [
         'title' => 'Testare ed esplorare le destinazioni tramite agenti',

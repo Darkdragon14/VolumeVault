@@ -17,8 +17,12 @@ export type ExecutionHost = {
     agent_maintenance_state?: string;
     status?: string;
     compatibility?: string;
-    agent_host_path_allowlist?: string[];
-    host_path_allowlist?: string[];
+    host_path_policy?: {
+        status: 'known' | 'unknown' | 'local_disabled';
+        reported_at: string | null;
+        freshness: 'current' | 'fresh' | 'stale' | 'unavailable';
+        prefixes: string[];
+    };
 };
 
 export const hostId = (resource: { docker_host_id?: number | null }) => Number(resource.docker_host_id ?? 1);

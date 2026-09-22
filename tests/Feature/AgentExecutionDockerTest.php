@@ -185,10 +185,14 @@ PHP);
             $agents = [];
             foreach (['a', 'b'] as $side) {
                 $enrollment = $this->control($server, <<<'PHP'
-$host = App\Models\DockerHost::create(['name' => 'Execution '.$input['side']]);
-$installation = app(App\Services\Agents\AgentRegistry::class)->issueEnrollment($host);
-preg_match("/'VOLUMEVAULT_AGENT_ENROLLMENT_TOKEN=([^']+)'/", $installation['command'], $token);
-$result = ['id' => $host->id, 'token' => $token[1], 'ca' => base64_encode(app(App\Services\Agents\AgentTlsIdentity::class)->caCertificate())];
+$ca = base64_encode(app(App\Services\Agents\AgentTlsIdentity::class)->caCertificate());
+$result = Illuminate\Support\Facades\DB::transaction(function () use ($input, $ca): array {
+    $host = App\Models\DockerHost::create(['name' => 'Execution '.$input['side']]);
+    $installation = app(App\Services\Agents\AgentRegistry::class)->issueEnrollment($host);
+    preg_match("/'VOLUMEVAULT_AGENT_ENROLLMENT_TOKEN=([^']+)'/", $installation['command'], $token);
+
+    return ['id' => $host->id, 'token' => $token[1], 'ca' => $ca];
+}, attempts: 3);
 PHP, ['side' => $side]);
                 $hosts[$side] = $enrollment['id'];
                 $agents[$side] = $prefix.'-agent-'.$side;
@@ -355,6 +359,7 @@ PHP, ['children' => $group['children'], 'endpoint' => $endpoint, 'password' => $
             $this->assertSame(2, $archives['operations']);
 
             $this->verifyRemoteStack($server, $engines, $agents, $hosts, $endpoint, $password);
+            $this->verifyAgentOnlyStorageMeasurement($server, $hosts['a']);
 
             $labelVolume = 'label-managed-data';
             $this->writeMarker($engines['a'], $labelVolume, $marker);
@@ -561,6 +566,46 @@ PHP, ['relay' => $relayRestore['relay']]);
     }
 
     /** @return array<string, mixed> */
+    private function verifyAgentOnlyStorageMeasurement(string $server, int $hostId): void
+    {
+        $queued = $this->control($server, <<<'PHP'
+config(['volumevault.ssrf.allowed_ips' => []]);
+$destination = App\Models\BackupDestination::where('name', 'Isolated MinIO')->firstOrFail()->replicate();
+$destination->name = 'Agent-only storage measurement';
+$destination->storage_measurement_host_id = $input['host'];
+$destination->settings = [...($destination->settings ?? []), 'storage_limit_warning_bytes' => 1];
+$destination->save();
+$blocked = false;
+try { app(App\Services\BackupDestinations\DestinationStorage::class)->freshStorageUsage($destination); }
+catch (App\Exceptions\OutboundHostBlockedException) { $blocked = true; }
+app(App\Actions\Alerts\EnsureAlertRules::class)->handle();
+$rule = App\Models\AlertRule::where('type', 'destination_storage_limit')->firstOrFail();
+$rule->update(['enabled' => true]);
+app(App\Actions\Alerts\RunAllAlertChecks::class)->handle($rule);
+$operation = App\Models\AgentOperation::where('backup_destination_id', $destination->id)->where('destination_action', 'stats')->firstOrFail();
+$result = ['blocked' => $blocked, 'destination' => $destination->id, 'operation' => $operation->id, 'host' => $operation->docker_host_id];
+PHP, ['host' => $hostId]);
+        $this->assertTrue($queued['blocked'], 'The central process must not be allowed to measure the MinIO endpoint.');
+        $this->assertSame($hostId, $queued['host']);
+        $this->waitFor(function () use ($server, $queued): bool {
+            $state = $this->control($server, <<<'PHP'
+config(['volumevault.ssrf.allowed_ips' => []]);
+$operation = App\Models\AgentOperation::findOrFail($input['operation']);
+app(App\Actions\Alerts\RunAllAlertChecks::class)->handle(App\Models\AlertRule::where('type', 'destination_storage_limit')->firstOrFail());
+$alert = App\Models\Alert::where('subject_type', (new App\Models\BackupDestination)->getMorphClass())->where('subject_id', $input['destination'])->first();
+$result = ['status' => $operation->status, 'result' => $operation->result, 'alert' => $alert?->status->value];
+PHP, $queued);
+            if ($state['status'] !== 'completed') {
+                return false;
+            }
+            $this->assertSame('success', $state['result']['status']);
+            $this->assertGreaterThan(0, $state['result']['data']['used_bytes']);
+            $this->assertSame('active', $state['alert']);
+
+            return true;
+        }, 'agent-only real MinIO storage measurement and alert', 90);
+    }
+
     private function waitForRun(string $server, string $kind, int $id): array
     {
         $state = [];
@@ -686,6 +731,11 @@ require 'vendor/autoload.php';
 $app = require 'bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 $input = json_decode(getenv('EXECUTION_TEST_INPUT'), true, flags: JSON_THROW_ON_ERROR);
+$databaseDiagnostics = null;
+if (config('database.default') === 'sqlite' && is_file((string) config('database.connections.sqlite.database'))) {
+    $databaseDiagnostics = ['journal_mode' => Illuminate\Support\Facades\DB::selectOne('PRAGMA journal_mode')->journal_mode,
+        'busy_timeout_ms' => Illuminate\Support\Facades\DB::selectOne('PRAGMA busy_timeout')->timeout];
+}
 PHP;
         $failure = <<<'PHP'
 } catch (Throwable $exception) {
@@ -695,8 +745,25 @@ PHP;
             $categories[] = $category;
         }
     }
+    $query = [];
+    if ($exception instanceof Illuminate\Database\QueryException) {
+        preg_match('/\A\s*(select|insert|update|delete|create|alter|drop|pragma)\b/i', $exception->getSql(), $verb);
+        $tables = [];
+        foreach (['docker_hosts', 'activity_logs', 'backup_destinations', 'backup_jobs', 'backup_runs', 'restore_runs', 'agent_operations', 'jobs'] as $table) {
+            if (str_contains($exception->getSql(), '"'.$table.'"')) { $tables[] = $table; }
+        }
+        $query = ['verb' => strtolower($verb[1] ?? 'unknown'), 'tables' => $tables,
+            'sqlstate' => $exception->errorInfo[0] ?? null, 'driver_code' => $exception->errorInfo[1] ?? null];
+    }
+    $trace = [];
+    foreach ($exception->getTrace() as $frame) {
+        if (isset($frame['file']) && str_starts_with($frame['file'], '/app/app/')) {
+            $trace[] = substr($frame['file'], 5).':'.($frame['line'] ?? 0);
+        }
+    }
     echo json_encode(['_control_error' => get_class($exception), 'code' => (string) $exception->getCode(),
-        'source' => basename($exception->getFile()).':'.$exception->getLine(), 'categories' => $categories], JSON_THROW_ON_ERROR);
+        'source' => basename($exception->getFile()).':'.$exception->getLine(), 'categories' => $categories,
+        'query' => $query, 'application_trace' => array_slice($trace, 0, 8), 'database' => $databaseDiagnostics ?? null], JSON_THROW_ON_ERROR);
 }
 PHP;
         $output = $this->docker(['exec', '-w', '/app', '-e', 'EXECUTION_TEST_INPUT='.json_encode($input, JSON_THROW_ON_ERROR), $container, 'php', '-r', "try {\n".$bootstrap."\n".$code."\necho json_encode(\$result, JSON_THROW_ON_ERROR);\n".$failure]);

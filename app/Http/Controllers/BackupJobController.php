@@ -29,6 +29,7 @@ use App\Models\JobAlertConfig;
 use App\Models\NotificationChannel;
 use App\Services\Agents\AgentExecution;
 use App\Services\Agents\OperationalHostScope;
+use App\Services\BackupSources\HostPathAllowlistAudit;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use App\Support\DeploymentMode;
 use Illuminate\Http\Request;
@@ -323,10 +324,14 @@ class BackupJobController extends Controller
     private function formProps(): array
     {
         $this->ensureAlertRules->handle();
+        $policyAudit = app(HostPathAllowlistAudit::class);
 
         return [
             'job' => null,
-            'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => app(AgentExecution::class)->summary($host, includePaths: true)),
+            'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => [
+                ...app(AgentExecution::class)->summary($host),
+                'host_path_policy' => $policyAudit->policyReport($host),
+            ]),
             'volumes' => DockerVolume::query()
                 ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
                 ->where('exists', true)->orderBy('name')->get(['docker_host_id', 'name']),

@@ -89,12 +89,26 @@ class DestinationController extends Controller
         return response()->json(['data' => $result], $result['ok'] ? 200 : 422);
     }
 
+    public function hostKeyOperation(\App\Models\AgentOperation $operation): JsonResponse
+    {
+        abort_unless($operation->kind === 'destination' && $operation->destination_action === 'host_key' && $operation->backup_destination_id === null, 404);
+
+        return response()->json(['data' => app(\App\Services\BackupDestinations\DestinationOperations::class)->safe($operation)]);
+    }
+
     public function hostKey(Request $request, DestinationStorage $storage): JsonResponse
     {
         $data = $request->validate([
             'host' => ['required', 'string', 'max:255'],
             'port' => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'],
         ]);
+
+        if (isset($data['docker_host_id']) && (int) $data['docker_host_id'] !== \App\Models\DockerHost::LOCAL_ID) {
+            $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+
+            return response()->json(['data' => $operations->safe($operations->createHostKey($data['host'], (int) ($data['port'] ?? 22), (int) $data['docker_host_id']))], 202);
+        }
 
         try {
             return response()->json(['data' => $storage->probeHostKey($data['host'], (int) ($data['port'] ?? 22))]);

@@ -192,13 +192,20 @@ class DestinationStorage
     /** @return array{used_bytes: int, object_count: int} */
     public function storageUsage(BackupDestination $destination): array
     {
-        if ($destination->isHostBound() && (int) $destination->docker_host_id !== \App\Models\DockerHost::LOCAL_ID) {
+        if ($destination->storageMeasurementHostId() !== \App\Models\DockerHost::LOCAL_ID) {
             return app(DestinationOperations::class)->usage($destination);
         }
         LocalDockerExecution::assertDestination($destination);
         $cacheKey = 'destination_storage_usage_bytes_'.$destination->id;
+        $fingerprint = $destination->storageMeasurementFingerprint();
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && ($cached['fingerprint'] ?? null) === $fingerprint) {
+            return $cached['usage'];
+        }
+        $usage = $this->aggregateUsage($destination);
+        Cache::put($cacheKey, ['fingerprint' => $fingerprint, 'usage' => $usage], now()->addMinutes(30));
 
-        return Cache::remember($cacheKey, now()->addMinutes(30), fn (): array => $this->aggregateUsage($destination));
+        return $usage;
     }
 
     public function freshStorageUsage(BackupDestination $destination): array
@@ -860,11 +867,14 @@ class DestinationStorage
      */
     public function probeHostKey(string $host, int $port = 22): array
     {
+        if (! SftpEndpointHost::isValid($host) || $port < 1 || $port > 65535) {
+            throw new RuntimeException('Invalid SSH endpoint.');
+        }
         $this->outboundHostGuard->assertHostAllowed($host);
 
         $key = $this->newSftp($host, $port)->getServerPublicHostKey();
 
-        if (! is_string($key) || $key === '') {
+        if (! is_string($key) || $key === '' || strlen($key) > 4096 || self::hostKeyFingerprint($key) === '') {
             throw new RuntimeException('Unable to read the host key from the SSH server.');
         }
 
@@ -876,7 +886,24 @@ class DestinationStorage
 
     protected function newSftp(string $host, int $port): SFTP
     {
-        return new SFTP($host, $port, 15);
+        $addresses = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : (gethostbynamel($host) ?: []);
+        if (! filter_var($host, FILTER_VALIDATE_IP)) {
+            foreach (dns_get_record($host, DNS_AAAA) ?: [] as $record) {
+                if (isset($record['ipv6'])) {
+                    $addresses[] = $record['ipv6'];
+                }
+            }
+        }
+        if ($addresses === []) {
+            throw new RuntimeException('Unable to resolve the SSH server.');
+        }
+        foreach ($addresses as $address) {
+            $this->outboundHostGuard->assertHostAllowed($address);
+        }
+
+        $address = filter_var($addresses[0], FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false ? '['.$addresses[0].']' : $addresses[0];
+
+        return new SFTP($address, $port, 15);
     }
 
     protected function sftp(BackupDestination $destination): SFTP

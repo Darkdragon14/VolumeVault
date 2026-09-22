@@ -1,9 +1,13 @@
 <?php
 
 return [
+    'audit_remote_workflow_parity' => [
+        'title' => 'Korrekturen der entfernten Nebenabläufe abgeschlossen',
+        'description' => 'Ungespeicherte SFTP-Hostschlüssel über geeignete Agenten ermitteln, einen Host für automatische Speicherschwellen speichern und Aktualität sowie Herkunft der Pfadrichtlinie prüfen. Entfernte Startmeldungen und Archivmetadaten nutzen dauerhafte Wiederholungen mit verschlüsselten Snapshots und geordnetem Gruppenabschluss. Installationssicherungen laufen zentral; Importe verschlüsseln Agentenoperationen, Relay-Blöcke und Outbox-Snapshots neu und erhalten Zuweisungen, ohne Agenten zurückzusetzen. Die sieben Audit-Lücken sind implementiert; manuelle Updates, eigene Netzwerkanbindung, hostübergreifendes Relay nur in neue Volumes und zentrale Installationssicherungen bleiben bewusste v1-Grenzen. Eine unabhängige Prüfung aller Hauptbedienelemente wird damit nicht behauptet.',
+    ],
     'remote_stack_backups' => [
         'title' => 'Sammelbackups für entfernte Stacks',
-        'description' => 'Stacks auf ihrem ausgewählten Docker-Host sichern, auch im Orchestrator-Modus. Der Dialog zeigt den Host und gemeinsame oder hosteigene Ziele. Bestehende Einstellungen, Benachrichtigungen, Label-Reservierungen und Gruppenzeitpläne bleiben erhalten; erstellte, eingereihte, übersprungene und gruppierte Elemente werden zusammengefasst. Sieben weitere Workflow-Lücken folgen später; vollständige lokale/entfernte Funktionsgleichheit besteht noch nicht.',
+        'description' => 'Stacks auf ihrem ausgewählten Docker-Host sichern, auch im Orchestrator-Modus. Der Dialog zeigt den Host und gemeinsame oder hosteigene Ziele. Bestehende Einstellungen, Benachrichtigungen, Label-Reservierungen und Gruppenzeitpläne bleiben erhalten; erstellte, eingereihte, übersprungene und gruppierte Elemente werden zusammengefasst.',
     ],
     'unified_host_operations' => [
         'title' => 'Einheitliche Ansichten für alle Docker-Hosts',
@@ -15,7 +19,7 @@ return [
     ],
     'cross_host_archive_relay' => [
         'title' => 'Hostlokale Archive auf einem anderen Host wiederherstellen',
-        'description' => 'Die verschlüsselte zentrale Weiterleitung überträgt Archive in neue Volumes anderer Hosts, auch lokal/remote im Hybridbetrieb. Entfernte Seiten benötigen archive-relay-v1. Listen und aktuelle Belege bleiben beim Archiveigentümer; Details zeigen Fortschritt, Ablauf, Fehler und Bereinigung. Das Original bleibt erhalten. Standard: 10 GiB pro Archiv, 50 GiB Speicher und 24 Stunden Laufzeit. Einheitliche Inventaransichten und die Prüfung weiterer Arbeitsabläufe stehen noch aus.',
+        'description' => 'Die verschlüsselte zentrale Weiterleitung überträgt Archive in neue Volumes anderer Hosts, auch lokal/remote im Hybridbetrieb. Entfernte Seiten benötigen archive-relay-v1. Listen und aktuelle Belege bleiben beim Archiveigentümer; Details zeigen Fortschritt, Ablauf, Fehler und Bereinigung. Das Original bleibt erhalten. Standard: 10 GiB pro Archiv, 50 GiB Speicher und 24 Stunden Laufzeit.',
     ],
     'agent_destination_operations' => [
         'title' => 'Ziele über Agenten testen und durchsuchen',
