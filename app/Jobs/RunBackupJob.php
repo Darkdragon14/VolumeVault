@@ -144,7 +144,7 @@ class RunBackupJob implements ShouldQueue
         $restoreActive = RestoreRun::query()
             ->where('target_docker_host_id', $run->docker_host_id)
             ->where('target_volume_name', $volume)
-            ->where(fn ($query) => $this->stillWorking($query))
+            ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
 
         return $backupActive || $restoreActive;

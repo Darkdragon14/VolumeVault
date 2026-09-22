@@ -11,12 +11,12 @@ class RestoreRunController extends Controller
     public function index(): JsonResponse
     {
         return response()->json([
-            'data' => RestoreRun::with('job.destination', 'destination')->latest()->limit(100)->get(),
+            'data' => RestoreRun::with('job.destination', 'destination', 'archiveRelay')->latest()->limit(100)->get(),
         ]);
     }
 
     public function show(RestoreRun $restoreRun): JsonResponse
     {
-        return response()->json(['data' => $restoreRun->load('job.destination', 'destination')]);
+        return response()->json(['data' => $restoreRun->load('job.destination', 'destination', 'archiveRelay')]);
     }
 }

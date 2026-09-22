@@ -156,7 +156,7 @@ const fetchHostKey = async () => {
                 <select v-model="form.docker_host_id" class="input" required>
                     <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!hostSelectable(host)">{{ host.name }}</option>
                 </select>
-                <p class="text-sm text-slate-400">{{ t('hostWorkflow.relayUnsupported') }}</p>
+                <p class="text-sm text-slate-400">{{ t('archiveRelay.description') }}</p>
                 <span v-if="form.errors.docker_host_id" class="text-sm text-rose-300">{{ form.errors.docker_host_id }}</span>
             </label>
             <div class="grid gap-4 sm:grid-cols-2">

@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Actions\Backup\RunBackup;
+use App\Actions\Docker\CleanupDestinationOperationHelper;
 use App\Actions\Docker\ClearDockerVolume;
 use App\Actions\Docker\ContainerIsAlive;
 use App\Actions\Docker\CreateDockerVolume;
+use App\Actions\Docker\ExportRelayArchive;
 use App\Actions\Docker\FindContainersUsingVolume;
 use App\Actions\Docker\InspectDockerVolume;
 use App\Actions\Docker\RemoveDockerContainer;
@@ -21,6 +23,8 @@ use App\Models\RestoreRun;
 use App\Services\Agents\AgentOperationRuntime;
 use App\Services\Agents\AgentOperationStore;
 use App\Services\Agents\AgentOperationSupervisor;
+use App\Services\Agents\AgentState;
+use App\Services\Agents\AgentTlsIdentity;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\BackupDestinations\ListBackupObjects;
 use App\Services\Docker\DockerProcess;
@@ -29,7 +33,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Mockery;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
@@ -101,6 +108,53 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertSame(1, BackupRun::count());
     }
 
+    public function test_export_runtime_uploads_with_real_client_from_child_state_while_parent_loop_is_open(): void
+    {
+        config([
+            'volumevault.agents.url' => 'https://vault.example:8443',
+            'volumevault.agents.tls_directory' => $this->root.'/tls',
+            'volumevault.agents.client.url' => 'https://vault.example:8443',
+            'volumevault.agents.client.enrollment_token' => Str::uuid().'.'.bin2hex(random_bytes(32)),
+        ]);
+        config(['volumevault.agents.client.ca_certificate' => base64_encode((new AgentTlsIdentity)->caCertificate())]);
+        $parent = new AgentState;
+        $parent->open();
+        try {
+            $parent->markEnrolled();
+            $identity = $parent->identity();
+            $before = file_get_contents($this->root.'/state.json');
+            $operation = [
+                'id' => (string) Str::uuid(), 'token' => str_repeat('a', 64), 'kind' => 'archive_export',
+                'spec' => ['version' => 1, 'destination' => [
+                    'name' => 'Source archive', 'provider' => 'docker_volume', 'bucket' => '',
+                    'access_key_id' => '', 'secret_access_key' => '', 'settings' => ['volume_name' => 'archives'], 'secrets' => [],
+                ], 'relay' => ['id' => (string) Str::uuid(), 'key' => 'backup.tar.gz', 'max_bytes' => 1048576]],
+            ];
+            $archive = gzencode('worker export marker');
+            $store = app(AgentOperationStore::class);
+            $store->accept($operation);
+            $this->mock(ExportRelayArchive::class)->shouldReceive('handle')->once()->andReturnUsing(
+                fn (BackupDestination $destination, string $key, string $path) => file_put_contents($path, $archive));
+            $this->mock(CleanupDestinationOperationHelper::class)->shouldReceive('handle')->once()->andReturnTrue();
+            Http::preventStrayRequests();
+            Http::fake(function ($request, array $options) use ($operation, $identity, $parent, $archive) {
+                $this->assertSame('https://vault.example:8443/agent/v1/operations/'.$operation['id'].'/relay', $request->url());
+                $this->assertTrue($request->hasHeader('Authorization', 'Bearer '.$identity['host_uuid'].'.'.$identity['credential']));
+                $this->assertSame($parent->caPath(), $options['verify']);
+                $this->assertSame($archive, base64_decode($request['chunk'], true));
+
+                return Http::response(['offset' => strlen($archive)]);
+            });
+            $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+            $this->assertSame('finished', $store->read($operation['id'])['phase']);
+            $this->assertSame('success', $store->read($operation['id'])['result']['status']);
+            Http::assertSentCount(1);
+            $this->assertSame($before, file_get_contents($this->root.'/state.json'));
+        } finally {
+            $parent->close();
+        }
+    }
+
     public function test_destination_runtime_uses_private_database_and_durable_receipt_before_cleanup(): void
     {
         $operation = self::operation();
@@ -149,7 +203,9 @@ class AgentOperationRuntimeTest extends TestCase
         $process = new class($store, $operation['id']) extends DockerProcess
         {
             public int $launches = 0;
+
             public bool $removeWorks = false;
+
             public bool $confirmedAbsent = false;
 
             public function __construct(private AgentOperationStore $store, private string $id) {}
@@ -158,8 +214,8 @@ class AgentOperationRuntimeTest extends TestCase
             {
                 if ($command[1] === 'run') {
                     $receipt = $this->store->read($this->id);
-                    \PHPUnit\Framework\Assert::assertSame('executing', $receipt['phase']);
-                    \PHPUnit\Framework\Assert::assertContains($receipt['helper_name'], $command);
+                    Assert::assertSame('executing', $receipt['phase']);
+                    Assert::assertContains($receipt['helper_name'], $command);
                     $this->launches++;
 
                     return new DockerProcessResult($command, 124, '', 'test-secret timeout', true);
@@ -196,8 +252,18 @@ class AgentOperationRuntimeTest extends TestCase
     {
         $operation = self::operation('restore');
         app(AgentOperationStore::class)->accept($operation);
-        $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->once()->with('target-on-b')->andThrow(new RuntimeException('No such volume'));
-        $this->mock(CreateDockerVolume::class)->shouldReceive('handle')->once()->with('target-on-b');
+        $ownershipToken = null;
+        $inspector = $this->mock(InspectDockerVolume::class);
+        $inspector->shouldReceive('handle')->once()->with('target-on-b')->andThrow(new RuntimeException('No such volume'));
+        $this->mock(CreateDockerVolume::class)->shouldReceive('handle')->once()->with('target-on-b', Mockery::type('string'))
+            ->andReturnUsing(function (string $name, string $token) use (&$ownershipToken): void {
+                $ownershipToken = $token;
+            });
+        $inspector->shouldReceive('handle')->once()->with('target-on-b')->andReturnUsing(function () use (&$ownershipToken): array {
+            $this->assertNotNull($ownershipToken);
+
+            return ['labels' => [CreateDockerVolume::RESTORE_OWNERSHIP_LABEL => $ownershipToken]];
+        });
         $this->mock(DestinationStorage::class)->shouldReceive('download')->once()->andReturnUsing(function ($destination, $key, $path): void {
             file_put_contents($path, 'verified archive fixture');
         });

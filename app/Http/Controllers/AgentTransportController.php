@@ -61,4 +61,18 @@ class AgentTransportController extends Controller
 
         return response()->json(['acknowledged' => true]);
     }
+
+    public function relay(Request $request, string $operation, \App\Services\Agents\ArchiveRelays $relays): JsonResponse
+    {
+        $data = $request->validate([
+            'token' => ['required', 'regex:/\A[a-f0-9]{64}\z/'],
+            'action' => ['required', 'in:upload,download,verified'],
+            'offset' => ['required', 'integer:strict', 'min:0'],
+            'chunk' => ['required_if:action,upload', 'string', 'max:1398104'],
+            'size_bytes' => ['required_if:action,upload', 'integer:strict', 'min:1'],
+            'sha256' => ['required_if:action,upload', 'regex:/\A[a-f0-9]{64}\z/'],
+        ]);
+
+        return response()->json($relays->transfer($request->attributes->get('docker_host'), $operation, $data['token'], $data));
+    }
 }

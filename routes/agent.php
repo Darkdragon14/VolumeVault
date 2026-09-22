@@ -12,4 +12,5 @@ Route::middleware([AuthenticateAgent::class, 'throttle:agent-traffic', RequireAg
     Route::post('operations/pull', [AgentTransportController::class, 'pull'])->name('agents.operations.pull');
     Route::post('operations/{operation}/progress', [AgentTransportController::class, 'progress'])->whereUuid('operation')->name('agents.operations.progress');
     Route::post('operations/{operation}/complete', [AgentTransportController::class, 'complete'])->whereUuid('operation')->name('agents.operations.complete');
+    Route::post('operations/{operation}/relay', [AgentTransportController::class, 'relay'])->whereUuid('operation')->name('agents.operations.relay');
 });

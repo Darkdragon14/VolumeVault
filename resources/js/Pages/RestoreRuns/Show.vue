@@ -1,17 +1,28 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePoll } from '@inertiajs/vue3';
+import { watch } from 'vue';
+import { formatBytes } from '@/Composables/useFormatBytes';
 import { useI18n } from '@/i18n';
 
-defineProps<{ run: any }>();
+const props = defineProps<{ run: any }>();
+
+const { start, stop } = usePoll(2000, { only: ['run'] }, { autoStart: false });
+watch(() => ['queued', 'running'].includes(props.run.status)
+    || Boolean(props.run.archive_relay && !props.run.archive_relay.cleaned_at)
+    || Boolean(props.run.docker_container_cleanup_pending)
+    || (props.run.stopped_container_ids?.length ?? 0) > 0, (needsPolling) => {
+    if (needsPolling) start();
+    else stop();
+}, { immediate: true });
 
 const { t, formatDate } = useI18n();
 </script>
 
 <template>
-    <Head :title="t('Restore run #{id}', { id: run.id })" />
     <AppLayout :title="t('Restore run #{id}', { id: run.id })" :subtitle="t('Inspect source, target, selected archive, logs, and errors for this restore run.')">
+        <Head :title="t('Restore run #{id}', { id: run.id })" />
         <template #actions>
             <Link :href="`/backup-jobs/${run.job.id}`" class="btn-secondary">{{ t('Back to job') }}</Link>
         </template>
@@ -34,6 +45,20 @@ const { t, formatDate } = useI18n();
                 </div>
             </dl>
             <p v-if="run.error_message" class="mt-5 break-words rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ run.error_message }}</p>
+        </section>
+
+        <section v-if="run.archive_relay" class="card mt-6 p-4 sm:p-5" data-archive-relay aria-live="polite">
+            <h2 class="mb-4 text-lg font-semibold">{{ t('archiveRelay.title') }}</h2>
+            <dl class="grid gap-4 sm:grid-cols-2">
+                <div><dt class="label">{{ t('Source') }}</dt><dd>{{ run.archive_relay.source_docker_host?.name }} (#{{ run.archive_relay.source_docker_host_id }})</dd></div>
+                <div><dt class="label">{{ t('Target') }}</dt><dd>{{ run.archive_relay.target_docker_host?.name }} (#{{ run.archive_relay.target_docker_host_id }})</dd></div>
+                <div><dt class="label">{{ t('Status') }}</dt><dd>{{ t(`archiveRelay.${run.archive_relay.status}`) }}</dd></div>
+                <div><dt class="label">{{ t('archiveRelay.expires') }}</dt><dd>{{ formatDate(run.archive_relay.expires_at) }}</dd></div>
+                <div><dt class="label">{{ t('archiveRelay.upload') }}</dt><dd>{{ formatBytes(run.archive_relay.uploaded_bytes) }} / {{ formatBytes(run.archive_relay.size_bytes) }}</dd></div>
+                <div><dt class="label">{{ t('archiveRelay.download') }}</dt><dd>{{ formatBytes(run.archive_relay.downloaded_bytes) }} / {{ formatBytes(run.archive_relay.size_bytes) }}</dd></div>
+            </dl>
+            <p v-if="run.archive_relay.error_message" role="alert" class="mt-4 text-sm text-rose-600 dark:text-rose-300">{{ run.archive_relay.error_message }}</p>
+            <p class="mt-4 text-sm text-slate-400">{{ t(run.archive_relay.cleaned_at ? 'archiveRelay.cleaned' : 'archiveRelay.retained') }}</p>
         </section>
 
         <section class="card mt-6 p-4 sm:p-5">

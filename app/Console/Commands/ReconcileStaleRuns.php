@@ -149,6 +149,18 @@ class ReconcileStaleRuns extends Command
             }
         });
 
+        $restoreCleanupCount = 0;
+        RestoreRun::query()
+            ->where('target_docker_host_id', DockerHost::LOCAL_ID)
+            ->whereDoesntHave('archiveRelay')
+            ->where('docker_container_cleanup_pending', true)
+            ->whereIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
+            ->get()->each(function (RestoreRun $run) use ($cutoff, &$restoreCleanupCount): void {
+                if ($this->recoverRestoreHelper($run, $cutoff)) {
+                    $restoreCleanupCount++;
+                }
+            });
+
         // Runs the sweep just failed (or runs whose worker died during restart)
         // may still have application containers stopped. Restart them now.
         $restartedCount = 0;
@@ -172,7 +184,7 @@ class ReconcileStaleRuns extends Command
             }
         });
 
-        $this->info("Reconciled {$backupCount} stale backup run(s), {$restoreCount} stale restore run(s) and {$groupCount} stale backup group run(s); completed {$containerCleanupCount} pending backup cleanup(s); restarted containers for {$restartedCount} interrupted run(s).");
+        $this->info("Reconciled {$backupCount} stale backup run(s), {$restoreCount} stale restore run(s) and {$groupCount} stale backup group run(s); completed {$containerCleanupCount} pending backup cleanup(s) and {$restoreCleanupCount} pending restore cleanup(s); restarted containers for {$restartedCount} interrupted run(s).");
 
         return self::SUCCESS;
     }
@@ -477,6 +489,7 @@ class ReconcileStaleRuns extends Command
         return RestoreRun::query()
             ->where('target_docker_host_id', DockerHost::LOCAL_ID)
             ->where('status', RestoreRun::STATUS_RUNNING)
+            ->whereDoesntHave('archiveRelay')
             ->get()
             ->filter(fn (RestoreRun $run) => $this->isStale($run, $cutoff, RestoreRun::STATUS_RUNNING)
                 && ! $this->restoreIsProgressing($run, $cutoff)
@@ -490,9 +503,17 @@ class ReconcileStaleRuns extends Command
      */
     private function markStaleRestoreFailed(RestoreRun $run, CarbonInterface $cutoff, RunRestore $runRestore, string $reason): bool
     {
+        $volumeLock = $run->docker_container_cleanup_pending ? $this->restoreOverlapLock($run) : null;
+
+        if ($volumeLock !== null && ! $volumeLock->get()) {
+            return false;
+        }
+
         $heartbeatLock = Cache::lock(RunHeartbeatLock::restore($run->id), 180);
 
         if (! $heartbeatLock->get()) {
+            $volumeLock?->release();
+
             return false;
         }
 
@@ -501,7 +522,9 @@ class ReconcileStaleRuns extends Command
         try {
             $run->refresh();
 
-            if ($run->status !== RestoreRun::STATUS_RUNNING || $this->restoreIsProgressing($run, $cutoff)) {
+            if ($run->target_docker_host_id !== DockerHost::LOCAL_ID || $run->archiveRelay()->exists()
+                || ($run->docker_container_cleanup_pending && $volumeLock === null)
+                || $run->status !== RestoreRun::STATUS_RUNNING || $this->restoreIsProgressing($run, $cutoff)) {
                 return false;
             }
 
@@ -525,6 +548,10 @@ class ReconcileStaleRuns extends Command
                 }
             }
 
+            if ($run->docker_container_cleanup_pending && ! $this->cleanupRestoreHelper($run)) {
+                return false;
+            }
+
             return $runRestore->markFailed(
                 $run,
                 new RuntimeException($reason),
@@ -539,6 +566,60 @@ class ReconcileStaleRuns extends Command
             if (! $released) {
                 $heartbeatLock->release();
             }
+            $volumeLock?->release();
+        }
+    }
+
+    private function recoverRestoreHelper(RestoreRun $run, CarbonInterface $cutoff): bool
+    {
+        $volumeLock = $this->restoreOverlapLock($run);
+
+        if (! $volumeLock->get()) {
+            return false;
+        }
+
+        $heartbeatLock = Cache::lock(RunHeartbeatLock::restore($run->id), 180);
+
+        if (! $heartbeatLock->get()) {
+            $volumeLock->release();
+
+            return false;
+        }
+
+        try {
+            $run->refresh();
+
+            if ($run->target_docker_host_id !== DockerHost::LOCAL_ID || $run->archiveRelay()->exists()
+                || ! $run->docker_container_cleanup_pending
+                || ! in_array($run->status, [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED], true)
+                || $run->last_heartbeat_at?->greaterThanOrEqualTo($cutoff)) {
+                return false;
+            }
+
+            return $this->cleanupRestoreHelper($run);
+        } finally {
+            $heartbeatLock->release();
+            $volumeLock->release();
+        }
+    }
+
+    /** Called only while holding the worker's volume and heartbeat locks. */
+    private function cleanupRestoreHelper(RestoreRun $run): bool
+    {
+        try {
+            if (! filled($run->docker_container_id)) {
+                throw new RuntimeException('Pending restore helper has no recorded identity; absence cannot be confirmed.');
+            }
+
+            $this->removeDockerContainer->handle($run->docker_container_id);
+            $run->forceFill(['docker_container_id' => null, 'docker_container_cleanup_pending' => false])->save();
+
+            return true;
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->warn("Failed to remove pending restore helper for restore run {$run->id}: {$exception->getMessage()}");
+
+            return false;
         }
     }
 
@@ -623,7 +704,7 @@ class ReconcileStaleRuns extends Command
             ->where('target_docker_host_id', $dockerHostId)
             ->where('target_volume_name', $volume)
             ->when($restoreId, fn ($query) => $query->whereKeyNot($restoreId))
-            ->where(fn ($query) => $this->stillHoldsVolume($query, $recentlyReleased))
+            ->where(fn ($query) => $this->stillHoldsVolume($query, $recentlyReleased, includeBackupCleanup: true))
             ->exists();
 
         $backupHolds = BackupRun::query()

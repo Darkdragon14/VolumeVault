@@ -4,7 +4,6 @@ namespace App\Actions\Restore\Modes;
 
 use App\Actions\Docker\CreateDockerVolume;
 use App\Actions\Docker\InspectDockerVolume;
-use App\Actions\Docker\RemoveDockerVolume;
 use App\Models\RestoreRun;
 use App\Services\Logging\AppendRunLog;
 use RuntimeException;
@@ -18,7 +17,6 @@ class NewVolumeRestore implements RestoreModeHandler
     public function __construct(
         private readonly InspectDockerVolume $inspectDockerVolume,
         private readonly CreateDockerVolume $createDockerVolume,
-        private readonly RemoveDockerVolume $removeDockerVolume,
         private readonly AppendRunLog $appendRunLog,
     ) {}
 
@@ -32,25 +30,41 @@ class NewVolumeRestore implements RestoreModeHandler
     public function prepareTarget(RestoreRun $run, ?callable $heartbeat = null): void
     {
         $this->appendRunLog->handle($run, 'Creating target Docker volume '.$run->target_volume_name.'.');
-        $this->createDockerVolume->handle($run->target_volume_name);
+        $run->forceFill(['target_volume_ownership_token' => bin2hex(random_bytes(32))])->save();
+
+        try {
+            $this->createDockerVolume->handle($run->target_volume_name, $run->target_volume_ownership_token);
+
+            if (! $this->ownsTarget($run)) {
+                throw new RuntimeException('Target Docker volume ownership could not be verified: '.$run->target_volume_name);
+            }
+        } catch (Throwable $exception) {
+            $this->cleanupAfterFailure($run);
+
+            throw $exception;
+        }
     }
 
     /**
-     * Remove the target volume this run created after a failed extraction.
-     *
-     * Without this, the partially-created volume survives and the next retry
-     * trips the prepareTarget() existence guard with no clear cause. Only
-     * reached when prepareTarget() succeeded, so the volume is always ours to
-     * remove. Cleanup failures are logged but never mask the original error.
+     * Docker has no conditional remove-by-ownership operation. Once the helper
+     * releases its reference, even a freshly inspected name can be replaced.
      */
     public function cleanupAfterFailure(RestoreRun $run): void
     {
-        try {
-            $this->removeDockerVolume->handle($run->target_volume_name);
-            $this->appendRunLog->handle($run, 'Removed partially-created target volume '.$run->target_volume_name.' so the run can be retried cleanly.');
-        } catch (Throwable $cleanupException) {
-            $this->appendRunLog->handle($run, 'Failed to remove partially-created target volume '.$run->target_volume_name.': '.$cleanupException->getMessage());
+        $this->appendRunLog->handle($run, 'Target volume '.$run->target_volume_name.' was not automatically removed. Inspect it and remove it manually if appropriate, or choose a different target name before retrying.');
+    }
+
+    private function ownsTarget(RestoreRun $run): bool
+    {
+        $token = $run->target_volume_ownership_token;
+
+        if (! is_string($token) || $token === '') {
+            return false;
         }
+
+        $volume = $this->inspectDockerVolume->handle($run->target_volume_name);
+
+        return ($volume['labels'][CreateDockerVolume::RESTORE_OWNERSHIP_LABEL] ?? null) === $token;
     }
 
     private function volumeExists(string $volumeName): bool

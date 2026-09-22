@@ -57,6 +57,10 @@ class RunRestoreJob implements ShouldQueue
         // requeues a lock loser after a delay so it waits and serializes (under
         // the retryUntil budget) rather than failing.
         $run = RestoreRun::find($this->restoreRunId);
+        if ($run?->target_docker_host_id === DockerHost::LOCAL_ID && $run->archiveRelay !== null) {
+            // The relay retains an owner-scoped shared volume lock through worker recovery and cleanup.
+            return [];
+        }
         $key = VolumeJobLock::key($run?->target_volume_name, 'restore-run-'.$this->restoreRunId, $run?->target_docker_host_id ?? DockerHost::LOCAL_ID);
 
         return [(new WithoutOverlapping($key))->shared()->releaseAfter(60)->expireAfter(86400)];
@@ -69,6 +73,7 @@ class RunRestoreJob implements ShouldQueue
         }
 
         $run = RestoreRun::findOrFail($this->restoreRunId);
+        $localRelay = $run->target_docker_host_id === DockerHost::LOCAL_ID && $run->archiveRelay !== null;
 
         if (app(HostWorkAdmission::class)->isWaiting($run)) {
             $this->release(60);
@@ -82,7 +87,9 @@ class RunRestoreJob implements ShouldQueue
         // expired lock and start on the same volume. If another run is already
         // executing on this volume, the lock failed to serialize us — requeue
         // rather than overlap a possibly-destructive op.
-        if ($this->volumeBusy($run)) {
+        // Local relays recheck under the host lock with durable volume ownership;
+        // a legacy non-owner waiter must not block the owner's recovery here.
+        if (! $localRelay && $this->volumeBusy($run)) {
             $this->release(60);
 
             return;
@@ -90,7 +97,7 @@ class RunRestoreJob implements ShouldQueue
 
         $runRestore->handle($run);
 
-        if (app(HostWorkAdmission::class)->isWaiting($run->refresh())) {
+        if (app(HostWorkAdmission::class)->isWaiting($run->refresh()) || ($localRelay && $run->status === RestoreRun::STATUS_QUEUED)) {
             $this->release(60);
         }
     }
@@ -116,7 +123,7 @@ class RunRestoreJob implements ShouldQueue
             ->where('target_docker_host_id', $run->target_docker_host_id)
             ->where('target_volume_name', $volume)
             ->whereKeyNot($run->getKey())
-            ->where(fn ($query) => $this->stillWorking($query))
+            ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
 
         $backupActive = BackupRun::query()

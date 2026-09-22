@@ -47,6 +47,31 @@ class AgentOperationRuntime
             $redactor = $this->redactor = new AgentOperationRedactor($operation);
             app()->instance(AppendRunLog::class, new AgentOperationRunLog($redactor));
             $this->protectPersistedErrors();
+            if ($operation['kind'] === 'archive_export') {
+                $helper = $operation['spec']['destination']['provider'] === 'docker_volume'
+                    ? \App\Actions\Docker\CleanupDestinationOperationHelper::name($id) : null;
+                if ($operation['phase'] !== 'accepted' && $helper !== null && ($operation['helper_name'] ?? null) !== $helper) {
+                    return false;
+                }
+                $this->store->markExecuting($id, $helper);
+                try {
+                    $result = app(ArchiveRelayRuntime::class)->export($operation, $this->store->directory($id), $operation['phase'] === 'accepted',
+                        fn (array $data): array => app(AgentClient::class)->relayTransfer($id, $operation['token'], $data));
+                } catch (\App\Exceptions\ArchiveRelayConnectionException) {
+                    return false;
+                } catch (\Throwable) {
+                    if ($helper !== null && ! app(\App\Actions\Docker\CleanupDestinationOperationHelper::class)->handle($id)) {
+                        return false;
+                    }
+                    $result = $this->failure('Archive relay export failed; original archive retained.');
+                }
+                if ($result === null) {
+                    return false;
+                }
+                $this->store->finish($id, $result);
+
+                return true;
+            }
             if ($operation['kind'] === 'destination') {
                 $execute = app(\App\Services\BackupDestinations\ExecuteDestinationOperation::class);
                 try {
@@ -72,6 +97,20 @@ class AgentOperationRuntime
                 $this->store->finish($id, $result);
 
                 return true;
+            }
+            $relayArchive = null;
+            if ($operation['kind'] === 'restore' && isset($operation['spec']['relay']) && ! RestoreRun::where('status', '!=', 'queued')->exists()) {
+                try {
+                    app(AgentOperationSpecification::class)->validateLocalPolicy($operation);
+                    $relayArchive = app(ArchiveRelayRuntime::class)->download($operation['spec']['relay'], $this->store->directory($id),
+                        fn (array $data): array => app(AgentClient::class)->relayTransfer($id, $operation['token'], $data));
+                } catch (\App\Exceptions\ArchiveRelayConnectionException) {
+                    return false;
+                } catch (\Throwable) {
+                    $this->store->finish($id, $this->failure('Archive relay download failed integrity, storage or local policy checks.'));
+
+                    return true;
+                }
             }
             $runClass = $operation['kind'] === 'backup' ? BackupRun::class : RestoreRun::class;
             if ($operation['phase'] === 'accepted') {
@@ -99,7 +138,7 @@ class AgentOperationRuntime
                 try {
                     $operation['kind'] === 'backup'
                         ? app(RunBackup::class)->handle($run, acceptedOperation: true)
-                        : app(RunRestore::class)->handle($run);
+                        : app(RunRestore::class)->handle($run, $relayArchive);
                 } catch (\Throwable) {
                     // Keep the durable run; recovery owns all subsequent work.
                 }
@@ -303,8 +342,8 @@ class AgentOperationRuntime
         }
     }
 
-    private function failure(): array
+    private function failure(string $message = 'Operation rejected by agent-local policy.'): array
     {
-        return ['status' => 'failed', 'logs' => '', 'error_message' => 'Operation rejected by agent-local policy.', 'backup_key' => null, 'backup_size_bytes' => null, 'cleanup_complete' => true, 'finished_at' => now()->toIso8601String(), 'duration_seconds' => 0];
+        return ['status' => 'failed', 'logs' => '', 'error_message' => $message, 'backup_key' => null, 'backup_size_bytes' => null, 'cleanup_complete' => true, 'finished_at' => now()->toIso8601String(), 'duration_seconds' => 0];
     }
 }

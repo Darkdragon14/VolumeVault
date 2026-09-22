@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'restore_volume_ownership' => [
+        'title' => 'Verify ownership of new restore volumes',
+        'description' => 'New-volume restores pin the target with an extraction helper and verify its random ownership label before starting that exact helper. Failed target volumes are never automatically deleted. Inspect them and remove them manually if appropriate, or retry with a different target name; run logs explain the next steps.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Restore host-local archives on another host',
+        'description' => 'Transfer archives through the encrypted central relay into a new volume on another host, including local/remote hybrid restores. Remote sides require archive-relay-v1. Listings and fresh receipts stay with the archive owner; restore details show transfer progress, expiry, errors and cleanup. The original archive is preserved. Defaults are 10 GiB per archive, 50 GiB relay storage and a 24-hour lifetime. Unified inventory views and the remaining secondary workflow audit are still pending.',
+    ],
     'agent_destination_operations' => [
         'title' => 'Test and browse destinations through agents',
         'description' => 'Choose a host to test saved destinations, measure storage and browse paginated archives with visible progress, errors and freshness. Agents require destination-v1; shared storage still defaults to the central host and local storage stays with its owner. Restores bind listed archive keys to fresh receipts from the target host, while older agents retain historical restore support.',
@@ -19,11 +27,11 @@ return [
     ],
     'remote_agent_execution' => [
         'title' => 'Back up and restore through Docker agents',
-        'description' => 'Compatible agents now execute backups and restores using durable encrypted commands and private recovery journals. Restore from a shared network destination onto another host without a Docker socket on the orchestrator. Results and safety-backup metadata survive reconnects without replaying completed work. Cross-host local-archive relaying remains unavailable.',
+        'description' => 'Compatible agents now execute backups and restores using durable encrypted commands and private recovery journals. Restore from a shared network destination onto another host without a Docker socket on the orchestrator. Results and safety-backup metadata survive reconnects without replaying completed work.',
     ],
     'remote_host_workflows' => [
         'title' => 'Host-aware backup and restore configuration',
-        'description' => 'Jobs can target registered agents, including offline agents and orchestrator-only deployments. Restores can select another host when using shared network storage. Inventory, host paths and local destinations are scoped to their host. Cross-host transfers of host-local archives remain unavailable.',
+        'description' => 'Jobs can target registered agents, including offline agents and orchestrator-only deployments. Restores can select another host when using shared network storage. Inventory, host paths and local destinations are scoped to their host.',
     ],
     'docker_host_metrics' => [
         'title' => 'Useful local and agent host information',

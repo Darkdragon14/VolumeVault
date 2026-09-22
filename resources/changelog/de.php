@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'restore_volume_ownership' => [
+        'title' => 'Eigentümerschaft neuer Wiederherstellungsvolumes prüfen',
+        'description' => 'Wiederherstellungen in neue Volumes binden das Ziel an einen Entpack-Hilfscontainer und prüfen vor dessen Start das zufällige Eigentumslabel. Zielvolumes fehlgeschlagener Wiederherstellungen werden niemals automatisch gelöscht. Prüfen und bei Bedarf manuell entfernen oder mit einem anderen Zielnamen erneut versuchen; die Laufprotokolle erklären die nächsten Schritte.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Hostlokale Archive auf einem anderen Host wiederherstellen',
+        'description' => 'Die verschlüsselte zentrale Weiterleitung überträgt Archive in neue Volumes anderer Hosts, auch lokal/remote im Hybridbetrieb. Entfernte Seiten benötigen archive-relay-v1. Listen und aktuelle Belege bleiben beim Archiveigentümer; Details zeigen Fortschritt, Ablauf, Fehler und Bereinigung. Das Original bleibt erhalten. Standard: 10 GiB pro Archiv, 50 GiB Speicher und 24 Stunden Laufzeit. Einheitliche Inventaransichten und die Prüfung weiterer Arbeitsabläufe stehen noch aus.',
+    ],
     'agent_destination_operations' => [
         'title' => 'Ziele über Agenten testen und durchsuchen',
         'description' => 'Wählen Sie einen Host, um gespeicherte Ziele zu testen, Speicher zu messen und Archive seitenweise mit Fortschritt, Fehlern und Aktualität anzuzeigen. Agenten benötigen destination-v1; gemeinsame Speicher verwenden standardmäßig weiterhin den zentralen Host, lokale Speicher ihren Besitzer. Wiederherstellungen binden Archivschlüssel an aktuelle Nachweise des Zielhosts. Ältere Agenten unterstützen weiterhin historische Wiederherstellungen.',
@@ -19,11 +27,11 @@ return [
     ],
     'remote_agent_execution' => [
         'title' => 'Backups und Wiederherstellungen über Docker-Agents',
-        'description' => 'Kompatible Agents führen Backups und Wiederherstellungen mit dauerhaften verschlüsselten Befehlen und privaten Wiederherstellungsjournalen aus. Gemeinsame Netzwerkziele ermöglichen die Wiederherstellung auf einem anderen Host ohne Docker-Socket am Orchestrator. Ergebnisse und Metadaten der Sicherheitsbackups bleiben nach Verbindungsabbrüchen erhalten, ohne abgeschlossene Arbeit zu wiederholen. Die Weiterleitung lokaler Archive zwischen Hosts ist noch nicht verfügbar.',
+        'description' => 'Kompatible Agents führen Backups und Wiederherstellungen mit dauerhaften verschlüsselten Befehlen und privaten Wiederherstellungsjournalen aus. Gemeinsame Netzwerkziele ermöglichen die Wiederherstellung auf einem anderen Host ohne Docker-Socket am Orchestrator. Ergebnisse und Metadaten der Sicherheitsbackups bleiben nach Verbindungsabbrüchen erhalten, ohne abgeschlossene Arbeit zu wiederholen.',
     ],
     'remote_host_workflows' => [
         'title' => 'Hostbezogene Backup- und Wiederherstellungskonfiguration',
-        'description' => 'Jobs können registrierte Agents verwenden, auch offline und im reinen Orchestrator-Modus. Mit gemeinsamem Netzwerkspeicher sind Wiederherstellungen auf einem anderen Host möglich. Inventar, Pfade und lokale Ziele bleiben hostbezogen. Hostübergreifende Übertragungen lokaler Archive sind noch nicht verfügbar.',
+        'description' => 'Jobs können registrierte Agents verwenden, auch offline und im reinen Orchestrator-Modus. Mit gemeinsamem Netzwerkspeicher sind Wiederherstellungen auf einem anderen Host möglich. Inventar, Pfade und lokale Ziele bleiben hostbezogen.',
     ],
     'docker_host_metrics' => [
         'title' => 'Aussagekräftige Informationen zu lokalen Hosts und Agents',

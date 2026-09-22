@@ -541,7 +541,7 @@ class RunBackupGroup
         $restoreBusy = RestoreRun::query()
             ->where('target_docker_host_id', $dockerHostId)
             ->where('target_volume_name', $volume)
-            ->where(fn ($query) => $this->stillWorking($query))
+            ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
 
         return $backupBusy || $restoreBusy;

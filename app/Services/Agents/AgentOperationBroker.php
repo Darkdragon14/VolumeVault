@@ -37,19 +37,23 @@ class AgentOperationBroker
             }
             $operation = AgentOperation::where('docker_host_id', $host->id)->where('status', 'pending')
                 ->where(fn ($query) => $query->whereIn('kind', app(AgentExecution::class)->supportsHost($locked, 'destination-v1') ? ['restore', 'destination'] : ['restore'])
+                    ->orWhere('kind', 'archive_export')
                     ->orWhereHas('backupRun.job', fn ($jobs) => $jobs->where('status', '!=', BackupJob::STATUS_PAUSED)))
                 ->orderBy('created_at')->orderBy('id')->lockForUpdate()->first();
             if (! $operation) {
                 return null;
             }
-            if ($operation->kind === 'destination') {
-                if (! app(AgentExecution::class)->supportsHost($locked, 'destination-v1')) {
+            if (in_array($operation->kind, ['destination', 'archive_export'], true)) {
+                if (! app(AgentExecution::class)->supportsHost($locked, $operation->kind === 'archive_export' ? 'archive-relay-v1' : 'destination-v1')) {
                     return null;
                 }
                 $operation->forceFill([
                     'status' => 'running', 'delivery_token' => bin2hex(random_bytes(32)),
                     'owner_instance_id' => $locked->agent_instance_id, 'claimed_at' => now(), 'last_progress_at' => now(),
                 ])->save();
+                if ($operation->kind === 'archive_export') {
+                    \App\Models\ArchiveRelay::where('source_agent_operation_id', $operation->id)->where('status', 'pending')->update(['status' => 'exporting']);
+                }
 
                 return $this->envelope($operation);
             }
@@ -91,6 +95,9 @@ class AgentOperationBroker
                 ],
                 'owner_instance_id' => $locked->agent_instance_id, 'claimed_at' => now(), 'last_progress_at' => now(),
             ])->save();
+            if ($run instanceof RestoreRun && ($relay = $run->archiveRelay) !== null) {
+                $operation->update(['context' => [...($operation->context ?? []), 'archive_relay_id' => $relay->id]]);
+            }
             ActivityLog::record('agent_operation_assigned', 'Operation assigned to its Docker agent.', $run);
 
             return $this->envelope($operation);
@@ -105,7 +112,7 @@ class AgentOperationBroker
                 return;
             }
             $operation->update(['last_progress_at' => now()]);
-            if ($operation->kind === 'destination') {
+            if (in_array($operation->kind, ['destination', 'archive_export'], true)) {
                 return;
             }
             $run = $operation->kind === 'backup' ? $operation->backupRun : $operation->restoreRun;
@@ -115,12 +122,31 @@ class AgentOperationBroker
 
     public function complete(DockerHost $host, string $id, string $token, array $result): void
     {
+        unset($result['_verified_relay']);
+        $export = DB::transaction(function () use ($host, $id, $token, $result): ?AgentOperation {
+            $operation = $this->lockedOperation($host, $id, $token);
+            if ($operation->kind !== 'archive_export' || $operation->status === 'completed') {
+                return null;
+            }
+            abort_unless($operation->status === 'running' && $result['cleanup_complete'] === true, 409, 'Operation is not ready to finish.');
+
+            return $operation;
+        });
+        if ($export !== null) {
+            $result = app(ArchiveRelays::class)->verifyExport($export, $result);
+        }
         $finalizations = DB::transaction(function () use ($host, $id, $token, $result): array {
             $operation = $this->lockedOperation($host, $id, $token);
             if ($operation->status === 'completed') {
                 return [];
             }
             abort_unless($operation->status === 'running' && $result['cleanup_complete'] === true, 409, 'Operation is not ready to finish.');
+            if ($operation->kind === 'archive_export') {
+                abort_if(array_key_exists('data', $result), 422, 'Unexpected archive export result.');
+                app(ArchiveRelays::class)->completeExport($operation, $result);
+
+                return [];
+            }
             if ($operation->kind === 'destination') {
                 app(\App\Services\BackupDestinations\DestinationOperations::class)->complete($operation, $result);
 
@@ -160,7 +186,7 @@ class AgentOperationBroker
             $run->forceFill([
                 'status' => $status, 'finished_at' => now(), 'last_heartbeat_at' => now(),
                 'duration_seconds' => $result['duration_seconds'],
-                'logs' => $redactor->clean($result['logs'] ?? ''), 'error_message' => $error,
+                'logs' => $redactor->clean(($run instanceof RestoreRun && $run->archiveRelay !== null ? $run->logs."\n" : '').($result['logs'] ?? '')), 'error_message' => $error,
                 'stopped_container_ids' => null,
             ]);
             if ($run instanceof BackupRun) {
@@ -188,7 +214,7 @@ class AgentOperationBroker
         }, attempts: 3);
         app(ProcessRunFinalization::class)->dispatch($finalizations);
         $operation = AgentOperation::where('docker_host_id', $host->id)->findOrFail($id);
-        if ($operation->kind === 'destination') {
+        if (in_array($operation->kind, ['destination', 'archive_export'], true)) {
             return;
         }
         $job = ($operation->kind === 'backup' ? $operation->backupRun : $operation->restoreRun)?->job;
@@ -203,6 +229,10 @@ class AgentOperationBroker
         $this->registry->assertCredential($locked, $host->agent_token_hash, $host->agent_instance_id);
         $operation = AgentOperation::where('docker_host_id', $locked->id)->whereKey($id)->lockForUpdate()->first();
         abort_unless($operation && is_string($operation->delivery_token) && hash_equals($operation->delivery_token, $token), 404);
+        if ($operation->kind === 'archive_export' || isset($operation->context['archive_relay_id'])
+            || ($operation->kind === 'restore' && $operation->restoreRun?->archiveRelay !== null)) {
+            abort_unless($operation->owner_instance_id === $locked->agent_instance_id, 404);
+        }
 
         return $operation;
     }

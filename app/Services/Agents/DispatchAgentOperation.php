@@ -19,6 +19,9 @@ class DispatchAgentOperation
     {
         return DB::transaction(function () use ($run): bool {
             $run = $run->fresh(['job']);
+            if ($run instanceof RestoreRun && ($relay = $run->archiveRelay) !== null && $relay->status !== 'ready') {
+                return false;
+            }
             if ($run instanceof BackupRun && $run->belongsToGroupRun() && ! AdvanceBackupGroupRun::authorizes($run)) {
                 return false;
             }
@@ -43,7 +46,14 @@ class DispatchAgentOperation
         $job = $run instanceof BackupRun ? $run->executionJob() : $run->job;
         $destination = $run instanceof BackupRun ? $run->destinationForRun() : $run->destination;
         $hostId = $run instanceof BackupRun ? $run->docker_host_id : $run->target_docker_host_id;
-        if (! $destination?->is_active || ($destination->isHostBound() && (int) $destination->docker_host_id !== $hostId)) {
+        $relay = $run instanceof RestoreRun ? $run->archiveRelay : null;
+        if ($relay !== null) {
+            app(AgentExecution::class)->validateHost($hostId, 'archive-relay-v1');
+            if ($relay->status !== 'ready' || $relay->expires_at->isPast()) {
+                throw new \RuntimeException('Archive relay is not ready.');
+            }
+        }
+        if ($relay === null && (! $destination?->is_active || ($destination->isHostBound() && (int) $destination->docker_host_id !== $hostId))) {
             throw ValidationException::withMessages(['destination' => 'This destination is not available to the selected agent.']);
         }
         $spec = [
@@ -53,13 +63,16 @@ class DispatchAgentOperation
                 'backup_filter_mode', 'backup_exclude_regexp', 'backup_include_paths',
                 'stop_containers_before_backup', 'stop_container_names', 'timezone',
             ]),
-            'destination' => $this->destination($destination),
+            'destination' => $relay?->destination_snapshot ?? $this->destination($destination),
             'run' => $run instanceof BackupRun ? ['backup_filename' => $run->backup_filename] : $run->only([
                 'selected_backup_key', 'source_volume_name', 'target_volume_name', 'mode',
                 'backup_before_overwrite', 'confirmation_text',
             ]),
         ];
         $spec['job']['source_type'] = $job->sourceType();
+        if ($relay !== null) {
+            $spec['relay'] = ['id' => $relay->id, 'size_bytes' => (int) $relay->size_bytes, 'sha256' => $relay->sha256];
+        }
         if ($run instanceof RestoreRun) {
             // A restore acts on its admitted target, not the job's current source.
             // The archive's historical source remains in run.source_volume_name.

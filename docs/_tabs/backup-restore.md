@@ -14,9 +14,9 @@ Docker commands are built with array arguments through Symfony Process. Secrets 
 
 ### Browsing archives on the restore target
 
-The restore archive selector can browse the destination through the selected target host when it supports `destination-v1`. It shows asynchronous progress, failures and freshness, and loads additional pages without changing provider keys. Each listed archive retains the receipt from the page that returned that exact key. A receipt must match the current destination locator and target host and remain within its 30-minute freshness window when the restore is submitted.
+The restore archive selector browses host-local destinations through their source owner and shared network destinations through the selected execution target when the listing host supports `destination-v1`. It shows asynchronous progress, failures and freshness, and loads additional pages without changing provider keys. Each listed archive retains the receipt from the page that returned that exact key. A receipt must match the current destination locator and listing host (source owner for host-local archives, execution target for network archives) and remain within its 30-minute freshness window when the restore is submitted.
 
-Changing the target host clears the selection and receipt, reloads the listing, and resets overwrite mode, safety-backup choice and typed confirmation. Selecting a historical run still loads its server-resolved source/destination snapshot before proceeding; validation errors preserve the current form. Older agents can continue restoring known successful historical records without a listing receipt. This fallback does not enable arbitrary archive browsing or transfer archives between host-local destinations. Restore to a new volume remains the default.
+Changing the target host resets overwrite mode, safety-backup choice and typed confirmation. For shared network destinations, it also clears the selection and receipt and reloads the listing on the new target. For host-local destinations, listing stays on the owner and an eligible fresh owner receipt remains selected. Selecting a historical run still loads its server-resolved source/destination snapshot before proceeding; validation errors preserve the current form. Older agents can continue restoring known successful historical records without a listing receipt. This fallback does not enable arbitrary archive browsing or bypass the relay capability requirement for cross-host host-local restores. Restore to a new volume remains the default.
 
 ## Backup Jobs
 
@@ -122,6 +122,12 @@ The group list and details disable `Run now` when the group has no runnable memb
 
 Remote/mixed runs use a durable central coordinator with snapshotted membership, source identity and failure policy. Existing `backup-v1` agents execute the members; no new agent protocol is required. Members run sequentially, each completing its configured container stop, backup and restart before the next starts. **This is not a consistent cross-host snapshot and does not stop all containers together.** Already assigned work drains during maintenance, while the next member waits if its host is in maintenance. Purely local groups retain their synchronous member execution within the queued group job.
 
+### Restore a host-local archive onto another host
+
+Choose the archive from its destination owner, then choose a restore target with relay support. Both remote sides require `archive-relay-v1`; local-central sources or targets are supported in hybrid mode. The wizard uses the backend’s per-target capability checks. Only a new volume is allowed for a cross-host relay, and its name must be unused on the target host. Selecting a target clears destructive confirmations while preserving an eligible, fresh owner receipt. Historical restores look up the exact archive using the recorded run identity on the owner, independently of the target.
+
+Restore details refresh transfer phase, uploaded/downloaded bytes, expiry, errors and cleanup state. The original archive is preserved. Central chunks are encrypted with `APP_KEY`; agent staging is private temporary plaintext retained as needed until acknowledgement. See Installation for relay capacity limits and Security for storage requirements. The transfer uses central TLS connections, with no direct agent-to-agent connection.
+
 To create a group:
 
 1. Open `Backup groups` and create a group, or select `Part of a group` while creating a backup job and choose `Create a new group`.
@@ -159,6 +165,10 @@ Existing jobs with no archive name template keep that legacy pattern.
 ## Restore Behavior
 
 Restore-to-new-volume remains the default and safest mode because it never overwrites the source. Host path backups are always restored into a new Docker volume.
+
+New-volume restores create an extraction helper that pins the target with a `volume-nocopy` mount, then verify the persisted random ownership label before starting that exact helper ID. This prevents extraction into an externally created same-name replacement.
+
+**If a new-volume restore fails, its target volume is retained and is never automatically deleted.** Inspect the run logs and the target volume, then remove it manually if appropriate or retry with a different unused target name. The retained volume may contain incomplete data. This safety behavior applies to all new-volume restores, including same-host and cross-host restores: Docker cannot atomically verify ownership and delete a volume, so automatic deletion could remove an externally created replacement. Temporary archive or relay cleanup is separate from retaining the failed target volume.
 
 Available restore modes:
 

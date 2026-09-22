@@ -65,7 +65,19 @@ Both container images are built from the same source revision and published with
 
 ## Agent Enrollment and Inventory
 
-Compatible agents provide inventory discovery and execute backups and restores, including members of remote or mixed-host backup groups. Backup forms select a source host; restore forms select a target host. Shared network destinations support A-to-B restore into a new volume. A host-local destination belongs to its owner and can currently be restored only on that same host. Agents advertising `docker-labels-v1` support host-scoped Docker-label reconciliation on complete inventories; configure each host under Settings > Docker label backups, including in orchestrator-only mode. Upgrade older agents to enable reconciliation; their inventories preserve existing label-managed jobs and surface synchronization errors. Agents advertising `destination-v1` also support asynchronous destination testing, paginated browsing and storage measurements. Older agents retain historical restore support. Host-local archive relaying remains unavailable. The existing Volumes, Stacks and Dashboard inventory pages remain local-only; job/restore forms and Docker hosts expose agent inventories.
+Compatible agents provide inventory discovery and execute backups and restores, including members of remote or mixed-host backup groups. Backup forms select a source host; restore forms select a target host. Shared network destinations support A-to-B restore into a new volume. Host-local destinations remain owned and listed by their source host; cross-host restores use the central archive relay and require `archive-relay-v1` on each remote side. Local-central sources and targets work in hybrid mode. Agents advertising `docker-labels-v1` support host-scoped Docker-label reconciliation on complete inventories; configure each host under Settings > Docker label backups, including in orchestrator-only mode. Upgrade older agents to enable reconciliation; their inventories preserve existing label-managed jobs and surface synchronization errors. Agents advertising `destination-v1` also support asynchronous destination testing, paginated browsing and storage measurements. Older agents retain historical same-host restore support. The existing Volumes, Stacks and Dashboard inventory pages remain local-only; job/restore forms and Docker hosts expose agent inventories. Unified views and a secondary workflow audit remain pending; this is not full feature parity.
+
+### Archive relay capacity
+
+Relay defaults in `config/volumevault.php` are:
+
+| Environment variable | Default | Meaning |
+| --- | --- | --- |
+| `VOLUMEVAULT_ARCHIVE_RELAY_MAX_BYTES` | `10737418240` | 10 GiB maximum archive |
+| `VOLUMEVAULT_ARCHIVE_RELAY_MAX_DISK_BYTES` | `53687091200` | 50 GiB central relay disk budget |
+| `VOLUMEVAULT_ARCHIVE_RELAY_TTL_SECONDS` | `86400` | 24-hour transfer lifetime |
+
+Central storage is `storage/app/private/archive-relays`. Admission reserves **3 × maximum archive size per relay** for encryption and local staging, not merely the expected archive size. Source staging requires **2 × maximum archive size** free. With defaults, reserve 30 GiB centrally per admitted relay and 20 GiB for source staging. Keep the scheduler and workers running for transfer reconciliation and cleanup. Expiry blocks new uploads/assignments; it does not discard an assigned agent’s pending cleanup or acknowledgement.
 
 Groups containing remote members use a durable central coordinator and the existing `backup-v1` agent capability; no new agent protocol is needed. Remote-only groups work in orchestrator mode; mixed groups require local execution for their local members. Keep the central scheduler, execution queue and metadata worker running. Membership, failure policy and member sources are snapshotted when the remote/mixed run is queued. Members execute sequentially, each completing its configured stop/backup/restart cycle before the next starts. This does not stop all applications together or provide a consistent cross-host snapshot. Purely local groups retain their synchronous member execution within the queued group job.
 

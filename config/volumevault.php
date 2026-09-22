@@ -2,6 +2,16 @@
 
 return [
     'mode' => env('VOLUMEVAULT_MODE', 'hybrid'),
+    'archive_relay' => [
+        // Central chunks are APP_KEY-encrypted; losing APP_KEY makes them unreadable.
+        // Byte limits: reserve 3 * max_bytes per relay for encryption and local staging.
+        // Source staging requires 2 * max_bytes free; agent staging is private plaintext.
+        // Expiry stops new uploads/assignments, never discards an assigned agent's cleanup.
+        'directory' => storage_path('app/private/archive-relays'),
+        'max_bytes' => (int) env('VOLUMEVAULT_ARCHIVE_RELAY_MAX_BYTES', 10737418240),
+        'max_disk_bytes' => (int) env('VOLUMEVAULT_ARCHIVE_RELAY_MAX_DISK_BYTES', 53687091200),
+        'ttl_seconds' => (int) env('VOLUMEVAULT_ARCHIVE_RELAY_TTL_SECONDS', 86400),
+    ],
     'agents' => [
         'enabled' => (bool) env('VOLUMEVAULT_AGENTS_ENABLED', false),
         'url' => rtrim((string) env('VOLUMEVAULT_AGENT_URL', ''), '/'),

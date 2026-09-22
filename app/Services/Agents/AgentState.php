@@ -43,6 +43,38 @@ class AgentState
 
     private function initialize(): void
     {
+        [$origin, $canonicalPem, $fingerprint, $token, $host] = $this->configuredTrust();
+        $path = $this->directory.'/state.json';
+        if (file_exists($path)) {
+            $this->data = json_decode(file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
+            if (($this->data['origin'] ?? null) !== $origin || ($this->data['ca_fingerprint'] ?? null) !== $fingerprint || ($host !== null && ($this->data['host_uuid'] ?? null) !== $host) || ! is_file($this->caPath()) || file_get_contents($this->caPath()) !== $canonicalPem) {
+                throw new RuntimeException('Trust changed.');
+            }
+            if (! Str::isUuid($this->data['instance_id'] ?? '') || ! Str::isUuid($this->data['host_uuid'] ?? '') || ! preg_match('/\A[0-9a-f]{64}\z/', $this->data['credential'] ?? '') || ! is_int($this->data['sequence'] ?? null) || $this->data['sequence'] < 0 || ! is_bool($this->data['enrolled'] ?? null)) {
+                throw new RuntimeException('Invalid state.');
+            }
+            if ($token !== '' && ! hash_equals($this->data['enrollment_fingerprint'], hash('sha256', $token))) {
+                $this->newIdentity($token);
+            }
+            if (! @chmod($path, 0600) || ! @chmod($this->caPath(), 0600)) {
+                throw new RuntimeException('Unable to secure state.');
+            }
+        } else {
+            if ($host === null) {
+                throw new RuntimeException('Enrollment required.');
+            }
+            if (file_exists($this->caPath()) && file_get_contents($this->caPath()) !== $canonicalPem) {
+                throw new RuntimeException('Trust changed.');
+            }
+            $this->atomicWrite($this->caPath(), $canonicalPem);
+            $this->data = ['origin' => $origin, 'ca_fingerprint' => $fingerprint, 'host_uuid' => $host];
+            $this->newIdentity($token);
+        }
+    }
+
+    /** Validate the configured origin and CA identically for the loop and read-only workers. */
+    private function configuredTrust(): array
+    {
         $origin = (string) config('volumevault.agents.client.url');
         $parts = parse_url($origin);
         if (! is_array($parts) || ($parts['scheme'] ?? '') !== 'https' || empty($parts['host']) || ! filter_var($origin, FILTER_VALIDATE_URL) || array_diff(array_keys($parts), ['scheme', 'host', 'port', 'path']) !== [] || ! in_array($parts['path'] ?? '', ['', '/'], true) || preg_match('/[\s\\\\]/', $origin)) {
@@ -69,31 +101,46 @@ class AgentState
             }
             $host = $pieces[0];
         }
-        $path = $this->directory.'/state.json';
-        if (file_exists($path)) {
-            $this->data = json_decode(file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
-            if (($this->data['origin'] ?? null) !== $origin || ($this->data['ca_fingerprint'] ?? null) !== $fingerprint || ($host !== null && ($this->data['host_uuid'] ?? null) !== $host) || ! is_file($this->caPath()) || file_get_contents($this->caPath()) !== $canonicalPem) {
-                throw new RuntimeException('Trust changed.');
+
+        return [$origin, $canonicalPem, $fingerprint, $token, $host];
+    }
+
+    /**
+     * Workers read atomically published identity without taking the loop's exclusive
+     * lock. This never enrolls, rotates credentials, or writes inventory sequence.
+     *
+     * @return array{origin: string, host_uuid: string, instance_id: string, credential: string, enrolled: bool, ca_path: string}
+     */
+    public function transportSnapshot(): array
+    {
+        if (is_resource($this->lock)) {
+            return [...array_intersect_key($this->identity(), array_flip(['origin', 'host_uuid', 'instance_id', 'credential', 'enrolled'])), 'ca_path' => $this->caPath()];
+        }
+        try {
+            [$origin, $pem, $fingerprint, $token, $host] = $this->configuredTrust();
+            $directory = (string) config('volumevault.agents.client.state_directory', storage_path('app/agent'));
+            foreach ([$directory, $directory.'/state.json', $directory.'/server-ca.pem'] as $path) {
+                if (is_link($path) || ! file_exists($path)) {
+                    throw new RuntimeException;
+                }
             }
-            if (! Str::isUuid($this->data['instance_id'] ?? '') || ! Str::isUuid($this->data['host_uuid'] ?? '') || ! preg_match('/\A[0-9a-f]{64}\z/', $this->data['credential'] ?? '') || ! is_int($this->data['sequence'] ?? null) || $this->data['sequence'] < 0 || ! is_bool($this->data['enrolled'] ?? null)) {
-                throw new RuntimeException('Invalid state.');
+            if (! is_file($directory.'/state.json') || filesize($directory.'/state.json') > 16384
+                || ! is_file($directory.'/server-ca.pem') || filesize($directory.'/server-ca.pem') > 16384) {
+                throw new RuntimeException;
             }
-            if ($token !== '' && ! hash_equals($this->data['enrollment_fingerprint'], hash('sha256', $token))) {
-                $this->newIdentity($token);
+            $data = json_decode(file_get_contents($directory.'/state.json'), true, flags: JSON_THROW_ON_ERROR);
+            if (($data['origin'] ?? null) !== $origin || ($data['ca_fingerprint'] ?? null) !== $fingerprint
+                || file_get_contents($directory.'/server-ca.pem') !== $pem || ($data['enrolled'] ?? null) !== true
+                || ! Str::isUuid($data['host_uuid'] ?? '') || ! Str::isUuid($data['instance_id'] ?? '')
+                || ! preg_match('/\A[0-9a-f]{64}\z/', $data['credential'] ?? '')
+                || ($host !== null && $data['host_uuid'] !== $host)
+                || ($token !== '' && ($data['enrollment_fingerprint'] ?? null) !== hash('sha256', $token))) {
+                throw new RuntimeException;
             }
-            if (! @chmod($path, 0600) || ! @chmod($this->caPath(), 0600)) {
-                throw new RuntimeException('Unable to secure state.');
-            }
-        } else {
-            if ($host === null) {
-                throw new RuntimeException('Enrollment required.');
-            }
-            if (file_exists($this->caPath()) && file_get_contents($this->caPath()) !== $canonicalPem) {
-                throw new RuntimeException('Trust changed.');
-            }
-            $this->atomicWrite($this->caPath(), $canonicalPem);
-            $this->data = ['origin' => $origin, 'ca_fingerprint' => $fingerprint, 'host_uuid' => $host];
-            $this->newIdentity($token);
+
+            return [...array_intersect_key($data, array_flip(['origin', 'host_uuid', 'instance_id', 'credential', 'enrolled'])), 'ca_path' => $directory.'/server-ca.pem'];
+        } catch (\Throwable) {
+            throw new AgentStateException('Persisted relay transport identity or trust is unavailable.');
         }
     }
 

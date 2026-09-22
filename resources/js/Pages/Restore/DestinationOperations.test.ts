@@ -23,6 +23,11 @@ const hosts = [1, 2, 3].map((id) => ({ id, name: `Host ${id}`, driver: id === 1 
     agent_capabilities: id === 3 ? ['restore-v1'] : ['restore-v1', 'destination-v1'],
     supports_destination_operations: id !== 3, supports_host_bound_destinations: id !== 3,
 }));
+const relayHosts = hosts.map((host) => ({ ...host,
+    agent_registered_at: host.id === 1 ? null : '2026-09-22T10:00:00Z',
+    agent_protocol_version: host.id === 1 ? null : 1,
+    agent_capabilities: host.id === 1 ? [] : [...host.agent_capabilities, 'archive-relay-v1'],
+}));
 const operation = (id: string, host: number, key: string, cursor: string | null = null, backupRunId: number | null = null) => ({
     data: { id, destination_id: 9, docker_host_id: host, backup_run_id: backupRunId, action: 'list', status: 'completed', locator_current: true,
         fresh_until: new Date(Date.now() + 1800000).toISOString(), result: { status: 'success', data: {
@@ -262,4 +267,101 @@ it('does not offer a cached historical archive after an exact lookup returns no 
     expect(form().destination_operation_id).toBeNull();
     expect(button('Continue').attributes('disabled')).toBeDefined();
     expect(request).not.toHaveBeenCalled();
+});
+
+it('keeps exact owner receipts across relay target changes and submits new-volume restores only', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(json(operation('owner-receipt', 2, 'exact-local.tar.gz', null, 82)));
+    vi.stubGlobal('fetch', fetch);
+    const { wrapper, button, form, request } = await setup({
+        hosts: relayHosts, destinationOperationHosts: relayHosts,
+        targetDockerHostId: 2, sourceDockerHostId: 2, backupRunId: 82,
+        preselectedBackupKey: 'exact-local.tar.gz',
+        restoreDestination: { id: 9, name: 'A archives', provider: 'local', docker_host_id: 2 },
+        archiveTransfer: { source_docker_host_id: 2, host_bound: true, required_agent_capability: 'archive-relay-v1', mode: 'new_volume', max_bytes: 10737418240,
+            targets: [{ docker_host_id: 2, supported: true, transfer_required: false }, { docker_host_id: 3, supported: true, transfer_required: true }] },
+        volumes: [{ docker_host_id: 3, name: 'collision' }],
+    });
+    expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toMatchObject({ docker_host_id: 2, backup_run_id: 82 });
+    await wrapper.get('input[value="exact-local.tar.gz"]').setValue();
+    await button('Continue').trigger('click');
+    await wrapper.get('input[value="safe_inplace"]').setValue();
+    form().confirmation_text = 'data';
+    form().backup_before_overwrite = true;
+    expect(wrapper.get('[data-target-host] option[value="3"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-target-host]').setValue('3');
+    await flushPromises();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(form()).toMatchObject({ destination_operation_id: 'owner-receipt', selected_backup_key: 'exact-local.tar.gz',
+        mode: 'new_volume', confirmation_text: '', backup_before_overwrite: false });
+    expect(wrapper.find('input[value="inplace"]').exists()).toBe(false);
+    expect(wrapper.find('input[value="safe_inplace"]').exists()).toBe(false);
+    await wrapper.get('input.input').setValue('collision');
+    expect(button('Continue').attributes('disabled')).toBeDefined();
+    await wrapper.get('input.input').setValue('new-on-B');
+    await button('Continue').trigger('click');
+    await button('Queue restore').trigger('click');
+    await flushPromises();
+    expect(request.mock.calls[0][0]).toMatchObject({ method: 'post', data: {
+        target_docker_host_id: 3, backup_run_id: 82, selected_backup_key: 'exact-local.tar.gz',
+        destination_operation_id: 'owner-receipt', mode: 'new_volume', target_volume_name: 'new-on-B',
+    } });
+});
+
+it.each([[1, 2], [2, 1]])('lists owner %i independently of hybrid target %i', async (owner, target) => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(json(operation('owner', owner, 'exact', null, 82)));
+    vi.stubGlobal('fetch', fetch);
+    const { wrapper, form, button, request } = await setup({
+        hosts: relayHosts, destinationOperationHosts: relayHosts,
+        targetDockerHostId: target, sourceDockerHostId: owner, backupRunId: 82, preselectedBackupKey: 'exact',
+        restoreDestination: { id: 9, provider: 'docker_volume', docker_host_id: owner },
+        archiveTransfer: { source_docker_host_id: owner, host_bound: true, required_agent_capability: 'archive-relay-v1', mode: 'new_volume', max_bytes: 10737418240,
+            targets: [{ docker_host_id: target, supported: true, transfer_required: true }] },
+    });
+    expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toMatchObject({ docker_host_id: owner, backup_run_id: 82 });
+    await wrapper.get('input[value="exact"]').setValue();
+    expect(form().destination_operation_id).toBe('owner');
+    await button('Continue').trigger('click');
+    expect(wrapper.find('input[value="inplace"]').exists()).toBe(false);
+    await button('Continue').trigger('click');
+    await button('Queue restore').trigger('click');
+    await flushPromises();
+    expect(request.mock.calls[0][0]).toMatchObject({ data: { target_docker_host_id: target, destination_operation_id: 'owner', mode: 'new_volume' } });
+});
+
+it.each([false, true])('does not browse a different host when the owner cannot list (manage=%s)', async (manage) => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    vi.stubGlobal('fetch', fetch);
+    const { wrapper, button } = await setup({
+        can: { manageSensitiveData: manage }, targetDockerHostId: 2,
+        restoreDestination: { id: 9, provider: 'local', docker_host_id: 3 },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    if (manage) {
+        expect(wrapper.text()).toContain('destinationOperations.history');
+        expect(button('Continue').attributes('disabled')).toBeDefined();
+    } else {
+        expect(button('Continue')).toBeUndefined();
+        expect(wrapper.find('[data-listing-host]').exists()).toBe(false);
+    }
+});
+
+it.each([[1, 2, 2], [2, 1, 2], [2, 3, 2], [2, 3, 3]])('blocks relay from %i to %i when agent %i lacks relay support', async (owner, target, oldAgent) => {
+    const compatibleHosts = relayHosts.map((host) => host.id === oldAgent
+        ? { ...host, agent_capabilities: host.agent_capabilities.filter((capability) => capability !== 'archive-relay-v1') } : host);
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(json(operation('owner', owner, 'exact', null, 82)));
+    vi.stubGlobal('fetch', fetch);
+    const { wrapper, button } = await setup({
+        hosts: compatibleHosts, destinationOperationHosts: compatibleHosts,
+        targetDockerHostId: target, sourceDockerHostId: owner, backupRunId: 82, preselectedBackupKey: 'exact',
+        restoreDestination: { id: 9, provider: 'local', docker_host_id: owner },
+        archiveTransfer: { source_docker_host_id: owner, host_bound: true, required_agent_capability: 'archive-relay-v1', mode: 'new_volume', max_bytes: 10737418240,
+            targets: [{ docker_host_id: owner, supported: true, transfer_required: false }, { docker_host_id: target, supported: false, transfer_required: true }] },
+    });
+    expect(wrapper.get(`[data-listing-host] option[value="${target}"]`).attributes('disabled')).toBeDefined();
+    expect(wrapper.get(`[data-listing-host] option[value="${owner}"]`).attributes('disabled')).toBeUndefined();
+    await wrapper.get('input[value="exact"]').setValue();
+    await button('Continue').trigger('click');
+    expect(wrapper.text()).toContain('archiveRelay.missingCapability');
+    expect(button('Continue').attributes('disabled')).toBeDefined();
+    expect(JSON.parse(fetch.mock.calls[0][1]!.body as string).docker_host_id).toBe(owner);
 });

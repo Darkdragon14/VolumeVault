@@ -50,8 +50,26 @@ class RestoreController extends Controller
 
         $backups = $this->flagBackupsForJob($backups, $backupJob, $restoreDestination);
         $preselectedBackupKey = $selectedBackupRun?->backup_key ?? $request->query('backup');
+        $relaySourceHost = DockerHost::find($restoreDestination->docker_host_id);
 
         return Inertia::render('Restore/Create', [
+            'archiveTransfer' => [
+                'source_docker_host_id' => $restoreDestination->docker_host_id,
+                'host_bound' => $restoreDestination->isHostBound(),
+                'required_agent_capability' => 'archive-relay-v1',
+                'mode' => 'new_volume',
+                'max_bytes' => (int) config('volumevault.archive_relay.max_bytes'),
+                'targets' => DockerHost::orderBy('name')->get()->map(function (DockerHost $host) use ($restoreDestination, $relaySourceHost): array {
+                    $relay = app(\App\Services\Agents\ArchiveRelays::class)->required($restoreDestination, $host->id);
+                    $execution = app(AgentExecution::class);
+
+                    return ['docker_host_id' => $host->id, 'transfer_required' => $relay,
+                        'supported' => $host->maintenance_requested_at === null && $execution->supportsHost($host, 'restore-v1')
+                            && (! $relay || ($execution->supportsHost($host, 'archive-relay-v1')
+                                && $relaySourceHost?->maintenance_requested_at === null
+                                && $execution->supportsHost($relaySourceHost, 'archive-relay-v1')))];
+                }),
+            ],
             'destinationOperationHosts' => app(\App\Services\BackupDestinations\DestinationOperations::class)->hostOptions(),
             'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => app(AgentExecution::class)->summary($host, includePaths: true)),
             'volumes' => DockerVolume::where('exists', true)->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))->get(['docker_host_id', 'name']),

@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'restore_volume_ownership' => [
+        'title' => 'Az új visszaállítási kötetek tulajdonjogának ellenőrzése',
+        'description' => 'Az új kötetre történő visszaállítás segédkonténerrel rögzíti a célt, és ugyanennek a konténernek az indítása előtt ellenőrzi a véletlen tulajdonosi címkét. A sikertelen visszaállítás célköteteit soha nem törli automatikusan. Vizsgálja meg, és szükség esetén kézzel törölje őket, vagy próbálja újra másik célnévvel; a futási napló ismerteti a teendőket.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Helyi archívumok visszaállítása másik gépre',
+        'description' => 'A titkosított központi közvetítő másik gép új kötetére továbbítja az archívumot, helyi/távoli hibrid módban is. A távoli oldalakhoz archive-relay-v1 szükséges. A listák és érvényes nyugták a tulajdonoshoz kötődnek; a részletek mutatják az előrehaladást, lejáratot, hibákat és tisztítást. Az eredeti megmarad. Alapértékek: archívumonként 10 GiB, 50 GiB tárhely és 24 óra. Az egységes nézetek és a másodlagos folyamatok auditja még hátravan.',
+    ],
     'agent_destination_operations' => [
         'title' => 'Célhelyek tesztelése és böngészése ügynökökkel',
         'description' => 'Válasszon gazdagépet a mentett célhelyek teszteléséhez, a tárhely méréséhez és az archívumok lapozható böngészéséhez, látható állapottal, hibákkal és érvényességgel. Az ügynökökhöz destination-v1 szükséges; a megosztott tároló alapértelmezése a központi gép, a helyié a tulajdonos. A visszaállítás az archívumkulcsokat a célgép friss igazolásaihoz köti, a régebbi ügynökök pedig továbbra is támogatják az előzményekből történő visszaállítást.',
@@ -19,11 +27,11 @@ return [
     ],
     'remote_agent_execution' => [
         'title' => 'Mentés és visszaállítás Docker-ügynökökkel',
-        'description' => 'A kompatibilis ügynökök mentéseket és visszaállításokat hajtanak végre tartós titkosított parancsokkal és saját helyreállítási naplóval. Megosztott hálózati célról másik gépre is visszaállíthatók az adatok az orchestrátor Docker-socketje nélkül. Az eredmények és biztonsági mentések metaadatai újracsatlakozáskor megmaradnak, az elkészült munka megismétlése nélkül. A helyi archívumok gépek közötti átvitele még nem érhető el.',
+        'description' => 'A kompatibilis ügynökök mentéseket és visszaállításokat hajtanak végre tartós titkosított parancsokkal és saját helyreállítási naplóval. Megosztott hálózati célról másik gépre is visszaállíthatók az adatok az orchestrátor Docker-socketje nélkül. Az eredmények és biztonsági mentések metaadatai újracsatlakozáskor megmaradnak, az elkészült munka megismétlése nélkül.',
     ],
     'remote_host_workflows' => [
         'title' => 'Gépenkénti mentési és visszaállítási beállítások',
-        'description' => 'A feladatok regisztrált ügynököket célozhatnak offline állapotban és csak vezérlő módban is. Megosztott hálózati tárolóról másik gépre is lehet visszaállítani. A leltár, az útvonalak és a helyi célok gépenként elkülönülnek. A helyi archívumok gépek közötti átvitele még nem érhető el.',
+        'description' => 'A feladatok regisztrált ügynököket célozhatnak offline állapotban és csak vezérlő módban is. Megosztott hálózati tárolóról másik gépre is lehet visszaállítani. A leltár, az útvonalak és a helyi célok gépenként elkülönülnek.',
     ],
     'docker_host_metrics' => [
         'title' => 'Hasznos adatok a helyi gépekről és ügynökökről',

@@ -3,6 +3,7 @@
 namespace App\Services\Agents;
 
 use App\Models\ActivityLog;
+use App\Models\AgentOperation;
 use App\Models\BackupGroupRun;
 use App\Models\BackupRun;
 use App\Models\DockerHost;
@@ -24,6 +25,7 @@ class AgentLifecycle
         })->count();
         $restores = RestoreRun::where('target_docker_host_id', $host->id)->where(function ($query): void {
             $query->where('status', RestoreRun::STATUS_RUNNING)
+                ->orWhere('docker_container_cleanup_pending', true)
                 ->orWhere(fn ($query) => $query->whereNotNull('stopped_container_ids')->whereJsonLength('stopped_container_ids', '>', 0));
         })->count();
         $groups = BackupGroupRun::whereNull('member_run_ids')->where('status', BackupGroupRun::STATUS_RUNNING)->where(function ($query) use ($host): void {
@@ -31,10 +33,14 @@ class AgentLifecycle
                 ->orWhereHas('memberRuns', fn ($runs) => $runs->where('docker_host_id', $host->id));
         })->count();
 
-        $destinations = \App\Models\AgentOperation::where('docker_host_id', $host->id)->where('kind', 'destination')->where('status', 'running')->get()
-            ->filter(fn ($operation): bool => ! $host->isLocal() || in_array($operation->payload['destination']['provider'] ?? null, ['local', 'docker_volume'], true))->count();
+        $destinations = AgentOperation::where('docker_host_id', $host->id)->whereIn('kind', ['destination', 'archive_export'])->where('status', 'running')->get()
+            ->filter(fn ($operation): bool => $operation->kind === 'archive_export' || ! $host->isLocal() || in_array($operation->payload['destination']['provider'] ?? null, ['local', 'docker_volume'], true))->count();
+        $relayCleanup = $host->isLocal() ? AgentOperation::where('docker_host_id', $host->id)->where('kind', 'restore')->where('status', 'running')
+            ->whereHas('restoreRun', fn ($query) => $query->where('status', '!=', RestoreRun::STATUS_RUNNING)
+                ->where('docker_container_cleanup_pending', false)
+                ->where(fn ($query) => $query->whereNull('stopped_container_ids')->orWhereJsonLength('stopped_container_ids', 0)))->count() : 0;
 
-        return max($backups + $restores + $groups + $destinations, (int) ($host->agent_active_operations ?? 0));
+        return max($backups + $restores + $groups + $destinations + $relayCleanup, (int) ($host->agent_active_operations ?? 0));
     }
 
     /** @return array{maintenance_requested: bool, maintenance_ready: bool, active_operations: int} */

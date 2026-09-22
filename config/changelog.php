@@ -2,6 +2,8 @@
 
 return [
     'unreleased' => [
+        ['type' => 'change', 'key' => 'restore_volume_ownership'],
+        ['type' => 'feature', 'key' => 'cross_host_archive_relay'],
         ['type' => 'feature', 'key' => 'agent_destination_operations'],
         ['type' => 'feature', 'key' => 'remote_docker_label_backups'],
         ['type' => 'feature', 'key' => 'remote_backup_groups'],

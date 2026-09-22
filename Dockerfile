@@ -7,7 +7,7 @@ RUN npm ci && npm run build
 FROM alpine:3.23 AS local-archive-reader
 RUN apk add --no-cache build-base
 COPY docker/local-archive-reader.c /src/local-archive-reader.c
-RUN cc -O2 -Wall -Wextra -Werror /src/local-archive-reader.c -o /volumevault-local-archive-reader
+RUN cc -static -O2 -Wall -Wextra -Werror /src/local-archive-reader.c -o /volumevault-local-archive-reader
 
 FROM ghcr.io/nicholas-fedor/shoutrrr:0.21.0@sha256:977d519527cd4e09df865ee9c287424df6b9bf7f4eb6a601bb99a1f89fd0e9e5 AS shoutrrr
 

@@ -47,7 +47,7 @@ class CreateRestoreRun
             $sourceContext = $this->sourceContext($current, $selectedBackupRun);
             $restoreDestination = $this->resolveRestoreDestination->handle($current, $backupRunId);
             if ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== $targetHostId) {
-                throw ValidationException::withMessages(['target_docker_host_id' => 'Archive transfer between host-local destinations not yet supported.']);
+                app(\App\Services\Agents\ArchiveRelays::class)->validate($restoreDestination, $targetHostId, $mode);
             }
             if ($restoreDestination->isHostBound() && (int) $restoreDestination->docker_host_id !== DockerHost::LOCAL_ID && $selectedBackupRun === null && empty($data['destination_operation_id'])) {
                 throw ValidationException::withMessages(['backup_run_id' => 'Select a known successful backup run for an agent-owned local destination.']);
@@ -61,7 +61,7 @@ class CreateRestoreRun
             $restoreDestinationId = (int) $restoreDestination->id;
             $restoreDestinationFingerprint = $this->destinationFingerprint($restoreDestination);
             $selectedBackupKeyAvailability = isset($data['destination_operation_id'])
-                ? ['available' => app(\App\Services\BackupDestinations\DestinationOperations::class)->verifies($restoreDestination, $targetHostId, $data['destination_operation_id'], $selectedBackupKey), 'exception' => null]
+                ? ['available' => app(\App\Services\BackupDestinations\DestinationOperations::class)->verifies($restoreDestination, $restoreDestination->isHostBound() ? (int) $restoreDestination->docker_host_id : $targetHostId, $data['destination_operation_id'], $selectedBackupKey), 'exception' => null]
                 : $this->selectedBackupKeyAvailability(
                 $restoreDestination,
                 $selectedBackupKey,
@@ -256,6 +256,10 @@ class CreateRestoreRun
             'backup_job_id' => $job->id,
             'target_volume_name' => $targetVolume,
         ]);
+
+        if (app(\App\Services\Agents\ArchiveRelays::class)->required($restoreDestination, $targetHostId)) {
+            app(\App\Services\Agents\ArchiveRelays::class)->create($run, $restoreDestination, isset($data['backup_run_id']) ? (int) $data['backup_run_id'] : null);
+        }
 
         return $run;
     }

@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'restore_volume_ownership' => [
+        'title' => 'Ověření vlastnictví nových svazků pro obnovu',
+        'description' => 'Obnova do nového svazku zajistí cíl pomocným kontejnerem a před spuštěním právě tohoto kontejneru ověří náhodný štítek vlastnictví. Cílové svazky po selhání se nikdy automaticky nemažou. Zkontrolujte je a případně ručně odstraňte, nebo obnovu opakujte s jiným názvem cíle; protokoly běhu vysvětlují další postup.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Obnova lokálních archivů na jiném hostiteli',
+        'description' => 'Šifrovaný centrální přenos doručí archiv do nového svazku na jiném hostiteli, i v hybridním místním/vzdáleném režimu. Vzdálené strany vyžadují archive-relay-v1. Seznamy a platná potvrzení zůstávají u vlastníka; podrobnosti zobrazují průběh, platnost, chyby a úklid. Originál je zachován. Výchozí hodnoty: 10 GiB na archiv, 50 GiB úložiště a 24 hodin. Sjednocené pohledy a audit vedlejších postupů ještě nejsou dokončeny.',
+    ],
     'agent_destination_operations' => [
         'title' => 'Testování a procházení úložišť pomocí agentů',
         'description' => 'Vyberte hostitele pro testování uložených cílů, měření úložiště a stránkované procházení archivů s průběhem, chybami a platností výsledků. Agenti vyžadují destination-v1; sdílené úložiště stále používá jako výchozí centrálního hostitele a místní zůstává u vlastníka. Obnovení váže klíče archivů na čerstvá potvrzení cílového hostitele, zatímco starší agenti zachovávají obnovení z historie.',
@@ -19,11 +27,11 @@ return [
     ],
     'remote_agent_execution' => [
         'title' => 'Zálohování a obnova prostřednictvím agentů Dockeru',
-        'description' => 'Kompatibilní agenti provádějí zálohy a obnovy pomocí trvalých šifrovaných příkazů a soukromých protokolů obnovy. Sdílené síťové cíle umožňují obnovu na jiného hostitele bez Docker socketu v orchestrátoru. Výsledky a metadata bezpečnostních záloh přežijí opětovné připojení bez opakování dokončené práce. Přenos místních archivů mezi hostiteli zatím není dostupný.',
+        'description' => 'Kompatibilní agenti provádějí zálohy a obnovy pomocí trvalých šifrovaných příkazů a soukromých protokolů obnovy. Sdílené síťové cíle umožňují obnovu na jiného hostitele bez Docker socketu v orchestrátoru. Výsledky a metadata bezpečnostních záloh přežijí opětovné připojení bez opakování dokončené práce.',
     ],
     'remote_host_workflows' => [
         'title' => 'Konfigurace záloh a obnovy podle hostitele',
-        'description' => 'Úlohy mohou používat registrované agenty, i offline a v režimu samotného orchestrátoru. Sdílené síťové úložiště umožňuje obnovu na jiném hostiteli. Inventář, cesty a místní cíle jsou oddělené podle hostitele. Přenos místních archivů mezi hostiteli zatím není dostupný.',
+        'description' => 'Úlohy mohou používat registrované agenty, i offline a v režimu samotného orchestrátoru. Sdílené síťové úložiště umožňuje obnovu na jiném hostiteli. Inventář, cesty a místní cíle jsou oddělené podle hostitele.',
     ],
     'docker_host_metrics' => [
         'title' => 'Přehledné informace o místních hostitelích a agentech',

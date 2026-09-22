@@ -17,6 +17,7 @@ const props = defineProps<{
     volumes?: { docker_host_id?: number; name: string }[];
     sourceDockerHostId?: number;
     targetDockerHostId?: number;
+    archiveTransfer?: { source_docker_host_id: number; host_bound: boolean; required_agent_capability: string; mode: string; max_bytes: number; targets: { docker_host_id: number; transfer_required: boolean; supported: boolean }[] };
     restoreDestination: any;
     backups: any[];
     hasOtherBackups?: boolean;
@@ -63,11 +64,12 @@ const form = useForm({
 const hosts = computed(() => executionHosts(props.hosts));
 const sourceHostId = computed(() => props.sourceDockerHostId ?? hostId(props.job));
 const targetHost = computed(() => hosts.value.find((host) => Number(host.id) === Number(form.target_docker_host_id)));
-const listingContext = computed(() => ({ destination: props.restoreDestination, hostId: Number(form.target_docker_host_id), backupRunId: props.backupRunId }));
+const listingHostId = computed(() => isHostLocalDestination(props.restoreDestination) ? hostId(props.restoreDestination) : Number(form.target_docker_host_id));
+const listingContext = computed(() => ({ destination: props.restoreDestination, hostId: listingHostId.value, backupRunId: props.backupRunId }));
 const listing = useDestinationOperations(listingContext);
 const { objects: listedObjects, nextCursor, pending: listingPending, error: listingError, operation: listingOperation, fresh: listingFresh } = listing;
-const listingAvailable = computed(() => !!props.destinationOperations && operationHostAvailable(
-    props.destinationOperationHosts?.find((host) => Number(host.id) === Number(form.target_docker_host_id)), props.restoreDestination,
+const listingAvailable = computed(() => canManageBackups.value && !!props.destinationOperations && operationHostAvailable(
+    props.destinationOperationHosts?.find((host) => Number(host.id) === listingHostId.value), props.restoreDestination,
 ));
 const backups = computed(() => {
     if (!props.destinationOperations || !listingAvailable.value) return props.backups;
@@ -91,18 +93,24 @@ watch([() => JSON.stringify(listingContext.value), listingAvailable], () => {
     }
 }, { immediate: true });
 const sameHost = computed(() => Number(form.target_docker_host_id) === Number(sourceHostId.value));
-const targetAvailable = (host: ExecutionHost) => canExecute(host, 'restore-v1') && destinationMatchesHost(props.restoreDestination, host.id);
+const transferTarget = computed(() => props.archiveTransfer?.targets.find((target) => Number(target.docker_host_id) === Number(form.target_docker_host_id)));
+const relayRequired = computed(() => isHostLocalDestination(props.restoreDestination) && listingHostId.value !== Number(form.target_docker_host_id));
+const targetAvailable = (host: ExecutionHost) => canExecute(host, 'restore-v1') && (props.archiveTransfer
+    ? props.archiveTransfer.targets.some((target) => Number(target.docker_host_id) === Number(host.id) && target.supported)
+    : destinationMatchesHost(props.restoreDestination, host.id));
 const workflowVisible = computed(() => canManageBackups.value && (localExecutionEnabled.value || hosts.value.length > 0));
 const targetExists = computed(() => !isInPlace.value && (props.volumes ?? []).some((volume) => hostId(volume) === Number(form.target_docker_host_id) && volume.name === form.target_volume_name));
 const targetValid = computed(() => !!targetHost.value && targetAvailable(targetHost.value) && !targetExists.value
-    && !!form.target_volume_name.trim() && (!isInPlace.value || sameHost.value));
+    && !!form.target_volume_name.trim() && (!isInPlace.value || (sameHost.value && !relayRequired.value)));
 watch(() => form.target_docker_host_id, () => {
-    form.destination_operation_id = null;
-    contextReceipt.value = null;
-    initialReceipt = null;
-    if (props.destinationOperations) {
+    if (!isHostLocalDestination(props.restoreDestination) && props.destinationOperations) {
+        form.destination_operation_id = null;
+        contextReceipt.value = null;
+        initialReceipt = null;
         form.selected_backup_key = '';
         step.value = 1;
+    } else if (step.value > 2) {
+        step.value = 2;
     }
     form.mode = 'new_volume';
     form.confirmation_text = '';
@@ -123,7 +131,7 @@ const modes = computed(() => {
 
     // In-place modes overwrite the source volume itself, so they only apply to
     // Docker volume sources (host path jobs keep restore-to-new-volume only).
-    if (sourceContextReady.value && isDockerVolumeSource.value && sameHost.value) {
+    if (sourceContextReady.value && isDockerVolumeSource.value && sameHost.value && !relayRequired.value) {
         list.push(
             {
                 value: 'inplace',
@@ -306,6 +314,7 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
             <h2 class="text-xl font-semibold">{{ t('Select backup') }}</h2>
             <p v-if="!destinationOperations" class="mt-1 text-sm text-slate-400">{{ t('Backups are listed newest first from {name}.', { name: restoreDestination?.name }) }}</p>
             <p v-else class="mt-1 text-sm text-slate-400">{{ restoreDestination?.name }}</p>
+            <p v-if="isHostLocalDestination(restoreDestination)" class="mt-1 text-sm text-slate-400">{{ t('Source') }}: {{ hosts.find((host) => Number(host.id) === listingHostId)?.name ?? listingHostId }} (#{{ listingHostId }})</p>
             <p v-if="listError && listingOperation?.result?.status !== 'success'" class="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ listError }}</p>
             <p v-if="backupRunUnverifiable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('This historical Dropbox backup has no stable file ID. Its identity cannot be verified, so restoring this run is unavailable.') }}</p>
             <p v-if="form.errors.selected_backup_key" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.selected_backup_key }}</p>
@@ -379,8 +388,8 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
                 <span v-if="form.errors.target_docker_host_id" class="text-sm text-rose-300">{{ form.errors.target_docker_host_id }}</span>
             </label>
             <p v-if="!targetHost || !targetAvailable(targetHost)" role="status" class="mt-3 text-sm text-amber-600 dark:text-amber-200">{{ t('hostWorkflow.unavailable') }}</p>
-            <p v-if="isHostLocalDestination(restoreDestination)" class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.relayUnsupported') }}</p>
-            <p v-else class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.sharedRestore') }}</p>
+            <p v-if="relayRequired" class="mt-3 text-sm text-slate-400">{{ t(transferTarget?.supported ? 'archiveRelay.description' : 'archiveRelay.missingCapability') }}</p>
+            <p v-else-if="!isHostLocalDestination(restoreDestination)" class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.sharedRestore') }}</p>
             <div class="mt-5 grid gap-4 lg:grid-cols-3">
                 <label
                     v-for="mode in modes"

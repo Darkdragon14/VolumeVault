@@ -293,7 +293,7 @@ describe('Host-scoped backup and restore workflows', () => {
         await button(wrapper, 'Continue').trigger('click');
         expect(wrapper.get('[data-target-host] option[value="2"]').attributes('disabled')).toBeUndefined();
         expect(wrapper.get('[data-target-host] option[value="3"]').attributes('disabled')).toBeDefined();
-        expect(wrapper.text()).toContain('hostWorkflow.relayUnsupported');
+        expect(wrapper.text()).not.toContain('hostWorkflow.relayUnsupported');
         await button(wrapper, 'Continue').trigger('click');
         await button(wrapper, 'Queue restore').trigger('click');
         expect(inertia.submitted).toHaveBeenCalledWith('/backup-jobs/7/restore', expect.objectContaining({ target_docker_host_id: 2 }));

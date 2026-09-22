@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'restore_volume_ownership' => [
+        'title' => 'Eigendom van nieuwe herstelvolumes controleren',
+        'description' => 'Herstel naar nieuwe volumes houdt het doel vast met een hulpcontainer en controleert het willekeurige eigendomslabel voordat precies die container start. Doelvolumes na een mislukking worden nooit automatisch verwijderd. Inspecteer ze en verwijder ze zo nodig handmatig, of probeer opnieuw met een andere doelnaam; de uitvoeringslogboeken geven de vervolgstappen aan.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Hostlokale archieven op een andere host herstellen',
+        'description' => 'Het versleutelde centrale relais draagt archieven over naar een nieuw volume op een andere host, ook lokaal/extern in hybride modus. Externe kanten vereisen archive-relay-v1. Lijsten en geldige ontvangstbewijzen blijven bij de eigenaar; details tonen voortgang, verloop, fouten en opruiming. Het origineel blijft behouden. Standaard: 10 GiB per archief, 50 GiB opslag en 24 uur. Gecombineerde inventarisweergaven en de controle van secundaire workflows moeten nog worden afgerond.',
+    ],
     'agent_destination_operations' => [
         'title' => 'Bestemmingen testen en doorzoeken via agents',
         'description' => 'Kies een host om opgeslagen bestemmingen te testen, opslag te meten en archieven per pagina te bekijken met zichtbare voortgang, fouten en geldigheid. Agents vereisen destination-v1; gedeelde opslag gebruikt standaard nog de centrale host en lokale opslag blijft bij de eigenaar. Herstel koppelt archiefsleutels aan recente bewijzen van de doelhost; oudere agents behouden herstel vanuit de geschiedenis.',
@@ -19,11 +27,11 @@ return [
     ],
     'remote_agent_execution' => [
         'title' => 'Back-ups en herstel via Docker-agents',
-        'description' => 'Compatibele agents voeren back-ups en herstelbewerkingen uit met duurzame versleutelde opdrachten en privéhersteljournalen. Gedeelde netwerkbestemmingen maken herstel op een andere host mogelijk zonder Docker-socket op de orchestrator. Resultaten en veiligheidsback-upmetadata blijven behouden na herverbinden zonder voltooid werk opnieuw uit te voeren. Het doorsturen van lokale archieven tussen hosts is nog niet beschikbaar.',
+        'description' => 'Compatibele agents voeren back-ups en herstelbewerkingen uit met duurzame versleutelde opdrachten en privéhersteljournalen. Gedeelde netwerkbestemmingen maken herstel op een andere host mogelijk zonder Docker-socket op de orchestrator. Resultaten en veiligheidsback-upmetadata blijven behouden na herverbinden zonder voltooid werk opnieuw uit te voeren.',
     ],
     'remote_host_workflows' => [
         'title' => 'Hostgerichte configuratie van back-ups en herstel',
-        'description' => 'Taken kunnen geregistreerde agents gebruiken, ook offline en in de modus met alleen een orchestrator. Gedeelde netwerkopslag maakt herstel op een andere host mogelijk. Inventaris, paden en lokale bestemmingen zijn per host afgeschermd. Overdracht van lokale archieven tussen hosts is nog niet beschikbaar.',
+        'description' => 'Taken kunnen geregistreerde agents gebruiken, ook offline en in de modus met alleen een orchestrator. Gedeelde netwerkopslag maakt herstel op een andere host mogelijk. Inventaris, paden en lokale bestemmingen zijn per host afgeschermd.',
     ],
     'docker_host_metrics' => [
         'title' => 'Duidelijke informatie over lokale hosts en agents',

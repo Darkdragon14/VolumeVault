@@ -25,6 +25,13 @@ class DestinationStorage
 {
     private ?string $operationHelperName = null;
 
+    private ?int $operationMaxBytes = null;
+
+    public function useOperationLimit(?int $bytes): void
+    {
+        $this->operationMaxBytes = $bytes;
+    }
+
     public function useOperationHelper(?string $name): void
     {
         $this->operationHelperName = $name;
@@ -1728,7 +1735,7 @@ class DestinationStorage
             throw new RuntimeException('Local archive path changed while it was being opened.');
         }
 
-        $this->secureLocalArchiveReader->copy($archiveRoot, $key, $targetPath, $rootStat, $progress);
+        $this->secureLocalArchiveReader->copy($archiveRoot, $key, $targetPath, $rootStat, $progress, $this->operationMaxBytes);
     }
 
     private function hasLocalObject(BackupDestination $destination, string $key): bool

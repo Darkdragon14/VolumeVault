@@ -30,7 +30,11 @@ class AgentOperationSpecification
                 'id' => ['required', 'uuid'],
                 'token' => ['required', 'regex:/\A[0-9a-f]{64}\z/'],
                 'kind' => ['required', 'in:backup,restore'],
-                'spec' => ['required', 'array:version,job,destination,safety_destination,run'],
+                'spec' => ['required', 'array:version,job,destination,safety_destination,run,relay'],
+                'spec.relay' => ['sometimes', 'array:id,size_bytes,sha256'],
+                'spec.relay.id' => ['required_with:spec.relay', 'uuid'],
+                'spec.relay.size_bytes' => ['required_with:spec.relay', 'integer:strict', 'min:1'],
+                'spec.relay.sha256' => ['required_with:spec.relay', 'regex:/\A[0-9a-f]{64}\z/'],
                 'spec.version' => ['required', 'integer', 'in:1'],
                 'spec.job' => ['required', 'array:name,source_type,volume_name,host_path,retention_days,retention_count,backup_filter_mode,backup_exclude_regexp,backup_include_paths,stop_containers_before_backup,stop_container_names,timezone'],
                 'spec.job.name' => ['required', 'string', 'max:255'],
@@ -72,6 +76,15 @@ class AgentOperationSpecification
                 $rules['spec.selected_backup.display_name'] = ['required_with:spec.selected_backup', 'string', 'max:4096'];
                 $rules['spec.selected_backup.size'] = ['nullable', 'integer:strict', 'min:0'];
                 $rules['spec.selected_backup.last_modified'] = ['nullable', 'string', 'max:64', 'date'];
+            }
+            if (($operation['kind'] ?? null) === 'archive_export') {
+                $rules = array_filter($rules, fn (string $key): bool => ! str_starts_with($key, 'spec.job') && ! str_starts_with($key, 'spec.run') && ! str_starts_with($key, 'spec.relay') && $key !== 'spec.safety_destination', ARRAY_FILTER_USE_KEY);
+                $rules['kind'] = ['required', 'in:archive_export'];
+                $rules['spec'] = ['required', 'array:version,destination,relay'];
+                $rules['spec.relay'] = ['required', 'array:id,key,max_bytes'];
+                $rules['spec.relay.id'] = ['required', 'uuid'];
+                $rules['spec.relay.key'] = ['required', 'string', 'max:4096'];
+                $rules['spec.relay.max_bytes'] = ['required', 'integer:strict', 'min:1'];
             }
             if (array_diff(array_keys($operation), ['id', 'token', 'kind', 'spec']) !== [] || ($operation['spec']['version'] ?? null) !== 1) {
                 throw new RuntimeException;
@@ -120,8 +133,17 @@ class AgentOperationSpecification
                 });
                 $validator->validate();
             }
-            if ($operation['kind'] !== 'destination') {
+            if ($operation['kind'] === 'archive_export') {
+                if (! in_array($operation['spec']['destination']['provider'], ['local', 'docker_volume'], true)) {
+                    throw new RuntimeException;
+                }
+                DockerVolumeName::assertKey($operation['spec']['relay']['key']);
+            } elseif ($operation['kind'] !== 'destination') {
                 $this->validateSourceAndTarget($operation);
+            }
+            if (isset($operation['spec']['relay']) && $operation['kind'] !== 'archive_export'
+                && ($operation['kind'] !== 'restore' || ($operation['spec']['run']['mode'] ?? '') !== 'new_volume' || ($operation['spec']['run']['backup_before_overwrite'] ?? false))) {
+                throw new RuntimeException;
             }
         } catch (\Throwable) {
             // Validation exceptions can contain credential-bearing URLs/values.
@@ -133,6 +155,13 @@ class AgentOperationSpecification
     public function validateLocalPolicy(array $operation): void
     {
         try {
+            if ($operation['kind'] === 'restore' && isset($operation['spec']['relay'])) {
+                if ($operation['spec']['relay']['size_bytes'] > (int) config('volumevault.archive_relay.max_bytes')) {
+                    throw new RuntimeException;
+                }
+
+                return;
+            }
             if ($operation['kind'] === 'backup' && $operation['spec']['job']['source_type'] === 'host_path') {
                 app(HostPathPolicy::class)->assertValid($operation['spec']['job']['host_path'] ?? '');
             }

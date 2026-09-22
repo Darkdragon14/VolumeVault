@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'restore_volume_ownership' => [
+        'title' => 'Vérifier la propriété des nouveaux volumes de restauration',
+        'description' => 'Les restaurations dans un nouveau volume fixent la cible avec un conteneur auxiliaire et vérifient son étiquette de propriété aléatoire avant de démarrer ce même conteneur. Les volumes cibles après échec ne sont jamais supprimés automatiquement. Inspectez-les puis supprimez-les manuellement si nécessaire, ou réessayez avec un autre nom ; les journaux indiquent la marche à suivre.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Restaurer une archive locale sur un autre hôte',
+        'description' => 'Le relais central chiffré transfère les archives vers un nouveau volume sur un autre hôte, y compris en mode hybride local/distant. Les côtés distants nécessitent archive-relay-v1. Listes et reçus récents restent liés au propriétaire ; les détails affichent progression, expiration, erreurs et nettoyage. L’original est conservé. Par défaut : 10 Gio par archive, 50 Gio de stockage et 24 heures. Les vues unifiées et l’audit des workflows secondaires restent à terminer.',
+    ],
     'agent_destination_operations' => [
         'title' => 'Tester et parcourir les destinations via les agents',
         'description' => 'Choisissez un hôte pour tester les destinations enregistrées, mesurer le stockage et parcourir les archives paginées avec progression, erreurs et validité visibles. Les agents nécessitent destination-v1 ; le stockage partagé utilise toujours l’hôte central par défaut et le stockage local son propriétaire. Les restaurations associent les clés aux reçus récents de l’hôte cible, tandis que les anciens agents conservent la restauration depuis l’historique.',
@@ -19,11 +27,11 @@ return [
     ],
     'remote_agent_execution' => [
         'title' => 'Sauvegardes et restaurations exécutées par les agents',
-        'description' => 'Les agents compatibles exécutent les sauvegardes et restaurations avec des commandes chiffrées persistantes et un journal local de récupération. Une destination réseau partagée permet de restaurer sur un autre hôte sans socket Docker sur l’orchestrateur. Résultats et métadonnées des sauvegardes de sécurité survivent aux reconnexions sans rejouer le travail terminé. Le relais d’archives locales entre hôtes reste indisponible.',
+        'description' => 'Les agents compatibles exécutent les sauvegardes et restaurations avec des commandes chiffrées persistantes et un journal local de récupération. Une destination réseau partagée permet de restaurer sur un autre hôte sans socket Docker sur l’orchestrateur. Résultats et métadonnées des sauvegardes de sécurité survivent aux reconnexions sans rejouer le travail terminé.',
     ],
     'remote_host_workflows' => [
         'title' => 'Configuration des sauvegardes et restaurations par hôte',
-        'description' => 'Les jobs peuvent cibler des agents enregistrés, même hors ligne et en mode orchestrateur seul. Les restaurations peuvent cibler un autre hôte avec un stockage réseau partagé. Inventaires, chemins et destinations locales sont isolés par hôte. Le transfert des archives locales entre hôtes reste indisponible.',
+        'description' => 'Les jobs peuvent cibler des agents enregistrés, même hors ligne et en mode orchestrateur seul. Les restaurations peuvent cibler un autre hôte avec un stockage réseau partagé. Inventaires, chemins et destinations locales sont isolés par hôte.',
     ],
     'docker_host_metrics' => [
         'title' => 'Informations utiles sur les hôtes locaux et les agents',

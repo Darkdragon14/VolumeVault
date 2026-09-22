@@ -2,6 +2,7 @@
 
 namespace App\Services\Agents;
 
+use App\Exceptions\ArchiveRelayConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -65,6 +66,28 @@ class AgentClient
         $this->post('operations/'.$id.'/progress', $this->credential(), ['token' => $token]);
     }
 
+    public function relayTransfer(string $id, string $token, array $data): array
+    {
+        app(AgentOperationStore::class)->assertId($id);
+
+        try {
+            $identity = $this->state->transportSnapshot();
+            if (! $identity['enrolled']) {
+                throw new AgentStateException('Relay transport identity is not enrolled.');
+            }
+
+            return $this->post('operations/'.$id.'/relay', $identity['host_uuid'].'.'.$identity['credential'], [...$data, 'token' => $token], $identity);
+        } catch (AgentStateException $exception) {
+            throw $exception;
+        } catch (RuntimeException $exception) {
+            if ($exception->getCode() === 0 || $exception->getCode() === 429 || $exception->getCode() >= 500) {
+                throw new ArchiveRelayConnectionException('Relay connection unavailable.');
+            }
+
+            throw new RuntimeException('Relay transfer was rejected.');
+        }
+    }
+
     public function completeOperation(array $receipt): void
     {
         if (! Str::isUuid($receipt['id'] ?? '')) {
@@ -107,11 +130,11 @@ class AgentClient
      * @param  array<string, mixed>  $body
      * @return array<string, mixed>
      */
-    private function post(string $endpoint, string $token, array $body): array
+    private function post(string $endpoint, string $token, array $body, ?array $identity = null): array
     {
-        $identity = $this->state->identity();
+        $identity ??= $this->state->identity();
         $options = [
-            'verify' => $this->state->caPath(), 'allow_redirects' => false, 'proxy' => '',
+            'verify' => $identity['ca_path'] ?? $this->state->caPath(), 'allow_redirects' => false, 'proxy' => '',
             'stream_context' => ['ssl' => ['verify_peer' => true, 'verify_peer_name' => true, 'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT]],
         ];
         if (defined('CURLOPT_SSLVERSION')) {
@@ -129,7 +152,7 @@ class AgentClient
             throw new AgentProtocolException('Agent protocol is incompatible with the orchestrator.');
         }
         if (! $response->successful()) {
-            throw new RuntimeException('Agent request failed (HTTP '.$response->status().').');
+            throw new RuntimeException('Agent request failed (HTTP '.$response->status().').', $response->status());
         }
 
         return is_array($response->json()) ? $response->json() : [];

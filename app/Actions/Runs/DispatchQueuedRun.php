@@ -33,6 +33,11 @@ class DispatchQueuedRun
     {
         $run->refresh();
 
+        if ($run instanceof RestoreRun && ($relay = $run->archiveRelay) !== null && $relay->status !== 'ready'
+            && ! ($run->target_docker_host_id === DockerHost::LOCAL_ID && $relay->status === 'downloading')) {
+            return false;
+        }
+
         if ($run instanceof BackupGroupRun && $run->member_run_ids !== null) {
             app(AdvanceBackupGroupRun::class)->handle($run);
 

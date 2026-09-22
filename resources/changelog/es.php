@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'restore_volume_ownership' => [
+        'title' => 'Verificar la propiedad de los nuevos volúmenes de restauración',
+        'description' => 'Las restauraciones en volúmenes nuevos fijan el destino mediante un contenedor auxiliar y verifican su etiqueta de propiedad aleatoria antes de iniciar ese mismo contenedor. Los volúmenes de destino tras un fallo nunca se eliminan automáticamente. Inspecciónelos y elimínelos manualmente si procede, o reintente con otro nombre; los registros explican los pasos siguientes.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Restaurar archivos locales en otro host',
+        'description' => 'El relevo central cifrado transfiere archivos a un volumen nuevo en otro host, incluido el modo híbrido local/remoto. Los lados remotos requieren archive-relay-v1. Las listas y los recibos vigentes siguen vinculados al propietario; los detalles muestran progreso, caducidad, errores y limpieza. Se conserva el original. Valores predeterminados: 10 GiB por archivo, 50 GiB de almacenamiento y 24 horas. Quedan pendientes las vistas unificadas y la auditoría de flujos secundarios.',
+    ],
     'agent_destination_operations' => [
         'title' => 'Probar y explorar destinos mediante agentes',
         'description' => 'Elige un host para probar destinos guardados, medir almacenamiento y explorar archivos paginados con progreso, errores y vigencia visibles. Los agentes requieren destination-v1; el almacenamiento compartido sigue usando el host central por defecto y el local permanece con su propietario. Las restauraciones vinculan las claves a comprobantes recientes del host de destino, mientras los agentes antiguos conservan la restauración desde el historial.',
@@ -19,11 +27,11 @@ return [
     ],
     'remote_agent_execution' => [
         'title' => 'Copias y restauraciones mediante agentes Docker',
-        'description' => 'Los agentes compatibles ejecutan copias y restauraciones con comandos cifrados persistentes y diarios privados de recuperación. Un destino de red compartido permite restaurar en otro host sin socket Docker en el orquestador. Los resultados y metadatos de copias de seguridad previas sobreviven a las reconexiones sin repetir trabajo completado. El traslado de archivos locales entre hosts sigue sin estar disponible.',
+        'description' => 'Los agentes compatibles ejecutan copias y restauraciones con comandos cifrados persistentes y diarios privados de recuperación. Un destino de red compartido permite restaurar en otro host sin socket Docker en el orquestador. Los resultados y metadatos de copias de seguridad previas sobreviven a las reconexiones sin repetir trabajo completado.',
     ],
     'remote_host_workflows' => [
         'title' => 'Configuración de copias y restauraciones por host',
-        'description' => 'Los trabajos pueden usar agentes registrados, incluso sin conexión y en modo solo orquestador. El almacenamiento de red compartido permite restaurar en otro host. El inventario, las rutas y los destinos locales se limitan a su host. Las transferencias de archivos locales entre hosts aún no están disponibles.',
+        'description' => 'Los trabajos pueden usar agentes registrados, incluso sin conexión y en modo solo orquestador. El almacenamiento de red compartido permite restaurar en otro host. El inventario, las rutas y los destinos locales se limitan a su host.',
     ],
     'docker_host_metrics' => [
         'title' => 'Información útil de hosts locales y agentes',

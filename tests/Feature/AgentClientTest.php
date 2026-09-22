@@ -8,7 +8,9 @@ use App\Services\Agents\AgentCompatibility;
 use App\Services\Agents\AgentLabelInventory;
 use App\Services\Agents\AgentLoop;
 use App\Services\Agents\AgentOperationEnvelope;
+use App\Services\Agents\AgentOperationSupervisor;
 use App\Services\Agents\AgentState;
+use App\Services\Agents\AgentStateException;
 use App\Services\Agents\AgentTlsIdentity;
 use App\Services\BackupSources\HostPathPolicy;
 use Illuminate\Http\Client\Factory;
@@ -166,6 +168,60 @@ class AgentClientTest extends TestCase
             return Http::response($this->enrollment());
         });
         (new AgentClient($state))->enroll();
+    }
+
+    public function test_relay_worker_uses_read_only_persisted_identity_while_loop_holds_exclusive_state_lock(): void
+    {
+        $loop = $this->state();
+        $loop->markEnrolled();
+        $before = file_get_contents($this->directory.'/state/state.json');
+        $identity = $loop->identity();
+        $id = (string) Str::uuid();
+        $token = str_repeat('c', 64);
+        Http::fake(function (Request $request, array $options) use ($loop, $identity, $id, $token) {
+            $this->assertSame('https://vault.example:8443/agent/v1/operations/'.$id.'/relay', $request->url());
+            $this->assertTrue($request->hasHeader('Authorization', 'Bearer '.$identity['host_uuid'].'.'.$identity['credential']));
+            $this->assertSame($identity['instance_id'], $request['instance_id']);
+            $this->assertSame($token, $request['token']);
+            $this->assertSame($loop->caPath(), $options['verify']);
+            $this->assertFalse($options['allow_redirects']);
+            $this->assertSame('', $options['proxy']);
+            $this->assertTrue($options['stream_context']['ssl']['verify_peer_name']);
+
+            return Http::response(['offset' => 3]);
+        });
+        $workerState = new AgentState;
+        $worker = new AgentClient($workerState);
+        $this->assertSame(['offset' => 3], $worker->relayTransfer($id, $token,
+            ['action' => 'upload', 'offset' => 0, 'size_bytes' => 3, 'sha256' => hash('sha256', 'abc'), 'chunk' => base64_encode('abc')]));
+        $this->assertSame($before, file_get_contents($this->directory.'/state/state.json'));
+        try {
+            $workerState->nextSequence();
+            $this->fail('Read-only worker acquired mutation rights.');
+        } catch (AgentStateException) {
+            $this->assertSame(1, $loop->nextSequence());
+        }
+        try {
+            (new AgentState)->open();
+            $this->fail('The worker released the loop exclusive lock.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('in use', $exception->getMessage());
+        }
+    }
+
+    public function test_invalid_worker_persisted_trust_fails_closed_instead_of_becoming_a_connection_retry(): void
+    {
+        $state = $this->state();
+        $state->markEnrolled();
+        $persisted = $state->identity();
+        $persisted['origin'] = 'https://untrusted.example:8443';
+        file_put_contents($this->directory.'/state/state.json', json_encode($persisted, JSON_THROW_ON_ERROR));
+        $this->expectException(AgentStateException::class);
+        try {
+            (new AgentClient(new AgentState))->relayTransfer((string) Str::uuid(), str_repeat('c', 64), ['action' => 'download', 'offset' => 0]);
+        } finally {
+            Http::assertNothingSent();
+        }
     }
 
     public function test_lost_enrollment_response_retries_same_durable_identity_then_restart_uses_credential(): void
@@ -356,7 +412,7 @@ class AgentClientTest extends TestCase
             return $advertised === 0 ? $next : null;
         });
         $client->shouldReceive('inventory')->once();
-        $supervisor = $this->mock(\App\Services\Agents\AgentOperationSupervisor::class);
+        $supervisor = $this->mock(AgentOperationSupervisor::class);
         $supervisor->shouldReceive('tick')->twice();
         $supervisor->shouldReceive('activeCount')->andReturnUsing(function () use (&$active): int {
             return $active;

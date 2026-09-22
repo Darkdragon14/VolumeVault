@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'restore_volume_ownership' => [
+        'title' => 'Verifica della proprietà dei nuovi volumi di ripristino',
+        'description' => 'I ripristini in nuovi volumi vincolano la destinazione a un contenitore ausiliario e verificano l’etichetta di proprietà casuale prima di avviare quello stesso contenitore. I volumi di destinazione dopo un errore non vengono mai eliminati automaticamente. Ispezionarli e rimuoverli manualmente se opportuno, oppure riprovare con un altro nome; i log indicano i passi successivi.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Ripristino di archivi locali su un altro host',
+        'description' => 'Il relay centrale crittografato trasferisce gli archivi in un nuovo volume su un altro host, anche in modalità ibrida locale/remota. I lati remoti richiedono archive-relay-v1. Elenchi e ricevute valide restano associati al proprietario; i dettagli mostrano avanzamento, scadenza, errori e pulizia. L’originale è conservato. Valori predefiniti: 10 GiB per archivio, 50 GiB di spazio e 24 ore. Restano da completare le viste unificate e la verifica dei flussi secondari.',
+    ],
     'agent_destination_operations' => [
         'title' => 'Testare ed esplorare le destinazioni tramite agenti',
         'description' => 'Scegli un host per testare destinazioni salvate, misurare lo spazio ed esplorare archivi paginati con avanzamento, errori e validità visibili. Gli agenti richiedono destination-v1; lo spazio condiviso usa ancora l’host centrale per impostazione predefinita e quello locale resta sul proprio host. I ripristini associano le chiavi a ricevute recenti dell’host di destinazione; gli agenti meno recenti mantengono il ripristino dalla cronologia.',
@@ -19,11 +27,11 @@ return [
     ],
     'remote_agent_execution' => [
         'title' => 'Backup e ripristini tramite agenti Docker',
-        'description' => 'Gli agenti compatibili eseguono backup e ripristini con comandi cifrati persistenti e registri privati di recupero. Una destinazione di rete condivisa consente il ripristino su un altro host senza socket Docker sull’orchestratore. Risultati e metadati dei backup di sicurezza sopravvivono alle riconnessioni senza ripetere operazioni completate. Il trasferimento di archivi locali tra host non è ancora disponibile.',
+        'description' => 'Gli agenti compatibili eseguono backup e ripristini con comandi cifrati persistenti e registri privati di recupero. Una destinazione di rete condivisa consente il ripristino su un altro host senza socket Docker sull’orchestratore. Risultati e metadati dei backup di sicurezza sopravvivono alle riconnessioni senza ripetere operazioni completate.',
     ],
     'remote_host_workflows' => [
         'title' => 'Configurazione di backup e ripristini per host',
-        'description' => 'I job possono usare agent registrati, anche offline e in modalità solo orchestratore. Lo storage di rete condiviso consente il ripristino su un altro host. Inventario, percorsi e destinazioni locali sono isolati per host. I trasferimenti di archivi locali tra host non sono ancora disponibili.',
+        'description' => 'I job possono usare agent registrati, anche offline e in modalità solo orchestratore. Lo storage di rete condiviso consente il ripristino su un altro host. Inventario, percorsi e destinazioni locali sono isolati per host.',
     ],
     'docker_host_metrics' => [
         'title' => 'Informazioni utili sugli host locali e sugli agenti',

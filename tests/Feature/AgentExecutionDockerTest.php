@@ -24,6 +24,9 @@ class AgentExecutionDockerTest extends TestCase
 
     private ?string $network = null;
 
+    /** @var array<int, string> */
+    private array $agentContainers = [];
+
     public function test_agent_a_backs_up_to_s3_and_agent_b_restores_on_a_distinct_engine(): void
     {
         if (getenv('VOLUMEVAULT_AGENT_EXECUTION_DOCKER_TEST') !== '1') {
@@ -91,6 +94,8 @@ class AgentExecutionDockerTest extends TestCase
                 '-e', 'VOLUMEVAULT_AGENTS_ENABLED=true',
                 '-e', 'VOLUMEVAULT_AGENT_URL=https://orchestrator:8443',
                 '-e', 'VOLUMEVAULT_AGENT_IMAGE='.$agentImage,
+                '-e', 'VOLUMEVAULT_ARCHIVE_RELAY_MAX_BYTES=67108864',
+                '-e', 'VOLUMEVAULT_ARCHIVE_RELAY_MAX_DISK_BYTES=536870912',
                 '-e', 'VOLUMEVAULT_SSRF_ALLOWED_IPS='.$subnet,
             ]);
             $this->waitFor(fn (): bool => $this->succeeds([
@@ -117,12 +122,14 @@ $result = ['id' => $host->id, 'token' => $token[1], 'ca' => base64_encode(app(Ap
 PHP, ['side' => $side]);
                 $hosts[$side] = $enrollment['id'];
                 $agents[$side] = $prefix.'-agent-'.$side;
+                $this->agentContainers[$hosts[$side]] = $agents[$side];
                 $this->start($agents[$side], $agentImage, [
                     '-v', $this->volume($agents[$side].'-data').':/app/storage',
                     '-e', 'DOCKER_HOST=tcp://'.$this->ip($engines[$side]).':2375',
                     '-e', 'VOLUMEVAULT_ORCHESTRATOR_URL=https://orchestrator:8443',
                     '-e', 'VOLUMEVAULT_AGENT_ENROLLMENT_TOKEN='.$enrollment['token'],
                     '-e', 'VOLUMEVAULT_AGENT_CA='.$enrollment['ca'],
+                    '-e', 'VOLUMEVAULT_ARCHIVE_RELAY_MAX_BYTES=67108864',
                     '-e', 'VOLUMEVAULT_HOST_PATH_ALLOWLIST=/app/storage/destination-probe',
                     '-e', 'VOLUMEVAULT_SSRF_ALLOWED_IPS='.$subnet,
                 ]);
@@ -370,6 +377,47 @@ PHP, ['job' => $labelJob['id'], 'host' => $hosts['a'], 'other' => $hosts['b'], '
 $result = app(App\Services\Agents\AgentLifecycle::class)->setMaintenance(App\Models\DockerHost::findOrFail($input['host']), false);
 PHP, ['host' => $hosts['a']]);
             $this->assertFalse($resumed['maintenance_requested']);
+
+            $this->docker(['exec', $engines['a'], 'docker', 'volume', 'create', 'relay-archives']);
+            $localBackup = $this->control($server, <<<'PHP'
+$destination = App\Models\BackupDestination::create(['name' => 'Relay archives on A', 'provider' => 'docker_volume', 'docker_host_id' => $input['a'], 'bucket' => '', 'access_key_id' => '', 'secret_access_key' => '', 'settings' => ['volume_name' => 'relay-archives'], 'is_active' => true]);
+$job = App\Models\BackupJob::create(['name' => 'Actual local archive relay', 'docker_host_id' => $input['a'], 'source_type' => 'docker_volume', 'volume_name' => $input['source'], 'backup_destination_id' => $destination->id, 'schedule_type' => 'daily', 'schedule_config' => ['time' => '02:00'], 'timezone' => 'UTC', 'status' => 'active', 'stop_containers_before_backup' => false]);
+$run = app(App\Actions\Backup\CreateBackupRun::class)->handle($job, 'manual');
+app(App\Actions\Runs\DispatchQueuedRun::class)->handle($run);
+$result = ['id' => $run->id, 'job' => $job->id, 'capabilities' => App\Models\DockerHost::whereIn('id', [$input['a'], $input['b']])->get()->every(fn ($host) => in_array('archive-relay-v1', $host->agent_capabilities, true))];
+PHP, ['a' => $hosts['a'], 'b' => $hosts['b'], 'source' => $source]);
+            $this->assertTrue($localBackup['capabilities']);
+            $completedLocalBackup = $this->waitForRun($server, 'backup', $localBackup['id']);
+            $originalDigest = $this->archiveDigest($engines['a'], 'relay-archives', $completedLocalBackup['key']);
+            $relayRestore = $this->control($server, <<<'PHP'
+$job = App\Models\BackupJob::findOrFail($input['job']);
+$run = app(App\Actions\Restore\CreateRestoreRun::class)->handle($job, ['mode' => 'new_volume', 'target_docker_host_id' => $input['b'], 'target_volume_name' => 'relay-restored-on-b', 'selected_backup_key' => $input['key'], 'backup_run_id' => $input['backup']]);
+app(App\Actions\Runs\DispatchQueuedRun::class)->handle($run);
+$result = ['id' => $run->id, 'relay' => $run->archiveRelay->id, 'source_operation' => $run->archiveRelay->source_agent_operation_id];
+PHP, ['job' => $localBackup['job'], 'b' => $hosts['b'], 'key' => $completedLocalBackup['key'], 'backup' => $localBackup['id']]);
+            $completedRelay = $this->waitForRun($server, 'restore', $relayRestore['id']);
+            $this->assertSame($marker, $this->readMarker($engines['b'], 'relay-restored-on-b'));
+            $this->assertSame($marker, $this->readMarker($engines['a'], $source));
+            $this->assertSame($sentinel, $this->readMarker($engines['b'], $source));
+            $this->assertSame($originalDigest, $this->archiveDigest($engines['a'], 'relay-archives', $completedLocalBackup['key']));
+            $this->assertSame('', trim($this->docker(['exec', $engines['a'], 'docker', 'container', 'ls', '-aq', '--filter', 'name=^/volumevault-destination-'.$relayRestore['source_operation'].'$'])));
+            $this->assertSame('', trim($this->docker(['exec', $engines['b'], 'docker', 'container', 'ls', '-aq', '--filter', 'name=^/volumevault-restore-'])));
+            foreach (['a' => $relayRestore['source_operation'], 'b' => $completedRelay['operation']] as $side => $operationId) {
+                $this->waitFor(fn (): bool => $this->journal($agents[$side], $operationId)['phase'] === 'acknowledged', 'relay '.$side.' durable acknowledgement', 60);
+                $removed = $this->control($agents[$side], <<<'PHP'
+$result = ['removed' => ! is_dir(app(App\Services\Agents\AgentOperationStore::class)->directory($input['id']))];
+PHP, ['id' => $operationId]);
+                $this->assertTrue($removed['removed']);
+            }
+            $spool = $this->control($server, <<<'PHP'
+app(App\Services\Agents\ArchiveRelays::class)->coordinate();
+$relay = App\Models\ArchiveRelay::findOrFail($input['relay']);
+$result = ['cleaned' => $relay->cleaned_at !== null, 'removed' => ! is_dir(app(App\Services\Agents\ArchiveRelayStorage::class)->directory($relay->id)), 'size' => $relay->size_bytes, 'sha256' => $relay->sha256];
+PHP, ['relay' => $relayRestore['relay']]);
+            $this->assertTrue($spool['cleaned']);
+            $this->assertTrue($spool['removed']);
+            $this->assertGreaterThan(0, $spool['size']);
+            $this->assertSame($originalDigest, $spool['sha256']);
         } finally {
             $this->cleanup();
         }
@@ -430,6 +478,16 @@ PHP, ['host' => $hosts['a']]);
         return $this->docker(['exec', $engine, 'docker', 'run', '--rm', '--pull=never', '-v', $volume.':/data:ro', '--entrypoint', 'sh', self::OFFEN_IMAGE, '-c', 'cat /data/marker']);
     }
 
+    private function archiveDigest(string $engine, string $volume, string $key): string
+    {
+        $output = $this->docker(['exec', $engine, 'docker', 'run', '--rm', '-v', $volume.':/archives:ro',
+            '--entrypoint', 'sha256sum', self::OFFEN_IMAGE, '--', '/archives/'.$key]);
+        $digest = explode(' ', trim($output), 2)[0];
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $digest);
+
+        return $digest;
+    }
+
     /** @return array<string, mixed> */
     private function waitForRun(string $server, string $kind, int $id): array
     {
@@ -441,13 +499,68 @@ $run = ($backup ? App\Models\BackupRun::class : App\Models\RestoreRun::class)::f
 $operations = App\Models\AgentOperation::where($backup ? 'backup_run_id' : 'restore_run_id', $run->id);
 $result = ['status' => $run->status, 'key' => $backup ? $run->backup_key : null, 'size' => $backup ? $run->backup_size_bytes : null, 'host' => $backup ? $run->docker_host_id : $run->target_docker_host_id, 'operation' => (clone $operations)->value('id'), 'count' => $operations->count()];
 PHP, ['kind' => $kind, 'id' => $id]);
-            $this->assertNotContains($state['status'], ['failed', 'cancelled'], $kind.' failed; inspect the isolated runtime pipeline (raw logs withheld to protect credentials).');
+            if (in_array($state['status'], ['failed', 'cancelled'], true)) {
+                $this->fail($kind.' #'.$id.' failed. Safe diagnostics: '.json_encode($this->runDiagnostics($server, $kind, $id), JSON_THROW_ON_ERROR));
+            }
 
             return $state['status'] === 'success';
-        }, $kind.' completion through real agent polling', 180);
+        }, $kind.' #'.$id.' completion through real agent polling', 180,
+            fn (): array => $this->runDiagnostics($server, $kind, $id));
         $this->assertSame(1, $state['count']);
 
         return $state;
+    }
+
+    /** Only allowlisted lifecycle metadata leaves the orchestrator and agent journals. */
+    private function runDiagnostics(string $server, string $kind, int $id): array
+    {
+        $central = $this->control($server, <<<'PHP'
+$backup = $input['kind'] === 'backup';
+$run = ($backup ? App\Models\BackupRun::class : App\Models\RestoreRun::class)::findOrFail($input['id']);
+$relay = $backup ? null : $run->archiveRelay;
+$operations = App\Models\AgentOperation::where($backup ? 'backup_run_id' : 'restore_run_id', $run->id)
+    ->when($relay, fn ($query) => $query->orWhere('id', $relay->source_agent_operation_id))->get();
+$result = [
+    'run' => $run->only(['id', 'status', 'started_at', 'finished_at', 'last_heartbeat_at', 'dispatch_attempted_at', 'dispatch_published_at', 'docker_container_id', 'docker_container_cleanup_pending']),
+    'relay' => $relay?->only(['id', 'status', 'source_docker_host_id', 'target_docker_host_id', 'source_agent_operation_id', 'size_bytes', 'uploaded_bytes', 'downloaded_bytes', 'expires_at', 'cleaned_at']),
+    'operations' => $operations->map(fn ($operation) => $operation->only(['id', 'docker_host_id', 'kind', 'status', 'claimed_at', 'last_progress_at', 'completed_at']))->all(),
+    'hosts' => App\Models\DockerHost::whereIn('id', $operations->pluck('docker_host_id'))->get()->map(fn ($host) => $host->only(['id', 'last_seen_at', 'agent_active_operations', 'maintenance_requested_at', 'agent_capabilities']))->all(),
+    'queue' => ['pending' => Illuminate\Support\Facades\DB::table('jobs')->count(), 'failed' => Illuminate\Support\Facades\DB::table('failed_jobs')->count()],
+];
+PHP, ['kind' => $kind, 'id' => $id]);
+        $agents = [];
+        foreach ($central['operations'] as $operation) {
+            $agent = $this->agentContainers[$operation['docker_host_id']] ?? null;
+            if ($agent === null) {
+                continue;
+            }
+            $agents[$operation['id']] = $this->control($agent, <<<'PHP'
+$store = app(App\Services\Agents\AgentOperationStore::class);
+try {
+    $entry = $store->read($input['id']);
+    $directory = $store->directory($input['id']);
+    $result = ['phase' => $entry['phase'] ?? null, 'kind' => $entry['kind'] ?? null,
+        'outcome' => $entry['result']['status'] ?? null, 'cleanup_complete' => $entry['result']['cleanup_complete'] ?? null,
+        'helper_recorded' => isset($entry['helper_name']), 'runtime_database' => is_file($directory.'/runtime.sqlite')];
+    foreach (['export.tar.gz', 'export.json', 'relay.tar.gz'] as $file) {
+        $result['files'][$file] = is_file($directory.'/'.$file) ? filesize($directory.'/'.$file) : null;
+    }
+    if ($result['runtime_database']) {
+        $db = new PDO('sqlite:'.$directory.'/runtime.sqlite');
+        $db->exec('PRAGMA query_only = ON');
+        foreach (['backup_runs', 'restore_runs'] as $table) {
+            $columns = array_intersect(['id', 'status', 'started_at', 'finished_at', 'last_heartbeat_at', 'docker_container_id', 'docker_container_cleanup_pending'],
+                array_column($db->query('PRAGMA table_info('.$table.')')->fetchAll(PDO::FETCH_ASSOC), 'name'));
+            $result[$table] = $columns === [] ? [] : $db->query('SELECT '.implode(',', $columns).' FROM '.$table)->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+} catch (Throwable $exception) {
+    $result = ['exception_class' => get_class($exception)];
+}
+PHP, ['id' => $operation['id']]);
+        }
+
+        return ['central' => $central, 'agents' => $agents];
     }
 
     private function interruptControlPlaneUntilResultIsDurable(string $server, string $agent, string $kind, int $id): void
