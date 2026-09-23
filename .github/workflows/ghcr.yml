@@ -1,4 +1,4 @@
-name: Publish container image
+name: Publish container images
 
 on:
   push:
@@ -11,12 +11,28 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  prepare:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      image: ${{ steps.image.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set image repository
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - name: Set up PHP for changelog validation
         if: startsWith(github.ref, 'refs/tags/v')
@@ -32,7 +48,30 @@ jobs:
 
       - name: Validate tagged release changelog
         if: startsWith(github.ref, 'refs/tags/v')
-        run: php artisan changelog:validate "${{ github.ref_name }}" --release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: php artisan changelog:validate "$RELEASE_TAG" --release
+
+  build:
+    needs: prepare
+    name: Build ${{ matrix.image.target }} (${{ matrix.platform.arch }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - target: deploy
+            suffix: ''
+          - target: agent
+            suffix: '-agent'
+        platform:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -48,20 +87,112 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ needs.prepare.outputs.image }}${{ matrix.image.suffix }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
             type=ref,event=branch
             type=ref,event=tag
 
-      - name: Build and push
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          target: ${{ matrix.image.target }}
+          platforms: linux/${{ matrix.platform.arch }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image }}${{ matrix.image.suffix }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APP_VERSION=${{ github.ref_name }}
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image.target }}-${{ matrix.platform.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  publish:
+    needs: [prepare, build]
+    name: Publish ${{ matrix.image.target }} multi-platform image
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - target: deploy
+            suffix: ''
+          - target: agent
+            suffix: '-agent'
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.image.target }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.prepare.outputs.image }}${{ matrix.image.suffix }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+            type=ref,event=branch
+            type=ref,event=tag
+
+      - name: Publish and verify multi-platform manifest
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}${{ matrix.image.suffix }}
+          METADATA: ${{ steps.meta.outputs.json }}
+        run: |
+          shopt -s nullglob
+          digests=("$RUNNER_TEMP/digests/"*)
+          [[ ${#digests[@]} -eq 2 ]]
+
+          sources=()
+          for file in "${digests[@]}"; do
+            digest="${file##*/}"
+            [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+            sources+=("$IMAGE@sha256:$digest")
+          done
+
+          mapfile -t tags < <(jq -r '.tags[]' <<< "$METADATA")
+          [[ ${#tags[@]} -gt 0 ]]
+          args=()
+          for tag in "${tags[@]}"; do
+            args+=(--tag "$tag")
+          done
+
+          verify_platforms() {
+            jq -e '
+              [.manifests[].platform | select(.os != "unknown") | "\(.os)/\(.architecture)"]
+              | sort == ["linux/amd64", "linux/arm64"]'
+          }
+
+          docker buildx imagetools create --dry-run "${sources[@]}" | verify_platforms
+          docker buildx imagetools create "${args[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "${tags[0]}" --raw | verify_platforms

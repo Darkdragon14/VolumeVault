@@ -3,6 +3,7 @@
 namespace App\Actions\Restore;
 
 use App\Actions\Docker\InspectDockerVolume;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use Carbon\CarbonInterface;
 use RuntimeException;
@@ -11,7 +12,7 @@ class GenerateRestoreVolumeName
 {
     public function __construct(private readonly InspectDockerVolume $inspectDockerVolume) {}
 
-    public function handle(string $sourceVolumeName, ?CarbonInterface $now = null): string
+    public function handle(string $sourceVolumeName, ?CarbonInterface $now = null, int $dockerHostId = DockerHost::LOCAL_ID): string
     {
         $timestamp = ($now ?: now())->format('Ymd_His');
         $source = preg_replace('/[^A-Za-z0-9_.-]+/', '_', $sourceVolumeName) ?: 'volume';
@@ -21,7 +22,7 @@ class GenerateRestoreVolumeName
         $candidate = $base;
         $suffix = 2;
 
-        while ($this->volumeExists($candidate)) {
+        while ($this->volumeExists($candidate, $dockerHostId)) {
             $candidate = mb_substr($base, 0, 115).'_'.$suffix;
             $suffix++;
         }
@@ -29,10 +30,14 @@ class GenerateRestoreVolumeName
         return $candidate;
     }
 
-    private function volumeExists(string $volumeName): bool
+    private function volumeExists(string $volumeName, int $dockerHostId): bool
     {
-        if (DockerVolume::where('name', $volumeName)->exists()) {
+        if (DockerVolume::where('docker_host_id', $dockerHostId)->where('name', $volumeName)->exists()) {
             return true;
+        }
+
+        if ($dockerHostId !== DockerHost::LOCAL_ID) {
+            return false;
         }
 
         try {

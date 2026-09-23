@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class DockerLabelBackupSetting extends Model
 {
     protected $fillable = [
+        'docker_host_id',
         'enabled',
         'backup_destination_id',
         'defaults',
@@ -22,6 +23,7 @@ class DockerLabelBackupSetting extends Model
     protected function casts(): array
     {
         return [
+            'docker_host_id' => 'integer',
             'enabled' => 'boolean',
             'defaults' => 'array',
             'last_synced_at' => 'datetime',
@@ -33,9 +35,14 @@ class DockerLabelBackupSetting extends Model
         return $this->belongsTo(BackupDestination::class, 'backup_destination_id');
     }
 
-    public static function current(): self
+    public function dockerHost(): BelongsTo
     {
-        return self::query()->firstOrCreate(['id' => 1], [
+        return $this->belongsTo(DockerHost::class);
+    }
+
+    public static function current(int $dockerHostId = DockerHost::LOCAL_ID): self
+    {
+        return self::query()->firstOrCreate(['docker_host_id' => $dockerHostId], [
             'defaults' => self::defaultValues(),
         ]);
     }

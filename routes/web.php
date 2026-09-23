@@ -13,6 +13,7 @@ use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardPreferenceController;
 use App\Http\Controllers\DestinationController;
+use App\Http\Controllers\DockerHostController;
 use App\Http\Controllers\DockerLabelBackupSettingController;
 use App\Http\Controllers\InstallationSaveController;
 use App\Http\Controllers\NotificationChannelController;
@@ -75,6 +76,12 @@ Route::middleware('auth')->group(function () {
     Route::resource('backup-jobs', BackupJobController::class)->only(['index']);
     Route::resource('backup-groups', BackupJobGroupController::class)->only(['index']);
     Route::middleware('admin')->group(function () {
+        Route::get('/docker-hosts', [DockerHostController::class, 'index'])->name('docker-hosts.index');
+        Route::post('/docker-hosts', [DockerHostController::class, 'store'])->middleware('throttle:20,1')->name('docker-hosts.store');
+        Route::post('/docker-hosts/{dockerHost}/enrollment', [DockerHostController::class, 'enrollment'])->middleware('throttle:20,1')->name('docker-hosts.enrollment');
+        Route::delete('/docker-hosts/{dockerHost}/agent', [DockerHostController::class, 'revoke'])->name('docker-hosts.revoke');
+        Route::post('/docker-hosts/{dockerHost}/maintenance', [DockerHostController::class, 'maintenance'])->name('docker-hosts.maintenance');
+        Route::get('/docker-hosts/{dockerHost}/update-guide', [DockerHostController::class, 'updateGuide'])->name('docker-hosts.update-guide');
         Route::get('/alerts/settings', [AlertRuleController::class, 'edit'])->name('alerts.settings.edit');
         Route::put('/alerts/settings', [AlertRuleController::class, 'update'])->name('alerts.settings.update');
         Route::get('/settings/docker-label-backups', [DockerLabelBackupSettingController::class, 'edit'])->name('settings.docker-label-backups.edit');
@@ -95,8 +102,11 @@ Route::middleware('auth')->group(function () {
 
         Route::resource('destinations', DestinationController::class)->except(['show']);
         Route::post('/destinations/host-key', [DestinationController::class, 'hostKey'])->name('destinations.host-key');
+        Route::get('/destinations/host-key/operations/{operation}', [DestinationController::class, 'hostKeyOperation'])->name('destinations.host-key.operations.show');
         Route::patch('/destinations/{destination}/active', [DestinationController::class, 'updateActive'])->name('destinations.active');
         Route::post('/destinations/{destination}/test', [DestinationController::class, 'test'])->name('destinations.test');
+        Route::post('/destinations/{destination}/operations', [\App\Http\Controllers\DestinationOperationController::class, 'store'])->name('destinations.operations.store');
+        Route::get('/destinations/{destination}/operations/{operation}', [\App\Http\Controllers\DestinationOperationController::class, 'show'])->name('destinations.operations.show');
 
         Route::get('/installation-save', [InstallationSaveController::class, 'index'])->name('installation-save.index');
         Route::get('/installation-save/download', [InstallationSaveController::class, 'download'])->name('installation-save.download');

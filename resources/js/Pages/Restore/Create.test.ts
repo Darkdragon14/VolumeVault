@@ -6,10 +6,14 @@ import RestoreCreate from './Create.vue';
 
 const inertia = vi.hoisted(() => ({
     post: vi.fn(),
+    get: vi.fn(),
+    deployment: undefined as any,
 }));
 
 vi.mock('@inertiajs/vue3', () => ({
     Head: { template: '<div />' },
+    router: { get: inertia.get },
+    usePage: () => ({ props: { deployment: inertia.deployment, can: { runDockerActions: true } } }),
     Link: { template: '<a><slot /></a>' },
     useForm: (data: Record<string, unknown>) => reactive({
         ...data,
@@ -32,11 +36,14 @@ vi.mock('@/Composables/useFormatBytes', () => ({
 }));
 
 describe('Restore form', () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        inertia.deployment = undefined;
+    });
 
     const warning = 'This historical Dropbox backup has no stable file ID. Its identity cannot be verified, so restoring this run is unavailable.';
     const safetyWarning = 'Safety backup before overwrite is unavailable because the job’s current destination is Dropbox. A newly uploaded Dropbox backup cannot be verified for restore. Choose a different job destination or explicitly turn off the safety backup.';
-    const mountForm = (backupRunUnverifiable = false, currentProvider = 'dropbox', historicalProvider = 'dropbox') => mount(RestoreCreate, {
+    const mountForm = (backupRunUnverifiable = false, currentProvider = 'dropbox', historicalProvider = 'dropbox', overrides = {}) => mount(RestoreCreate, {
         props: {
             job: { id: 7, name: 'Documents', destination: { name: 'Current', provider: currentProvider } },
             restoreDestination: { id: 3, name: 'Historical', provider: historicalProvider },
@@ -48,6 +55,7 @@ describe('Restore form', () => {
             sourceLabel: 'documents',
             sourceVolumeName: 'documents',
             generatedTargetVolumeName: 'documents-restored',
+            ...overrides,
         },
         global: { stubs: { AppLayout: { template: '<main><slot /></main>' } } },
     });
@@ -58,6 +66,15 @@ describe('Restore form', () => {
         expect(wrapper.text()).toContain(warning);
         expect(wrapper.find('input[type="radio"]').exists()).toBe(false);
         expect(wrapper.findAll('button').find((button) => button.text() === 'Continue')?.attributes('disabled')).toBeDefined();
+        expect(inertia.post).not.toHaveBeenCalled();
+    });
+
+    it.each([false, 0, '0', 'false'])('hides the restore workflow when local execution is %s', (flag) => {
+        inertia.deployment = { mode: 'orchestrator', local_execution_enabled: flag };
+        const wrapper = mountForm();
+        expect(wrapper.text()).toContain('dockerHosts.localDisabled');
+        expect(wrapper.find('input').exists()).toBe(false);
+        expect(wrapper.find('button').exists()).toBe(false);
         expect(inertia.post).not.toHaveBeenCalled();
     });
 
@@ -109,20 +126,63 @@ describe('Restore form', () => {
         expect((wrapper.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
     });
 
-    it('returns to selection and displays selected-key validation errors', async () => {
+    it.each(['selected_backup_key', 'backup_run_id'])('returns to selection and displays %s validation errors', async (field) => {
         const wrapper = mountForm();
         const continueButton = () => wrapper.findAll('button').find((button) => button.text() === 'Continue');
         await continueButton()?.trigger('click');
         await continueButton()?.trigger('click');
         inertia.post.mockImplementationOnce((_url, options) => {
-            (wrapper.vm as unknown as { form: { errors: Record<string, string> } }).form.errors.selected_backup_key = warning;
-            options.onError({ selected_backup_key: warning });
+            (wrapper.vm as unknown as { form: { errors: Record<string, string> } }).form.errors[field] = warning;
+            options.onError({ [field]: warning });
         });
         await wrapper.findAll('button').find((button) => button.text() === 'Queue restore')?.trigger('click');
 
         expect(wrapper.text()).toContain('Select backup');
         expect(wrapper.find('[role="alert"]').text()).toBe(warning);
         expect(wrapper.text()).not.toContain('Confirm restore');
+    });
+
+    it('resolves each selected remote run before showing its historical source or submitting its ID', async () => {
+        const backups = [
+            { key: 'old.tar.gz', backup_run_id: 81, belongs_to_job: true },
+            { key: 'path.tar.gz', backup_run_id: 82, belongs_to_job: true },
+        ];
+        const wrapper = mountForm(false, 'local', 'docker_volume', { backupRunId: null, preselectedBackupKey: null, backups });
+        const form = (wrapper.vm as any).form;
+        await wrapper.get('input[value="old.tar.gz"]').setValue();
+        expect(form.backup_run_id).toBe(81);
+        await wrapper.findAll('button').find((button) => button.text() === 'Continue')!.trigger('click');
+        expect(inertia.get).toHaveBeenLastCalledWith('/backup-jobs/7/restore', { backup_run_id: 81 }, expect.objectContaining({ preserveState: 'errors' }));
+        expect(wrapper.find('input[value="inplace"]').exists()).toBe(false);
+        const options = inertia.get.mock.calls[0][2];
+        options.onError({ backup_run_id: 'Historical run unavailable' });
+        options.onFinish();
+        await wrapper.get('input[value="path.tar.gz"]').setValue();
+        expect(wrapper.text()).toContain('Historical run unavailable');
+        expect(form.backup_run_id).toBe(82);
+        await wrapper.findAll('button').find((button) => button.text() === 'Continue')!.trigger('click');
+        expect(inertia.get).toHaveBeenLastCalledWith('/backup-jobs/7/restore', { backup_run_id: 82 }, expect.any(Object));
+        expect(inertia.post).not.toHaveBeenCalled();
+        wrapper.unmount();
+
+        // A non-preserving Inertia visit mounts the server's historical context.
+        const resolved = mountForm(false, 'local', 'docker_volume', {
+            backupRunId: 82, preselectedBackupKey: 'path.tar.gz', backups: [backups[1]],
+            isDockerVolumeSource: false, sourceVolumeName: null, sourceLabel: '/historical/path',
+            sourceDockerHostId: 2, generatedTargetVolumeName: 'historical-path-restored',
+        });
+        const next = () => resolved.findAll('button').find((button) => button.text() === 'Continue')!;
+        await next().trigger('click');
+        expect(resolved.find('input[value="inplace"]').exists()).toBe(false);
+        await next().trigger('click');
+        expect(resolved.text()).toContain('/historical/path');
+        inertia.post.mockImplementationOnce(function (this: any) {
+            expect(this.backup_run_id).toBe(82);
+            expect(this.selected_backup_key).toBe('path.tar.gz');
+            expect(this.mode).toBe('new_volume');
+        });
+        await resolved.findAll('button').find((button) => button.text() === 'Queue restore')!.trigger('click');
+        expect(inertia.post).toHaveBeenCalledOnce();
     });
 
     it('submits the historical backup run context', async () => {

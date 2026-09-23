@@ -8,6 +8,7 @@ use App\Actions\Restore\Modes\InPlaceRestore;
 use App\Actions\Restore\Modes\SafeInPlaceRestore;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Logging\AppendRunLog;
 use RuntimeException;
 
@@ -38,6 +39,8 @@ class RunPreRestoreBackup
 
     public function handle(RestoreRun $run): void
     {
+        LocalDockerExecution::validate();
+
         $run->loadMissing('job');
         $job = $run->job;
 
@@ -61,7 +64,7 @@ class RunPreRestoreBackup
         // even if it fails.
         $run->forceFill(['pre_restore_backup_run_id' => $backup->id])->save();
 
-        $this->runBackup->handle($backup);
+        $this->runBackup->handle($backup, acceptedOperation: true);
 
         $backup->refresh();
 

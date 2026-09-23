@@ -8,6 +8,7 @@ use App\Models\BackupRun;
 use App\Models\NotificationChannel;
 use App\Models\RunFinalization;
 use App\Services\Notifications\SendShoutrrrNotification;
+use App\Support\DeploymentMode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,10 @@ class ProcessRunFinalization
 
     public function handle(int $finalizationId, ?string $enqueueToken = null, ?string $claimToken = null): void
     {
+        if ($this->requiresDisabledLocalStorage($finalizationId)) {
+            return;
+        }
+
         $claimToken ??= (string) Str::uuid();
         $finalization = $this->claim($finalizationId, $claimToken);
 
@@ -36,9 +41,24 @@ class ProcessRunFinalization
         }
 
         try {
+            if ($finalization->type === RunFinalization::TYPE_ARCHIVE_METADATA && $finalization->remote_metadata_payload !== null) {
+                $metadata = app(\App\Services\BackupDestinations\RemoteArchiveMetadata::class)->detect($finalization);
+                if ($metadata === null) {
+                    RunFinalization::whereKey($finalization->id)->where('claim_token', $claimToken)->update([
+                        'status' => RunFinalization::STATUS_PENDING, 'attempts' => $finalization->attempts - 1,
+                        'available_at' => now()->addMinute(), 'claim_token' => null, 'claimed_at' => null,
+                    ]);
+
+                    return;
+                }
+                $this->complete($finalization->id, $claimToken, $metadata);
+
+                return;
+            }
             $metadata = match ($finalization->type) {
                 RunFinalization::TYPE_ARCHIVE_METADATA => $this->runBackup->detectArchiveMetadata($finalization->backup_run_id),
                 RunFinalization::TYPE_FINISHED_NOTIFICATION => $this->sendFinishedNotification($finalization),
+                RunFinalization::TYPE_STARTED_NOTIFICATION => $this->sendStartedNotification($finalization),
                 default => throw new RuntimeException('Unknown run finalization type.'),
             };
             $this->complete($finalization->id, $claimToken, $metadata);
@@ -54,6 +74,10 @@ class ProcessRunFinalization
         $dispatched = 0;
 
         foreach (array_unique($finalizationIds) as $finalizationId) {
+            if ($this->requiresDisabledLocalStorage((int) $finalizationId)) {
+                continue;
+            }
+
             $enqueueToken = $this->admit((int) $finalizationId);
 
             if ($enqueueToken === null) {
@@ -79,15 +103,35 @@ class ProcessRunFinalization
     public function dispatchDue(int $limit = 100): int
     {
         $ids = $this->dueQuery()
+            ->when(DeploymentMode::isOrchestrator(), fn (Builder $query) => $query
+                ->with(['backupRun.snapshotDestination', 'backupRun.job.destination']))
             ->where(fn (Builder $query) => $query
                 ->whereNull('enqueue_token')
                 ->orWhere('enqueued_at', '<=', now()->subMinutes(self::STALE_AFTER_MINUTES)))
             ->orderBy('id')
-            ->limit($limit)
+            ->lazyById()
+            ->reject(fn (RunFinalization $finalization): bool => $this->requiresDisabledLocalStorage($finalization))
+            ->reject(fn (RunFinalization $finalization): bool => $this->hasOutstandingNotificationDependencies($finalization))
+            ->take($limit)
             ->pluck('id')
             ->all();
 
         return $this->dispatch($ids);
+    }
+
+    private function requiresDisabledLocalStorage(int|RunFinalization $finalization): bool
+    {
+        if (! DeploymentMode::isOrchestrator()) {
+            return false;
+        }
+
+        if (is_int($finalization)) {
+            $finalization = RunFinalization::find($finalization);
+        }
+
+        return $finalization?->type === RunFinalization::TYPE_ARCHIVE_METADATA
+            && $finalization->remote_metadata_payload === null
+            && $finalization->backupRun?->destinationForRun()?->isHostBound() === true;
     }
 
     public function failExecution(int $finalizationId, string $enqueueToken, string $claimToken, Throwable $exception): void
@@ -166,6 +210,7 @@ class ProcessRunFinalization
             })
             ->where(function (Builder $query): void {
                 $query->where('type', RunFinalization::TYPE_ARCHIVE_METADATA)
+                    ->orWhere('type', RunFinalization::TYPE_STARTED_NOTIFICATION)
                     ->orWhereNull('backup_run_id')
                     ->orWhereHas('backupRun', fn (Builder $query) => $query->where('status', BackupRun::STATUS_FAILED))
                     ->orWhereDoesntHave('backupRun.finalizations', fn (Builder $query) => $query
@@ -179,7 +224,7 @@ class ProcessRunFinalization
         return DB::transaction(function () use ($finalizationId): ?string {
             $finalization = $this->dueQuery()->lockForUpdate()->find($finalizationId);
 
-            if ($finalization === null || ($finalization->enqueue_token !== null && $finalization->enqueued_at?->isAfter(now()->subMinutes(self::STALE_AFTER_MINUTES)))) {
+            if ($finalization === null || $this->hasOutstandingNotificationDependencies($finalization) || ($finalization->enqueue_token !== null && $finalization->enqueued_at?->isAfter(now()->subMinutes(self::STALE_AFTER_MINUTES)))) {
                 return null;
             }
 
@@ -195,7 +240,7 @@ class ProcessRunFinalization
         return DB::transaction(function () use ($finalizationId, $claimToken): ?RunFinalization {
             $finalization = $this->dueQuery()->lockForUpdate()->find($finalizationId);
 
-            if ($finalization === null) {
+            if ($finalization === null || $this->hasOutstandingNotificationDependencies($finalization)) {
                 return null;
             }
 
@@ -220,10 +265,78 @@ class ProcessRunFinalization
         });
     }
 
+    private function hasOutstandingNotificationDependencies(RunFinalization $finalization): bool
+    {
+        if ($finalization->type !== RunFinalization::TYPE_FINISHED_NOTIFICATION) {
+            return false;
+        }
+        foreach (['backup_run_id', 'backup_group_run_id', 'restore_run_id'] as $owner) {
+            if ($finalization->{$owner} !== null && RunFinalization::where($owner, $finalization->{$owner})
+                ->where('type', RunFinalization::TYPE_STARTED_NOTIFICATION)->outstanding()->exists()) {
+                return true;
+            }
+        }
+        if ($finalization->backup_group_run_id === null) {
+            return false;
+        }
+        $groupRun = $finalization->backupGroupRun;
+        $memberIds = $finalization->context['member_run_ids'] ?? $groupRun?->member_run_ids
+            ?? $groupRun?->memberRuns()->pluck('id')->all() ?? [];
+
+        return RunFinalization::whereIn('backup_run_id', $memberIds)
+            ->whereHas('backupRun', fn (Builder $query) => $query->where('backup_group_run_id', $finalization->backup_group_run_id))
+            ->where('type', RunFinalization::TYPE_ARCHIVE_METADATA)->outstanding()->exists();
+    }
+
+    private function notificationRecipient(RunFinalization $finalization): ?NotificationChannel
+    {
+        $channel = $finalization->notificationChannel;
+        if ($channel !== null && $finalization->notification_snapshot !== null) {
+            $channel = clone $channel;
+            $channel->forceFill(\Illuminate\Support\Arr::only($finalization->notification_snapshot, RunFinalization::NOTIFICATION_SNAPSHOT_FIELDS));
+        }
+
+        return $channel;
+    }
+
+    /** @return array<string, mixed> */
+    private function sendStartedNotification(RunFinalization $finalization): array
+    {
+        if ($finalization->restore_run_id !== null) {
+            $run = $finalization->restoreRun;
+            $channel = $this->notificationRecipient($finalization);
+            if ($run === null || $channel === null) {
+                throw new RuntimeException('Finalization owner or recipient no longer exists.');
+            }
+            $this->sendShoutrrrNotification->sendRestoreRunStartedToChannel($run, $channel);
+
+            return [];
+        }
+        if ($finalization->backup_run_id !== null) {
+            $run = $finalization->backupRun;
+            $channel = $this->notificationRecipient($finalization);
+            if ($run === null || $channel === null) {
+                throw new RuntimeException('Finalization owner or recipient no longer exists.');
+            }
+            $this->sendShoutrrrNotification->sendBackupRunStartedToChannel($run, $channel);
+
+            return [];
+        }
+        $run = $finalization->backupGroupRun;
+        $channel = $this->notificationRecipient($finalization);
+        if ($run !== null && $channel !== null) {
+            $run = clone $run;
+            $run->status = 'running';
+            $this->sendShoutrrrNotification->sendGroupRunStartedToChannel($run, $channel);
+        }
+
+        return [];
+    }
+
     /** @return array<string, mixed> */
     private function sendFinishedNotification(RunFinalization $finalization): array
     {
-        $channel = NotificationChannel::query()->find($finalization->notification_channel_id);
+        $channel = $this->notificationRecipient($finalization);
 
         if ($channel === null) {
             throw new RuntimeException('Finalization recipient no longer exists.');
@@ -274,6 +387,7 @@ class ProcessRunFinalization
 
             $finalization->forceFill([
                 'status' => RunFinalization::STATUS_COMPLETED,
+                ...($finalization->remote_metadata_payload !== null ? ['remote_metadata_payload' => null] : []),
                 'finished_at' => now(),
                 'claimed_at' => null,
                 'claim_token' => null,
@@ -307,6 +421,9 @@ class ProcessRunFinalization
             ])->save();
 
             if ($exhausted && $finalization->type === RunFinalization::TYPE_ARCHIVE_METADATA) {
+                if ($finalization->remote_metadata_payload !== null) {
+                    $finalization->update(['remote_metadata_payload' => null]);
+                }
                 BackupRun::query()->whereKey($finalization->backup_run_id)->update(['archive_metadata_pending' => false]);
             }
 
@@ -328,6 +445,9 @@ class ProcessRunFinalization
         ])->save();
 
         if ($finalization->type === RunFinalization::TYPE_ARCHIVE_METADATA) {
+            if ($finalization->remote_metadata_payload !== null) {
+                $finalization->update(['remote_metadata_payload' => null]);
+            }
             BackupRun::query()->whereKey($finalization->backup_run_id)->update(['archive_metadata_pending' => false]);
         }
     }

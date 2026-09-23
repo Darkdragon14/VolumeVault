@@ -14,6 +14,8 @@ use App\Http\Controllers\Api\V1\RestoreController;
 use App\Http\Controllers\Api\V1\RestoreRunController;
 use App\Http\Controllers\Api\V1\StackController;
 use App\Http\Controllers\Api\V1\VolumeController;
+use App\Http\Controllers\DestinationOperationController;
+use App\Http\Controllers\DockerLabelBackupSettingController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -21,8 +23,10 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware(['auth:sanctum', 'abilities:read'])->group(function () {
         Route::get('/me', MeController::class);
+        Route::get('/settings/docker-label-backups', [DockerLabelBackupSettingController::class, 'show'])->middleware('admin');
         Route::get('/dashboard', DashboardController::class);
         Route::get('/volumes', [VolumeController::class, 'index']);
+        Route::get('/stacks', [StackController::class, 'index']);
         Route::get('/backup-jobs', [BackupJobController::class, 'index']);
         Route::get('/backup-jobs/{backupJob}', [BackupJobController::class, 'show']);
         Route::get('/backup-jobs/{backupJob}/backups', [BackupJobController::class, 'backups'])->middleware('admin');
@@ -36,12 +40,15 @@ Route::prefix('v1')->group(function () {
         Route::get('/restore-runs/{restoreRun}', [RestoreRunController::class, 'show']);
         Route::get('/host-path-allowlist', HostPathAllowlistController::class)->middleware('admin');
         Route::get('/destinations', [DestinationController::class, 'index'])->middleware('admin');
+        Route::get('/destinations/host-key/operations/{operation}', [DestinationController::class, 'hostKeyOperation'])->middleware('admin');
         Route::get('/destinations/{destination}', [DestinationController::class, 'show'])->middleware('admin');
+        Route::get('/destinations/{destination}/operations/{operation}', [DestinationOperationController::class, 'show'])->middleware('admin');
         Route::get('/notifications', [NotificationChannelController::class, 'index'])->middleware('admin');
         Route::get('/notifications/{notification}', [NotificationChannelController::class, 'show'])->middleware('admin');
     });
 
     Route::middleware(['auth:sanctum', 'abilities:write', 'admin'])->group(function () {
+        Route::put('/settings/docker-label-backups', [DockerLabelBackupSettingController::class, 'update']);
         Route::post('/volumes/sync', [VolumeController::class, 'sync']);
         Route::post('/stacks/backup', [StackController::class, 'backup']);
         Route::post('/backup-jobs', [BackupJobController::class, 'store']);
@@ -63,6 +70,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/destinations/{destination}', [DestinationController::class, 'update']);
         Route::delete('/destinations/{destination}', [DestinationController::class, 'destroy']);
         Route::post('/destinations/{destination}/test', [DestinationController::class, 'test']);
+        Route::post('/destinations/{destination}/operations', [DestinationOperationController::class, 'store']);
         Route::put('/notifications/{notification}', [NotificationChannelController::class, 'update']);
         Route::post('/notifications/{notification}/test', [NotificationChannelController::class, 'test']);
     });

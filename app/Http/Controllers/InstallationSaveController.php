@@ -4,8 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\BackupDestination;
+use App\Models\DockerHost;
 use App\Services\BackupDestinations\DestinationStorage;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\InstallationSaves\CreateSecureInstallationSave;
+use App\Support\DeploymentMode;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
@@ -18,7 +22,8 @@ class InstallationSaveController extends Controller
     public function index(): Response
     {
         return Inertia::render('InstallationSaves/Index', [
-            'destinations' => BackupDestination::where('is_active', true)->orderBy('name')->get()->map->safeForFrontend(),
+            'destinations' => $this->availableDestinations()
+                ->orderBy('name')->get()->map->safeForFrontend(),
         ]);
     }
 
@@ -46,7 +51,11 @@ class InstallationSaveController extends Controller
             'backup_destination_id' => ['required', 'integer', Rule::exists('backup_destinations', 'id')],
         ]);
 
-        $destination = BackupDestination::where('is_active', true)->findOrFail($data['backup_destination_id']);
+        $destination = $this->availableDestinations()->findOrFail($data['backup_destination_id']);
+
+        if ($destination->isHostBound()) {
+            LocalDockerExecution::validate();
+        }
 
         try {
             $save = $createSecureInstallationSave->handle();
@@ -66,5 +75,17 @@ class InstallationSaveController extends Controller
                 File::delete($save->path);
             }
         }
+    }
+
+    private function availableDestinations(): Builder
+    {
+        return BackupDestination::where('is_active', true)
+            ->where(function (Builder $query): void {
+                $query->whereNotIn('provider', [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME]);
+
+                if (DeploymentMode::localExecutionEnabled()) {
+                    $query->orWhere('docker_host_id', DockerHost::LOCAL_ID);
+                }
+            });
     }
 }

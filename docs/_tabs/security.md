@@ -10,13 +10,57 @@ Mounting `/var/run/docker.sock` gives this application high privileges on the Do
 
 VolumeVault can start privileged Docker operations through the Docker socket. Treat access to the web UI and write-capable API tokens like access to the Docker host.
 
-The same warning applies when `DOCKER_HOST` points to a TCP endpoint: Docker API access is effectively root access to the Docker host. Never expose an unencrypted endpoint to the internet or an untrusted network. Keep it behind a private network, VPN, firewall, or tightly controlled socket proxy. Filtering Docker API routes reduces exposure but does not remove the risk, because VolumeVault must create containers and mount host filesystems. VolumeVault does not currently manage Docker TLS client certificates or remote Docker hosts.
+The same warning applies when `DOCKER_HOST` points to a TCP endpoint: Docker API access is effectively root access to the Docker host. Never expose an unencrypted endpoint to the internet or an untrusted network. Keep it behind a private network, VPN, firewall, or tightly controlled socket proxy. Filtering Docker API routes reduces exposure but does not remove the risk, because VolumeVault must create containers and mount host filesystems. VolumeVault does not currently manage Docker TLS client certificates or direct remote-daemon connections. Remote Docker hosts use dedicated agents instead.
 
 VolumeVault canonicalizes paths visible in its own filesystem regardless of whether Docker uses a Unix socket or TCP endpoint. Paths unavailable to VolumeVault can only receive lexical allowlist validation before Docker tests the bind mount. Keep `VOLUMEVAULT_HOST_PATH_ALLOWLIST` narrow, protect allowlisted directories from untrusted symlink replacement, and treat changes to it as privileged configuration.
 
 On first launch, VolumeVault requires onboarding and creates the first account as an administrator. Admins can manage users, encrypted destinations, notification channels, restores, and active Docker operations such as volume sync and manual backup runs. Regular users have read-only access to operational screens.
 
 ## HTTPS And Session Cookie
+
+### Agent Transport
+
+Orchestrator-only mode (`VOLUMEVAULT_MODE=orchestrator`) requires no Docker socket or remote daemon. Local execution entrypoints are blocked even if `DOCKER_HOST` is accidentally configured. Remote-only backup groups are supported; mixed groups require local execution for local members. Notifications use the bundled Shoutrrr binary. The dedicated agent retains Docker-host privileges locally and does not receive the central database or `APP_KEY`.
+
+Remote/mixed groups use durable central coordination over the existing `backup-v1` operations. Each member keeps its own host-scoped source, destination and execution privileges. Membership, source identity and failure policy are snapshotted for the run. Assigned work may drain during host maintenance; an unassigned next member waits for its host to resume. Container stop, backup and restart happen separately for each member, in sequence. Groups do not stop every application's containers together and do not guarantee a consistent cross-host snapshot.
+
+### New restore volume ownership
+
+New-volume restores persist a cryptographically random ownership nonce and label the volume they create with it. Before extraction, VolumeVault creates the extraction helper with a `--mount` volume mount and `volume-nocopy`, pinning the volume without copying image contents into it. It then verifies the ownership nonce while the helper holds that reference and starts the exact created helper ID. A matching name alone is insufficient: a volume created externally with the same name is rejected if its ownership label does not match. Pinning before verification closes the volume-replacement race between checking ownership and starting extraction.
+
+**Failed new-volume targets are never automatically deleted**, even when an ownership check would match. Docker provides no atomic compare-and-delete operation; after releasing the helper’s reference, an inspected volume name could refer to an externally created replacement before deletion. The target is retained for inspection. Check the run logs, inspect the volume on the target host and remove it manually only if appropriate, or retry with a different unused target name. This applies to all new-volume restores, not only archive-relay transfers. Cleanup of temporary relay data does not mean the failed target volume was deleted.
+
+### Cross-host archive relay
+
+Host-local archive transfers pass through the central server in 1 MiB chunks over verified TLS; no direct agent-to-agent link is required. Central chunks are encrypted with `APP_KEY`. Preserve and back up that key: losing it makes encrypted data, including relay chunks and destination credentials, unrecoverable.
+
+Agent staging is **sensitive temporary plaintext in private storage**, not encrypted central spool data. It can remain during recovery until acknowledgement (ACK) permits cleanup. Protect agent disks, state volumes and backups accordingly. The original destination archive is preserved on success and failure. Transfer expiry prevents new uploads/assignments but does not bypass assigned-operation recovery or cleanup acknowledgement. Cross-host host-local restores create a new volume only; they do not enable in-place overwrite on the target.
+
+Destination testing, browsing and storage measurements use `destination-v1` operations with the selected host's local path and egress policies. Host-local destinations are listed through their source owner, even when a relay restore targets another host. Credentials remain in encrypted operation specifications, never in frontend responses. List results are bounded to 2 MiB and 1000 objects per page. Restore receipts bind an exact returned key to the destination locator and listing host for 30 minutes: the **source owner** for host-local archives, or the **execution target** for shared network destinations. Target changes do not renew receipt freshness; a host-local owner receipt remains eligible only while its identity and freshness are valid. Opaque pagination cursors bind the destination, locator, host and page limit for one hour. Browser cancellation stops polling, not work already accepted by the host.
+
+Docker-label defaults are administrator-managed and scoped to a Docker host. Remote reconciliation requires `docker-labels-v1` and a complete inventory; older or incomplete inventories preserve existing jobs and surface errors. Destinations must be active and shared or owned by the selected host. Labels cannot configure credentials, secrets or host paths.
+
+Maintenance and run admission serialize on the same Docker host rows. New runs cannot be claimed after maintenance wins that lock; operations accepted beforehand continue to completion and remain counted until cleanup finishes. Remote readiness additionally requires a fresh acknowledgment of the current maintenance nonce and zero reported operations. Version diagnostics are recorded only after agent authentication. Manual update guides contain no enrollment token or agent credential and do not replace containers automatically.
+
+The optional agent endpoint uses HTTPS with a persisted private certificate authority, verified hostnames, and TLS 1.2 or newer on the agent client. Agents do not accept incoming connections and do not expose the Docker API. Obtain the generated installation command through a trusted administrator session: its bundled public CA establishes the initial trust relationship.
+
+Enrollment tokens expire after 15 minutes and can establish only one agent identity. Retrying the same enrollment with the same locally persisted credential is idempotent. The orchestrator stores SHA-256 hashes of high-entropy enrollment and agent credentials; agent credentials cannot authenticate as users or access the public API. Re-enrollment invalidates the previous credential, and revocation blocks both ordinary requests and enrollment retries.
+
+Agent private state uses a dedicated persistent directory with mode `0700` and files with mode `0600`. Protect the Docker host and storage volume as you would the Docker socket. The orchestrator's CA private key is retained in its protected persistent storage; the generated command contains only the public CA certificate. The agent does not receive `APP_KEY` or central database access.
+
+Execution specifications are encrypted at rest centrally and delivered in an authenticated encrypted envelope over TLS. The envelope key is derived with HKDF from the authenticated agent credential and host UUID; the API response does not expose destination credentials as plaintext fields. The agent journals the decrypted specification using its own local key before execution, then revalidates paths and destination egress against local policy. No arbitrary shell command, image override or central policy override is accepted in a specification.
+
+For S3-compatible destinations, an explicitly duplicated `settings.endpoint` must match the primary `endpoint`, including null/empty values. Contradictory representations are rejected rather than allowing the upload and download clients to resolve different endpoints. The agent checks the primary endpoint consumed by the uploader against its local egress policy.
+
+Every backup helper creation, including `docker run --rm`, is recorded as cleanup pending before launch. A failed attached Docker client does not prove that its helper stopped. Applications remain stopped until idempotent helper removal and secret-file cleanup are confirmed; recovery completes that sequence after an interruption.
+
+One durable assignment per host prevents overlapping backup/restore commands. Assignments are not reassigned merely because a heartbeat expires. Result callbacks require both agent authentication and the specific operation token, and duplicate completion cannot rewrite history or duplicate notification finalizations. Results are accepted only after cleanup; safety-backup metadata is preserved centrally before local receipts are compacted.
+
+Inventory updates are scoped to the authenticated host, limited in size, and ordered by a persisted sequence number for that agent identity. Revocation is rechecked inside the inventory transaction. Loss of connectivity or a failed Docker listing preserves the last known inventory rather than reporting every volume as missing.
+
+Enrollment is limited to ten requests per minute per source IP using its own counter. Authenticated heartbeats and inventories share a separate quota of 180 requests per minute per host UUID. Agent authentication runs before that quota is charged, so another host cannot consume it with invalid credentials.
+
+### Browser Sessions
 
 When VolumeVault is served over HTTPS (directly or behind a TLS-terminating reverse proxy), set `SESSION_SECURE_COOKIE=true`. This marks the session cookie with the `Secure` flag so the browser only ever sends it over HTTPS, which protects it from being leaked over an accidental plain-HTTP request.
 
@@ -77,6 +121,12 @@ The save intentionally does not include `APP_KEY`. Keep `APP_KEY` outside the fi
 Secure saves exclude runtime-only data such as sessions, cache, queued jobs, temporary restore downloads, and logs. They can be downloaded locally or uploaded to an active backup destination under `installation-saves/` when the provider supports paths.
 
 To migrate an installation, start a fresh VolumeVault instance, choose `Import existing installation` during onboarding, upload the `.vvsave`, and provide the previous installation `APP_KEY`. Imported destination, notification, and user two-factor secrets are re-encrypted with the new instance key after restore.
+
+Installation-save creation and upload run **centrally**, not on the executor selected for destination measurements or browsing. Network destinations must be reachable under the central server's egress policy. The destination picker is filtered by the backend: active network destinations are eligible, and central-owned filesystem/Docker-volume destinations are available only in hybrid mode. Agent-owned local storage is not an installation-save upload target.
+
+Import also re-encrypts persisted agent-operation payloads, context, delivery tokens and results; relay destination snapshots and encrypted relay chunks; and metadata/notification outbox snapshots with the new `APP_KEY`. Agent assignments and pending finalizations are preserved rather than cleared to make import appear idle. Relay storage must be under the saved private storage path and match the new installation's configured path. Missing/incomplete chunks or digest failures reject the import before replacing live storage. Keep the previous key available until import succeeds and keep the new key securely backed up afterwards.
+
+A `.vvsave` restores **central state**, not remote agent runtimes, local agent encryption keys or anti-replay journals. It cannot rewind an agent or external storage to the snapshot time. Preserve each agent's identity volume and reconcile outstanding assignments and remote state after recovery; do not delete journals to force old work to execute again. External notification delivery is retryable, not exactly once across disaster recovery.
 
 ## Safety Notes
 

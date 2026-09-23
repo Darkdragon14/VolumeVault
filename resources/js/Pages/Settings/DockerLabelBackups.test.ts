@@ -1,25 +1,31 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DockerLabelBackups from './DockerLabelBackups.vue';
 
 const inertia = vi.hoisted(() => ({
     form: null as Record<string, unknown> | null,
     errors: {} as Record<string, string>,
+    deployment: undefined as any,
+    canManage: true,
+    get: vi.fn(),
+    payload: null as Record<string, unknown> | null,
 }));
 
 vi.mock('@inertiajs/vue3', async () => {
-    const { reactive } = await vi.importActual<typeof import('vue')>('vue');
+    const { useForm } = await vi.importActual<typeof import('@inertiajs/vue3')>('@inertiajs/vue3');
 
     return {
         Head: { template: '<div />' },
+        router: { get: inertia.get },
+        usePage: () => ({ props: { deployment: inertia.deployment, can: { manageSensitiveData: inertia.canManage } } }),
         useForm: (data: Record<string, unknown>) => {
-            inertia.form = reactive({
-                ...data,
-                errors: reactive({ ...inertia.errors }),
-                processing: false,
-                put: vi.fn(),
+            const form = useForm(data);
+            form.setError(inertia.errors);
+            form.put = vi.fn(() => {
+                inertia.payload = form.data();
             });
+            inertia.form = form;
 
             return inertia.form;
         },
@@ -34,6 +40,7 @@ vi.mock('@/i18n', () => ({
 }));
 
 const settings = {
+    docker_host_id: 1,
     enabled: true,
     backup_destination_id: 1,
     schedule_type: 'weekly' as const,
@@ -64,6 +71,11 @@ function mountPage(errors: Record<string, string> = {}, notificationChannels: Ar
     return mount(DockerLabelBackups, {
         props: {
             settings,
+            hosts: [
+                { id: 1, name: 'Local', supports_docker_labels: true },
+                { id: 2, name: 'Remote NAS', supports_docker_labels: true },
+                { id: 3, name: 'Older agent', supports_docker_labels: false },
+            ],
             destinations: [{ id: 1, name: 'Local' }],
             notificationChannels,
             timezones: ['UTC'],
@@ -80,6 +92,99 @@ function mountPage(errors: Record<string, string> = {}, notificationChannels: Ar
 }
 
 describe('Docker label backup settings schedule', () => {
+    beforeEach(() => {
+        inertia.deployment = undefined;
+        inertia.canManage = true;
+        inertia.get.mockReset();
+        inertia.payload = null;
+    });
+
+    it('reloads host context, resets errors and edits, and submits only the loaded host payload', async () => {
+        const wrapper = mountPage({ backup_destination_id: 'Old destination error' });
+        inertia.form!.retention_days = 99;
+        await wrapper.get('[data-host-selector]').setValue(2);
+        expect(inertia.get).toHaveBeenCalledWith('/settings/docker-label-backups', { docker_host_id: 2 }, expect.objectContaining({ preserveState: true }));
+        expect(wrapper.find('form').exists()).toBe(false);
+        expect(wrapper.get('[data-host-selector]').attributes('disabled')).toBeDefined();
+        expect(inertia.form!.put).not.toHaveBeenCalled();
+
+        await wrapper.setProps({
+            settings: { ...settings, docker_host_id: 2, backup_destination_id: 20, retention_days: 7, last_sync_error: 'Remote sync failed', last_synced_at: '2026-09-18T12:00:00Z' },
+            destinations: [{ id: 20, name: 'Remote destination' }],
+        });
+        inertia.get.mock.calls[0][2].onFinish();
+        await wrapper.vm.$nextTick();
+        expect(inertia.form).toMatchObject({ docker_host_id: 2, backup_destination_id: 20, retention_days: 7, errors: {} });
+        expect(wrapper.text()).toContain('Remote NAS (#2)');
+        expect(wrapper.text()).toContain('Remote sync failed');
+        expect(wrapper.text()).toContain('2026-09-18T12:00:00Z');
+        expect(wrapper.text()).not.toContain('Old destination error');
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.payload).toMatchObject({ docker_host_id: 2, backup_destination_id: 20, retention_days: 7 });
+        expect(inertia.payload).not.toHaveProperty('last_sync_error');
+
+        await wrapper.get('[data-host-selector]').setValue(1);
+        await wrapper.setProps({ settings, destinations: [{ id: 1, name: 'Local destination' }] });
+        inertia.get.mock.calls[1][2].onFinish();
+        await wrapper.vm.$nextTick();
+        expect(inertia.form).toMatchObject({ docker_host_id: 1, backup_destination_id: 1, retention_days: null });
+        expect(wrapper.text()).not.toContain('Remote sync failed');
+    });
+
+    it('restores the loaded host after a failed or cancelled navigation without mixing contexts', async () => {
+        const wrapper = mountPage();
+        await wrapper.get('[data-host-selector]').setValue(2);
+        inertia.get.mock.calls[0][2].onFinish();
+        await wrapper.vm.$nextTick();
+        expect((wrapper.get('[data-host-selector]').element as HTMLSelectElement).value).toBe('1');
+        expect(wrapper.text()).toContain('dockerLabels.loadFailed');
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.payload).toMatchObject({ docker_host_id: 1, backup_destination_id: 1 });
+        await wrapper.get('[data-host-selector]').setValue(2);
+        expect(wrapper.text()).not.toContain('dockerLabels.loadFailed');
+    });
+
+    it('clears a destination absent from the newly loaded host choices', async () => {
+        const wrapper = mountPage();
+        await wrapper.setProps({ settings: { ...settings, docker_host_id: 2 }, destinations: [{ id: 20, name: 'Remote destination' }] });
+        expect(inertia.form!.backup_destination_id).toBeNull();
+    });
+
+    it('allows remote configuration in orchestrator mode and warns for an older selected agent', async () => {
+        inertia.deployment = { mode: 'orchestrator', local_execution_enabled: false };
+        const wrapper = mountPage();
+        expect(wrapper.get('[data-host-selector] option[value="1"]').attributes('disabled')).toBeDefined();
+        await wrapper.setProps({ settings: { ...settings, docker_host_id: 3 }, destinations: [] });
+        expect(wrapper.find('form').exists()).toBe(true);
+        expect(wrapper.text()).toContain('dockerLabels.upgradeAgent');
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.payload).toMatchObject({ docker_host_id: 3, backup_destination_id: null });
+        await wrapper.setProps({ settings: { ...settings, docker_host_id: 2 } });
+        expect(wrapper.text()).not.toContain('dockerLabels.upgradeAgent');
+        expect(wrapper.text()).toContain('dockerLabels.nextInventory');
+    });
+
+    it('prevents changes without management permission and host navigation during a save', async () => {
+        inertia.canManage = false;
+        const wrapper = mountPage();
+        expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined();
+        expect(wrapper.find('button.btn-primary').exists()).toBe(false);
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.form!.put).not.toHaveBeenCalled();
+        inertia.form!.processing = true;
+        await wrapper.vm.$nextTick();
+        expect(wrapper.get('[data-host-selector]').attributes('disabled')).toBeDefined();
+        await wrapper.get('[data-host-selector]').trigger('change');
+        expect(inertia.get).not.toHaveBeenCalled();
+    });
+
+    it.each([false, 0, '0', 'false'])('hides local source settings when execution is %s', (flag) => {
+        inertia.deployment = { mode: 'orchestrator', local_execution_enabled: flag };
+        const wrapper = mountPage();
+        expect(wrapper.find('form').exists()).toBe(false);
+        expect(wrapper.text()).toContain('dockerHosts.localDisabled');
+    });
+
     it('preserves valid values for the initial mode and removes unrelated keys', () => {
         mountPage();
 

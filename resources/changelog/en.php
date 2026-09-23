@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'remote_agent_execution' => [
+        'title' => 'Multi-host backups with agents',
+        'description' => 'Manage backups and restores across multiple Docker hosts from one interface, including groups, stacks, labels and destinations. Choose hybrid mode to keep local execution or orchestrator mode without local Docker access.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Restore a local archive on another host',
+        'description' => 'Restore locally stored backups into a new volume on another host through an encrypted transfer via the orchestrator. The original archive is preserved.',
+    ],
+    'restore_volume_ownership' => [
+        'title' => 'Volume protection during restores',
+        'description' => 'The restore verifies that it owns the new volume before writing to it. If the restore fails, the target volume is retained for inspection and manual removal if needed.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Reject unsupported Dropbox safety backups before restore',
         'description' => 'In-place restores now reject a requested safety backup before queuing when the job’s current destination is Dropbox. The restore form explains the limitation and preserves your choice until you explicitly change it.',

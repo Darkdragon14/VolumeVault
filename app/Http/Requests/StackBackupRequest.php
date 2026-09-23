@@ -16,6 +16,7 @@ class StackBackupRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'docker_host_id' => ['sometimes', 'required', 'integer', 'exists:docker_hosts,id'],
             'stack' => ['nullable', 'string', 'max:255'],
             'backup_destination_id' => ['nullable', 'integer', 'exists:backup_destinations,id'],
             'schedule_type' => ['nullable', 'string', Rule::in([

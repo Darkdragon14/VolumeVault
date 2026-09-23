@@ -9,8 +9,11 @@ use App\Http\Requests\StoreDestinationRequest;
 use App\Http\Requests\UpdateDestinationRequest;
 use App\Models\ActivityLog;
 use App\Models\BackupDestination;
+use App\Models\DockerHost;
+use App\Services\Agents\AgentExecution;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\BackupDestinations\TestBackupDestination;
+use App\Support\DeploymentMode;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -32,7 +35,8 @@ class DestinationController extends Controller
         $query->latest();
 
         return Inertia::render('Destinations/Index', [
-            'destinations' => $this->paginateForInertia($query, $perPage, fn (BackupDestination $d): array => $d->safeForFrontend()),
+            'destinationOperationHosts' => app(\App\Services\BackupDestinations\DestinationOperations::class)->hostOptions(),
+            'destinations' => $this->paginateForInertia($query, $perPage, fn (BackupDestination $d): array => [...$d->safeForFrontend(), 'docker_host_id' => $d->docker_host_id]),
             'defaultPerPage' => $request->user()->default_per_page ?? 10,
         ]);
     }
@@ -41,7 +45,9 @@ class DestinationController extends Controller
     {
         return Inertia::render('Destinations/Form', [
             'destination' => null,
-            'providers' => BackupDestination::providerOptions(),
+            'destinationOperationHosts' => app(\App\Services\BackupDestinations\DestinationOperations::class)->hostOptions(),
+            'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => app(AgentExecution::class)->summary($host, includePaths: true)),
+            'providers' => $this->providerOptions(),
         ]);
     }
 
@@ -61,8 +67,10 @@ class DestinationController extends Controller
     public function edit(BackupDestination $destination): Response
     {
         return Inertia::render('Destinations/Form', [
-            'destination' => $destination->safeForFrontend(),
-            'providers' => BackupDestination::providerOptions(),
+            'destination' => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id],
+            'destinationOperationHosts' => app(\App\Services\BackupDestinations\DestinationOperations::class)->hostOptions(),
+            'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => app(AgentExecution::class)->summary($host, includePaths: true)),
+            'providers' => $this->providerOptions(),
         ]);
     }
 
@@ -111,8 +119,14 @@ class DestinationController extends Controller
         return back()->with('success', $isActive ? 'Destination enabled.' : 'Destination disabled.');
     }
 
-    public function test(BackupDestination $destination, TestBackupDestination $testBackupDestination)
+    public function test(Request $request, BackupDestination $destination, TestBackupDestination $testBackupDestination)
     {
+        $data = $request->validate(['docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id']]);
+        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        $hostId = $operations->hostId($destination, isset($data['docker_host_id']) ? (int) $data['docker_host_id'] : null);
+        if ($hostId !== DockerHost::LOCAL_ID) {
+            return response()->json(['data' => $operations->safe($operations->create($destination, 'test', $hostId))], 202);
+        }
         $result = $testBackupDestination->handle($destination);
 
         return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
@@ -123,7 +137,14 @@ class DestinationController extends Controller
         $data = $request->validate([
             'host' => ['required', 'string', 'max:255'],
             'port' => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'],
         ]);
+
+        if (isset($data['docker_host_id']) && (int) $data['docker_host_id'] !== DockerHost::LOCAL_ID) {
+            $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+
+            return response()->json(['data' => $operations->safe($operations->createHostKey($data['host'], (int) ($data['port'] ?? 22), (int) $data['docker_host_id']))], 202);
+        }
 
         try {
             return response()->json($storage->probeHostKey($data['host'], (int) ($data['port'] ?? 22)));
@@ -132,5 +153,17 @@ class DestinationController extends Controller
                 'message' => str(trim($exception->getMessage()) ?: 'Unable to reach the SSH server.')->limit(300)->toString(),
             ], 422);
         }
+    }
+
+    public function hostKeyOperation(\App\Models\AgentOperation $operation): \Illuminate\Http\JsonResponse
+    {
+        abort_unless($operation->kind === 'destination' && $operation->destination_action === 'host_key' && $operation->backup_destination_id === null, 404);
+
+        return response()->json(['data' => app(\App\Services\BackupDestinations\DestinationOperations::class)->safe($operation)]);
+    }
+
+    private function providerOptions(): array
+    {
+        return BackupDestination::providerOptions();
     }
 }

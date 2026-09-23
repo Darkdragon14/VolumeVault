@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Actions\Docker\SyncDockerVolumes;
+use App\Support\DeploymentMode;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -21,6 +22,10 @@ class SyncDockerVolumesJob implements ShouldQueue
 
     public function handle(SyncDockerVolumes $syncDockerVolumes): void
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return;
+        }
+
         $syncDockerVolumes->handle();
     }
 }

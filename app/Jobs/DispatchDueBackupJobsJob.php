@@ -7,6 +7,8 @@ use App\Actions\Runs\DispatchQueuedRun;
 use App\Models\ActivityLog;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
+use App\Support\DeploymentMode;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -31,6 +33,7 @@ class DispatchDueBackupJobsJob implements ShouldQueue
     public function handle(CreateBackupRun $createBackupRun, DispatchQueuedRun $dispatchQueuedRun): void
     {
         BackupJob::query()
+            ->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->where('status', BackupJob::STATUS_ACTIVE)
             // Group members are scheduled by their group, never on their own.
             ->whereNull('backup_job_group_id')

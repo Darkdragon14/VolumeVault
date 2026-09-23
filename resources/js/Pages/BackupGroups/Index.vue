@@ -2,8 +2,9 @@
 import StatusBadge from '@/Components/StatusBadge.vue';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { useDeployment } from '@/Composables/useDeployment';
 import Pagination from '@/Components/Pagination.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 
 interface PaginatedData<T> {
@@ -16,8 +17,7 @@ defineProps<{
     defaultPerPage: number;
 }>();
 
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
+const { groupPermissions: can } = useDeployment();
 const { t, formatDate, timezone } = useI18n();
 
 const runNow = (id: number) => router.post(`/backup-groups/${id}/run`);
@@ -70,7 +70,7 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
                         </thead>
                         <tbody class="divide-y divide-white/10">
                             <tr v-for="group in groups.data" :key="group.id" class="cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewGroup(group.id)" @keydown="onGroupKeydown($event, group.id)">
-                                <td class="px-4 py-3 font-medium text-white">{{ group.name }}</td>
+                                <td class="px-4 py-3 font-medium text-white">{{ group.name }}<p v-if="can.runDockerActions && group.can_run_reason" class="mt-1 text-sm font-normal text-slate-400">{{ t(group.can_run_reason) }}</p></td>
                                 <td class="px-4 py-3 text-slate-300">{{ group.members_count }}</td>
                                 <td class="px-4 py-3 text-slate-300">{{ group.schedule_summary }}</td>
                                 <td class="px-4 py-3" @click.stop @keydown.stop>
@@ -91,7 +91,7 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
                                 <td class="px-4 py-3 text-slate-300">{{ formatDate(group.next_run_at) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex md:min-w-52 flex-wrap gap-2" @click.stop @keydown.stop>
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Run now')" icon="play" :disabled="group.status !== 'active'" @click="runNow(group.id)" />
+                                        <ActionIcon v-if="can.runDockerActions" :label="t('Run now')" icon="play" :disabled="!group.can_run" @click="runNow(group.id)" />
                                         <ActionIcon v-if="can.runDockerActions && (group.status === 'paused' || group.status === 'error')" :label="t('Resume')" icon="play" @click="resume(group.id)" />
                                         <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="group.status === 'running'" @click="pause(group.id)" />
                                         <ActionIcon v-if="can.runDockerActions" :label="t('Edit')" icon="edit" :href="`/backup-groups/${group.id}/edit`" />
@@ -108,12 +108,13 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <h2 class="break-words font-semibold text-white">{{ group.name }}</h2>
+                                <p v-if="can.runDockerActions && group.can_run_reason" class="mt-1 text-sm text-slate-400">{{ t(group.can_run_reason) }}</p>
                                 <p class="mt-1 text-sm text-slate-400">{{ t('{count} volume(s)', { count: group.members_count }) }} · {{ group.schedule_summary }}</p>
                             </div>
                             <StatusBadge :status="group.status" />
                         </div>
                         <div class="flex flex-wrap gap-2" @click.stop @keydown.stop>
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Run now')" icon="play" :disabled="group.status !== 'active'" @click="runNow(group.id)" />
+                            <ActionIcon v-if="can.runDockerActions" :label="t('Run now')" icon="play" :disabled="!group.can_run" @click="runNow(group.id)" />
                             <ActionIcon v-if="can.runDockerActions && (group.status === 'paused' || group.status === 'error')" :label="t('Resume')" icon="play" @click="resume(group.id)" />
                             <ActionIcon v-else-if="can.runDockerActions" :label="t('Pause')" icon="pause" :disabled="group.status === 'running'" @click="pause(group.id)" />
                             <ActionIcon v-if="can.runDockerActions" :label="t('Edit')" icon="edit" :href="`/backup-groups/${group.id}/edit`" />

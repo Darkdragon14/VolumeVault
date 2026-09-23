@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Models\DockerHost;
+
 class VolumeJobLock
 {
     /**
@@ -14,10 +16,15 @@ class VolumeJobLock
      * Docker volume (host-path backups, restore-to-new-volume) fall back to the
      * caller's own identity key, preserving their previous per-run/per-job
      * isolation.
+     *
+     * Local keys must remain unchanged so locks persisted before host attribution
+     * continue to serialize workers during an upgrade.
      */
-    public static function key(?string $volumeName, string $fallback): string
+    public static function key(?string $volumeName, string $fallback, int $dockerHostId = DockerHost::LOCAL_ID): string
     {
-        return filled($volumeName) ? 'volume-'.$volumeName : $fallback;
+        $key = filled($volumeName) ? 'volume-'.$volumeName : $fallback;
+
+        return $dockerHostId === DockerHost::LOCAL_ID ? $key : 'host-'.$dockerHostId.':'.$key;
     }
 
     /**
@@ -35,8 +42,8 @@ class VolumeJobLock
     }
 
     /** Convenience for the volume-based lock key (used by tests and volume runs). */
-    public static function cacheKey(string $volumeName): string
+    public static function cacheKey(string $volumeName, int $dockerHostId = DockerHost::LOCAL_ID): string
     {
-        return self::cacheKeyFor(self::key($volumeName, ''));
+        return self::cacheKeyFor(self::key($volumeName, '', $dockerHostId));
     }
 }

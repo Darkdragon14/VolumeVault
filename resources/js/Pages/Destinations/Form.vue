@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DestinationOperations from '@/Components/DestinationOperations.vue';
+import type { DestinationOperationHost } from '@/Composables/useDestinationOperations';
+import { isHostLocalDestination, useDeployment, type ExecutionHost } from '@/Composables/useDeployment';
 import PasswordInput from '@/Components/PasswordInput.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from '@/i18n';
 import { bestSizeUnit, bytesToUnitValue, sizeUnits, type SizeUnit, unitValueToBytes } from '@/Composables/useFormatBytes';
 
@@ -14,16 +17,25 @@ type ProviderOption = {
 
 const props = defineProps<{
     destination: any | null;
+    hosts?: ExecutionHost[];
+    destinationOperationHosts?: DestinationOperationHost[];
     providers: ProviderOption[];
 }>();
 
 const editing = computed(() => Boolean(props.destination));
+const page = usePage();
+const canManageDestinations = computed(() => Boolean((page.props.can as { manageSensitiveData?: boolean } | undefined)?.manageSensitiveData));
+const { executionHosts, localExecutionEnabled, canManageBackups } = useDeployment();
+const hosts = computed(() => executionHosts(props.hosts));
+const hostSelectable = (host: ExecutionHost) => Number(host.id) !== 1 || localExecutionEnabled.value;
 const { t, translateError } = useI18n();
 const settings = props.destination?.settings || {};
 const hasSecret = (field: string) => Boolean(props.destination?.has_secrets?.[field]);
 const storageLimitUnitSelections = ref<Record<string, SizeUnit>>({});
 
 const form = useForm({
+    docker_host_id: props.destination?.docker_host_id ?? hosts.value[0]?.id ?? 1,
+    storage_measurement_host_id: (props.destination?.storage_measurement_host_id === 1 ? null : props.destination?.storage_measurement_host_id ?? null) as number | null,
     name: props.destination?.name || '',
     provider: props.destination?.provider || props.providers[0]?.value || 'aws_s3',
     endpoint: props.destination?.endpoint || '',
@@ -74,6 +86,20 @@ const form = useForm({
 });
 
 const selectedProvider = computed(() => props.providers.find((provider) => provider.value === form.provider));
+const measurementHosts = computed(() => (props.destinationOperationHosts ?? []).filter((host) => canManageDestinations.value && Number(host.id) !== 1 && host.supports_destination_operations));
+const unavailableMeasurementHost = computed(() => {
+    const id = form.storage_measurement_host_id;
+    if (isHostLocalDestination(form) || id == null || id === 1 || measurementHosts.value.some(host => Number(host.id) === id)) return null;
+    const host = props.destinationOperationHosts?.find(host => Number(host.id) === id)
+        ?? hosts.value.find(host => Number(host.id) === id);
+    return { id, label: host ? `${host.name} (#${id})` : `#${id}` };
+});
+watch(() => [form.provider, form.docker_host_id], () => {
+    form.storage_measurement_host_id = isHostLocalDestination(form) ? Number(form.docker_host_id) : null;
+}, { flush: 'sync' });
+if (isHostLocalDestination(form)) form.storage_measurement_host_id = Number(form.docker_host_id);
+const canSave = computed(() => canManageBackups.value && (!isHostLocalDestination(form)
+    || hosts.value.some((host) => Number(host.id) === Number(form.docker_host_id) && hostSelectable(host))));
 const isS3 = computed(() => ['aws_s3', 'cloudflare_r2', 'custom_s3'].includes(form.provider));
 const error = (key: string) => form.errors[key as keyof typeof form.errors];
 const secretHint = (field: string) => editing.value && hasSecret(field) ? t('Already saved. Leave blank to keep existing value.') : '';
@@ -92,6 +118,8 @@ const updateStorageLimitUnit = (key: string, unit: SizeUnit) => {
 const updateStorageLimitThreshold = (key: string, value: string, unit: SizeUnit) => (form.settings as Record<string, any>)[key] = unitValueToBytes(value, unit);
 
 const submit = () => {
+    if (!canSave.value) return;
+    form.transform((data) => ({ ...data, docker_host_id: isHostLocalDestination(data) ? data.docker_host_id : null }));
     if (editing.value) {
         form.put(`/destinations/${props.destination.id}`);
         return;
@@ -109,28 +137,74 @@ const hostKeyProbe = ref<{ loading: boolean; fingerprint: string; error: string 
     fingerprint: '',
     error: '',
 });
+const hostKeyExecutor = ref(1);
+const hostKeyHosts = computed(() => measurementHosts.value.filter((host) => host.supports_sftp_host_key));
+let probeGeneration = 0;
+let probeTimer: ReturnType<typeof setTimeout> | undefined;
+let probeController: AbortController | undefined;
+const resetProbe = () => {
+    probeGeneration++;
+    clearTimeout(probeTimer);
+    probeController?.abort();
+    hostKeyProbe.value = { loading: false, fingerprint: '', error: '' };
+};
+watch(() => [form.provider, form.settings.host, form.settings.port, hostKeyExecutor.value], resetProbe, { flush: 'sync' });
+// Manual edits also invalidate discovery, including responses already in flight.
+watch(() => form.settings.host_key, resetProbe, { flush: 'sync' });
+watch(() => form.provider, () => {
+    form.settings.host_key = '';
+    hostKeyExecutor.value = 1;
+    form.clearErrors('settings.host', 'settings.port', 'settings.host_key', 'docker_host_id');
+});
+onBeforeUnmount(resetProbe);
 
 const fetchHostKey = async () => {
-    if (!form.settings.host || hostKeyProbe.value.loading) {
+    if (!canManageDestinations.value || form.provider !== 'ssh' || !form.settings.host || hostKeyProbe.value.loading) {
         return;
     }
-
+    resetProbe();
+    const generation = probeGeneration;
+    const endpoint = { host: form.settings.host, port: Number(form.settings.port) || 22 };
+    const executor = Number(hostKeyExecutor.value);
+    let operationId: string | undefined;
+    probeController = new AbortController();
+    const signal = probeController.signal;
     hostKeyProbe.value = { loading: true, fingerprint: '', error: '' };
-
-    try {
-        const { data } = await window.axios.post('/destinations/host-key', {
-            host: form.settings.host,
-            port: form.settings.port,
-        });
-        form.settings.host_key = data.key;
-        hostKeyProbe.value = { loading: false, fingerprint: data.fingerprint, error: '' };
-    } catch (error: any) {
-        hostKeyProbe.value = {
-            loading: false,
-            fingerprint: '',
-            error: error?.response?.data?.message || t('Unable to reach the SSH server.'),
-        };
-    }
+    const request = async (): Promise<void> => {
+        try {
+            const csrf = document.cookie.split('; ').find((cookie) => cookie.startsWith('XSRF-TOKEN='))?.slice(11);
+            const response = await fetch(operationId ? `/destinations/host-key/operations/${encodeURIComponent(operationId)}` : '/destinations/host-key', {
+                method: operationId ? 'GET' : 'POST', signal, credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest',
+                    ...(csrf ? { 'X-XSRF-TOKEN': decodeURIComponent(csrf) } : {}) },
+                ...(!operationId ? { body: JSON.stringify({ ...endpoint, docker_host_id: executor }) } : {}),
+            });
+            const payload = await response.json();
+            if (generation !== probeGeneration) return;
+            if (!response.ok) throw new Error(Object.values(payload.errors ?? {}).flat().join(' ') || payload.message || t('destinationOperations.failed'));
+            let result = payload;
+            if (executor !== 1) {
+                const operation = payload.data;
+                if (!operation?.id || operation.endpoint?.host !== endpoint.host || operation.endpoint?.port !== endpoint.port
+                    || operation.docker_host_id !== executor || operation.action !== 'host_key' || operation.destination_id !== null
+                    || (operationId && operation.id !== operationId)) throw new Error(t('destinationOperations.stale'));
+                operationId = operation.id;
+                if (['pending', 'running'].includes(operation.status)) {
+                    probeTimer = setTimeout(() => { void request(); }, 1500);
+                    return;
+                }
+                if (operation.status !== 'completed' || operation.result?.status !== 'success') throw new Error(operation.result?.error_message || t('destinationOperations.failed'));
+                result = operation.result.data;
+            }
+            if (typeof result?.key !== 'string' || typeof result?.fingerprint !== 'string') throw new Error(t('destinationOperations.failed'));
+            form.settings.host_key = result.key;
+            hostKeyProbe.value = { loading: false, fingerprint: result.fingerprint, error: '' };
+        } catch (error) {
+            if (generation !== probeGeneration) return;
+            hostKeyProbe.value = { loading: false, fingerprint: '', error: error instanceof Error ? error.message : t('Unable to reach the SSH server.') };
+        }
+    };
+    await request();
 };
 </script>
 
@@ -138,6 +212,14 @@ const fetchHostKey = async () => {
     <Head :title="editing ? t('Edit destination') : t('New destination')" />
     <AppLayout :title="editing ? t('Edit destination') : t('New destination')" :subtitle="t('Store destination settings and credentials encrypted at rest.')">
         <form class="card max-w-4xl space-y-5 p-4 sm:p-6" @submit.prevent="submit">
+            <label v-if="isHostLocalDestination(form)" class="block space-y-2">
+                <span class="label">{{ t('hostWorkflow.destinationHost') }}</span>
+                <select v-model="form.docker_host_id" class="input" required>
+                    <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!hostSelectable(host)">{{ host.name }}</option>
+                </select>
+                <p class="text-sm text-slate-400">{{ t('archiveRelay.description') }}</p>
+                <span v-if="form.errors.docker_host_id" class="text-sm text-rose-300">{{ form.errors.docker_host_id }}</span>
+            </label>
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="space-y-2">
                     <span class="label">{{ t('Name') }}</span>
@@ -264,9 +346,17 @@ const fetchHostKey = async () => {
                     <span v-if="error('settings.identity_file')" class="text-sm text-rose-300">{{ error('settings.identity_file') }}</span>
                 </label>
                 <div class="space-y-2 sm:col-span-2">
+                    <label class="block space-y-2">
+                        <span class="label">{{ t('remoteAudit.keyExecutor') }}</span>
+                        <select v-model="hostKeyExecutor" class="input" data-testid="host-key-executor" :disabled="!canManageDestinations">
+                            <option :value="1">{{ t('remoteAudit.central') }}</option>
+                            <option v-for="host in hostKeyHosts" :key="host.id" :value="host.id">{{ host.name }}</option>
+                        </select>
+                        <span class="text-xs text-slate-400">{{ t('remoteAudit.keyHelp') }}</span>
+                    </label>
                     <div class="flex items-center justify-between gap-2">
                         <span class="label">{{ t('Pinned host key') }}</span>
-                        <button type="button" class="btn-secondary text-xs" :disabled="!form.settings.host || hostKeyProbe.loading" @click="fetchHostKey">
+                        <button type="button" class="btn-secondary text-xs" :disabled="!canManageDestinations || !form.settings.host || hostKeyProbe.loading" @click="fetchHostKey">
                             {{ hostKeyProbe.loading ? t('Fetching...') : t('Fetch key from server') }}
                         </button>
                     </div>
@@ -399,6 +489,22 @@ const fetchHostKey = async () => {
                     <p class="mt-1 text-sm text-slate-400">{{ t('Configure absolute usage thresholds for the destination storage limit alert. Leave both empty to skip this destination.') }}</p>
                 </div>
                 <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    <label class="space-y-2 sm:col-span-2">
+                        <span class="label">{{ t('remoteAudit.measureExecutor') }}</span>
+                        <select v-model="form.storage_measurement_host_id" class="input" data-testid="measurement-executor" :disabled="!canManageDestinations || isHostLocalDestination(form)">
+                            <template v-if="isHostLocalDestination(form)">
+                                <option :value="Number(form.docker_host_id)">{{ hosts.find(host => Number(host.id) === Number(form.docker_host_id))?.name }}</option>
+                            </template>
+                            <template v-else>
+                                <option :value="null">{{ t('remoteAudit.central') }}</option>
+                                <option v-if="unavailableMeasurementHost" :value="unavailableMeasurementHost.id" disabled>{{ t('remoteAudit.savedUnavailable', { host: unavailableMeasurementHost.label }) }}</option>
+                                <option v-for="host in measurementHosts" :key="host.id" :value="host.id">{{ host.name }}</option>
+                            </template>
+                        </select>
+                        <p class="text-sm text-slate-400">{{ t('remoteAudit.measureHelp') }}</p>
+                        <p v-if="unavailableMeasurementHost" class="text-sm text-amber-300">{{ t('remoteAudit.measureUnavailableHelp') }}</p>
+                        <span v-if="form.errors.storage_measurement_host_id" class="text-sm text-rose-300">{{ form.errors.storage_measurement_host_id }}</span>
+                    </label>
                     <label class="space-y-2">
                         <span class="label">{{ t('Warning threshold') }}</span>
                         <span class="flex gap-2">
@@ -464,9 +570,10 @@ const fetchHostKey = async () => {
             </div>
 
             <div class="flex flex-wrap gap-3">
-                <button class="btn-primary" :disabled="form.processing">{{ editing ? t('Update destination') : t('Create destination') }}</button>
+                <button class="btn-primary" :disabled="form.processing || !canSave">{{ editing ? t('Update destination') : t('Create destination') }}</button>
                 <Link href="/destinations" class="btn-secondary">{{ t('Cancel') }}</Link>
             </div>
         </form>
+        <DestinationOperations v-if="destination" :destination="destination" :hosts="destinationOperationHosts ?? []" />
     </AppLayout>
 </template>

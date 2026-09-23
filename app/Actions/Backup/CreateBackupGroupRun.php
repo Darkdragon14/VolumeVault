@@ -5,7 +5,10 @@ namespace App\Actions\Backup;
 use App\Models\ActivityLog;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJobGroup;
+use App\Models\DockerHost;
 use App\Models\User;
+use App\Services\Agents\HostWorkAdmission;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Validation\ValidationException;
 
@@ -32,6 +35,10 @@ class CreateBackupGroupRun
                 throw ValidationException::withMessages([
                     'group' => 'Only active backup groups can run.',
                 ]);
+            }
+
+            if ($lockedGroup->runnableMembers()->where('docker_host_id', DockerHost::LOCAL_ID)->exists()) {
+                LocalDockerExecution::validate();
             }
 
             $alreadyRunning = BackupGroupRun::query()
@@ -67,6 +74,7 @@ class CreateBackupGroupRun
 
     private function createRun(BackupJobGroup $group, string $trigger, ?User $initiatedBy): BackupGroupRun
     {
+        app(HostWorkAdmission::class)->assertGroupAccepting($group);
         $run = BackupGroupRun::create([
             'backup_job_group_id' => $group->id,
             'initiated_by_user_id' => $initiatedBy?->getKey(),
@@ -74,6 +82,24 @@ class CreateBackupGroupRun
             'trigger' => $trigger,
             'scheduled_for' => $trigger === BackupGroupRun::TRIGGER_SCHEDULED ? $group->next_run_at : null,
         ]);
+
+        if ($group->members()->where('docker_host_id', '!=', DockerHost::LOCAL_ID)->exists()) {
+            $ids = [];
+            foreach ($group->runnableMembers()->orderBy('id')->get() as $member) {
+                $ids[] = app(CreateBackupRunRecord::class)->handle($member, [
+                    'backup_group_run_id' => $run->id,
+                    'initiated_by_user_id' => $initiatedBy?->getKey(),
+                    'status' => 'queued',
+                    'trigger' => $trigger,
+                    'scheduled_for' => $run->scheduled_for,
+                ])->id;
+            }
+            $run->forceFill([
+                'member_run_ids' => $ids,
+                'failure_policy_snapshot' => $group->failure_policy,
+                'total_members' => count($ids),
+            ])->save();
+        }
 
         $anchor = $group->next_run_at;
 

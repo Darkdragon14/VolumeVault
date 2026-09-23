@@ -4,6 +4,7 @@ namespace App\Actions\Destinations;
 
 use App\Actions\Backup\WithDockerLabelMutationLocks;
 use App\Models\BackupDestination;
+use App\Models\BackupJob;
 use App\Models\DockerLabelBackupSetting;
 
 class MutateDestination
@@ -56,11 +57,11 @@ class MutateDestination
 
     public function delete(BackupDestination $destination): void
     {
-        $this->withLocks->handle([$destination->id], function ($destinations, ?DockerLabelBackupSetting $settings, $managedJobs) use ($destination): void {
+        $this->withLocks->handleAcrossHosts([$destination->id], function ($destinations, ?DockerLabelBackupSetting $settings, $managedJobs) use ($destination): void {
             $locked = $destinations->get($destination->id);
             $message = match (true) {
                 $this->isEnabledDefault($destination, $settings) => 'This destination is the active default for Docker label backups. Change or disable that setting before deleting it.',
-                $managedJobs->contains('backup_destination_id', $destination->id) => 'This destination is used by Docker label managed jobs. Disable or reconfigure label backups before deleting it.',
+                $destination->jobs()->where('configuration_source', BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL)->exists() => 'This destination is used by Docker label managed jobs. Disable or reconfigure label backups before deleting it.',
                 $locked?->hasRunInProgress(includeAllFinalizations: true) => 'A backup or restore using this destination is in progress. Wait for it to finish before deleting it.',
                 default => null,
             };
@@ -89,6 +90,6 @@ class MutateDestination
 
     private function isEnabledDefault(BackupDestination $destination, ?DockerLabelBackupSetting $settings): bool
     {
-        return $settings?->enabled && $settings->backup_destination_id === $destination->id;
+        return DockerLabelBackupSetting::usesEnabledDestination($destination);
     }
 }

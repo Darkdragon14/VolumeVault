@@ -3,6 +3,7 @@
 namespace App\Services\InstallationSaves;
 
 use App\Models\ActivityLog;
+use App\Services\Agents\ArchiveRelayStorage;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -16,6 +17,15 @@ use ZipArchive;
 
 class ImportSecureInstallationSave
 {
+    private const ENCRYPTED_COLUMNS = [
+        'backup_destinations' => ['access_key_id', 'secret_access_key', 'secrets'],
+        'notification_channels' => ['url'],
+        'users' => ['two_factor_secret', 'two_factor_recovery_codes'],
+        'agent_operations' => ['payload', 'context', 'delivery_token', 'result'],
+        'archive_relays' => ['destination_snapshot'],
+        'run_finalizations' => ['remote_metadata_payload', 'notification_snapshot'],
+    ];
+
     private const VOLATILE_TABLES = [
         'sessions',
         'cache',
@@ -35,7 +45,8 @@ class ImportSecureInstallationSave
         $zipPath = $tmpDirectory.'/payload.zip';
         $extractDirectory = $tmpDirectory.'/extract';
 
-        File::ensureDirectoryExists($extractDirectory);
+        File::ensureDirectoryExists($tmpDirectory, 0700);
+        File::ensureDirectoryExists($extractDirectory, 0700);
 
         try {
             File::put($zipPath, $this->crypto->decrypt(File::get($savePath), $previousAppKey));
@@ -49,7 +60,15 @@ class ImportSecureInstallationSave
                 throw new RuntimeException('The installation save does not contain a valid storage payload.');
             }
 
-            $this->prepareImportedDatabase($databasePath, $previousAppKey);
+            $relayPath = $manifest['archive_relay']['relative_path'] ?? 'app/private/archive-relays';
+
+            if (! is_string($relayPath) || ! $this->isRelativePath($relayPath)
+                || ! str_starts_with($relayPath, 'app/private/')
+                || $relayPath !== $this->relativePath((string) config('volumevault.archive_relay.directory'), storage_path())) {
+                throw new RuntimeException('The installation save relay storage path does not match this installation.');
+            }
+
+            $this->prepareImportedDatabase($databasePath, $previousAppKey, $storageSource.'/'.$relayPath);
             $this->replaceStorage($storageSource);
 
             DB::purge();
@@ -110,7 +129,7 @@ class ImportSecureInstallationSave
         return $manifest;
     }
 
-    private function prepareImportedDatabase(string $databasePath, string $previousAppKey): void
+    private function prepareImportedDatabase(string $databasePath, string $previousAppKey, string $relayDirectory): void
     {
         $pdo = new PDO('sqlite:'.$databasePath);
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -118,13 +137,25 @@ class ImportSecureInstallationSave
         $oldEncrypter = $this->crypto->makeLaravelEncrypter($previousAppKey);
         $currentEncrypter = $this->crypto->makeLaravelEncrypter((string) config('app.key'));
 
-        $this->clearVolatileTables($pdo);
-        $this->reencryptColumn($pdo, 'backup_destinations', 'access_key_id', $oldEncrypter, $currentEncrypter);
-        $this->reencryptColumn($pdo, 'backup_destinations', 'secret_access_key', $oldEncrypter, $currentEncrypter);
-        $this->reencryptColumn($pdo, 'backup_destinations', 'secrets', $oldEncrypter, $currentEncrypter);
-        $this->reencryptColumn($pdo, 'notification_channels', 'url', $oldEncrypter, $currentEncrypter);
-        $this->reencryptColumn($pdo, 'users', 'two_factor_secret', $oldEncrypter, $currentEncrypter);
-        $this->reencryptColumn($pdo, 'users', 'two_factor_recovery_codes', $oldEncrypter, $currentEncrypter);
+        $pdo->beginTransaction();
+
+        try {
+            $this->clearVolatileTables($pdo);
+
+            foreach (self::ENCRYPTED_COLUMNS as $table => $columns) {
+                foreach ($columns as $column) {
+                    $this->reencryptColumn($pdo, $table, $column, $oldEncrypter, $currentEncrypter);
+                }
+            }
+
+            $this->reencryptRelayChunks($relayDirectory, $oldEncrypter, $currentEncrypter);
+            $this->verifyRelayChunks($pdo, $relayDirectory, $currentEncrypter);
+            $pdo->commit();
+        } catch (Throwable $exception) {
+            $pdo->rollBack();
+
+            throw $exception;
+        }
     }
 
     private function clearVolatileTables(PDO $pdo): void
@@ -158,11 +189,98 @@ class ImportSecureInstallationSave
                 throw new RuntimeException('Unable to decrypt imported secrets. Check the previous APP_KEY.', previous: $exception);
             }
 
-            $statement->execute([
-                'id' => $row['id'],
-                'value' => $currentEncrypter->encrypt($plain, false),
-            ]);
+            try {
+                $statement->execute([
+                    'id' => $row['id'],
+                    'value' => $currentEncrypter->encrypt($plain, false),
+                ]);
+            } finally {
+                $this->wipe($plain);
+            }
         }
+    }
+
+    private function reencryptRelayChunks(string $directory, Encrypter $oldEncrypter, Encrypter $currentEncrypter): void
+    {
+        if (! File::isDirectory($directory)) {
+            return;
+        }
+
+        $files = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY,
+        );
+
+        foreach ($files as $file) {
+            $relative = $this->relativePath($file->getPathname(), $directory);
+            [$id, $offset] = array_pad(explode('/', $relative), 2, null);
+
+            if (! Str::isUuid($id) || strtolower($id) !== $id || ! preg_match('/\A(?:0|[1-9][0-9]*)\z/', $offset ?? '')
+                || $relative !== $id.'/'.$offset || $file->getSize() > 2 * ArchiveRelayStorage::CHUNK_BYTES) {
+                throw new RuntimeException('The installation save contains invalid relay storage.');
+            }
+
+            try {
+                $plain = $oldEncrypter->decryptString(File::get($file->getPathname()));
+                $encrypted = $currentEncrypter->encryptString($plain);
+
+                if (File::put($file->getPathname(), $encrypted) !== strlen($encrypted)) {
+                    throw new RuntimeException('Unable to write imported relay storage.');
+                }
+            } catch (Throwable) {
+                throw new RuntimeException('Unable to re-encrypt imported relay storage. Check the previous APP_KEY and save integrity.');
+            } finally {
+                $this->wipe($plain);
+            }
+        }
+    }
+
+    private function verifyRelayChunks(PDO $pdo, string $directory, Encrypter $encrypter): void
+    {
+        if (! $this->tableExists($pdo, 'archive_relays')) {
+            return;
+        }
+
+        $rows = $pdo->query('SELECT id, uploaded_bytes, size_bytes, sha256 FROM archive_relays WHERE cleaned_at IS NULL AND uploaded_bytes > 0');
+
+        foreach ($rows as $row) {
+            if (! Str::isUuid($row['id']) || strtolower($row['id']) !== $row['id']
+                || $row['uploaded_bytes'] > $row['size_bytes']
+                || ($row['uploaded_bytes'] < $row['size_bytes'] && $row['uploaded_bytes'] % ArchiveRelayStorage::CHUNK_BYTES !== 0)) {
+                throw new RuntimeException('The installation save contains invalid relay metadata.');
+            }
+
+            $hash = hash_init('sha256');
+            for ($offset = 0; $offset < $row['uploaded_bytes']; $offset += ArchiveRelayStorage::CHUNK_BYTES) {
+                $path = $directory.'/'.$row['id'].'/'.$offset;
+                if (! File::isFile($path)) {
+                    throw new RuntimeException('The installation save is missing relay chunks. Live storage has not been replaced.');
+                }
+
+                try {
+                    $plain = $encrypter->decryptString(File::get($path));
+                    if (strlen($plain) !== min(ArchiveRelayStorage::CHUNK_BYTES, $row['size_bytes'] - $offset)) {
+                        throw new RuntimeException('The installation save contains an incomplete relay chunk.');
+                    }
+                    hash_update($hash, $plain);
+                } finally {
+                    $this->wipe($plain);
+                }
+            }
+
+            if ($row['uploaded_bytes'] === $row['size_bytes'] && ! hash_equals((string) $row['sha256'], hash_final($hash))) {
+                throw new RuntimeException('The installation save relay digest does not match.');
+            }
+        }
+    }
+
+    private function wipe(?string &$plain): void
+    {
+        if (is_string($plain) && function_exists('sodium_memzero')) {
+            sodium_memzero($plain);
+        }
+
+        $plain = null;
     }
 
     private function replaceStorage(string $storageSource): void
@@ -183,17 +301,20 @@ class ImportSecureInstallationSave
             $target = $storageRoot.'/'.$relative;
 
             if ($item->isDir()) {
-                File::ensureDirectoryExists($target);
+                File::ensureDirectoryExists($target, $relative === 'app/private' || str_starts_with($relative, 'app/private/') ? 0700 : 0755);
 
                 continue;
             }
 
             File::ensureDirectoryExists(dirname($target));
             File::copy($item->getPathname(), $target);
+            if (str_starts_with($relative, 'app/private/')) {
+                chmod($target, 0600);
+            }
         }
 
         foreach (['app/private', 'app/public', 'framework/cache', 'framework/sessions', 'framework/views', 'logs'] as $directory) {
-            File::ensureDirectoryExists($storageRoot.'/'.$directory);
+            File::ensureDirectoryExists($storageRoot.'/'.$directory, $directory === 'app/private' ? 0700 : 0755);
         }
     }
 

@@ -2,6 +2,8 @@
 
 namespace App\Services\BackupSources;
 
+use App\Models\DockerHost;
+use App\Support\DeploymentMode;
 use InvalidArgumentException;
 
 class HostPathPolicy
@@ -62,7 +64,7 @@ class HostPathPolicy
         }
     }
 
-    public function validationError(string $path): ?string
+    public function validationError(string $path, ?int $dockerHostId = null): ?string
     {
         if (! str_starts_with($path, '/')) {
             return 'Host path must be an absolute path.';
@@ -82,8 +84,12 @@ class HostPathPolicy
             return 'Host path cannot contain . or .. segments.';
         }
 
-        if (! $this->isAllowed($path)) {
-            $prefixes = $this->allowedPrefixes();
+        if (preg_match('/[\x00-\x1F\x7F:]/', $path)) {
+            return 'Host path contains unsupported characters.';
+        }
+
+        if (! $this->isAllowed($path, $dockerHostId)) {
+            $prefixes = $this->allowedPrefixes($dockerHostId);
 
             if ($prefixes === []) {
                 return 'Host path access is disabled. Configure at least one allowed prefix in VOLUMEVAULT_HOST_PATH_ALLOWLIST.';
@@ -95,9 +101,9 @@ class HostPathPolicy
         return null;
     }
 
-    public function isAllowed(string $path): bool
+    public function isAllowed(string $path, ?int $dockerHostId = null): bool
     {
-        $prefixes = $this->allowedPrefixes();
+        $prefixes = $this->allowedPrefixes($dockerHostId);
 
         // Fail closed: with no allowlist configured, no host path is allowed.
         // (Out of the box this blocks mounting arbitrary host paths such as
@@ -118,8 +124,18 @@ class HostPathPolicy
     /**
      * @return array<int, string>
      */
-    public function allowedPrefixes(): array
+    public function allowedPrefixes(?int $dockerHostId = null): array
     {
+        if ($dockerHostId !== null && $dockerHostId !== DockerHost::LOCAL_ID) {
+            return collect(DockerHost::find($dockerHostId)?->agent_host_path_allowlist ?? [])
+                ->map(fn (mixed $path): string => $this->normalize(is_string($path) ? $path : null))
+                ->filter()->unique()->values()->all();
+        }
+
+        if (DeploymentMode::isOrchestrator()) {
+            return [];
+        }
+
         $allowlist = config('volumevault.host_path_allowlist', []);
 
         if (is_string($allowlist)) {

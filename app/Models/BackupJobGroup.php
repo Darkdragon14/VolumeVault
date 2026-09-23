@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\Agents\AgentExecution;
+use App\Support\DeploymentMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -91,6 +93,29 @@ class BackupJobGroup extends Model
     public function groupRuns(): HasMany
     {
         return $this->hasMany(BackupGroupRun::class)->latest();
+    }
+
+    /**
+     * Advisory UI admission using eagerly loaded members; execution rechecks its guards.
+     * Maintenance includes paused members, matching HostWorkAdmission::assertGroupAccepting.
+     *
+     * @return array{can_run: bool, can_run_reason: ?string}
+     */
+    public function runAvailability(): array
+    {
+        $members = $this->members;
+        $runnable = $members->where('status', '!=', BackupJob::STATUS_PAUSED);
+        $reason = match (true) {
+            $this->status !== self::STATUS_ACTIVE, (bool) $this->has_pending_run, $runnable->isEmpty() => 'hostWorkflow.groupRunUnavailable',
+            ! DeploymentMode::localExecutionEnabled() && $runnable->contains('docker_host_id', DockerHost::LOCAL_ID) => 'dockerHosts.localDisabled',
+            $members->contains(fn (BackupJob $member): bool => $member->dockerHost === null
+                || $member->dockerHost->maintenance_requested_at !== null) => 'hostWorkflow.unavailable',
+            ! $runnable->every(fn (BackupJob $member): bool => app(AgentExecution::class)
+                ->supportsHost($member->dockerHost, 'backup-v1')) => 'hostWorkflow.unavailable',
+            default => null,
+        };
+
+        return ['can_run' => $reason === null, 'can_run_reason' => $reason];
     }
 
     public function notificationChannels(): BelongsToMany

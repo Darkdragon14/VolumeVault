@@ -725,16 +725,15 @@ class NotificationChannelTest extends TestCase
         {
             public array $explicitJobIds = [];
 
-            public function handle(
+            public function handleAcrossHosts(
                 array $destinationIds,
                 callable $callback,
-                array $volumeNames = [],
                 array $notificationChannelIds = [],
                 array $explicitJobIds = [],
             ): mixed {
                 $this->explicitJobIds = $explicitJobIds;
 
-                return parent::handle($destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds);
+                return parent::handleAcrossHosts($destinationIds, $callback, $notificationChannelIds, $explicitJobIds);
             }
         };
         $queries = [];
@@ -784,10 +783,9 @@ class NotificationChannelTest extends TestCase
                 private readonly BackupJob $job,
             ) {}
 
-            public function handle(
+            public function handleAcrossHosts(
                 array $destinationIds,
                 callable $callback,
-                array $volumeNames = [],
                 array $notificationChannelIds = [],
                 array $explicitJobIds = [],
             ): mixed {
@@ -798,7 +796,7 @@ class NotificationChannelTest extends TestCase
                     $this->attachmentChanged = true;
                 }
 
-                return parent::handle($destinationIds, $callback, $volumeNames, $notificationChannelIds, $explicitJobIds);
+                return parent::handleAcrossHosts($destinationIds, $callback, $notificationChannelIds, $explicitJobIds);
             }
         };
 

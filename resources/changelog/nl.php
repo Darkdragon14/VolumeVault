@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'remote_agent_execution' => [
+        'title' => 'Back-ups van meerdere hosts met agents',
+        'description' => 'Beheer back-ups en herstel van meerdere Docker-hosts vanuit één interface, met groepen, stacks, labels en bestemmingen. Kies de hybride modus om lokaal te blijven uitvoeren of de orchestratormodus zonder toegang tot de lokale Docker.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Een lokaal archief op een andere host herstellen',
+        'description' => 'Herstel lokaal opgeslagen back-ups naar een nieuw volume op een andere host via een versleutelde overdracht door de orchestrator. Het oorspronkelijke archief blijft behouden.',
+    ],
+    'restore_volume_ownership' => [
+        'title' => 'Bescherming van volumes tijdens herstel',
+        'description' => 'Het herstelproces controleert of het nieuwe volume erbij hoort voordat het erin schrijft. Bij een fout blijft het doelvolume behouden voor inspectie en eventuele handmatige verwijdering.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Niet-ondersteunde Dropbox-veiligheidsback-ups vooraf weigeren',
         'description' => 'Herstel op dezelfde locatie weigert nu een aangevraagde veiligheidsback-up vóór het inplannen als de huidige taakbestemming Dropbox is. Het formulier legt de beperking uit en behoudt je keuze totdat je die expliciet wijzigt.',

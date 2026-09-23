@@ -4,22 +4,24 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\BackupRun;
+use App\Services\Agents\OperationalHostScope;
 use Illuminate\Http\JsonResponse;
 
 class BackupRunController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(OperationalHostScope $scope): JsonResponse
     {
         return response()->json([
-            'data' => BackupRun::with(['job.destination', 'snapshotDestination'])->latest()->limit(100)->get()
-                ->map(fn (BackupRun $run): array => $this->serialize($run)),
+            ...$scope->props(),
+            'data' => $scope->query(BackupRun::class)->with(['job.destination', 'snapshotDestination'])->latest()->limit(100)->get()
+                ->map(fn (BackupRun $run): array => [...$this->serialize($run), 'docker_host' => $scope->summary($run->docker_host_id)]),
         ]);
     }
 
-    public function show(BackupRun $backupRun): JsonResponse
+    public function show(BackupRun $backupRun, OperationalHostScope $scope): JsonResponse
     {
         return response()->json([
-            'data' => $this->serialize($backupRun->load(['job.destination', 'snapshotDestination'])),
+            'data' => [...$this->serialize($backupRun->load(['job.destination', 'snapshotDestination'])), 'docker_host' => $scope->summary($backupRun->docker_host_id)],
         ]);
     }
 

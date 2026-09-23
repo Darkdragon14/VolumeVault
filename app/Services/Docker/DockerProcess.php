@@ -2,6 +2,7 @@
 
 namespace App\Services\Docker;
 
+use App\Support\DeploymentMode;
 use Closure;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
@@ -40,6 +41,8 @@ class DockerProcess
 
     public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
     {
+        DeploymentMode::assertLocalExecution();
+
         $process = new Process($command, null, $this->environment($environment), null, $timeout);
 
         return $this->runProcess($process, $command, $environment);
@@ -72,6 +75,8 @@ class DockerProcess
 
     public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
     {
+        DeploymentMode::assertLocalExecution();
+
         $input = @fopen($inputPath, 'rb');
 
         if ($input === false) {
@@ -98,6 +103,8 @@ class DockerProcess
      */
     public function runWithOutputFile(array $command, string $outputPath, int $timeout = 300, array $environment = []): DockerProcessResult
     {
+        DeploymentMode::assertLocalExecution();
+
         $output = @fopen($outputPath, 'wb');
 
         if ($output === false) {

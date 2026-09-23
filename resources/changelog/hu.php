@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'remote_agent_execution' => [
+        'title' => 'Több gazdagép mentése ügynökökkel',
+        'description' => 'Kezelje több Docker-gazdagép mentéseit és visszaállításait egyetlen felületről, csoportokkal, vermekkel, címkékkel és célhelyekkel. Válassza a hibrid módot a helyi végrehajtás megtartásához, vagy az orchestrátor módot a helyi Docker elérése nélkül.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Helyi archívum visszaállítása másik gazdagépre',
+        'description' => 'Állítsa vissza a helyben tárolt mentéseket egy másik gazdagép új kötetébe, az orchestrátoron keresztüli titkosított átvitellel. Az eredeti archívum megmarad.',
+    ],
+    'restore_volume_ownership' => [
+        'title' => 'Kötetek védelme visszaállításkor',
+        'description' => 'A visszaállítás írás előtt ellenőrzi, hogy az új kötet hozzá tartozik-e. Hiba esetén a célkötet megmarad ellenőrzésre és szükség esetén kézi törlésre.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'A nem támogatott Dropbox biztonsági mentések korai elutasítása',
         'description' => 'A helyben történő visszaállítás már sorba állítás előtt elutasítja a kért biztonsági mentést, ha a feladat jelenlegi célhelye Dropbox. Az űrlap elmagyarázza a korlátozást, és megőrzi a választást annak kifejezett módosításáig.',

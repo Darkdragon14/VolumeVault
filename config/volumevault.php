@@ -1,6 +1,30 @@
 <?php
 
 return [
+    'mode' => env('VOLUMEVAULT_MODE', 'hybrid'),
+    'archive_relay' => [
+        // Central chunks are APP_KEY-encrypted; losing APP_KEY makes them unreadable.
+        // Byte limits: reserve 3 * max_bytes per relay for encryption and local staging.
+        // Source staging requires 2 * max_bytes free; agent staging is private plaintext.
+        // Expiry stops new uploads/assignments, never discards an assigned agent's cleanup.
+        'directory' => storage_path('app/private/archive-relays'),
+        'max_bytes' => (int) env('VOLUMEVAULT_ARCHIVE_RELAY_MAX_BYTES', 10737418240),
+        'max_disk_bytes' => (int) env('VOLUMEVAULT_ARCHIVE_RELAY_MAX_DISK_BYTES', 53687091200),
+        'ttl_seconds' => (int) env('VOLUMEVAULT_ARCHIVE_RELAY_TTL_SECONDS', 86400),
+    ],
+    'agents' => [
+        'enabled' => (bool) env('VOLUMEVAULT_AGENTS_ENABLED', false),
+        'url' => rtrim((string) env('VOLUMEVAULT_AGENT_URL', ''), '/'),
+        'tls_directory' => storage_path('app/private/agent-tls'),
+        'image' => trim((string) env('VOLUMEVAULT_AGENT_IMAGE', '')) ?: 'ghcr.io/darkdragon14/volumevault-agent:'.(env('APP_VERSION', 'main') === 'main' ? 'latest' : env('APP_VERSION')),
+        'client' => [
+            'url' => env('VOLUMEVAULT_ORCHESTRATOR_URL', ''),
+            'enrollment_token' => env('VOLUMEVAULT_AGENT_ENROLLMENT_TOKEN', ''),
+            'ca_certificate' => env('VOLUMEVAULT_AGENT_CA', ''),
+            'state_directory' => env('VOLUMEVAULT_AGENT_STATE_DIRECTORY', storage_path('app/agent')),
+        ],
+    ],
+
     'docker_host' => env('DOCKER_HOST', 'unix:///var/run/docker.sock'),
     'docker_network' => trim((string) env('VOLUMEVAULT_DOCKER_NETWORK', '')),
 

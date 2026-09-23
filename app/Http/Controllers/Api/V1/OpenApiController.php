@@ -36,6 +36,11 @@ class OpenApiController extends Controller
         ]);
     }
 
+    private function hostScopeParameter(): array
+    {
+        return ['name' => 'docker_host_id', 'in' => 'query', 'required' => false, 'description' => 'Existing host ID; omit for all hosts. Local host is 1. Restore lists filter by target host.', 'schema' => ['type' => 'integer', 'minimum' => 1]];
+    }
+
     private function paths(): array
     {
         return [
@@ -43,10 +48,17 @@ class OpenApiController extends Controller
                 'get' => $this->operation('Read the OpenAPI document.', [], public: true),
             ],
             '/me' => ['get' => $this->operation('Inspect current authenticated user and token.', ['read'])],
-            '/dashboard' => ['get' => $this->operation('Read dashboard stats and recent activity.', ['read'])],
-            '/volumes' => ['get' => $this->operation('List Docker volumes.', ['read'])],
-            '/host-path-allowlist' => ['get' => $this->operation('Read the configured host-path allowlist (prefixes that host-path backup sources and local destinations may use). Empty/not configured means host paths are refused (fail-closed).', ['read'], null, false, true)],
-            '/volumes/sync' => ['post' => $this->operation('Synchronize Docker volumes from the host.', ['write'], null, false, true)],
+            '/settings/docker-label-backups' => [
+                'get' => $this->operation('Read Docker label settings, eligible destinations, notification channels and hosts. Omitting docker_host_id selects local host 1.', ['read'], admin: true, queryParameters: [
+                    ['name' => 'docker_host_id', 'in' => 'query', 'schema' => ['type' => 'integer', 'default' => 1]],
+                ]),
+                'put' => $this->operation('Update host-scoped Docker label settings. Remote reconciliation requires a complete docker-labels-v1 inventory; execution requires backup-v1. Destinations must be shared or owned by the selected host.', ['write'], ['$ref' => '#/components/schemas/DockerLabelBackupSettingsRequest'], admin: true),
+            ],
+            '/dashboard' => ['get' => $this->operation('Read dashboard stats across all hosts by default. Group aggregates describe whole groups with a member in scope. Safe hosts and filters are inside data.', ['read'], queryParameters: [$this->hostScopeParameter()])],
+            '/volumes' => ['get' => $this->operation('List accepted Docker volume inventory across all hosts by default. Identities combine host ID and volume name. Includes safe hosts and filters alongside data.', ['read'], queryParameters: [$this->hostScopeParameter()])],
+            '/stacks' => ['get' => $this->operation('List host-qualified stacks derived from stored Compose/Swarm volume labels. Remote stack backups are queued on the explicitly selected registered agent, which requires backup-v1. Listing defaults to all hosts; POST /stacks/backup defaults to local host 1.', ['read'], queryParameters: [$this->hostScopeParameter()])],
+            '/host-path-allowlist' => ['get' => $this->hostPathAllowlistOperation()],
+            '/volumes/sync' => ['post' => $this->volumeSyncOperation()],
             '/stacks/backup' => ['post' => $this->operation('Back up a whole stack at once. For every Docker volume in the stack that has no backup job yet, a job is created using the given destination and schedule; then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, omit destination/schedule to just queue a run for every job. Volumes whose job belongs to a backup group are reported under "grouped" and are not run here — they back up on their group\'s own schedule. The 202 response is { data: { created, queued, skipped, grouped } }.', ['write'], ['$ref' => '#/components/schemas/StackBackupRequest'], false, true, 202)],
             '/backup-jobs' => [
                 'get' => $this->operation('List backup jobs.', ['read'], queryParameters: [
@@ -60,6 +72,7 @@ class OpenApiController extends Controller
                         'in' => 'query',
                         'schema' => ['type' => 'string', 'enum' => ['asc', 'desc'], 'default' => 'desc'],
                     ],
+                    $this->hostScopeParameter(),
                 ]),
                 'post' => $this->operation('Create a backup job.', ['write'], ['$ref' => '#/components/schemas/BackupJobRequest'], false, true, 201),
             ],
@@ -88,9 +101,9 @@ class OpenApiController extends Controller
             '/backup-groups/{id}/notifications' => ['patch' => $this->operation('Enable or disable a backup group\'s notifications.', ['write'], ['$ref' => '#/components/schemas/ToggleNotificationsRequest'], true, true)],
             '/backup-group-runs' => ['get' => $this->operation('List recent backup group runs.', ['read'])],
             '/backup-group-runs/{id}' => ['get' => $this->operation('Read a backup group run with its per-volume member runs.', ['read'], null, true)],
-            '/backup-runs' => ['get' => $this->operation('List recent backup runs.', ['read'], response: ['$ref' => '#/components/schemas/BackupRunCollectionResponse'])],
+            '/backup-runs' => ['get' => $this->operation('List recent backup runs scoped by historical execution host.', ['read'], queryParameters: [$this->hostScopeParameter()], response: ['$ref' => '#/components/schemas/BackupRunCollectionResponse'])],
             '/backup-runs/{id}' => ['get' => $this->operation('Read backup run details and logs.', ['read'], null, true, response: ['$ref' => '#/components/schemas/BackupRunResponse'])],
-            '/restore-runs' => ['get' => $this->operation('List recent restore runs.', ['read'])],
+            '/restore-runs' => ['get' => $this->operation('List recent restore runs scoped by target host. Source and target summaries are returned separately.', ['read'], queryParameters: [$this->hostScopeParameter()])],
             '/restore-runs/{id}' => ['get' => $this->operation('Read restore run details and logs.', ['read'], null, true)],
             '/destinations' => [
                 'get' => $this->operation('List backup destinations without plaintext secrets.', ['read'], null, false, true),
@@ -102,7 +115,10 @@ class OpenApiController extends Controller
                 'delete' => $this->operation('Delete a backup destination.', ['write'], null, true, true, 204),
             ],
             '/destinations/{id}/test' => ['post' => $this->operation('Test a backup destination.', ['write'], null, true, true)],
-            '/destinations/host-key' => ['post' => $this->operation('Read the SSH host key a server presents, to pin it as settings.host_key (trust on first use). Connects without authenticating.', ['write'], ['$ref' => '#/components/schemas/HostKeyRequest'], false, true)],
+            '/destinations/host-key' => ['post' => $this->hostKeyDiscoveryOperation()],
+            '/destinations/host-key/operations/{operation}' => ['get' => $this->operation('Poll unsaved SSH discovery. Admin/read required. data.result.data contains key and fingerprint on success; data.endpoint contains the immutable host and port. Only host_key operations without a saved destination are accepted.', ['read'], admin: true, queryParameters: [
+                ['name' => 'operation', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']],
+            ])],
             '/notifications' => ['get' => $this->operation('List notification channels without plaintext URLs.', ['read'], null, false, true)],
             '/notifications/{id}' => [
                 'get' => $this->operation('Read one notification channel without plaintext URL.', ['read'], null, true, true),
@@ -110,6 +126,61 @@ class OpenApiController extends Controller
             ],
             '/notifications/{id}/test' => ['post' => $this->operation('Send a notification test.', ['write'], null, true, true)],
         ];
+    }
+
+    private function volumeSyncOperation(): array
+    {
+        $operation = $this->operation(
+            'Synchronize local inventory and return counts (200). An omitted body or host defaults to local host 1. Opt into queued refresh with async=true and explicit docker_host_id=1 (202). Both execution paths use the shared synchronization lock. Local execution must be enabled; remote snapshots refresh through agent polling.',
+            ['write'],
+            ['type' => 'object', 'properties' => [
+                'docker_host_id' => ['type' => 'integer', 'enum' => [1], 'default' => 1, 'description' => 'Required when async is true.'],
+                'async' => ['type' => 'boolean', 'default' => false],
+            ], 'allOf' => [['if' => ['required' => ['async'], 'properties' => ['async' => ['const' => true]]], 'then' => ['required' => ['docker_host_id']]]]],
+            admin: true,
+            bodyRequired: false,
+            response: ['type' => 'object', 'properties' => ['data' => ['type' => 'object', 'properties' => [
+                'found' => ['type' => 'integer'], 'marked_missing' => ['type' => 'integer'], 'removed' => ['type' => 'integer'],
+            ]]]],
+        );
+        $operation['responses']['202'] = [
+            'description' => 'Local inventory synchronization queued.',
+            'content' => ['application/json' => ['schema' => ['type' => 'object', 'properties' => ['data' => ['type' => 'object', 'properties' => [
+                'docker_host_id' => ['type' => 'integer', 'const' => 1], 'queued' => ['type' => 'boolean', 'const' => true],
+            ]]]]]],
+        ];
+
+        return $operation;
+    }
+
+    private function hostKeyDiscoveryOperation(): array
+    {
+        $operation = $this->operation('Discover an unsaved SSH endpoint without credentials. Omit docker_host_id (or use 1) for the legacy central 200 response data:{key,fingerprint}. An explicit agent requires both destination-v1 and sftp-host-key-v1 and returns 202; poll the standalone host-key operation. Agent-local outbound policy applies; there is no central fallback.', ['write'], ['$ref' => '#/components/schemas/HostKeyRequest'], admin: true);
+        $operation['responses']['202'] = ['description' => 'Agent discovery queued. The data object includes id (UUID), status, docker_host_id, action=host_key, and immutable endpoint:{host,port}. Poll GET /destinations/host-key/operations/{id} for result.data:{key,fingerprint}.'];
+
+        return $operation;
+    }
+
+    private function hostPathAllowlistOperation(): array
+    {
+        $properties = [
+            'docker_host_id' => ['type' => 'integer'], 'host_name' => ['type' => 'string'],
+            'configuration_target' => ['type' => 'string', 'enum' => ['local', 'remote_agent']],
+            'policy_status' => ['type' => 'string', 'enum' => ['known', 'policy_unknown', 'local_disabled']],
+            'reported_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+            'freshness' => ['type' => 'string', 'enum' => ['current', 'fresh', 'stale', 'unavailable']],
+            'configured' => ['type' => ['boolean', 'null']],
+            'status' => ['type' => 'string', 'enum' => ['allowed', 'blocked', 'policy_unknown', 'local_disabled']],
+            'suggested_env_line' => ['type' => ['string', 'null']],
+            'suggested_allowlist' => ['type' => ['array', 'null'], 'items' => ['type' => 'string']],
+        ];
+        foreach (['prefixes', 'paths_in_use', 'blocked_paths', 'unknown_paths'] as $field) {
+            $properties[$field] = ['type' => 'array', 'items' => ['type' => 'string']];
+        }
+
+        return $this->operation('Inspect the selected host-path allowlist policy; docker_host_id defaults to local host 1. Requires admin/read. Paths and suggestions are scoped to that host. A known empty allowlist refuses all paths; policy_unknown means unavailable, stale, offline or missing agent inventory, not an empty policy. Local execution disabled reports local_disabled. Remote policies are advisory stored inventory, fresh for 15 minutes only while the agent is online; the executing agent enforces its actual policy.', ['read'], admin: true,
+            queryParameters: [['name' => 'docker_host_id', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'minimum' => 1, 'default' => 1]]],
+            response: ['type' => 'object', 'required' => ['data'], 'properties' => ['data' => ['type' => 'object', 'required' => array_keys($properties), 'properties' => $properties]]]);
     }
 
     private function operation(string $summary, array $abilities, ?array $body = null, bool $id = false, bool $admin = false, int $status = 200, bool $public = false, bool $bodyRequired = true, array $queryParameters = [], ?array $response = null): array
@@ -173,6 +244,13 @@ class OpenApiController extends Controller
             'DockerVolume' => [
                 'type' => 'object',
                 'properties' => [
+                    'docker_host_id' => ['type' => 'integer'],
+                    'docker_host' => ['$ref' => '#/components/schemas/OperationalHost'],
+                    'identity' => ['type' => 'string', 'description' => 'Host ID followed by a colon and the volume name.'],
+                    'canSync' => ['type' => 'boolean'],
+                    'canBackup' => ['type' => 'boolean'],
+                    'backup_unavailable_reason' => ['type' => ['string', 'null']],
+                    'create_job_url' => ['type' => 'string', 'description' => 'Web form URL qualified by volume and docker_host_id.'],
                     'id' => ['type' => 'integer'],
                     'name' => ['type' => 'string'],
                     'driver' => ['type' => ['string', 'null']],
@@ -216,6 +294,8 @@ class OpenApiController extends Controller
                     'logs' => ['type' => ['string', 'null']],
                     'error_message' => ['type' => ['string', 'null']],
                     'docker_container_id' => ['type' => ['string', 'null']],
+                    'docker_host_id' => ['type' => 'integer', 'readOnly' => true, 'description' => 'Docker host recorded for this execution. Existing runs are assigned to the built-in local host (1).'],
+                    'docker_host' => ['$ref' => '#/components/schemas/OperationalHost'],
                     'docker_container_cleanup_pending' => ['type' => 'boolean', 'description' => 'Whether interrupted backup-helper cleanup still needs to be reconciled.'],
                     'stopped_container_ids' => ['type' => ['array', 'null'], 'items' => ['type' => 'string'], 'description' => 'Application containers still owned by this run until restart recovery completes.'],
                     'backup_key' => ['type' => ['string', 'null']],
@@ -224,6 +304,29 @@ class OpenApiController extends Controller
                     'created_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
                     'updated_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
                     'job' => ['type' => ['object', 'null'], 'description' => 'Current backup job relation retained for response compatibility.'],
+                ],
+            ],
+            'OperationalHost' => [
+                'type' => ['object', 'null'],
+                'description' => 'Allowlisted operational summary. Host identity is stable; name and availability reflect current metadata. No enrollment or agent credentials.',
+                'properties' => [
+                    'id' => ['type' => 'integer'],
+                    'name' => ['type' => 'string'],
+                    'is_local' => ['type' => 'boolean'],
+                    'status' => ['type' => 'string'],
+                    'availability' => ['type' => 'string'],
+                    'maintenance_requested' => ['type' => 'boolean'],
+                    'capabilities' => ['type' => 'array', 'items' => ['type' => 'string']],
+                    'last_seen_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                    'last_inventory_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                    'docker_container_count' => ['type' => ['integer', 'null']],
+                    'total_volumes' => ['type' => 'integer'],
+                    'existing_volumes' => ['type' => 'integer'],
+                    'missing_volumes' => ['type' => 'integer'],
+                    'inventory_source' => ['type' => 'string'],
+                    'canSync' => ['type' => 'boolean'],
+                    'canBackup' => ['type' => 'boolean'],
+                    'backup_unavailable_reason' => ['type' => ['string', 'null']],
                 ],
             ],
             'BackupRunResponse' => [
@@ -237,6 +340,8 @@ class OpenApiController extends Controller
                 'type' => 'object',
                 'required' => ['data'],
                 'properties' => [
+                    'hosts' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/OperationalHost']],
+                    'filters' => ['type' => 'object', 'properties' => ['docker_host_id' => ['type' => ['integer', 'null']]]],
                     'data' => [
                         'type' => 'array',
                         'items' => ['$ref' => '#/components/schemas/BackupRun'],
@@ -281,6 +386,28 @@ class OpenApiController extends Controller
                     'notifications_enabled' => ['type' => 'boolean', 'description' => 'Required. Omitting it is rejected rather than silently disabling notifications.'],
                 ],
             ],
+            'DockerLabelBackupSettingsRequest' => [
+                'type' => 'object',
+                'required' => ['enabled', 'schedule_type', 'schedule_config', 'backup_filter_mode', 'notifications_enabled', 'alert_notifications_enabled', 'stop_containers_before_backup'],
+                'properties' => [
+                    'docker_host_id' => ['type' => 'integer', 'default' => 1],
+                    'enabled' => ['type' => 'boolean'],
+                    'backup_destination_id' => ['type' => ['integer', 'null'], 'description' => 'An active shared or same-host destination is required when enabled.'],
+                    'schedule_type' => ['type' => 'string', 'enum' => ['hourly', 'daily', 'weekly', 'cron']],
+                    'schedule_config' => ['type' => 'object'],
+                    'timezone' => ['type' => ['string', 'null']],
+                    'retention_days' => ['type' => ['integer', 'null'], 'minimum' => 1],
+                    'retention_count' => ['type' => ['integer', 'null'], 'minimum' => 1],
+                    'backup_filter_mode' => ['type' => 'string', 'enum' => ['exclude', 'include']],
+                    'backup_include_paths' => ['type' => ['string', 'null'], 'maxLength' => 2000],
+                    'backup_exclude_regexp' => ['type' => ['string', 'null'], 'maxLength' => 1000],
+                    'backup_filename_template' => ['type' => ['string', 'null'], 'maxLength' => 180],
+                    'notifications_enabled' => ['type' => 'boolean'],
+                    'notification_channel_ids' => ['type' => ['array', 'null'], 'items' => ['type' => 'integer'], 'uniqueItems' => true],
+                    'alert_notifications_enabled' => ['type' => 'boolean'],
+                    'stop_containers_before_backup' => ['type' => 'boolean'],
+                ],
+            ],
             'BackupJobRequest' => [
                 'type' => 'object',
                 'required' => ['name', 'backup_destination_id'],
@@ -291,6 +418,7 @@ class OpenApiController extends Controller
                     'backup_job_group_id' => ['type' => ['integer', 'null'], 'description' => 'Existing backup group to attach this job to. Required when planning_mode=group and group_selection is "existing" (or omitted).'],
                     'new_group' => ['type' => ['object', 'null'], 'description' => 'Group to create inline when planning_mode=group and group_selection=new. Same fields as BackupJobGroupRequest (name, schedule_type, schedule_config, timezone, failure_policy, notifications_enabled, notification_channel_ids).'],
                     'source_type' => ['type' => 'string', 'enum' => ['docker_volume', 'host_path'], 'default' => 'docker_volume'],
+                    'docker_host_id' => ['type' => 'integer', 'description' => 'Source Docker host. Defaults to local host 1 when creating a job; omitted on update preserves the existing host. Remote hosts require backup-v1.'],
                     'volume_name' => ['type' => ['string', 'null'], 'pattern' => '^[A-Za-z0-9_.-]+$', 'maxLength' => 255, 'description' => 'Required when source_type is docker_volume. Must match the Docker volume name pattern ^[A-Za-z0-9_.-]+$.'],
                     'host_path' => ['type' => ['string', 'null'], 'description' => 'Required when source_type is host_path. Must be an absolute directory path on the Docker host and match VOLUMEVAULT_HOST_PATH_ALLOWLIST when configured.'],
                     'backup_destination_id' => ['type' => 'integer'],
@@ -412,6 +540,7 @@ class OpenApiController extends Controller
             'StackBackupRequest' => [
                 'type' => 'object',
                 'properties' => [
+                    'docker_host_id' => ['type' => 'integer', 'default' => 1, 'description' => 'Host owning the stack volume inventory. Omitted means local, regardless of view filters. Remote hosts must be registered compatible agents supporting backup-v1 and not in maintenance; offline agents can queue work. Stack names never select volumes on other hosts.'],
                     'stack' => ['type' => ['string', 'null'], 'maxLength' => 255, 'description' => 'Compose or Swarm stack name (com.docker.compose.project / com.docker.stack.namespace). Null or omitted targets the "no stack" group of volumes that carry no stack label.'],
                     'backup_destination_id' => ['type' => ['integer', 'null'], 'description' => 'Destination for jobs created on the fly. Required only when the stack has volumes without a backup job; ignored when every volume is already covered.'],
                     'schedule_type' => ['type' => ['string', 'null'], 'enum' => ['hourly', 'daily', 'weekly', 'cron'], 'description' => 'Schedule for jobs created on the fly. Required only when the stack has volumes without a backup job. Existing jobs keep their own schedule.'],
@@ -431,8 +560,10 @@ class OpenApiController extends Controller
                 'properties' => [
                     'selected_backup_key' => ['type' => 'string', 'maxLength' => 2048, 'description' => 'Opaque provider object key of the backup to restore. Submit the exact key returned by GET /backup-jobs/{id}/backups; restore creation checks it against the destination listing (fail-closed). Provider keys may be absolute-looking or contain "..".'],
                     'backup_run_id' => ['type' => ['integer', 'null'], 'description' => 'Optional successful backup run belonging to the route job. When supplied, the run\'s snapshotted destination is used for listing, key validation, and restore even if the job now uses another destination. Supply the same value to GET /backup-jobs/{id}/backups.'],
+                    'destination_operation_id' => ['type' => ['string', 'null'], 'format' => 'uuid', 'description' => 'Fresh successful destination listing receipt containing the exact selected key. For host-local archive transfers this receipt must have executed on the source destination owner, independently of target_docker_host_id. Remote host-local archives require this receipt or a successful historical backup_run_id.'],
                     'mode' => ['type' => 'string', 'enum' => ['new_volume', 'inplace', 'safe_inplace'], 'description' => 'new_volume restores into a fresh volume (never destructive). inplace and safe_inplace overwrite the source volume and are only valid for Docker-volume sources; safe_inplace also stops the affected containers during the restore and restarts them afterwards. Both in-place modes require confirmation_text to equal the source volume name.'],
                     'target_volume_name' => ['type' => ['string', 'null'], 'pattern' => '^[A-Za-z0-9_.-]+$', 'maxLength' => 128, 'description' => 'Name for the new volume created by a new_volume restore. Must match ^[A-Za-z0-9_.-]+$. Ignored by the in-place modes, which always target the source volume.'],
+                    'target_docker_host_id' => ['type' => 'integer', 'description' => 'Execution target host; defaults to the job host. Cross-host restores require new_volume mode. Host-local archives use a central encrypted temporary relay; both participating remote agents require archive-relay-v1, and the target also requires restore-v1. Shared network destinations remain directly accessible.'],
                     'backup_before_overwrite' => ['type' => ['boolean', 'null'], 'description' => 'Only honoured by the destructive in-place modes: when true, a safety backup of the source volume is taken before it is overwritten. Ignored for new_volume.'],
                     'confirmation_text' => ['type' => ['string', 'null'], 'description' => 'Required for the in-place modes: must equal the source volume name to arm the destructive restore.'],
                 ],
@@ -451,8 +582,9 @@ class OpenApiController extends Controller
                 'type' => 'object',
                 'required' => ['host'],
                 'properties' => [
-                    'host' => ['type' => 'string', 'description' => 'SSH server hostname or IP.'],
+                    'host' => ['type' => 'string', 'description' => 'Bare IPv4/IPv6 address (including ::1) or DNS/container hostname (underscores allowed). URLs, userinfo, paths, controls and bracketed IPv6 are rejected. Agent-local outbound IP policy still applies.'],
                     'port' => ['type' => ['integer', 'null'], 'minimum' => 1, 'maximum' => 65535, 'default' => 22],
+                    'docker_host_id' => ['type' => ['integer', 'null'], 'description' => 'Explicit executor. Null/1 selects central; a remote host must advertise both destination-v1 and sftp-host-key-v1.'],
                 ],
             ],
             'NotificationChannelUpdateRequest' => [
@@ -495,6 +627,8 @@ class OpenApiController extends Controller
         return [
             'name' => ['type' => 'string'],
             'provider' => ['type' => 'string', 'enum' => BackupDestination::PROVIDERS],
+            'docker_host_id' => ['type' => ['integer', 'null'], 'description' => 'Owner of a local filesystem or Docker-volume destination. Network destinations are shared and have no host owner.'],
+            'storage_measurement_host_id' => ['type' => ['integer', 'null'], 'description' => 'Automatic storage measurement executor. Null/1 means central for network destinations; agents require destination-v1. Host-bound destinations always use their owner and reject a different executor. Omitted on update preserves the selection; null explicitly resets network destinations to central. Changes invalidate usage and delta baselines. This does not change manual operation defaults.'],
             'endpoint' => ['type' => ['string', 'null'], 'format' => 'uri'],
             'region' => ['type' => ['string', 'null']],
             'bucket' => ['type' => ['string', 'null'], 'description' => 'Legacy S3 bucket field. Use settings for non-S3 providers.'],

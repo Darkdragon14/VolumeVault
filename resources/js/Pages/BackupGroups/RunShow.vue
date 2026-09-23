@@ -41,6 +41,7 @@ const { t, formatDate } = useI18n();
                         <div class="min-w-0">
                             <p class="break-words font-medium text-white">{{ member.job_name }}</p>
                             <p class="mt-1 break-all text-slate-400">{{ member.source_label }}</p>
+                            <p class="mt-1 break-words text-slate-400">{{ t('hostWorkflow.sourceHost') }}: {{ member.docker_host?.name || t('Unknown') }} (#{{ member.docker_host_id ?? 1 }})</p>
                             <p v-if="member.error_message" class="mt-1 break-words text-rose-300">{{ member.error_message }}</p>
                         </div>
                         <div class="flex items-center gap-3">

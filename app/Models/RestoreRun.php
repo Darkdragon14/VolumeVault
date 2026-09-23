@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RestoreRun extends Model
 {
@@ -29,6 +30,8 @@ class RestoreRun extends Model
     public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
+        'source_docker_host_id',
+        'target_docker_host_id',
         'backup_job_id',
         'initiated_by_user_id',
         'backup_destination_id',
@@ -49,9 +52,11 @@ class RestoreRun extends Model
         'logs',
         'error_message',
         'docker_container_id',
+        'docker_container_cleanup_pending',
     ];
 
     protected $hidden = [
+        'target_volume_ownership_token',
         'dispatch_token',
         'dispatch_attempted_at',
         'dispatch_published_at',
@@ -60,6 +65,8 @@ class RestoreRun extends Model
     protected function casts(): array
     {
         return [
+            'source_docker_host_id' => 'integer',
+            'target_docker_host_id' => 'integer',
             'dispatch_attempted_at' => 'datetime',
             'dispatch_published_at' => 'datetime',
             'affected_containers' => 'array',
@@ -69,7 +76,23 @@ class RestoreRun extends Model
             'last_heartbeat_at' => 'datetime',
             'finished_at' => 'datetime',
             'duration_seconds' => 'integer',
+            'docker_container_cleanup_pending' => 'boolean',
         ];
+    }
+
+    protected $attributes = [
+        'source_docker_host_id' => DockerHost::LOCAL_ID,
+        'target_docker_host_id' => DockerHost::LOCAL_ID,
+    ];
+
+    public function sourceDockerHost(): BelongsTo
+    {
+        return $this->belongsTo(DockerHost::class, 'source_docker_host_id');
+    }
+
+    public function targetDockerHost(): BelongsTo
+    {
+        return $this->belongsTo(DockerHost::class, 'target_docker_host_id');
     }
 
     public function job(): BelongsTo
@@ -80,6 +103,11 @@ class RestoreRun extends Model
     public function destination(): BelongsTo
     {
         return $this->belongsTo(BackupDestination::class, 'backup_destination_id');
+    }
+
+    public function archiveRelay(): HasOne
+    {
+        return $this->hasOne(ArchiveRelay::class);
     }
 
     public function initiatedBy(): BelongsTo
@@ -107,6 +135,8 @@ class RestoreRun extends Model
     {
         return $query->where(function (Builder $q): void {
             $q->whereIn('status', [self::STATUS_QUEUED, self::STATUS_RUNNING])
+                ->orWhere('docker_container_cleanup_pending', true)
+                ->orWhereHas('archiveRelay', fn (Builder $relay) => $relay->whereNull('cleaned_at'))
                 ->orWhere(fn (Builder $inner) => $inner
                     ->whereNotNull('stopped_container_ids')
                     ->whereJsonLength('stopped_container_ids', '>', 0));

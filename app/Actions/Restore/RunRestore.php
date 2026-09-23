@@ -17,7 +17,10 @@ use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\DockerVolume;
 use App\Models\RestoreRun;
+use App\Services\Agents\HostWorkAdmission;
+use App\Services\Agents\LocalArchiveRelayTarget;
 use App\Services\BackupDestinations\DestinationStorage;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Logging\AppendRunLog;
 use App\Services\Notifications\SendShoutrrrNotification;
 use App\Support\RunHeartbeatLock;
@@ -45,8 +48,25 @@ class RunRestore
         private readonly CreateRunFinalizations $createFinalizations,
     ) {}
 
-    public function handle(RestoreRun $run): void
+    public function handle(RestoreRun $run, ?string $verifiedRelayArchive = null): void
     {
+        if ($verifiedRelayArchive === null && $run->archiveRelay !== null) {
+            LocalDockerExecution::assertHost((int) $run->target_docker_host_id);
+            app(LocalArchiveRelayTarget::class)->handle($run,
+                fn (string $archive) => $this->execute($run->fresh(), $archive, admitted: true));
+
+            return;
+        }
+        $this->execute($run, $verifiedRelayArchive);
+    }
+
+    private function execute(RestoreRun $run, ?string $verifiedRelayArchive, bool $admitted = false): void
+    {
+        if (app(HostWorkAdmission::class)->isWaiting($run)) {
+            return;
+        }
+
+        LocalDockerExecution::assertHost((int) $run->target_docker_host_id);
         $startedAt = now();
 
         // Atomically claim the run: flip a QUEUED row → RUNNING in a single
@@ -56,20 +76,18 @@ class RunRestore
         // a (possibly destructive) restore a live worker is mid-way through. A row
         // reconciliation already marked terminal also matches zero rows, so a
         // delayed lock loser never resurrects a finalized restore. Mirrors RunBackup.
-        $claimed = RestoreRun::query()
-            ->whereKey($run->getKey())
-            ->where('status', RestoreRun::STATUS_QUEUED)
-            ->update([
-                'status' => RestoreRun::STATUS_RUNNING,
-                'started_at' => $startedAt,
-                'last_heartbeat_at' => $startedAt,
-            ]);
+        $claimed = $admitted ? (int) ($run->status === RestoreRun::STATUS_RUNNING) : app(HostWorkAdmission::class)->claim($run, [
+            'status' => RestoreRun::STATUS_RUNNING,
+            'started_at' => $startedAt,
+            'last_heartbeat_at' => $startedAt,
+        ]);
 
         if ($claimed === 0) {
             return;
         }
 
         $run->refresh();
+        $run->archiveRelay?->update(['status' => 'restoring']);
         $run->loadMissing('job.destination', 'destination');
         $archivePath = storage_path('app/restore-runs/'.$run->id.'/backup.tar.gz');
         $handler = $this->handlerFor($run->mode);
@@ -99,12 +117,20 @@ class RunRestore
 
             $this->appendRunLog->handle($run, 'Downloading selected backup object from backup destination.');
             $this->heartbeat($run, requiresRunning: true);
-            $this->storage->download(
-                $run->destination,
-                $run->selected_backup_key,
-                $archivePath,
-                fn () => $this->heartbeat($run, requiresRunning: true),
-            );
+            if ($verifiedRelayArchive !== null) {
+                if ($run->mode !== RestoreRun::MODE_NEW_VOLUME || is_link($verifiedRelayArchive)
+                    || ! is_file($verifiedRelayArchive) || ! chmod(dirname($archivePath), 0700)
+                    || ! link($verifiedRelayArchive, $archivePath)) {
+                    throw new RuntimeException('Unable to use the verified relay archive.');
+                }
+            } else {
+                $this->storage->download(
+                    $run->destination,
+                    $run->selected_backup_key,
+                    $archivePath,
+                    fn () => $this->heartbeat($run, requiresRunning: true),
+                );
+            }
             $this->verifyArchive($run, $archivePath);
             $this->heartbeat($run, requiresRunning: true);
 
@@ -151,7 +177,7 @@ class RunRestore
                 throw new RuntimeException($result->combinedOutput() ?: 'Restore container failed.');
             }
 
-            DockerVolume::updateOrCreate(['name' => $run->target_volume_name], [
+            DockerVolume::updateOrCreate(['docker_host_id' => $run->target_docker_host_id, 'name' => $run->target_volume_name], [
                 'exists' => true,
                 'last_seen_at' => now(),
             ]);
@@ -294,6 +320,7 @@ class RunRestore
      */
     public function restartStoppedContainers(RestoreRun $run): void
     {
+        LocalDockerExecution::assertHost((int) $run->target_docker_host_id);
         $containerIds = $run->stopped_container_ids ?? [];
 
         if (! $containerIds) {

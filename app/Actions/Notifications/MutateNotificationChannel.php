@@ -71,7 +71,7 @@ class MutateNotificationChannel
         DockerLabelBackupSetting::current();
 
         return DB::transaction(function () use ($callback): mixed {
-            DockerLabelBackupSetting::query()->whereKey(1)->lockForUpdate()->firstOrFail();
+            DockerLabelBackupSetting::query()->orderBy('id')->lockForUpdate()->get();
             $channels = NotificationChannel::query()->orderBy('id')->lockForUpdate()->get();
 
             return $callback($channels);

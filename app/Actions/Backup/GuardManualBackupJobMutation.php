@@ -4,6 +4,9 @@ namespace App\Actions\Backup;
 
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
+use App\Models\DockerHost;
+use App\Services\Agents\AgentExecution;
+use App\Services\Agents\HostWorkAdmission;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
@@ -23,18 +26,25 @@ class GuardManualBackupJobMutation
         callable $callback,
         array $backupGroupIds = [],
         array $explicitJobIds = [],
+        int $dockerHostId = DockerHost::LOCAL_ID,
     ): mixed {
-        return $this->withGroupLocks->handle($backupGroupIds, function ($groups) use ($destinationIds, $destinationId, $volumeName, $notificationChannelIds, $callback, $volumeNames, $explicitJobIds): mixed {
-            return $this->withLocks->handle(
+        return $this->withGroupLocks->handle($backupGroupIds, function ($groups) use ($destinationIds, $destinationId, $volumeName, $notificationChannelIds, $callback, $volumeNames, $explicitJobIds, $dockerHostId): mixed {
+            return $this->withLocks->handleOnHost(
                 $destinationIds,
-                function ($destinations, $settings, $managedJobs, $volumes, $channels, $explicitJobs) use ($destinationId, $volumeName, $notificationChannelIds, $callback, $groups): mixed {
+                function ($destinations, $settings, $managedJobs, $volumes, $channels, $explicitJobs) use ($destinationId, $volumeName, $notificationChannelIds, $callback, $groups, $dockerHostId): mixed {
+                    app(AgentExecution::class)->validateHost($dockerHostId, 'backup-v1');
+                    app(HostWorkAdmission::class)->assertAccepting($dockerHostId);
+                    $destination = $destinations->get($destinationId);
+                    if ($destination?->isHostBound() && (int) $destination->docker_host_id !== $dockerHostId) {
+                        throw ValidationException::withMessages(['backup_destination_id' => 'The destination belongs to another Docker host.']);
+                    }
                     if (! $destinations->get($destinationId)?->is_active) {
                         throw ValidationException::withMessages([
                             'backup_destination_id' => 'The selected backup destination no longer exists or is inactive.',
                         ]);
                     }
 
-                    if ($volumeName !== null && ! $volumes->get($volumeName)?->exists) {
+                    if ($volumeName !== null && ! $volumes->get($volumeName)?->isAvailable()) {
                         throw ValidationException::withMessages([
                             'volume_name' => 'The selected Docker volume no longer exists.',
                         ]);
@@ -57,6 +67,7 @@ class GuardManualBackupJobMutation
                 $volumeNames,
                 $notificationChannelIds,
                 $explicitJobIds,
+                $dockerHostId,
             );
         });
     }

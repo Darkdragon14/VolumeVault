@@ -17,7 +17,25 @@ VolumeVault is not S3-only. It supports the destination families exposed by the 
 - Local filesystem: archive path shared between VolumeVault and the temporary Offen container.
 - Docker volume: a named Docker volume (any driver — `local`, NFS, CIFS, …) mounted **by name** into the temporary Offen container. No host path needs to be shared with VolumeVault.
 
-Each destination can be tested from the UI. Destination testing, listing, upload, download, and restore download behavior is centralized in `app/Services/BackupDestinations/DestinationStorage.php`. Backup runs upload through Offen, which does not expose a verifiable exact Dropbox file ID to VolumeVault. Asynchronous metadata processing never infers that ID from a filename, since the file may have been replaced. Even a newly successful Dropbox backup without a proven file ID remains unverifiable for restoration from run history.
+Each saved destination offers connection testing, storage measurements and paginated archive browsing from its edit page or the Test action on the destination list. Select **Execute on host** to run through a compatible `destination-v1` agent. Shared network destinations default to central host `1`, including deployments without local Docker execution; host-local destinations are fixed to their owner. Unavailable hosts show a capability/ownership/maintenance explanation. Operations use the saved configuration, so save edits before testing them.
+
+Requests run asynchronously: the UI shows pending/running status, errors, storage bytes and object count, and the result freshness deadline. Offline agents leave work pending until they can claim it. Changing the selected host or destination clears previous results and cancels browser polling. Browsing displays exact provider keys alongside names and loads additional pages on demand. Results used as restore receipts are fresh for 30 minutes from operation claim (or creation if unclaimed), not from when the browser retrieves them.
+
+### Automated usage and threshold measurements
+
+Under **Destination storage limits**, save an **Automated storage measurement executor** for scheduled checks. This is separate from the manual **Execute on host** control. Network destinations default to the central network; select a compatible `destination-v1` agent when the endpoint is private to that host. This setting selects both network reachability and the executor's egress policy. There is no central fallback when the chosen agent cannot perform the measurement. Pending, stale and failed measurements are not treated as zero usage.
+
+The saved `storage_measurement_host_id` is nullable: `null` or `1` means central execution for network destinations. API updates preserve the saved choice when omitted and reset it when explicitly set to `null`. Local filesystem and Docker-volume destinations always measure on their owner; the form fixes the selector accordingly. Changing the provider resets a network choice or selects the local owner, and changing a local owner updates the measurement host. A host's maintenance state does not erase this saved configuration.
+
+If a saved network measurement host becomes unavailable, the form keeps its ID and shows a disabled selected option with its name and ID (or just the ID if the host is no longer in the supplied host lists). It does not silently switch to central execution. If the backend rejects saving that host, select a compatible agent or the central network, or restore the agent's enrollment and upgrade it for `destination-v1`. Basic editing of a host-local destination keeps its explicit owner even when that host lacks destination-operation support.
+
+### SFTP host-key discovery
+
+An unsaved SFTP form can discover the server key from the **central network** or an agent with both `destination-v1` and `sftp-host-key-v1`. Choose the discovery executor explicitly; it is independent of automated measurements and manual saved-destination operations. Discovery sends only host, port and executor, never endpoint credentials. Agent discovery queues an operation and polls for its result. Changing the host, port, executor, provider or manually entered key invalidates the in-flight result; leaving the page stops polling.
+
+You may still paste a public host key or SHA256 fingerprint manually. Compare a discovered fingerprint with the server through a trusted channel before saving: discovery is trust on first use, not independent identity verification. Pinning protects SFTP operations performed by VolumeVault. **The Offen backup container cannot verify host keys**, so discovery does not fix this backup-upload limitation.
+
+Destination testing, listing, upload, download, and restore download behavior is centralized in `app/Services/BackupDestinations/DestinationStorage.php`. Backup runs upload through Offen, which does not expose a verifiable exact Dropbox file ID to VolumeVault. Asynchronous metadata processing never infers that ID from a filename, since the file may have been replaced. Even a newly successful Dropbox backup without a proven file ID remains unverifiable for restoration from run history.
 
 Uploaded SSH private keys are written to a temporary file with restricted permissions and copied through the Docker API into the temporary Offen backup container before it starts. The local key file and temporary container are removed after the backup attempt, including when setup or execution fails.
 
@@ -75,3 +93,5 @@ VOLUMEVAULT_HOST_PATH_ALLOWLIST=/archive,/mnt/backups
 
 php artisan config:clear
 ```
+
+For remote destinations, configure this variable on the **owning agent**. Policy reports come from accepted inventory and include a timestamp and freshness. Known-empty means no paths are allowed; stale, missing or offline-agent reports mean unknown and do not establish that a path is centrally blocked or safe. The agent applies its authoritative policy at execution. Use `php artisan volumevault:host-path-allowlist:audit --host=2` for one host or `--all` for all hosts; these remote audits use stored inventory without Docker access.

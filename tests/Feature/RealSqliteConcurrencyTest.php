@@ -154,6 +154,52 @@ class RealSqliteConcurrencyTest extends TestCase
         $this->assertSame('concurrent failure', $committedRun->error_message);
     }
 
+    public function test_agent_enrollment_retries_a_sqlite_read_to_write_upgrade_without_duplicate_records(): void
+    {
+        config(['database.connections.sqlite.journal_mode' => 'DELETE', 'database.connections.sqlite.busy_timeout' => null,
+            'volumevault.agents.enabled' => true]);
+        DB::purge('sqlite');
+        $this->mock(\App\Services\Agents\AgentTlsIdentity::class)->shouldReceive('caCertificate')->andReturn('test-public-ca');
+        $host = \App\Models\DockerHost::factory()->create();
+        $this->assertSame('delete', DB::selectOne('PRAGMA journal_mode')->journal_mode);
+        $this->assertGreaterThan(0, DB::selectOne('PRAGMA busy_timeout')->timeout);
+        $child = $this->fork(function (callable $barrier) use ($host): array {
+            $paused = false;
+            $rolledBack = false;
+            Event::listen('eloquent.retrieved: '.\App\Models\DockerHost::class, function (\App\Models\DockerHost $loaded) use ($host, $barrier, &$paused): void {
+                if (! $paused && $loaded->id === $host->id && DB::transactionLevel() === 1) {
+                    $paused = true;
+                    $barrier('enrollment-read');
+                }
+            });
+            Event::listen(\Illuminate\Database\Events\TransactionRolledBack::class, function () use ($barrier, &$rolledBack): void {
+                if (! $rolledBack) {
+                    $rolledBack = true;
+                    $barrier('enrollment-rolled-back');
+                }
+            });
+            try {
+                $installation = app(\App\Services\Agents\AgentRegistry::class)->issueEnrollment($host);
+                preg_match('/VOLUMEVAULT_AGENT_ENROLLMENT_TOKEN=([^\x27 ]+)/', $installation['command'], $matches);
+                [, $secret] = explode('.', $matches[1], 2);
+
+                return ['ok' => true, 'credential_matches' => hash_equals($host->fresh()->agent_enrollment_hash, hash('sha256', $secret))];
+            } catch (\Illuminate\Database\QueryException $exception) {
+                return ['ok' => false, 'sqlstate' => $exception->errorInfo[0] ?? null, 'driver_code' => $exception->errorInfo[1] ?? null];
+            }
+        });
+        $this->awaitBarrier($child, 'enrollment-read');
+        DB::beginTransaction();
+        DB::table('docker_hosts')->where('id', \App\Models\DockerHost::LOCAL_ID)->update(['name' => 'Concurrent host heartbeat']);
+        $this->releaseBarrier($child);
+        $this->awaitBarrier($child, 'enrollment-rolled-back');
+        DB::commit();
+        $this->releaseBarrier($child);
+        $this->assertSame(['ok' => true, 'credential_matches' => true], $this->finish($child));
+        $this->assertSame(2, \App\Models\DockerHost::count());
+        $this->assertSame(1, ActivityLog::where('event_type', 'agent_enrollment_issued')->where('subject_id', $host->id)->count());
+    }
+
     public function test_backup_run_creation_is_invisible_until_job_and_activity_writes_commit(): void
     {
         $job = $this->backupJob();

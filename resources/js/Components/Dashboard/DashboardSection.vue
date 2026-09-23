@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
+import HostIdentity from '@/Components/HostIdentity.vue';
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
@@ -26,6 +27,8 @@ const { t, formatDate } = useI18n();
             <Link v-for="run in recentBackupRuns" :key="run.id" :href="`/backup-runs/${run.id}`" class="flex flex-col gap-2 rounded-xl bg-white/5 px-4 py-3 hover:bg-slate-100 dark:hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
                     <p class="break-words font-medium">{{ run.job?.name || t('Backup run #{id}', { id: run.id }) }}</p>
+                    <HostIdentity :host="run.docker_host" />
+                    <p class="break-all text-xs text-slate-400">{{ run.source_name }}</p>
                     <p class="text-xs text-slate-400">{{ formatDate(run.started_at || run.created_at) }} <span v-if="run.backup_size_bytes !== null">/ {{ formatBytes(run.backup_size_bytes) }}</span></p>
                 </div>
                 <StatusBadge :status="run.status" />
@@ -56,7 +59,9 @@ const { t, formatDate } = useI18n();
         <div v-if="recentRestoreRuns.length" class="space-y-3">
             <Link v-for="run in recentRestoreRuns" :key="run.id" :href="`/restore-runs/${run.id}`" class="flex flex-col gap-2 rounded-xl bg-white/5 px-4 py-3 hover:bg-slate-100 dark:hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
-                    <p class="break-all font-medium">{{ run.source_volume_name }} to {{ run.target_volume_name }}</p>
+                    <p class="break-all font-medium">{{ run.source_volume_name }} → {{ run.target_volume_name }}</p>
+                    <p class="text-xs text-slate-400">{{ t('hostWorkflow.sourceHost') }}</p><HostIdentity :host="run.source_docker_host" />
+                    <p class="text-xs text-slate-400">{{ t('hostWorkflow.targetHost') }}</p><HostIdentity :host="run.target_docker_host" />
                     <p class="text-xs text-slate-400">{{ formatDate(run.started_at || run.created_at) }}</p>
                 </div>
                 <StatusBadge :status="run.status" />
@@ -70,6 +75,7 @@ const { t, formatDate } = useI18n();
         <div v-if="jobsWithErrors.length" class="space-y-3">
             <Link v-for="job in jobsWithErrors" :key="job.id" :href="`/backup-jobs/${job.id}`" class="block rounded-xl bg-rose-400/10 px-4 py-3 hover:bg-rose-400/15">
                 <p class="break-words font-medium text-rose-100">{{ job.name }}</p>
+                <HostIdentity :host="job.docker_host" />
                 <p class="break-words text-sm text-rose-200/80">{{ job.last_error || t('Unknown error') }}</p>
             </Link>
         </div>

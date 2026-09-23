@@ -6,25 +6,32 @@ use App\Actions\Backup\BackupStack;
 use App\Http\Requests\StackBackupRequest;
 use App\Models\BackupDestination;
 use App\Models\DockerVolume;
+use App\Services\Agents\OperationalHostScope;
 use App\Services\Volumes\VolumeBackupSummaries;
+use App\Support\DeploymentMode;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class StackController extends Controller
 {
-    public function index(VolumeBackupSummaries $volumeBackupSummaries): Response
+    public function index(VolumeBackupSummaries $volumeBackupSummaries, OperationalHostScope $scope): Response
     {
-        $volumes = DockerVolume::query()
+        $volumes = $scope->query(DockerVolume::class)
             ->orderByDesc('exists')
             ->orderBy('name')
             ->get();
 
         return Inertia::render('Stacks/Index', [
-            'stacks' => $volumeBackupSummaries->forStacks($volumes),
-            'destinations' => BackupDestination::where('is_active', true)
+            ...$scope->props(),
+            'stacks' => $volumeBackupSummaries->forStacks($volumes, $scope),
+            'destinations' => request()->user()?->isAdmin() ? BackupDestination::where('is_active', true)
                 ->orderBy('name')
                 ->get()
-                ->map->safeForFrontend(),
+                ->filter(fn (BackupDestination $destination): bool => ! DeploymentMode::isOrchestrator()
+                    || ! $destination->isHostBound()
+                    || ($scope->summary((int) $destination->docker_host_id)['canBackup'] ?? false))
+                ->values()
+                ->map->safeForFrontend() : [],
             'timezones' => \DateTimeZone::listIdentifiers(),
             'appTimezone' => config('app.timezone'),
         ]);

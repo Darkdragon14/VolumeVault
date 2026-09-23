@@ -64,6 +64,8 @@ The container listens on port `8080`; change the host side of the mapping, for e
 
 The single container runs nginx, PHP-FPM, database migrations, queue worker, and scheduler.
 
+If a MySQL upgrade failed in `2026_09_22_072732_add_destination_operations_to_agent_operations` with error 1059 (index name too long), update to the fixed code and rerun `php artisan migrate --force` in the application environment. The migration resumes after partially committed columns or foreign keys without deleting existing rows. Do not use `migrate:fresh` for recovery; it deletes data. Existing SQLite installations require no schema changes and retain rollback compatibility.
+
 To connect through a Docker TCP endpoint, such as a socket proxy in front of the same Docker engine, use the standalone TCP file: `VOLUMEVAULT_DOCKER_HOST=tcp://docker-proxy.example.internal:2375 docker compose -f docker-compose.tcp.yml up -d`. The separate interpolation variable configures the container without redirecting the host Docker CLI, and the TCP file does not mount `/var/run/docker.sock`. The base file is fixed to the local Unix socket so an ambient `DOCKER_HOST` cannot accidentally combine proxy mode with unrestricted socket access. The endpoint applies to the entire VolumeVault instance and must be reachable from both VolumeVault and the temporary Offen backup containers. If the proxy hostname only resolves on a user-defined Docker network, set `VOLUMEVAULT_DOCKER_NETWORK` to that network's engine-visible name so Offen joins it. This does not add support for managing a Docker engine on another host. Docker TCP access is root-equivalent; keep it on a trusted private network and see the installation and security documentation before enabling it.
 
 Defaults are built into the application for a production SQLite setup. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
@@ -99,6 +101,14 @@ The host is resolved just before connecting, so a determined attacker controllin
 When you serve VolumeVault over HTTPS (directly or behind a TLS-terminating reverse proxy), set `SESSION_SECURE_COOKIE=true` so the session cookie is only sent over HTTPS. **Leave it off for plain-HTTP or LAN-only access** — a `Secure` cookie is never sent over plain HTTP, so enabling it without TLS breaks login. Behind a reverse proxy, this works once `TRUSTED_PROXIES` is set and the proxy forwards `X-Forwarded-Proto: https` (see the docs for the full reverse-proxy setup).
 
 Keep your `APP_KEY` safe: it is required to decrypt destinations, notifications, two-factor secrets, and installation saves.
+
+### Deployment roles and agents
+
+The default `VOLUMEVAULT_MODE=hybrid` keeps the existing local Docker executor. Set `VOLUMEVAULT_MODE=orchestrator` to run the central application without a Docker socket or remote Docker endpoint; `docker-compose.orchestrator.yml` provides a standalone deployment for this mode. Local jobs and history remain stored, but local execution is disabled. Drain local work through maintenance before changing modes.
+
+Agents use the dedicated `volumevault-agent` PHP CLI image. The Docker hosts page shows local/central/agent roles, software and protocol compatibility, maintenance state, and a manual update guide. Keep each agent's existing `/app/storage` volume and configuration when replacing its container; a normal update does not require enrollment again. See `docs/_tabs/installation.md` for activation, image targets, compatibility and update procedures.
+
+Compatible agents execute standalone backups and restores. Shared network destinations support restoring an archive from host A into a new volume on host B. Distributed groups, remote Docker-label reconciliation and relay of archives stored only on another host remain under development.
 
 ## Documentation
 

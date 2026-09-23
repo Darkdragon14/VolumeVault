@@ -2,16 +2,17 @@
 import ActionIcon from '@/Components/ActionIcon.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import HostScope from '@/Components/HostScope.vue';
+import HostIdentity from '@/Components/HostIdentity.vue';
+import { destinationMatchesHost } from '@/Composables/useDeployment';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
 import { matchesSearch, readFiltersFromUrl, useListFilters, useUrlFilters } from '@/Composables/useListFilters';
 
-const props = defineProps<{ stacks: any[]; destinations: any[]; timezones: string[]; appTimezone: string }>();
+const props = defineProps<{ stacks: any[]; destinations: any[]; timezones: string[]; appTimezone: string; hosts: any[]; filters: { docker_host_id: number | null } }>();
 
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
 const { t, formatDate } = useI18n();
 const search = ref('');
 const backupFilter = ref('');
@@ -22,8 +23,10 @@ const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 
 
 const processing = ref(false);
 const backupTarget = ref<any | null>(null);
+const destinationsForStack = (stack: any) => props.destinations.filter(destination => destinationMatchesHost(destination, stack.docker_host_id));
+const eligibleDestinations = computed(() => backupTarget.value ? destinationsForStack(backupTarget.value) : []);
 const backupForm = reactive({
-    backup_destination_id: props.destinations[0]?.id ?? '',
+    backup_destination_id: '',
     schedule_type: 'daily',
     schedule_config: { time: '02:00', everyHours: 6, dayOfWeek: 'sunday', expression: '0 2 * * *' },
     timezone: '',
@@ -32,10 +35,11 @@ const backupForm = reactive({
 const isFullyConfigured = (stack: any) => stack.existing_volumes > 0 && stack.configured_job_volumes === stack.existing_volumes;
 
 const openBackup = (stack: any) => {
-    if (!props.destinations.length) {
+    const destinations = destinationsForStack(stack);
+    if (!stack.canBackup || !destinations.length) {
         return;
     }
-    backupForm.backup_destination_id = props.destinations[0]?.id ?? '';
+    backupForm.backup_destination_id = destinations[0].id;
     backupForm.schedule_type = 'daily';
     backupForm.schedule_config = { time: '02:00', everyHours: 6, dayOfWeek: 'sunday', expression: '0 2 * * *' };
     backupForm.timezone = '';
@@ -47,11 +51,12 @@ const closeBackup = () => {
 };
 
 const submitBackup = () => {
-    if (processing.value || !backupTarget.value) {
+    if (processing.value || !backupTarget.value || !eligibleDestinations.value.some(destination => String(destination.id) === String(backupForm.backup_destination_id))) {
         return;
     }
     router.post('/stacks/backup', {
         stack: backupTarget.value.name,
+        docker_host_id: backupTarget.value.docker_host_id,
         backup_destination_id: backupForm.backup_destination_id,
         schedule_type: backupForm.schedule_type,
         schedule_config: backupForm.schedule_config,
@@ -65,10 +70,10 @@ const submitBackup = () => {
 };
 
 const runAll = (stack: any) => {
-    if (processing.value || !confirm(t('Queue a backup run for every job in this stack?'))) {
+    if (!stack.canBackup || processing.value || !confirm(t('Queue a backup run for every job in this stack?'))) {
         return;
     }
-    router.post('/stacks/backup', { stack: stack.name }, {
+    router.post('/stacks/backup', { stack: stack.name, docker_host_id: stack.docker_host_id }, {
         preserveScroll: true,
         onStart: () => { processing.value = true; },
         onFinish: () => { processing.value = false; },
@@ -112,7 +117,7 @@ const stackConfigurationClass = (state: string) => ({
     not_configured: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
 }[state] || 'border-slate-300/20 bg-slate-300/10 text-slate-200');
 
-const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURIComponent(volumeName)}`;
+const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volume.name)}&docker_host_id=${volume.docker_host_id}`;
 </script>
 
 <template>
@@ -135,6 +140,7 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
             </div>
         </template>
 
+        <HostScope :hosts="hosts" :filters="filters" :query="{ search, backup_status: backupFilter }" />
         <div v-if="stacks.length && filtersVisible" class="card mb-4 p-4">
             <label class="block max-w-sm space-y-1">
                 <span class="label">{{ t('Backup status') }}</span>
@@ -149,7 +155,7 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
         </div>
 
         <div v-if="filteredStacks.length" class="space-y-6">
-            <section v-for="stack in filteredStacks" :key="stack.name || 'no-stack'" class="card overflow-hidden">
+            <section v-for="stack in filteredStacks" :key="stack.identity" class="card overflow-hidden">
                 <div class="border-b border-white/10 p-5">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div class="min-w-0">
@@ -157,10 +163,12 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
                                 <h2 class="break-words text-xl font-semibold text-white">{{ stack.name || t('No stack') }}</h2>
                                 <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold" :class="stackConfigurationClass(stack.configuration_state)">{{ stackConfigurationLabel(stack.configuration_state) }}</span>
                             </div>
+                            <HostIdentity :host="stack.docker_host" :reason="stack.backup_unavailable_reason" />
+                            <p class="mt-1 text-sm text-slate-400">{{ t('hostScope.volumeLabels') }} · {{ t('hostScope.containers') }}: {{ stack.container_count ?? t('Unknown') }}</p>
                             <p class="mt-1 text-sm text-slate-400">{{ t('{count} volumes', { count: stack.total_volumes }) }}</p>
-                            <div v-if="can.runDockerActions && stack.existing_volumes > 0" class="mt-3">
+                            <div v-if="stack.canBackup && stack.existing_volumes > 0" class="mt-3">
                                 <button v-if="isFullyConfigured(stack)" type="button" class="btn-secondary gap-2" :disabled="processing" @click="runAll(stack)">{{ t('Run all jobs') }}</button>
-                                <button v-else type="button" class="btn-secondary gap-2" :disabled="processing || !destinations.length" @click="openBackup(stack)">{{ t('Back up stack') }}</button>
+                                <button v-else type="button" class="btn-secondary gap-2" :disabled="processing || !destinationsForStack(stack).length" @click="openBackup(stack)">{{ t('Back up stack') }}</button>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:min-w-[30rem]">
@@ -191,8 +199,8 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
                             <div v-if="volume.last_backup_at"><dt class="text-xs uppercase text-slate-500">{{ t('Last backup') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(volume.last_backup_at) }} / {{ formatBytes(volume.last_backup_size_bytes, t('Unknown')) }}</dd></div>
                         </dl>
                         <div class="flex flex-wrap gap-2">
-                            <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}`" />
-                            <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume.name)" />
+                            <ActionIcon v-if="volume.canBackup" :label="t('Create backup job')" icon="archive" :href="volume.create_job_url" />
+                            <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume)" />
                         </div>
                     </article>
                 </div>
@@ -220,8 +228,8 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
-                                        <ActionIcon v-if="can.runDockerActions" :label="t('Create backup job')" icon="archive" :href="`/backup-jobs/create?volume=${encodeURIComponent(volume.name)}`" />
-                                        <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume.name)" />
+                                        <ActionIcon v-if="volume.canBackup" :label="t('Create backup job')" icon="archive" :href="volume.create_job_url" />
+                                        <ActionIcon :label="t('View jobs ({count})', { count: volume.related_jobs_count })" icon="eye" :href="jobsHref(volume)" />
                                     </div>
                                 </td>
                             </tr>
@@ -235,17 +243,18 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
             <button v-if="hasActiveFilters" type="button" class="btn-secondary mt-5" @click="resetFilters">{{ t('Reset filters') }}</button>
         </div>
 
-        <div v-if="backupTarget" class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4" @click.self="closeBackup">
-            <div class="card w-full max-w-lg p-5">
-                <h2 class="text-lg font-semibold text-white">{{ t('Back up stack') }}</h2>
+        <div v-if="backupTarget?.canBackup" class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4" @click.self="closeBackup">
+            <div role="dialog" aria-modal="true" aria-labelledby="stack-backup-title" class="card w-full max-w-lg p-5">
+                <h2 id="stack-backup-title" class="text-lg font-semibold text-white">{{ t('Back up stack') }}</h2>
                 <p class="mt-1 break-words text-sm text-slate-400">{{ backupTarget.name || t('No stack') }}</p>
-                <p class="mt-3 text-sm text-slate-300">{{ t('A backup job is created with the destination and schedule below for every volume in this stack that does not have one yet, then a backup run is queued for the whole stack. Existing jobs keep their own schedule.') }}</p>
+                <HostIdentity :host="backupTarget.docker_host" />
+                <p class="mt-3 text-sm text-slate-300">{{ t('stackBackup.details') }}</p>
 
                 <div class="mt-4 space-y-4">
                     <label class="block space-y-1">
                         <span class="label">{{ t('Destination') }}</span>
                         <select v-model="backupForm.backup_destination_id" class="input">
-                            <option v-for="destination in destinations" :key="destination.id" :value="destination.id">{{ destination.name }} / {{ destination.target_label || destination.bucket }}</option>
+                            <option v-for="destination in eligibleDestinations" :key="destination.id" :value="destination.id">{{ destination.name }} / {{ destination.target_label || destination.bucket }}</option>
                         </select>
                     </label>
 
@@ -290,7 +299,7 @@ const jobsHref = (volumeName: string) => `/backup-jobs?search=${encodeURICompone
 
                 <div class="mt-5 flex justify-end gap-2">
                     <button type="button" class="btn-secondary" :disabled="processing" @click="closeBackup">{{ t('Cancel') }}</button>
-                    <button type="button" class="btn-primary" :disabled="processing" @click="submitBackup">{{ processing ? t('Starting...') : t('Start backup') }}</button>
+                    <button type="button" class="btn-primary" :disabled="processing || !eligibleDestinations.length" @click="submitBackup">{{ processing ? t('Starting...') : t('Start backup') }}</button>
                 </div>
             </div>
         </div>

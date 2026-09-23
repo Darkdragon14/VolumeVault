@@ -4,7 +4,10 @@ namespace App\Jobs;
 
 use App\Actions\Restore\RunRestore;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\RestoreRun;
+use App\Services\Agents\HostWorkAdmission;
+use App\Support\DeploymentMode;
 use App\Support\VolumeJobLock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -54,14 +57,29 @@ class RunRestoreJob implements ShouldQueue
         // requeues a lock loser after a delay so it waits and serializes (under
         // the retryUntil budget) rather than failing.
         $run = RestoreRun::find($this->restoreRunId);
-        $key = VolumeJobLock::key($run?->target_volume_name, 'restore-run-'.$this->restoreRunId);
+        if ($run?->target_docker_host_id === DockerHost::LOCAL_ID && $run->archiveRelay !== null) {
+            // The relay retains an owner-scoped shared volume lock through worker recovery and cleanup.
+            return [];
+        }
+        $key = VolumeJobLock::key($run?->target_volume_name, 'restore-run-'.$this->restoreRunId, $run?->target_docker_host_id ?? DockerHost::LOCAL_ID);
 
         return [(new WithoutOverlapping($key))->shared()->releaseAfter(60)->expireAfter(86400)];
     }
 
     public function handle(RunRestore $runRestore): void
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return;
+        }
+
         $run = RestoreRun::findOrFail($this->restoreRunId);
+        $localRelay = $run->target_docker_host_id === DockerHost::LOCAL_ID && $run->archiveRelay !== null;
+
+        if (app(HostWorkAdmission::class)->isWaiting($run)) {
+            $this->release(60);
+
+            return;
+        }
 
         // Defense against an expired WithoutOverlapping lock: the lock has a 24h
         // TTL but a job has no timeout, so a legitimately long op can outlive its
@@ -69,13 +87,19 @@ class RunRestoreJob implements ShouldQueue
         // expired lock and start on the same volume. If another run is already
         // executing on this volume, the lock failed to serialize us — requeue
         // rather than overlap a possibly-destructive op.
-        if ($this->volumeBusy($run)) {
+        // Local relays recheck under the host lock with durable volume ownership;
+        // a legacy non-owner waiter must not block the owner's recovery here.
+        if (! $localRelay && $this->volumeBusy($run)) {
             $this->release(60);
 
             return;
         }
 
         $runRestore->handle($run);
+
+        if (app(HostWorkAdmission::class)->isWaiting($run->refresh()) || ($localRelay && $run->status === RestoreRun::STATUS_QUEUED)) {
+            $this->release(60);
+        }
     }
 
     /**
@@ -96,12 +120,14 @@ class RunRestoreJob implements ShouldQueue
         }
 
         $restoreActive = RestoreRun::query()
+            ->where('target_docker_host_id', $run->target_docker_host_id)
             ->where('target_volume_name', $volume)
             ->whereKeyNot($run->getKey())
-            ->where(fn ($query) => $this->stillWorking($query))
+            ->where(fn ($query) => $this->stillWorking($query, includeBackupCleanup: true))
             ->exists();
 
         $backupActive = BackupRun::query()
+            ->where('docker_host_id', $run->target_docker_host_id)
             ->where(function ($query) use ($volume): void {
                 $query->where('source_volume_name', $volume)
                     ->orWhere(fn ($query) => $query
