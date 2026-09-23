@@ -1,77 +1,17 @@
 <?php
 
 return [
-    'audit_remote_workflow_parity' => [
-        'title' => 'Complete the remote secondary-workflow audit fixes',
-        'description' => 'Discover unsaved SFTP host keys through capable agents, save an executor for automated storage thresholds, and inspect host-path policy freshness and provenance. Remote start notifications and archive metadata use durable retries with encrypted snapshots and ordered group completion. Installation saves execute centrally; imports rotate encrypted agent operations, relay chunks and outbox snapshots while preserving assignments, without rewinding agents. The seven audit gaps are implemented; manual updates, user-provided networking, new-volume cross-host relay and central installation saves remain intentional v1 boundaries. This does not claim every main control has passed independent review.',
-    ],
-    'remote_stack_backups' => [
-        'title' => 'Bulk backups for remote stacks',
-        'description' => 'Back up a stack on its selected Docker host, including in orchestrator mode. The dialog identifies the host and offers shared or same-host destinations. Existing settings, notifications, label reservations and group schedules are preserved, with created, queued, skipped and grouped totals.',
-    ],
-    'unified_host_operations' => [
-        'title' => 'Unified operations across Docker hosts',
-        'description' => 'Dashboard, inventories, jobs and histories default to all hosts with an optional host filter and visible host identity. Restore history filters by target; matching groups retain whole-group totals. Refresh reads accepted inventory snapshots and local sync explicitly targets the local host. Unknown container counts are shown as unknown.',
-    ],
-    'restore_volume_ownership' => [
-        'title' => 'Verify ownership of new restore volumes',
-        'description' => 'New-volume restores pin the target with an extraction helper and verify its random ownership label before starting that exact helper. Failed target volumes are never automatically deleted. Inspect them and remove them manually if appropriate, or retry with a different target name; run logs explain the next steps.',
+    'remote_agent_execution' => [
+        'title' => 'Multi-host backups with agents',
+        'description' => 'Manage backups and restores across multiple Docker hosts from one interface, including groups, stacks, labels and destinations. Choose hybrid mode to keep local execution or orchestrator mode without local Docker access.',
     ],
     'cross_host_archive_relay' => [
-        'title' => 'Restore host-local archives on another host',
-        'description' => 'Transfer archives through the encrypted central relay into a new volume on another host, including local/remote hybrid restores. Remote sides require archive-relay-v1. Listings and fresh receipts stay with the archive owner; restore details show transfer progress, expiry, errors and cleanup. The original archive is preserved. Defaults are 10 GiB per archive, 50 GiB relay storage and a 24-hour lifetime.',
+        'title' => 'Restore a local archive on another host',
+        'description' => 'Restore locally stored backups into a new volume on another host through an encrypted transfer via the orchestrator. The original archive is preserved.',
     ],
-    'agent_destination_operations' => [
-        'title' => 'Test and browse destinations through agents',
-        'description' => 'Choose a host to test saved destinations, measure storage and browse paginated archives with visible progress, errors and freshness. Agents require destination-v1; shared storage still defaults to the central host and local storage stays with its owner. Restores bind listed archive keys to fresh receipts from the target host, while older agents retain historical restore support.',
-    ],
-    'remote_docker_label_backups' => [
-        'title' => 'Docker label backups on remote hosts',
-        'description' => 'Configure label backup defaults per host in Settings or the API, including orchestrator-only deployments. Agents with docker-labels-v1 reconcile declarations on complete inventories using active shared or same-host destinations. Older or incomplete inventories preserve existing jobs and surface synchronization errors.',
-    ],
-    'remote_backup_groups' => [
-        'title' => 'Backup groups across local and remote hosts',
-        'description' => 'Groups now coordinate local, remote and mixed members sequentially with one aggregate outcome. Durable coordination preserves membership, sources and failure policy; assigned work drains during maintenance while the next member waits. Group controls work in orchestrator mode and member views identify their hosts. Each member completes its own stop, backup and restart cycle; this is not a consistent cross-host snapshot. Existing backup-v1 agents are supported.',
-    ],
-    'agent_execution_safety_and_identity' => [
-        'title' => 'Safer agent execution and precise resource selection',
-        'description' => 'Agent S3 endpoint checks reject conflicting configurations. Backup helpers must be removed before applications restart, including after a lost Docker connection. Volume shortcuts preserve their host, restore selection carries the historical backup context, and historical restores no longer inherit a changed job source type.',
-    ],
-    'remote_agent_execution' => [
-        'title' => 'Back up and restore through Docker agents',
-        'description' => 'Compatible agents now execute backups and restores using durable encrypted commands and private recovery journals. Restore from a shared network destination onto another host without a Docker socket on the orchestrator. Results and safety-backup metadata survive reconnects without replaying completed work.',
-    ],
-    'remote_host_workflows' => [
-        'title' => 'Host-aware backup and restore configuration',
-        'description' => 'Jobs can target registered agents, including offline agents and orchestrator-only deployments. Restores can select another host when using shared network storage. Inventory, host paths and local destinations are scoped to their host.',
-    ],
-    'docker_host_metrics' => [
-        'title' => 'Useful local and agent host information',
-        'description' => 'Host cards now show Docker engine versions and local container counts from synchronization. Local cards omit agent-only contact information and explain the last volume sync. VolumeVault versions are labeled explicitly, including development builds. Orchestrator-only cards omit Docker metrics. Deployment roles appear on host cards rather than below the application logo.',
-    ],
-    'maintenance_dispatch_recovery' => [
-        'title' => 'Resume queued work safely after maintenance',
-        'description' => 'Queued groups remain eligible for publication after long maintenance, even when reconciliation runs before dispatch. Resuming a host gives its waiting top-level runs a fresh delivery budget without changing execution history or internal child operations.',
-    ],
-    'agent_deployment_lifecycle' => [
-        'title' => 'Dedicated agents, orchestrator mode and manual updates',
-        'description' => 'Agents now have a dedicated PHP CLI image. Orchestrator-only mode works without a Docker daemon, including notifications. Docker hosts show roles, versions and protocol compatibility, with persistent maintenance and a manual update guide that preserves agent identity. Remote self-update is not enabled.',
-    ],
-    'restore_target_host_recovery' => [
-        'title' => 'Recover restores on their target host',
-        'description' => 'Interrupted restores targeting the local host are now recovered even when their archive originated on another host. Recovery also handles exhausted queue publications and stopped application containers, while leaving remote targets untouched.',
-    ],
-    'agent_runtime_resilience' => [
-        'title' => 'Reliable agent heartbeats and recovery',
-        'description' => 'Agents behind the same NAT no longer share traffic quotas or block enrollment. Long Docker inventory collections keep sending heartbeats and have a total time limit. Failed state writes stop the agent so Docker can restart it using its persisted identity.',
-    ],
-    'agent_enrollment_inventory' => [
-        'title' => 'Secure agent enrollment and Docker inventory',
-        'description' => 'Administrators can register hosts with a generated Docker command, view agent connectivity and inventory counts, renew enrollment and revoke access. PHP CLI agents use verified TLS, persistent identities and outbound-only connections. Built-in certificates renew automatically.',
-    ],
-    'docker_host_attribution' => [
-        'title' => 'Explicit local Docker host attribution',
-        'description' => 'Existing volumes, jobs, run history and local destinations are automatically assigned to the local Docker host during migration. Existing installations require no configuration changes. Host-scoped identities prepare multi-host execution.',
+    'restore_volume_ownership' => [
+        'title' => 'Volume protection during restores',
+        'description' => 'The restore verifies that it owns the new volume before writing to it. If the restore fails, the target volume is retained for inspection and manual removal if needed.',
     ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Reject unsupported Dropbox safety backups before restore',

@@ -1,77 +1,17 @@
 <?php
 
 return [
-    'audit_remote_workflow_parity' => [
-        'title' => 'Correcties voor secundaire externe werkstromen voltooid',
-        'description' => 'Ontdek SFTP-hostsleutels zonder opgeslagen bestemming via geschikte agents, sla een uitvoerder voor automatische opslagdrempels op en bekijk ouderdom en herkomst van padbeleid. Externe startmeldingen en archiefmetadata gebruiken duurzame herhalingen met versleutelde snapshots en geordende groepsafronding. Installatieback-ups blijven centraal; import versleutelt agentbewerkingen, relayblokken en outbox-snapshots opnieuw met behoud van toewijzingen, zonder agents terug te draaien. De zeven hiaten zijn geïmplementeerd; handmatige updates, eigen netwerkconnectiviteit, relay tussen hosts uitsluitend naar nieuwe volumes en centrale installatieback-ups blijven bewuste v1-grenzen. Dit verklaart niet dat alle hoofdbediening onafhankelijk is beoordeeld.',
-    ],
-    'remote_stack_backups' => [
-        'title' => 'Bulkback-ups van externe stacks',
-        'description' => 'Maak een back-up van een stack op de geselecteerde Docker-host, ook in orchestrator-modus. Het dialoogvenster toont de host en gedeelde of hosteigen bestemmingen. Instellingen, meldingen, labelreserveringen en groepsplanningen blijven behouden, met totalen voor aangemaakte, ingeplande, overgeslagen en gegroepeerde items.',
-    ],
-    'unified_host_operations' => [
-        'title' => 'Uniforme bewerkingen voor Docker-hosts',
-        'description' => 'Dashboard, inventarissen, taken en geschiedenis tonen standaard alle hosts met hostfilter en zichtbare identiteit. Herstel filtert op doelhost; groepstotalen blijven volledig. Vernieuwen leest geaccepteerde inventarissen en lokale synchronisatie kiest expliciet de lokale host. Onbekende containeraantallen worden als onbekend weergegeven.',
-    ],
-    'restore_volume_ownership' => [
-        'title' => 'Eigendom van nieuwe herstelvolumes controleren',
-        'description' => 'Herstel naar nieuwe volumes houdt het doel vast met een hulpcontainer en controleert het willekeurige eigendomslabel voordat precies die container start. Doelvolumes na een mislukking worden nooit automatisch verwijderd. Inspecteer ze en verwijder ze zo nodig handmatig, of probeer opnieuw met een andere doelnaam; de uitvoeringslogboeken geven de vervolgstappen aan.',
+    'remote_agent_execution' => [
+        'title' => 'Back-ups van meerdere hosts met agents',
+        'description' => 'Beheer back-ups en herstel van meerdere Docker-hosts vanuit één interface, met groepen, stacks, labels en bestemmingen. Kies de hybride modus om lokaal te blijven uitvoeren of de orchestratormodus zonder toegang tot de lokale Docker.',
     ],
     'cross_host_archive_relay' => [
-        'title' => 'Hostlokale archieven op een andere host herstellen',
-        'description' => 'Het versleutelde centrale relais draagt archieven over naar een nieuw volume op een andere host, ook lokaal/extern in hybride modus. Externe kanten vereisen archive-relay-v1. Lijsten en geldige ontvangstbewijzen blijven bij de eigenaar; details tonen voortgang, verloop, fouten en opruiming. Het origineel blijft behouden. Standaard: 10 GiB per archief, 50 GiB opslag en 24 uur.',
+        'title' => 'Een lokaal archief op een andere host herstellen',
+        'description' => 'Herstel lokaal opgeslagen back-ups naar een nieuw volume op een andere host via een versleutelde overdracht door de orchestrator. Het oorspronkelijke archief blijft behouden.',
     ],
-    'agent_destination_operations' => [
-        'title' => 'Bestemmingen testen en doorzoeken via agents',
-        'description' => 'Kies een host om opgeslagen bestemmingen te testen, opslag te meten en archieven per pagina te bekijken met zichtbare voortgang, fouten en geldigheid. Agents vereisen destination-v1; gedeelde opslag gebruikt standaard nog de centrale host en lokale opslag blijft bij de eigenaar. Herstel koppelt archiefsleutels aan recente bewijzen van de doelhost; oudere agents behouden herstel vanuit de geschiedenis.',
-    ],
-    'remote_docker_label_backups' => [
-        'title' => 'Docker-labelback-ups op externe hosts',
-        'description' => 'Configureer standaardwaarden per host via Instellingen of de API, ook bij een zelfstandige orchestrator. Agents met docker-labels-v1 verwerken declaraties bij volledige inventarissen met actieve gedeelde bestemmingen of bestemmingen op dezelfde host. Oudere of onvolledige inventarissen behouden bestaande taken en tonen synchronisatiefouten.',
-    ],
-    'remote_backup_groups' => [
-        'title' => 'Back-upgroepen over lokale en externe hosts',
-        'description' => 'Groepen coördineren lokale, externe en gemengde leden achtereenvolgens met één gezamenlijk resultaat. Duurzame coördinatie bewaart leden, bronnen en het foutbeleid; toegewezen werk wordt tijdens onderhoud afgerond terwijl het volgende lid wacht. Groepsbediening werkt in orchestrator-modus en leden tonen hun host. Elk lid voltooit zijn eigen stop-, back-up- en herstartcyclus; dit is geen consistente snapshot over hosts. Bestaande backup-v1-agents worden ondersteund.',
-    ],
-    'agent_execution_safety_and_identity' => [
-        'title' => 'Veilige agentuitvoering en juiste resourceselectie',
-        'description' => 'S3-controles van agents weigeren tegenstrijdige endpoints. Back-uphelpers moeten verdwijnen voordat toepassingen herstarten, ook na een verbroken Docker-verbinding. Volumelinks behouden hun host, archiefselectie geeft de historische context door en herstel neemt geen later gewijzigd brontype van de taak over.',
-    ],
-    'remote_agent_execution' => [
-        'title' => 'Back-ups en herstel via Docker-agents',
-        'description' => 'Compatibele agents voeren back-ups en herstelbewerkingen uit met duurzame versleutelde opdrachten en privéhersteljournalen. Gedeelde netwerkbestemmingen maken herstel op een andere host mogelijk zonder Docker-socket op de orchestrator. Resultaten en veiligheidsback-upmetadata blijven behouden na herverbinden zonder voltooid werk opnieuw uit te voeren.',
-    ],
-    'remote_host_workflows' => [
-        'title' => 'Hostgerichte configuratie van back-ups en herstel',
-        'description' => 'Taken kunnen geregistreerde agents gebruiken, ook offline en in de modus met alleen een orchestrator. Gedeelde netwerkopslag maakt herstel op een andere host mogelijk. Inventaris, paden en lokale bestemmingen zijn per host afgeschermd.',
-    ],
-    'docker_host_metrics' => [
-        'title' => 'Duidelijke informatie over lokale hosts en agents',
-        'description' => 'Hostkaarten tonen nu de Docker-engineversie en gesynchroniseerde lokale containeraantallen. Lokale kaarten verbergen het agentcontact en verduidelijken de laatste volumesynchronisatie. VolumeVault-versies, inclusief ontwikkelbuilds, zijn duidelijk benoemd. Kaarten voor alleen de orchestrator verbergen Docker-metrieken. Rollen verschijnen op de hostkaarten in plaats van onder het applicatielogo.',
-    ],
-    'maintenance_dispatch_recovery' => [
-        'title' => 'Wachtend werk betrouwbaar hervatten na onderhoud',
-        'description' => 'Groepen in de wachtrij blijven na lang onderhoud publiceerbaar, ook als reconciliatie vóór dispatch plaatsvindt. Hervatten geeft wachtende hoofduitvoeringen van die host een nieuw afleveringsbudget, zonder de uitvoeringshistorie of interne deelbewerkingen te wijzigen.',
-    ],
-    'agent_deployment_lifecycle' => [
-        'title' => 'Eigen agentimage, orchestratormodus en handmatige updates',
-        'description' => 'Agents hebben nu een eigen PHP-CLI-image. De modus met alleen de orchestrator werkt zonder Docker-daemon, inclusief meldingen. Het hostoverzicht toont rollen, versies en compatibiliteit, met persistent onderhoud en een handmatige updategids die de agentidentiteit behoudt. Automatisch bijwerken op afstand is niet ingeschakeld.',
-    ],
-    'restore_target_host_recovery' => [
-        'title' => 'Herstelbewerkingen op basis van hun doelhost herstellen',
-        'description' => 'Onderbroken herstelbewerkingen naar de lokale host worden nu ook hersteld als het archief van een andere host afkomstig is. Dit geldt ook voor uitgeputte wachtrijpublicaties en gestopte applicatiecontainers, terwijl externe doelen ongemoeid blijven.',
-    ],
-    'agent_runtime_resilience' => [
-        'title' => 'Betrouwbare agent-heartbeats en herstel',
-        'description' => 'Agents achter dezelfde NAT delen geen verkeersquota meer en blokkeren geen registratie. Langdurige Docker-inventarisaties blijven heartbeats verzenden en hebben een totale tijdslimiet. Een mislukte statusopslag stopt de agent, zodat Docker deze met de opgeslagen identiteit kan herstarten.',
-    ],
-    'agent_enrollment_inventory' => [
-        'title' => 'Veilige agentregistratie en Docker-inventaris',
-        'description' => 'Beheerders kunnen hosts registreren met een gegenereerd Docker-commando, de verbinding en inventarisaantallen bekijken, registratie vernieuwen en toegang intrekken. PHP-CLI-agents gebruiken geverifieerde TLS, persistente identiteiten en uitgaande verbindingen. Ingebouwde certificaten worden automatisch vernieuwd.',
-    ],
-    'docker_host_attribution' => [
-        'title' => 'Expliciete koppeling aan de lokale Docker-host',
-        'description' => 'Bestaande volumes, taken, uitvoeringsgeschiedenis en lokale bestemmingen worden tijdens de migratie automatisch aan de lokale Docker-host gekoppeld. Configuratiewijzigingen zijn niet nodig. Identiteiten per host bereiden uitvoering op meerdere hosts voor.',
+    'restore_volume_ownership' => [
+        'title' => 'Bescherming van volumes tijdens herstel',
+        'description' => 'Het herstelproces controleert of het nieuwe volume erbij hoort voordat het erin schrijft. Bij een fout blijft het doelvolume behouden voor inspectie en eventuele handmatige verwijdering.',
     ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Niet-ondersteunde Dropbox-veiligheidsback-ups vooraf weigeren',

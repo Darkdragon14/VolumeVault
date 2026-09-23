@@ -2,24 +2,9 @@
 
 return [
     'unreleased' => [
-        ['type' => 'change', 'key' => 'audit_remote_workflow_parity'],
-        ['type' => 'feature', 'key' => 'remote_stack_backups'],
-        ['type' => 'feature', 'key' => 'unified_host_operations'],
-        ['type' => 'change', 'key' => 'restore_volume_ownership'],
-        ['type' => 'feature', 'key' => 'cross_host_archive_relay'],
-        ['type' => 'feature', 'key' => 'agent_destination_operations'],
-        ['type' => 'feature', 'key' => 'remote_docker_label_backups'],
-        ['type' => 'feature', 'key' => 'remote_backup_groups'],
-        ['type' => 'change', 'key' => 'agent_execution_safety_and_identity'],
         ['type' => 'feature', 'key' => 'remote_agent_execution'],
-        ['type' => 'feature', 'key' => 'remote_host_workflows'],
-        ['type' => 'change', 'key' => 'docker_host_metrics'],
-        ['type' => 'change', 'key' => 'maintenance_dispatch_recovery'],
-        ['type' => 'feature', 'key' => 'agent_deployment_lifecycle'],
-        ['type' => 'change', 'key' => 'restore_target_host_recovery'],
-        ['type' => 'change', 'key' => 'agent_runtime_resilience'],
-        ['type' => 'feature', 'key' => 'agent_enrollment_inventory'],
-        ['type' => 'change', 'key' => 'docker_host_attribution'],
+        ['type' => 'feature', 'key' => 'cross_host_archive_relay'],
+        ['type' => 'change', 'key' => 'restore_volume_ownership'],
     ],
     'releases' => [
         'v1.23.0' => [

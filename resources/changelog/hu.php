@@ -1,77 +1,17 @@
 <?php
 
 return [
-    'audit_remote_workflow_parity' => [
-        'title' => 'Elkészültek a másodlagos távoli munkafolyamatok javításai',
-        'description' => 'SFTP-gazdakulcsok felderítése mentett cél nélkül, kompatibilis ügynökökkel; mentett végrehajtó az automatikus tárhelyküszöbökhöz; útvonalszabályzatok frissessége és eredete. A távoli indítási értesítések és archívummetaadatok tartós újrapróbálást, titkosított pillanatképeket és rendezett csoportlezárást kapnak. A telepítésmentések központilag futnak; az import újratitkosítja az ügynökműveleteket, közvetítőblokkokat és kimenő pillanatképeket, megőrizve a hozzárendeléseket, az ügynökök visszaállítása nélkül. A hét hiányosság megvalósítása elkészült; a kézi frissítés, saját hálózati kapcsolat, gazdák közötti átvitel csak új kötetbe és a központi telepítésmentés szándékos v1-korlát marad. Ez nem jelenti az összes fő vezérlő független felülvizsgálatát.',
-    ],
-    'remote_stack_backups' => [
-        'title' => 'Távoli vermek tömeges mentése',
-        'description' => 'Verem mentése a kiválasztott Docker-gazdagépen, orchestrator módban is. A párbeszédablak azonosítja a gazdagépet, és megosztott vagy saját célokat kínál. A beállítások, értesítések, címkés foglalások és csoportütemezések megmaradnak; az összegzés mutatja a létrehozott, sorba állított, kihagyott és csoportos elemeket.',
-    ],
-    'unified_host_operations' => [
-        'title' => 'Egységes műveletek Docker-gazdagépeken',
-        'description' => 'Az irányítópult, leltárak, feladatok és előzmények alapértelmezetten minden gazdagépet mutatnak szűrővel és látható azonosítással. A visszaállítások cél szerint szűrhetők; a csoportösszesítések teljesek maradnak. A frissítés elfogadott leltárt olvas, a helyi szinkronizálás kifejezetten a helyi gazdagépet célozza. Az ismeretlen konténerszám ismeretlenként jelenik meg.',
-    ],
-    'restore_volume_ownership' => [
-        'title' => 'Az új visszaállítási kötetek tulajdonjogának ellenőrzése',
-        'description' => 'Az új kötetre történő visszaállítás segédkonténerrel rögzíti a célt, és ugyanennek a konténernek az indítása előtt ellenőrzi a véletlen tulajdonosi címkét. A sikertelen visszaállítás célköteteit soha nem törli automatikusan. Vizsgálja meg, és szükség esetén kézzel törölje őket, vagy próbálja újra másik célnévvel; a futási napló ismerteti a teendőket.',
+    'remote_agent_execution' => [
+        'title' => 'Több gazdagép mentése ügynökökkel',
+        'description' => 'Kezelje több Docker-gazdagép mentéseit és visszaállításait egyetlen felületről, csoportokkal, vermekkel, címkékkel és célhelyekkel. Válassza a hibrid módot a helyi végrehajtás megtartásához, vagy az orchestrátor módot a helyi Docker elérése nélkül.',
     ],
     'cross_host_archive_relay' => [
-        'title' => 'Helyi archívumok visszaállítása másik gépre',
-        'description' => 'A titkosított központi közvetítő másik gép új kötetére továbbítja az archívumot, helyi/távoli hibrid módban is. A távoli oldalakhoz archive-relay-v1 szükséges. A listák és érvényes nyugták a tulajdonoshoz kötődnek; a részletek mutatják az előrehaladást, lejáratot, hibákat és tisztítást. Az eredeti megmarad. Alapértékek: archívumonként 10 GiB, 50 GiB tárhely és 24 óra.',
+        'title' => 'Helyi archívum visszaállítása másik gazdagépre',
+        'description' => 'Állítsa vissza a helyben tárolt mentéseket egy másik gazdagép új kötetébe, az orchestrátoron keresztüli titkosított átvitellel. Az eredeti archívum megmarad.',
     ],
-    'agent_destination_operations' => [
-        'title' => 'Célhelyek tesztelése és böngészése ügynökökkel',
-        'description' => 'Válasszon gazdagépet a mentett célhelyek teszteléséhez, a tárhely méréséhez és az archívumok lapozható böngészéséhez, látható állapottal, hibákkal és érvényességgel. Az ügynökökhöz destination-v1 szükséges; a megosztott tároló alapértelmezése a központi gép, a helyié a tulajdonos. A visszaállítás az archívumkulcsokat a célgép friss igazolásaihoz köti, a régebbi ügynökök pedig továbbra is támogatják az előzményekből történő visszaállítást.',
-    ],
-    'remote_docker_label_backups' => [
-        'title' => 'Docker-címkealapú mentések távoli gazdagépeken',
-        'description' => 'Állítsa be az alapértékeket gazdagépenként a Beállításokban vagy az API-n keresztül, csak vezérlőként működő telepítésnél is. A docker-labels-v1 ügynökök teljes leltár esetén dolgozzák fel a deklarációkat aktív megosztott vagy azonos gazdagépen lévő célokkal. A régi vagy hiányos leltárak megőrzik a meglévő feladatokat és jelzik a szinkronizálási hibákat.',
-    ],
-    'remote_backup_groups' => [
-        'title' => 'Mentési csoportok helyi és távoli gazdagépeken',
-        'description' => 'A csoportok helyi, távoli és vegyes tagokat koordinálnak egymás után, egyetlen összesített eredménnyel. A tartós koordináció megőrzi a tagságot, a forrásokat és a hibakezelési szabályt; a kiosztott munka karbantartás alatt befejeződik, a következő tag pedig vár. A csoportvezérlés orchestrator módban is működik, a nézetek jelzik a gazdagépet. Minden tag saját leállítási, mentési és újraindítási ciklust végez; ez nem gazdagépek közötti konzisztens pillanatkép. A meglévő backup-v1 ügynökök támogatottak.',
-    ],
-    'agent_execution_safety_and_identity' => [
-        'title' => 'Biztonságos ügynökvégrehajtás és pontos erőforrás-választás',
-        'description' => 'Az ügynökök S3-ellenőrzése elutasítja az ellentmondó végpontokat. A segédkonténereket az alkalmazások újraindítása előtt el kell távolítani, Docker-kapcsolathiba után is. A kötetlinkek megőrzik a gépet, az archívum kiválasztása átadja a történeti kontextust, és a visszaállítás nem örökli a feladat később módosított forrástípusát.',
-    ],
-    'remote_agent_execution' => [
-        'title' => 'Mentés és visszaállítás Docker-ügynökökkel',
-        'description' => 'A kompatibilis ügynökök mentéseket és visszaállításokat hajtanak végre tartós titkosított parancsokkal és saját helyreállítási naplóval. Megosztott hálózati célról másik gépre is visszaállíthatók az adatok az orchestrátor Docker-socketje nélkül. Az eredmények és biztonsági mentések metaadatai újracsatlakozáskor megmaradnak, az elkészült munka megismétlése nélkül.',
-    ],
-    'remote_host_workflows' => [
-        'title' => 'Gépenkénti mentési és visszaállítási beállítások',
-        'description' => 'A feladatok regisztrált ügynököket célozhatnak offline állapotban és csak vezérlő módban is. Megosztott hálózati tárolóról másik gépre is lehet visszaállítani. A leltár, az útvonalak és a helyi célok gépenként elkülönülnek.',
-    ],
-    'docker_host_metrics' => [
-        'title' => 'Hasznos adatok a helyi gépekről és ügynökökről',
-        'description' => 'A gépkártyák megjelenítik a Docker motor verzióját és a szinkronizált helyi konténerszámot. A helyi kártya elrejti az ügynökökre vonatkozó utolsó kapcsolatot, és pontosítja az utolsó kötetszinkronizálást. A VolumeVault-verziók, köztük a fejlesztői buildek, egyértelmű címkét kapnak. A csak orchestrátor mód elrejti a Docker-metrikákat. A szerepek a gépkártyákon jelennek meg az alkalmazás logója helyett.',
-    ],
-    'maintenance_dispatch_recovery' => [
-        'title' => 'Várakozó munkák megbízható folytatása karbantartás után',
-        'description' => 'A sorban álló csoportok hosszú karbantartás után is kiküldhetők, akkor is, ha az egyeztetés megelőzi a kiküldést. A gép folytatása új kézbesítési keretet ad a várakozó fő futásoknak, az előzmények és belső részfeladatok módosítása nélkül.',
-    ],
-    'agent_deployment_lifecycle' => [
-        'title' => 'Dedikált ügynökkép, orchestrátor mód és kézi frissítések',
-        'description' => 'Az ügynökök külön PHP CLI-képet kapnak. A csak orchestrátor mód Docker-démon nélkül működik, az értesítésekkel együtt. A gépnézet megjeleníti a szerepeket, verziókat és kompatibilitást, tartós karbantartással és az ügynök identitását megőrző kézi frissítési útmutatóval. Az automatikus távoli frissítés nincs engedélyezve.',
-    ],
-    'restore_target_host_recovery' => [
-        'title' => 'Visszaállítások helyreállítása a célgép alapján',
-        'description' => 'A helyi gépre irányuló megszakadt visszaállítások akkor is helyreállnak, ha az archívum másik gépről származik. Ez a kimerült sorbaadási kísérletekre és a leállítva maradt alkalmazáskonténerekre is vonatkozik, a távoli célok módosítása nélkül.',
-    ],
-    'agent_runtime_resilience' => [
-        'title' => 'Megbízható ügynök-életjelek és helyreállítás',
-        'description' => 'Az azonos NAT mögötti ügynökök már nem osztoznak a forgalmi kvótákon, és nem blokkolják a regisztrációt. A hosszú Docker-leltározások közben is érkeznek életjelek, és a gyűjtésnek teljes időkorlátja van. A sikertelen állapotmentés leállítja az ügynököt, így a Docker a mentett identitással újraindíthatja.',
-    ],
-    'agent_enrollment_inventory' => [
-        'title' => 'Biztonságos ügynökregisztráció és Docker-leltár',
-        'description' => 'Az adminisztrátorok generált Docker-paranccsal regisztrálhatnak gépeket, megtekinthetik a kapcsolatot és a leltár elemszámát, megújíthatják a regisztrációt és visszavonhatják a hozzáférést. A PHP CLI-ügynökök ellenőrzött TLS-t, tartós identitást és kimenő kapcsolatokat használnak. A beépített tanúsítványok automatikusan megújulnak.',
-    ],
-    'docker_host_attribution' => [
-        'title' => 'Kifejezett hozzárendelés a helyi Docker-géphez',
-        'description' => 'A migráció automatikusan a helyi Docker-géphez rendeli a meglévő köteteket, feladatokat, futási előzményeket és helyi célokat. Nincs szükség konfigurációmódosításra. A gépenkénti identitások a többgépes végrehajtást készítik elő.',
+    'restore_volume_ownership' => [
+        'title' => 'Kötetek védelme visszaállításkor',
+        'description' => 'A visszaállítás írás előtt ellenőrzi, hogy az új kötet hozzá tartozik-e. Hiba esetén a célkötet megmarad ellenőrzésre és szükség esetén kézi törlésre.',
     ],
     'dropbox_safety_backup_validation' => [
         'title' => 'A nem támogatott Dropbox biztonsági mentések korai elutasítása',

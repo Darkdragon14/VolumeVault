@@ -1,77 +1,17 @@
 <?php
 
 return [
-    'audit_remote_workflow_parity' => [
-        'title' => 'Dokončeny opravy vedlejších vzdálených postupů',
-        'description' => 'Zjišťujte SFTP klíče bez uloženého cíle přes kompatibilní agenty, uložte vykonavatele automatických limitů úložiště a sledujte stáří a původ zásad cest. Vzdálená oznámení zahájení a metadata archivů používají trvalé opakování, šifrované snímky a uspořádané dokončení skupin. Zálohy instalace běží centrálně; import znovu šifruje operace agentů, bloky přenosu a odchozí snímky se zachováním přiřazení, bez vracení agentů do minulosti. Sedm nedostatků je implementováno; ruční aktualizace, vlastní síťové propojení, přenos mezi hostiteli jen do nových svazků a centrální zálohy instalace zůstávají záměrnými hranicemi v1. Nejde o potvrzení nezávislé kontroly všech hlavních ovládacích prvků.',
-    ],
-    'remote_stack_backups' => [
-        'title' => 'Hromadné zálohy vzdálených stacků',
-        'description' => 'Zálohujte stack na vybraném hostiteli Dockeru, i v režimu orchestrátoru. Dialog identifikuje hostitele a nabízí sdílené cíle nebo cíle stejného hostitele. Nastavení, oznámení, rezervace štítků a plány skupin zůstávají zachovány se součty vytvořených, zařazených, přeskočených a seskupených položek.',
-    ],
-    'unified_host_operations' => [
-        'title' => 'Sjednocené operace hostitelů Dockeru',
-        'description' => 'Přehled, inventáře, úlohy a historie standardně zobrazují všechny hostitele s filtrem a viditelnou identitou. Obnovy se filtrují podle cíle; součty skupin zůstávají úplné. Obnovení čte přijaté inventáře a místní synchronizace výslovně cílí na místního hostitele. Neznámé počty kontejnerů jsou označeny jako neznámé.',
-    ],
-    'restore_volume_ownership' => [
-        'title' => 'Ověření vlastnictví nových svazků pro obnovu',
-        'description' => 'Obnova do nového svazku zajistí cíl pomocným kontejnerem a před spuštěním právě tohoto kontejneru ověří náhodný štítek vlastnictví. Cílové svazky po selhání se nikdy automaticky nemažou. Zkontrolujte je a případně ručně odstraňte, nebo obnovu opakujte s jiným názvem cíle; protokoly běhu vysvětlují další postup.',
+    'remote_agent_execution' => [
+        'title' => 'Zálohování více hostitelů pomocí agentů',
+        'description' => 'Spravujte zálohy a obnovy více hostitelů Dockeru z jednoho rozhraní, včetně skupin, stacků, štítků a cílů. Zvolte hybridní režim pro zachování místního spouštění nebo režim orchestrátoru bez přístupu k místnímu Dockeru.',
     ],
     'cross_host_archive_relay' => [
-        'title' => 'Obnova lokálních archivů na jiném hostiteli',
-        'description' => 'Šifrovaný centrální přenos doručí archiv do nového svazku na jiném hostiteli, i v hybridním místním/vzdáleném režimu. Vzdálené strany vyžadují archive-relay-v1. Seznamy a platná potvrzení zůstávají u vlastníka; podrobnosti zobrazují průběh, platnost, chyby a úklid. Originál je zachován. Výchozí hodnoty: 10 GiB na archiv, 50 GiB úložiště a 24 hodin.',
+        'title' => 'Obnova místního archivu na jiném hostiteli',
+        'description' => 'Obnovte místně uložené zálohy do nového svazku na jiném hostiteli pomocí šifrovaného přenosu přes orchestrátor. Původní archiv zůstává zachován.',
     ],
-    'agent_destination_operations' => [
-        'title' => 'Testování a procházení úložišť pomocí agentů',
-        'description' => 'Vyberte hostitele pro testování uložených cílů, měření úložiště a stránkované procházení archivů s průběhem, chybami a platností výsledků. Agenti vyžadují destination-v1; sdílené úložiště stále používá jako výchozí centrálního hostitele a místní zůstává u vlastníka. Obnovení váže klíče archivů na čerstvá potvrzení cílového hostitele, zatímco starší agenti zachovávají obnovení z historie.',
-    ],
-    'remote_docker_label_backups' => [
-        'title' => 'Zálohy podle štítků Dockeru na vzdálených hostitelích',
-        'description' => 'Nastavte výchozí hodnoty pro každého hostitele v nastavení nebo přes API, i v režimu samostatného orchestrátoru. Agenti docker-labels-v1 zpracovávají deklarace při úplných inventářích s aktivními sdílenými cíli nebo cíli stejného hostitele. Starší či neúplné inventáře zachovají existující úlohy a zobrazí chyby synchronizace.',
-    ],
-    'remote_backup_groups' => [
-        'title' => 'Skupiny záloh na místních i vzdálených hostitelích',
-        'description' => 'Skupiny koordinují místní, vzdálené i smíšené členy postupně s jedním souhrnným výsledkem. Trvalá koordinace zachovává členství, zdroje a zásady při selhání; přidělená práce během údržby doběhne a další člen čeká. Ovládání funguje v režimu orchestrátoru a zobrazení členů uvádí hostitele. Každý člen dokončí vlastní cyklus zastavení, zálohy a spuštění; nejde o konzistentní snímek napříč hostiteli. Stávající agenti backup-v1 jsou podporováni.',
-    ],
-    'agent_execution_safety_and_identity' => [
-        'title' => 'Bezpečné provádění agentů a přesný výběr prostředků',
-        'description' => 'Kontroly S3 agentů odmítají rozporné endpointy. Pomocné kontejnery musí být odstraněny před restartem aplikací i po přerušení spojení s Dockerem. Odkazy na svazky zachovávají hostitele, výběr archivu předává historický kontext a obnovy nepřebírají později změněný typ zdroje úlohy.',
-    ],
-    'remote_agent_execution' => [
-        'title' => 'Zálohování a obnova prostřednictvím agentů Dockeru',
-        'description' => 'Kompatibilní agenti provádějí zálohy a obnovy pomocí trvalých šifrovaných příkazů a soukromých protokolů obnovy. Sdílené síťové cíle umožňují obnovu na jiného hostitele bez Docker socketu v orchestrátoru. Výsledky a metadata bezpečnostních záloh přežijí opětovné připojení bez opakování dokončené práce.',
-    ],
-    'remote_host_workflows' => [
-        'title' => 'Konfigurace záloh a obnovy podle hostitele',
-        'description' => 'Úlohy mohou používat registrované agenty, i offline a v režimu samotného orchestrátoru. Sdílené síťové úložiště umožňuje obnovu na jiném hostiteli. Inventář, cesty a místní cíle jsou oddělené podle hostitele.',
-    ],
-    'docker_host_metrics' => [
-        'title' => 'Přehledné informace o místních hostitelích a agentech',
-        'description' => 'Karty hostitelů nyní zobrazují verzi enginu Docker a synchronizovaný počet místních kontejnerů. Místní karta skrývá poslední kontakt určený agentům a vysvětluje poslední synchronizaci svazků. Verze VolumeVault včetně vývojových sestavení jsou jasně označeny. Karty samotného orchestrátoru skrývají metriky Dockeru. Role se zobrazují na kartách hostitelů místo pod logem aplikace.',
-    ],
-    'maintenance_dispatch_recovery' => [
-        'title' => 'Spolehlivé obnovení čekajících úloh po údržbě',
-        'description' => 'Skupiny ve frontě zůstávají po dlouhé údržbě způsobilé k odeslání, i když kontrola opuštěných běhů předchází odesílání. Obnovení hostitele obnoví pokusy o doručení jeho čekajících hlavních běhů, bez změny historie a interních podoperací.',
-    ],
-    'agent_deployment_lifecycle' => [
-        'title' => 'Samostatní agenti, režim orchestrátoru a ruční aktualizace',
-        'description' => 'Agenti mají vlastní obraz PHP CLI. Režim samotného orchestrátoru funguje bez démona Dockeru včetně oznámení. Přehled hostitelů ukazuje role, verze a kompatibilitu, trvalou údržbu a průvodce ruční aktualizací zachovávající identitu agenta. Automatické vzdálené aktualizace nejsou zapnuty.',
-    ],
-    'restore_target_host_recovery' => [
-        'title' => 'Zotavení obnov podle cílového hostitele',
-        'description' => 'Přerušené obnovy na místního hostitele se nyní zotaví i tehdy, když archiv pochází z jiného hostitele. Zotavení zahrnuje také vyčerpané pokusy o předání do fronty a zastavené aplikační kontejnery, aniž by zasahovalo do vzdálených cílů.',
-    ],
-    'agent_runtime_resilience' => [
-        'title' => 'Spolehlivé signály dostupnosti a obnova agentů',
-        'description' => 'Agenti za stejným NAT již nesdílejí limity provozu ani neblokují registraci. Dlouhé sběry inventáře Dockeru nadále odesílají signály dostupnosti a mají celkový časový limit. Selhání zápisu stavu ukončí agenta, aby jej Docker mohl restartovat s uloženou identitou.',
-    ],
-    'agent_enrollment_inventory' => [
-        'title' => 'Bezpečná registrace agentů a inventář Dockeru',
-        'description' => 'Správci mohou registrovat hostitele vygenerovaným příkazem Dockeru, sledovat připojení a počty položek inventáře, obnovit registraci a odvolat přístup. Agenti PHP CLI používají ověřené TLS, trvalé identity a odchozí spojení. Vestavěné certifikáty se obnovují automaticky.',
-    ],
-    'docker_host_attribution' => [
-        'title' => 'Výslovné přiřazení k místnímu hostiteli Dockeru',
-        'description' => 'Migrace automaticky přiřadí existující svazky, úlohy, historii běhů a místní cíle k místnímu hostiteli Dockeru. Není třeba měnit konfiguraci. Identity podle hostitele připravují spouštění na více hostitelích.',
+    'restore_volume_ownership' => [
+        'title' => 'Ochrana svazků při obnově',
+        'description' => 'Obnova před zápisem ověří, že jí nový svazek patří. Při selhání zůstane cílový svazek zachován pro kontrolu a případné ruční odstranění.',
     ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Včasné odmítnutí nepodporovaných bezpečnostních záloh na Dropbox',

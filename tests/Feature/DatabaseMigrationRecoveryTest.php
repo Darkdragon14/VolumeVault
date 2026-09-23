@@ -24,6 +24,111 @@ class DatabaseMigrationRecoveryTest extends TestCase
         });
     }
 
+    #[DataProvider('destinationMigrationStates')]
+    public function test_destination_operation_migration_recovers_and_rolls_back(string $state): void
+    {
+        $migration = require database_path('migrations/2026_09_22_072732_add_destination_operations_to_agent_operations.php');
+        $indexName = in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)
+            ? 'agent_operations_destination_action_status_index'
+            : 'agent_operations_backup_destination_id_destination_action_status_index';
+
+        if ($state !== 'complete') {
+            $migration->down();
+            if ($state !== 'fresh') {
+                Schema::table('agent_operations', function (Blueprint $table) use ($state): void {
+                    $table->foreignId('backup_destination_id')->nullable();
+                    if ($state === 'foreign key') {
+                        $table->foreign('backup_destination_id')->references('id')->on('backup_destinations')->nullOnDelete();
+                    }
+                    if ($state !== 'first column') {
+                        $table->string('destination_action')->nullable();
+                        $table->string('locator_fingerprint', 64)->nullable();
+                        $table->text('result')->nullable();
+                    }
+                });
+            }
+        }
+
+        $id = (string) \Illuminate\Support\Str::uuid();
+        DB::table('agent_operations')->insert([
+            'id' => $id,
+            'docker_host_id' => \App\Models\DockerHost::factory()->create()->id,
+            'kind' => 'destination',
+            'payload' => 'preserved payload',
+        ]);
+
+        $migration->up();
+        DB::table('agent_operations')->where('id', $id)->update(['result' => 'preserved result']);
+        $migration->up();
+
+        $indexes = collect(Schema::getIndexes('agent_operations'))->where('columns', ['backup_destination_id', 'destination_action', 'status']);
+        $this->assertCount(1, $indexes);
+        $this->assertSame(DB::getDriverName() === 'pgsql' ? substr($indexName, 0, 63) : $indexName, $indexes->first()['name']);
+        $this->assertFalse($indexes->first()['unique']);
+        $this->assertTrue($this->foreignKeyExists('agent_operations', 'backup_destination_id', 'backup_destinations', 'set null'));
+        $this->assertDatabaseHas('agent_operations', ['id' => $id, 'payload' => 'preserved payload', 'result' => 'preserved result']);
+
+        $migration->down();
+        foreach (['backup_destination_id', 'destination_action', 'locator_fingerprint', 'result'] as $column) {
+            $this->assertFalse(Schema::hasColumn('agent_operations', $column));
+        }
+        $this->assertDatabaseHas('agent_operations', ['id' => $id, 'payload' => 'preserved payload']);
+        $migration->up();
+        $this->assertTrue(Schema::hasIndex('agent_operations', ['backup_destination_id', 'destination_action', 'status']));
+    }
+
+    public static function destinationMigrationStates(): array
+    {
+        return [
+            'fresh' => ['fresh'],
+            'first column committed' => ['first column'],
+            'all columns committed' => ['columns'],
+            'foreign key committed before oversized index failure' => ['foreign key'],
+            'already complete (legacy index on SQLite)' => ['complete'],
+        ];
+    }
+
+    public function test_mysql_retries_the_original_failed_destination_migration_through_artisan(): void
+    {
+        if (! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+            $this->markTestSkipped('Requires nontransactional MySQL DDL and its identifier limit.');
+        }
+
+        $name = '2026_09_22_072732_add_destination_operations_to_agent_operations';
+        (require database_path("migrations/{$name}.php"))->down();
+        DB::table('migrations')->where('migration', $name)->delete();
+
+        try {
+            Schema::table('agent_operations', function (Blueprint $table): void {
+                $table->foreignId('backup_destination_id')->nullable()->constrained()->nullOnDelete();
+                $table->string('destination_action')->nullable();
+                $table->string('locator_fingerprint', 64)->nullable();
+                $table->text('result')->nullable();
+                $table->index(['backup_destination_id', 'destination_action', 'status']);
+            });
+            $this->fail('The original oversized index should fail on MySQL.');
+        } catch (QueryException $exception) {
+            $this->assertSame(1059, $exception->errorInfo[1]);
+        }
+
+        $this->assertTrue(Schema::hasColumn('agent_operations', 'result'));
+        $this->assertTrue($this->foreignKeyExists('agent_operations', 'backup_destination_id', 'backup_destinations', 'set null'));
+        $this->assertFalse(Schema::hasIndex('agent_operations', ['backup_destination_id', 'destination_action', 'status']));
+
+        $id = (string) \Illuminate\Support\Str::uuid();
+        DB::table('agent_operations')->insert([
+            'id' => $id,
+            'docker_host_id' => \App\Models\DockerHost::factory()->create()->id,
+            'kind' => 'destination',
+            'result' => 'preserve across retry',
+        ]);
+        $this->artisan('migrate', ['--force' => true])->assertSuccessful();
+        $this->artisan('migrate', ['--force' => true])->assertSuccessful();
+        $this->assertDatabaseHas('migrations', ['migration' => $name]);
+        $this->assertDatabaseHas('agent_operations', ['id' => $id, 'result' => 'preserve across retry']);
+        $this->assertTrue(Schema::hasIndex('agent_operations', 'agent_operations_destination_action_status_index'));
+    }
+
     public function test_migrations_repair_tables_missing_foreign_keys_indexes_and_checks(): void
     {
         Schema::dropIfExists('docker_label_backup_settings');

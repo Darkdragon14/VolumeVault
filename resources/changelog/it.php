@@ -1,77 +1,17 @@
 <?php
 
 return [
-    'audit_remote_workflow_parity' => [
-        'title' => 'Integrate le correzioni dei flussi remoti secondari',
-        'description' => 'Rileva chiavi SFTP senza salvare la destinazione tramite agenti compatibili, scegli un esecutore per le soglie automatiche e consulta aggiornamento e provenienza delle regole dei percorsi. Notifiche di avvio e metadati remoti usano tentativi persistenti, istantanee cifrate e completamento ordinato dei gruppi. I salvataggi di installazione restano centrali; l’importazione ricifra operazioni, blocchi del relay e istantanee in uscita conservando le assegnazioni, senza riportare indietro gli agenti. Le sette lacune sono implementate; aggiornamenti manuali, rete fornita dall’utente, relay tra host solo verso nuovi volumi e salvataggi centrali restano limiti intenzionali di v1. Questo non certifica una revisione indipendente di tutti i controlli principali.',
-    ],
-    'remote_stack_backups' => [
-        'title' => 'Backup in blocco degli stack remoti',
-        'description' => 'Esegui il backup di uno stack sul suo host Docker selezionato, anche in modalità orchestratore. Il dialogo identifica l’host e offre destinazioni condivise o dello stesso host. Impostazioni, notifiche, prenotazioni tramite etichette e pianificazioni di gruppo sono preservate, con totali creati, accodati, saltati e raggruppati.',
-    ],
-    'unified_host_operations' => [
-        'title' => 'Operazioni unificate tra host Docker',
-        'description' => 'Dashboard, inventari, processi e cronologie mostrano tutti gli host per impostazione predefinita, con filtro e identità visibili. I ripristini si filtrano per destinazione e i totali dei gruppi restano completi. Aggiorna legge gli inventari accettati; la sincronizzazione locale indica esplicitamente l’host locale. I conteggi sconosciuti sono indicati come tali.',
-    ],
-    'restore_volume_ownership' => [
-        'title' => 'Verifica della proprietà dei nuovi volumi di ripristino',
-        'description' => 'I ripristini in nuovi volumi vincolano la destinazione a un contenitore ausiliario e verificano l’etichetta di proprietà casuale prima di avviare quello stesso contenitore. I volumi di destinazione dopo un errore non vengono mai eliminati automaticamente. Ispezionarli e rimuoverli manualmente se opportuno, oppure riprovare con un altro nome; i log indicano i passi successivi.',
+    'remote_agent_execution' => [
+        'title' => 'Backup di più host con gli agenti',
+        'description' => 'Gestisci backup e ripristini di più host Docker da un’unica interfaccia, con gruppi, stack, etichette e destinazioni. Scegli la modalità ibrida per mantenere l’esecuzione locale o la modalità orchestratore senza accesso al Docker locale.',
     ],
     'cross_host_archive_relay' => [
-        'title' => 'Ripristino di archivi locali su un altro host',
-        'description' => 'Il relay centrale crittografato trasferisce gli archivi in un nuovo volume su un altro host, anche in modalità ibrida locale/remota. I lati remoti richiedono archive-relay-v1. Elenchi e ricevute valide restano associati al proprietario; i dettagli mostrano avanzamento, scadenza, errori e pulizia. L’originale è conservato. Valori predefiniti: 10 GiB per archivio, 50 GiB di spazio e 24 ore.',
+        'title' => 'Ripristinare un archivio locale su un altro host',
+        'description' => 'Ripristina i backup archiviati localmente in un nuovo volume su un altro host tramite un trasferimento cifrato attraverso l’orchestratore. L’archivio originale viene conservato.',
     ],
-    'agent_destination_operations' => [
-        'title' => 'Testare ed esplorare le destinazioni tramite agenti',
-        'description' => 'Scegli un host per testare destinazioni salvate, misurare lo spazio ed esplorare archivi paginati con avanzamento, errori e validità visibili. Gli agenti richiedono destination-v1; lo spazio condiviso usa ancora l’host centrale per impostazione predefinita e quello locale resta sul proprio host. I ripristini associano le chiavi a ricevute recenti dell’host di destinazione; gli agenti meno recenti mantengono il ripristino dalla cronologia.',
-    ],
-    'remote_docker_label_backups' => [
-        'title' => 'Backup tramite etichette Docker su host remoti',
-        'description' => 'Configura i valori predefiniti per host dalle impostazioni o tramite API, anche in modalità solo orchestratore. Gli agenti docker-labels-v1 elaborano le dichiarazioni con inventari completi e destinazioni attive condivise o dello stesso host. Gli inventari obsoleti o incompleti preservano i processi esistenti e segnalano errori di sincronizzazione.',
-    ],
-    'remote_backup_groups' => [
-        'title' => 'Gruppi di backup su host locali e remoti',
-        'description' => 'I gruppi coordinano membri locali, remoti e misti in sequenza con un unico risultato aggregato. Il coordinamento persistente conserva membri, origini e politica di errore; il lavoro assegnato termina durante la manutenzione mentre il membro successivo attende. I controlli funzionano in modalità orchestratore e le viste identificano gli host. Ogni membro completa il proprio ciclo di arresto, backup e riavvio; non è uno snapshot coerente tra host. Sono supportati gli agenti backup-v1 esistenti.',
-    ],
-    'agent_execution_safety_and_identity' => [
-        'title' => 'Esecuzione sicura degli agenti e selezione precisa delle risorse',
-        'description' => 'I controlli S3 degli agenti rifiutano endpoint discordanti. I container ausiliari devono essere rimossi prima di riavviare le applicazioni, anche dopo una disconnessione Docker. I collegamenti ai volumi mantengono l’host, la selezione dell’archivio trasmette il contesto storico e i ripristini non ereditano modifiche successive al tipo di origine del processo.',
-    ],
-    'remote_agent_execution' => [
-        'title' => 'Backup e ripristini tramite agenti Docker',
-        'description' => 'Gli agenti compatibili eseguono backup e ripristini con comandi cifrati persistenti e registri privati di recupero. Una destinazione di rete condivisa consente il ripristino su un altro host senza socket Docker sull’orchestratore. Risultati e metadati dei backup di sicurezza sopravvivono alle riconnessioni senza ripetere operazioni completate.',
-    ],
-    'remote_host_workflows' => [
-        'title' => 'Configurazione di backup e ripristini per host',
-        'description' => 'I job possono usare agent registrati, anche offline e in modalità solo orchestratore. Lo storage di rete condiviso consente il ripristino su un altro host. Inventario, percorsi e destinazioni locali sono isolati per host.',
-    ],
-    'docker_host_metrics' => [
-        'title' => 'Informazioni utili sugli host locali e sugli agenti',
-        'description' => 'Le schede mostrano la versione del motore Docker e il numero di container locali sincronizzato. La scheda locale nasconde l’ultimo contatto riservato agli agenti e chiarisce l’ultima sincronizzazione dei volumi. Le versioni VolumeVault, incluse quelle di sviluppo, sono identificate chiaramente. La modalità solo orchestratore nasconde le metriche Docker. I ruoli compaiono sulle schede degli host anziché sotto il logo dell’applicazione.',
-    ],
-    'maintenance_dispatch_recovery' => [
-        'title' => 'Ripresa affidabile del lavoro in coda dopo la manutenzione',
-        'description' => 'I gruppi in coda restano pubblicabili dopo una lunga manutenzione, anche se la riconciliazione precede il dispatch. La ripresa di un host rinnova i tentativi di consegna delle esecuzioni principali in attesa, senza modificare cronologia e operazioni interne.',
-    ],
-    'agent_deployment_lifecycle' => [
-        'title' => 'Agenti dedicati, modalità orchestratore e aggiornamenti manuali',
-        'description' => 'Gli agenti dispongono di un’immagine PHP CLI dedicata. La modalità solo orchestratore funziona senza daemon Docker, notifiche incluse. La vista host mostra ruoli, versioni e compatibilità, con manutenzione persistente e guida all’aggiornamento manuale che conserva l’identità. L’aggiornamento remoto automatico non è abilitato.',
-    ],
-    'restore_target_host_recovery' => [
-        'title' => 'Recupero dei ripristini in base all’host di destinazione',
-        'description' => 'I ripristini interrotti verso l’host locale vengono ora recuperati anche se l’archivio proviene da un altro host. Il recupero gestisce anche i tentativi esauriti di pubblicazione in coda e i container applicativi rimasti fermi, senza modificare le destinazioni remote.',
-    ],
-    'agent_runtime_resilience' => [
-        'title' => 'Heartbeat e recupero affidabili degli agenti',
-        'description' => 'Gli agenti dietro lo stesso NAT non condividono più le quote e non bloccano la registrazione. Le raccolte lunghe dell’inventario Docker continuano a inviare heartbeat e hanno un limite di durata. Se il salvataggio dello stato fallisce, l’agente termina affinché Docker lo riavvii con la sua identità persistente.',
-    ],
-    'agent_enrollment_inventory' => [
-        'title' => 'Registrazione sicura degli agenti e inventario Docker',
-        'description' => 'Gli amministratori possono registrare host con un comando Docker generato, verificarne la connessione e i conteggi dell’inventario, rinnovare la registrazione e revocare l’accesso. Gli agenti PHP CLI usano TLS verificato, identità persistenti e connessioni in uscita. I certificati integrati si rinnovano automaticamente.',
-    ],
-    'docker_host_attribution' => [
-        'title' => 'Associazione esplicita all’host Docker locale',
-        'description' => 'La migrazione associa automaticamente volumi, processi, cronologia delle esecuzioni e destinazioni locali esistenti all’host Docker locale. Non sono necessarie modifiche alla configurazione. Le identità per host preparano l’esecuzione multihost.',
+    'restore_volume_ownership' => [
+        'title' => 'Protezione dei volumi durante il ripristino',
+        'description' => 'Il ripristino verifica che il nuovo volume gli appartenga prima di scrivervi. In caso di errore, il volume di destinazione viene conservato per l’ispezione e l’eventuale eliminazione manuale.',
     ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Rifiuto anticipato dei backup di sicurezza Dropbox non supportati',

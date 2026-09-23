@@ -1,77 +1,17 @@
 <?php
 
 return [
-    'audit_remote_workflow_parity' => [
-        'title' => 'Korrekturen der entfernten Nebenabläufe abgeschlossen',
-        'description' => 'Ungespeicherte SFTP-Hostschlüssel über geeignete Agenten ermitteln, einen Host für automatische Speicherschwellen speichern und Aktualität sowie Herkunft der Pfadrichtlinie prüfen. Entfernte Startmeldungen und Archivmetadaten nutzen dauerhafte Wiederholungen mit verschlüsselten Snapshots und geordnetem Gruppenabschluss. Installationssicherungen laufen zentral; Importe verschlüsseln Agentenoperationen, Relay-Blöcke und Outbox-Snapshots neu und erhalten Zuweisungen, ohne Agenten zurückzusetzen. Die sieben Audit-Lücken sind implementiert; manuelle Updates, eigene Netzwerkanbindung, hostübergreifendes Relay nur in neue Volumes und zentrale Installationssicherungen bleiben bewusste v1-Grenzen. Eine unabhängige Prüfung aller Hauptbedienelemente wird damit nicht behauptet.',
-    ],
-    'remote_stack_backups' => [
-        'title' => 'Sammelbackups für entfernte Stacks',
-        'description' => 'Stacks auf ihrem ausgewählten Docker-Host sichern, auch im Orchestrator-Modus. Der Dialog zeigt den Host und gemeinsame oder hosteigene Ziele. Bestehende Einstellungen, Benachrichtigungen, Label-Reservierungen und Gruppenzeitpläne bleiben erhalten; erstellte, eingereihte, übersprungene und gruppierte Elemente werden zusammengefasst.',
-    ],
-    'unified_host_operations' => [
-        'title' => 'Einheitliche Ansichten für alle Docker-Hosts',
-        'description' => 'Dashboard, Inventar, Jobs und Verlauf zeigen standardmäßig alle Hosts mit Hostfilter und sichtbarer Identität. Wiederherstellungen filtern nach Zielhost; Gruppensummen bleiben vollständig. Aktualisieren liest gespeicherte Inventarstände, lokaler Sync adressiert den lokalen Host. Unbekannte Containerzahlen werden als unbekannt angezeigt.',
-    ],
-    'restore_volume_ownership' => [
-        'title' => 'Eigentümerschaft neuer Wiederherstellungsvolumes prüfen',
-        'description' => 'Wiederherstellungen in neue Volumes binden das Ziel an einen Entpack-Hilfscontainer und prüfen vor dessen Start das zufällige Eigentumslabel. Zielvolumes fehlgeschlagener Wiederherstellungen werden niemals automatisch gelöscht. Prüfen und bei Bedarf manuell entfernen oder mit einem anderen Zielnamen erneut versuchen; die Laufprotokolle erklären die nächsten Schritte.',
+    'remote_agent_execution' => [
+        'title' => 'Hostübergreifende Backups mit Agenten',
+        'description' => 'Verwalten Sie Backups und Wiederherstellungen mehrerer Docker-Hosts über eine Oberfläche, einschließlich Gruppen, Stacks, Labels und Zielen. Wählen Sie den Hybridmodus für weiterhin lokale Ausführung oder den Orchestrator-Modus ohne lokalen Docker-Zugriff.',
     ],
     'cross_host_archive_relay' => [
-        'title' => 'Hostlokale Archive auf einem anderen Host wiederherstellen',
-        'description' => 'Die verschlüsselte zentrale Weiterleitung überträgt Archive in neue Volumes anderer Hosts, auch lokal/remote im Hybridbetrieb. Entfernte Seiten benötigen archive-relay-v1. Listen und aktuelle Belege bleiben beim Archiveigentümer; Details zeigen Fortschritt, Ablauf, Fehler und Bereinigung. Das Original bleibt erhalten. Standard: 10 GiB pro Archiv, 50 GiB Speicher und 24 Stunden Laufzeit.',
+        'title' => 'Lokale Archive auf einem anderen Host wiederherstellen',
+        'description' => 'Stellen Sie lokal gespeicherte Backups über eine verschlüsselte Übertragung durch den Orchestrator in einem neuen Volume auf einem anderen Host wieder her. Das ursprüngliche Archiv bleibt erhalten.',
     ],
-    'agent_destination_operations' => [
-        'title' => 'Ziele über Agenten testen und durchsuchen',
-        'description' => 'Wählen Sie einen Host, um gespeicherte Ziele zu testen, Speicher zu messen und Archive seitenweise mit Fortschritt, Fehlern und Aktualität anzuzeigen. Agenten benötigen destination-v1; gemeinsame Speicher verwenden standardmäßig weiterhin den zentralen Host, lokale Speicher ihren Besitzer. Wiederherstellungen binden Archivschlüssel an aktuelle Nachweise des Zielhosts. Ältere Agenten unterstützen weiterhin historische Wiederherstellungen.',
-    ],
-    'remote_docker_label_backups' => [
-        'title' => 'Docker-Label-Backups auf entfernten Hosts',
-        'description' => 'Label-Backup-Vorgaben lassen sich pro Host über Einstellungen oder API konfigurieren, auch im reinen Orchestrator-Betrieb. Agenten mit docker-labels-v1 gleichen Deklarationen bei vollständigen Inventaren mit aktiven gemeinsamen oder hosteigenen Zielen ab. Ältere oder unvollständige Inventare erhalten bestehende Jobs und zeigen Synchronisierungsfehler an.',
-    ],
-    'remote_backup_groups' => [
-        'title' => 'Backup-Gruppen über lokale und entfernte Hosts',
-        'description' => 'Gruppen koordinieren lokale, entfernte und gemischte Mitglieder nacheinander mit einem Gesamtergebnis. Die dauerhafte Koordination bewahrt Mitgliedschaft, Quellen und Fehlerstrategie; zugewiesene Arbeit wird während der Wartung abgeschlossen, das nächste Mitglied wartet. Gruppenaktionen funktionieren im Orchestrator-Modus und Mitglieder zeigen ihren Host. Jedes Mitglied durchläuft seinen eigenen Stopp-, Backup- und Neustartzyklus; dies ist kein konsistenter hostübergreifender Snapshot. Bestehende backup-v1-Agenten werden unterstützt.',
-    ],
-    'agent_execution_safety_and_identity' => [
-        'title' => 'Sichere Agent-Ausführung und eindeutige Ressourcenauswahl',
-        'description' => 'S3-Prüfungen der Agents lehnen widersprüchliche Endpoints ab. Backup-Helfer müssen vor dem Neustart der Anwendungen entfernt werden, auch nach einem Docker-Verbindungsabbruch. Volume-Verknüpfungen behalten ihren Host, die Archivauswahl übermittelt den historischen Kontext und Wiederherstellungen übernehmen keinen nachträglich geänderten Quelltyp des Jobs.',
-    ],
-    'remote_agent_execution' => [
-        'title' => 'Backups und Wiederherstellungen über Docker-Agents',
-        'description' => 'Kompatible Agents führen Backups und Wiederherstellungen mit dauerhaften verschlüsselten Befehlen und privaten Wiederherstellungsjournalen aus. Gemeinsame Netzwerkziele ermöglichen die Wiederherstellung auf einem anderen Host ohne Docker-Socket am Orchestrator. Ergebnisse und Metadaten der Sicherheitsbackups bleiben nach Verbindungsabbrüchen erhalten, ohne abgeschlossene Arbeit zu wiederholen.',
-    ],
-    'remote_host_workflows' => [
-        'title' => 'Hostbezogene Backup- und Wiederherstellungskonfiguration',
-        'description' => 'Jobs können registrierte Agents verwenden, auch offline und im reinen Orchestrator-Modus. Mit gemeinsamem Netzwerkspeicher sind Wiederherstellungen auf einem anderen Host möglich. Inventar, Pfade und lokale Ziele bleiben hostbezogen.',
-    ],
-    'docker_host_metrics' => [
-        'title' => 'Aussagekräftige Informationen zu lokalen Hosts und Agents',
-        'description' => 'Hostkarten zeigen nun die Docker-Engine-Version und synchronisierte lokale Containerzahlen. Lokale Karten blenden den Agent-Kontakt aus und erklären die letzte Volume-Synchronisierung. VolumeVault-Versionen einschließlich Entwicklungsbuilds sind klar gekennzeichnet. Reine Orchestrator-Karten zeigen keine Docker-Metriken. Die Bereitstellungsrollen erscheinen auf den Hostkarten statt unter dem Anwendungslogo.',
-    ],
-    'maintenance_dispatch_recovery' => [
-        'title' => 'Wartende Aufträge nach Wartung zuverlässig fortsetzen',
-        'description' => 'Wartende Gruppen bleiben nach langer Wartung veröffentlichbar, auch wenn die Bereinigung vor dem Dispatch läuft. Beim Fortsetzen eines Hosts erhalten seine wartenden Hauptausführungen ein neues Zustellbudget, ohne Ausführungshistorie oder interne Teiloperationen zu ändern.',
-    ],
-    'agent_deployment_lifecycle' => [
-        'title' => 'Eigenständige Agents, Orchestrator-Modus und manuelle Updates',
-        'description' => 'Agents erhalten ein eigenes PHP-CLI-Image. Der reine Orchestrator-Modus funktioniert einschließlich Benachrichtigungen ohne Docker-Daemon. Die Hostübersicht zeigt Rollen, Versionen und Protokollkompatibilität sowie persistente Wartung und eine manuelle Update-Anleitung mit erhaltener Agent-Identität. Automatische Remote-Updates sind nicht aktiviert.',
-    ],
-    'restore_target_host_recovery' => [
-        'title' => 'Wiederherstellungen anhand des Zielhosts bereinigen',
-        'description' => 'Unterbrochene Wiederherstellungen auf dem lokalen Host werden nun auch dann bereinigt, wenn ihr Archiv von einem anderen Host stammt. Dies gilt auch für ausgeschöpfte Warteschlangenübergaben und gestoppte Anwendungscontainer. Entfernte Ziele bleiben unverändert.',
-    ],
-    'agent_runtime_resilience' => [
-        'title' => 'Zuverlässige Agent-Heartbeats und Wiederherstellung',
-        'description' => 'Agents hinter demselben NAT teilen keine Verkehrslimits mehr und blockieren keine Registrierung. Lange Docker-Inventarerfassungen senden weiterhin Heartbeats und haben ein Gesamtzeitlimit. Fehlgeschlagene Zustandsschreibvorgänge beenden den Agent, damit Docker ihn mit seiner gespeicherten Identität neu starten kann.',
-    ],
-    'agent_enrollment_inventory' => [
-        'title' => 'Sichere Agent-Registrierung und Docker-Inventar',
-        'description' => 'Administratoren können Hosts über einen generierten Docker-Befehl registrieren, Verbindungsstatus und Inventarzähler einsehen sowie Registrierung erneuern und Zugriff widerrufen. PHP-CLI-Agents verwenden geprüftes TLS, persistente Identitäten und ausgehende Verbindungen. Integrierte Zertifikate werden automatisch erneuert.',
-    ],
-    'docker_host_attribution' => [
-        'title' => 'Explizite Zuordnung zum lokalen Docker-Host',
-        'description' => 'Vorhandene Volumes, Aufträge, Ausführungsverläufe und lokale Ziele werden bei der Migration automatisch dem lokalen Docker-Host zugeordnet. Konfigurationsänderungen sind nicht erforderlich. Hostbezogene Identitäten bereiten die Ausführung auf mehreren Hosts vor.',
+    'restore_volume_ownership' => [
+        'title' => 'Schutz der Volumes bei Wiederherstellungen',
+        'description' => 'Die Wiederherstellung prüft vor dem Schreiben, ob das neue Volume ihr gehört. Bei einem Fehler bleibt das Zielvolume zur Prüfung und bei Bedarf zur manuellen Löschung erhalten.',
     ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Nicht unterstützte Dropbox-Sicherheitskopien frühzeitig ablehnen',
