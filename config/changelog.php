@@ -1,12 +1,26 @@
 <?php
 
 return [
-    'unreleased' => [
-        ['type' => 'feature', 'key' => 'remote_agent_execution'],
-        ['type' => 'feature', 'key' => 'cross_host_archive_relay'],
-        ['type' => 'change', 'key' => 'restore_volume_ownership'],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.0' => [
+            'date' => '2026-09-28',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.0',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'remote_agent_execution',
+                ],
+                [
+                    'type' => 'feature',
+                    'key' => 'cross_host_archive_relay',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'restore_volume_ownership',
+                ],
+            ],
+        ],
         'v1.23.0' => [
             'date' => '2026-09-17',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v1.23.0',
