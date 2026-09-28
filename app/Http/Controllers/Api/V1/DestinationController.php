@@ -20,7 +20,7 @@ class DestinationController extends Controller
     public function index(): JsonResponse
     {
         return response()->json([
-            'data' => BackupDestination::latest()->get()->map->safeForFrontend(),
+            'data' => BackupDestination::latest()->get()->map(fn (BackupDestination $destination): array => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]),
         ]);
     }
 
@@ -36,12 +36,12 @@ class DestinationController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        return response()->json(['data' => $destination->safeForFrontend()], 201);
+        return response()->json(['data' => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]], 201);
     }
 
     public function show(BackupDestination $destination): JsonResponse
     {
-        return response()->json(['data' => $destination->safeForFrontend()]);
+        return response()->json(['data' => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]]);
     }
 
     public function update(UpdateDestinationRequest $request, BackupDestination $destination, MutateDestination $mutateDestination): JsonResponse
@@ -60,7 +60,9 @@ class DestinationController extends Controller
             throw ValidationException::withMessages(['is_active' => $exception->getMessage()]);
         }
 
-        return response()->json(['data' => $destination->fresh()->safeForFrontend()]);
+        $destination->refresh();
+
+        return response()->json(['data' => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]]);
     }
 
     public function destroy(BackupDestination $destination, MutateDestination $mutateDestination): JsonResponse
@@ -74,11 +76,24 @@ class DestinationController extends Controller
         return response()->json(status: 204);
     }
 
-    public function test(BackupDestination $destination, TestBackupDestination $testBackupDestination): JsonResponse
+    public function test(Request $request, BackupDestination $destination, TestBackupDestination $testBackupDestination): JsonResponse
     {
+        $data = $request->validate(['docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id']]);
+        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        $hostId = $operations->hostId($destination, isset($data['docker_host_id']) ? (int) $data['docker_host_id'] : null);
+        if ($hostId !== \App\Models\DockerHost::LOCAL_ID) {
+            return response()->json(['data' => $operations->safe($operations->create($destination, 'test', $hostId))], 202);
+        }
         $result = $testBackupDestination->handle($destination);
 
         return response()->json(['data' => $result], $result['ok'] ? 200 : 422);
+    }
+
+    public function hostKeyOperation(\App\Models\AgentOperation $operation): JsonResponse
+    {
+        abort_unless($operation->kind === 'destination' && $operation->destination_action === 'host_key' && $operation->backup_destination_id === null, 404);
+
+        return response()->json(['data' => app(\App\Services\BackupDestinations\DestinationOperations::class)->safe($operation)]);
     }
 
     public function hostKey(Request $request, DestinationStorage $storage): JsonResponse
@@ -86,7 +101,14 @@ class DestinationController extends Controller
         $data = $request->validate([
             'host' => ['required', 'string', 'max:255'],
             'port' => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'],
         ]);
+
+        if (isset($data['docker_host_id']) && (int) $data['docker_host_id'] !== \App\Models\DockerHost::LOCAL_ID) {
+            $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+
+            return response()->json(['data' => $operations->safe($operations->createHostKey($data['host'], (int) ($data['port'] ?? 22), (int) $data['docker_host_id']))], 202);
+        }
 
         try {
             return response()->json(['data' => $storage->probeHostKey($data['host'], (int) ($data['port'] ?? 22))]);

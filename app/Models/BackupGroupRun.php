@@ -57,6 +57,8 @@ class BackupGroupRun extends Model
     protected function casts(): array
     {
         return [
+            'member_run_ids' => 'array',
+            'current_member_run_id' => 'integer',
             'dispatch_attempted_at' => 'datetime',
             'dispatch_published_at' => 'datetime',
             'scheduled_for' => 'datetime',

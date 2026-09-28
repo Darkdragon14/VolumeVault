@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Docker\CleanupBackupRunSecretFiles;
 use App\Actions\Docker\RunBackupContainer;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
@@ -155,6 +156,41 @@ class RunBackupContainerTest extends TestCase
         );
 
         $this->assertSame(1, $heartbeats);
+    }
+
+    public function test_auto_removed_helper_is_confirmed_absent_before_secret_cleanup_and_clearing_pending(): void
+    {
+        Exceptions::fake();
+        $docker = $this->recordingDocker();
+        $docker->operationResults['rm'] = new DockerProcessResult([], 1, '', 'Error: No such container: backup');
+        $run = $this->backupRun($this->s3Destination());
+        $docker->backupRun = $run;
+        $cleanup = $this->mock(CleanupBackupRunSecretFiles::class);
+        $cleanup->shouldReceive('handle')->once()->andReturnUsing(function (BackupRun $run) use ($docker): void {
+            $this->assertSame(['run', 'rm'], array_column($docker->commands, 1));
+            $this->assertTrue($run->fresh()->docker_container_cleanup_pending);
+        });
+
+        $result = (new RunBackupContainer($docker, cleanupBackupRunSecretFiles: $cleanup))->handle($run);
+
+        $this->assertTrue($result->successful());
+        $this->assertTrue($docker->cleanupPendingWhenCreateRan);
+        $this->assertFalse($run->fresh()->docker_container_cleanup_pending);
+        Exceptions::assertNothingReported();
+    }
+
+    public function test_successful_single_run_keeps_pending_when_secret_cleanup_fails(): void
+    {
+        Exceptions::fake();
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->s3Destination());
+        $cleanup = $this->mock(CleanupBackupRunSecretFiles::class);
+        $cleanup->shouldReceive('handle')->once()->andThrow(new \RuntimeException('secret cleanup failed'));
+
+        $this->assertTrue((new RunBackupContainer($docker, cleanupBackupRunSecretFiles: $cleanup))->handle($run)->successful());
+
+        $this->assertTrue($run->fresh()->docker_container_cleanup_pending);
+        $this->assertSame(['run', 'rm'], array_column($docker->commands, 1));
     }
 
     public function test_custom_filename_template_uses_sanitized_job_name_run_id_and_time_tokens(): void
@@ -391,7 +427,7 @@ class RunBackupContainerTest extends TestCase
 
         (new RunBackupContainer($docker))->handle($run);
 
-        $this->assertSame(['run'], array_map(fn (array $command) => $command[1], $docker->commands));
+        $this->assertSame(['run', 'rm'], array_map(fn (array $command) => $command[1], $docker->commands));
     }
 
     public function test_ssh_private_key_is_cleaned_up_when_source_mount_validation_fails(): void
@@ -560,13 +596,15 @@ class RunBackupContainerTest extends TestCase
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
             {
-                $this->command = $command;
+                if (in_array($command[1] ?? null, ['run', 'create'], true)) {
+                    $this->command = $command;
+                    $this->environment = $environment;
+                }
                 $this->commands[] = $command;
-                $this->environment = $environment;
                 $this->environments[] = $environment;
                 $this->timeouts[] = $timeout;
 
-                if (($command[1] ?? null) === 'create' && $this->backupRun !== null) {
+                if (in_array($command[1] ?? null, ['run', 'create'], true) && $this->backupRun !== null) {
                     $this->cleanupPendingWhenCreateRan = $this->backupRun->fresh()->docker_container_cleanup_pending;
                 }
 

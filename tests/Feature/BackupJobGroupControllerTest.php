@@ -11,6 +11,7 @@ use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Models\NotificationChannel;
 use App\Models\User;
@@ -747,6 +748,72 @@ class BackupJobGroupControllerTest extends TestCase
         $this->actingAs($this->admin())
             ->get('/backup-groups/create')
             ->assertOk();
+    }
+
+    public function test_group_run_availability_tracks_execution_hosts_without_disabling_management(): void
+    {
+        $this->actingAs($this->admin());
+        $group = $this->group();
+        $member = $this->member($group);
+        $assertAvailability = function (bool $available, string $reason = 'hostWorkflow.groupRunUnavailable') use ($group): void {
+            foreach ([route('backup-groups.index') => 'groups.data.0', route('backup-groups.show', $group) => 'group'] as $url => $prefix) {
+                $this->get($url)->assertOk()->assertInertia(fn (Assert $page) => $page
+                    ->where($prefix.'.can_run', $available)
+                    ->where($prefix.'.can_run_reason', $available ? null : $reason));
+            }
+        };
+
+        config(['volumevault.mode' => 'hybrid']);
+        $assertAvailability(true);
+        config(['volumevault.mode' => 'orchestrator']);
+        $assertAvailability(false, 'dockerHosts.localDisabled');
+        $this->get(route('backup-groups.edit', $group))->assertOk();
+
+        $host = DockerHost::factory()->create();
+        $host->forceFill(['driver' => 'agent', 'agent_registered_at' => now(), 'agent_protocol_version' => 1,
+            'agent_capabilities' => ['inventory-v1', 'backup-v1']])->save();
+        $member->forceFill(['docker_host_id' => $host->id])->save();
+        $assertAvailability(true);
+        foreach (['agent_revoked_at' => now(), 'agent_protocol_version' => 99, 'agent_capabilities' => ['inventory-v1'], 'agent_registered_at' => null, 'maintenance_requested_at' => now()] as $attribute => $value) {
+            $original = $host->getAttribute($attribute);
+            $host->forceFill([$attribute => $value])->save();
+            $assertAvailability(false, 'hostWorkflow.unavailable');
+            $host->forceFill([$attribute => $original])->save();
+        }
+
+        $local = $this->member($group);
+        $assertAvailability(false, 'dockerHosts.localDisabled');
+        $local->update(['status' => 'paused']);
+        $assertAvailability(true);
+        DockerHost::findOrFail(1)->forceFill(['maintenance_requested_at' => now()])->save();
+        $assertAvailability(false, 'hostWorkflow.unavailable');
+        DockerHost::findOrFail(1)->forceFill(['maintenance_requested_at' => null])->save();
+        $member->update(['status' => 'error']);
+        $assertAvailability(true);
+        $member->update(['status' => 'paused']);
+        $assertAvailability(false);
+        $member->update(['status' => 'active']);
+        BackupGroupRun::create(['backup_job_group_id' => $group->id, 'status' => 'queued', 'trigger' => 'manual']);
+        $assertAvailability(false);
+    }
+
+    public function test_group_list_batches_host_queries_and_does_not_expose_loaded_member_models(): void
+    {
+        $this->actingAs($this->admin());
+        for ($i = 0; $i < 6; $i++) {
+            $this->member($this->group());
+        }
+        $hostQueries = [];
+        DB::listen(function (QueryExecuted $query) use (&$hostQueries): void {
+            if (str_contains($query->sql, 'from "docker_hosts"')) {
+                $hostQueries[] = $query->sql;
+            }
+        });
+        $this->get(route('backup-groups.index'))->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->has('groups.data', 6)
+            ->where('groups.data.0.can_run', true)
+            ->missing('groups.data.0.members'));
+        $this->assertCount(1, $hostQueries);
     }
 
     private function admin(): User

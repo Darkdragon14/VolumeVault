@@ -19,7 +19,7 @@ class DeleteBackupJob
 
             try {
                 $this->withGroupLocks->handle([$references['backup_job_group_id']], function () use ($current, $job, $references): void {
-                    $this->withLocks->handleForJobs(
+                    $this->withLocks->handleForJobsOnHost(
                         $current->isDockerLabelManaged() ? [$current->id] : [],
                         [$references['destination_id']],
                         function ($destinations, $settings, $managedJobs) use ($job, $references): void {
@@ -46,6 +46,7 @@ class DeleteBackupJob
                             $lockedJob->delete();
                         },
                         $current->isDockerVolumeSource() ? [$references['volume_name']] : [],
+                        dockerHostId: $current->docker_host_id,
                     );
                 });
 
@@ -59,11 +60,12 @@ class DeleteBackupJob
     }
 
     /**
-     * @return array{destination_id: int, backup_job_group_id: ?int, configuration_source: string, source_type: string, volume_name: ?string, host_path: ?string}
+     * @return array{docker_host_id: int, destination_id: int, backup_job_group_id: ?int, configuration_source: string, source_type: string, volume_name: ?string, host_path: ?string}
      */
     private function references(BackupJob $job): array
     {
         return [
+            'docker_host_id' => (int) $job->docker_host_id,
             'destination_id' => (int) $job->backup_destination_id,
             'backup_job_group_id' => $job->backup_job_group_id !== null ? (int) $job->backup_job_group_id : null,
             'configuration_source' => (string) $job->configuration_source,

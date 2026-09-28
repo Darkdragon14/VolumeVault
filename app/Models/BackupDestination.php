@@ -1,10 +1,11 @@
 <?php
 
 namespace App\Models;
-use App\Support\SshHostKey;
 
+use App\Support\SshHostKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
@@ -78,6 +79,8 @@ class BackupDestination extends Model
     ];
 
     protected $fillable = [
+        'docker_host_id',
+        'storage_measurement_host_id',
         'name',
         'provider',
         'endpoint',
@@ -104,6 +107,8 @@ class BackupDestination extends Model
     protected function casts(): array
     {
         return [
+            'docker_host_id' => 'integer',
+            'storage_measurement_host_id' => 'integer',
             'access_key_id' => 'encrypted',
             'secret_access_key' => 'encrypted',
             'use_path_style_endpoint' => 'boolean',
@@ -117,6 +122,46 @@ class BackupDestination extends Model
     public function isS3Compatible(): bool
     {
         return in_array($this->provider, self::S3_PROVIDERS, true);
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $destination): void {
+            $destination->docker_host_id = $destination->isHostBound()
+                ? ($destination->docker_host_id ?? DockerHost::LOCAL_ID)
+                : null;
+            if ($destination->isHostBound()) {
+                $destination->storage_measurement_host_id = $destination->docker_host_id;
+            }
+            if ($destination->exists) {
+                $original = new self;
+                $original->setRawAttributes($destination->getRawOriginal());
+                if ($original->locatorFingerprint() !== $destination->locatorFingerprint()
+                    || $original->storageMeasurementHostId() !== $destination->storageMeasurementHostId()) {
+                    $destination->storage_measurement_revision = (string) \Illuminate\Support\Str::uuid();
+                }
+            }
+        });
+    }
+
+    public function isHostBound(): bool
+    {
+        return in_array($this->provider, [self::PROVIDER_LOCAL, self::PROVIDER_DOCKER_VOLUME], true);
+    }
+
+    public function storageMeasurementHostId(): int
+    {
+        return (int) ($this->isHostBound() ? $this->docker_host_id : ($this->storage_measurement_host_id ?? DockerHost::LOCAL_ID));
+    }
+
+    public function storageMeasurementFingerprint(): string
+    {
+        return hash('sha256', $this->locatorFingerprint().':'.$this->storageMeasurementHostId().':'.$this->storage_measurement_revision);
+    }
+
+    public function dockerHost(): BelongsTo
+    {
+        return $this->belongsTo(DockerHost::class);
     }
 
     public function setting(string $key, mixed $default = null): mixed
@@ -209,6 +254,11 @@ class BackupDestination extends Model
             ],
             default => [],
         };
+
+        // Preserve persisted local fingerprints when upgrading existing runs.
+        if ($this->isHostBound() && $this->docker_host_id !== null && $this->docker_host_id !== DockerHost::LOCAL_ID) {
+            $locator['docker_host_id'] = $this->docker_host_id;
+        }
 
         return hash('sha256', json_encode([
             'provider' => $this->provider,
@@ -386,6 +436,7 @@ class BackupDestination extends Model
     {
         return [
             'id' => $this->id,
+            'storage_measurement_host_id' => $this->storage_measurement_host_id,
             'name' => $this->name,
             'provider' => $this->provider,
             'provider_label' => self::PROVIDER_LABELS[$this->provider] ?? $this->provider,

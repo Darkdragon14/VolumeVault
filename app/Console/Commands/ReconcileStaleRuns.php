@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Actions\Runs\DispatchQueuedRun;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
 use App\Actions\Docker\CleanupBackupRunSecretFiles;
@@ -12,14 +11,17 @@ use App\Actions\Docker\StopDockerContainer;
 use App\Actions\Restore\RunRestore;
 use App\Models\BackupGroupRun;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\RestoreRun;
+use App\Services\Agents\HostWorkAdmission;
+use App\Support\DeploymentMode;
 use App\Support\RunHeartbeatLock;
 use App\Support\VolumeJobLock;
 use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 use Throwable;
@@ -52,6 +54,10 @@ class ReconcileStaleRuns extends Command
 
     public function handle(RunBackup $runBackup, RunRestore $runRestore, RunBackupGroup $runBackupGroup): int
     {
+        if (DeploymentMode::isOrchestrator()) {
+            return self::SUCCESS;
+        }
+
         $minutes = (int) ($this->option('minutes') ?: self::DEFAULT_THRESHOLD_MINUTES);
 
         if ($minutes < 1) {
@@ -143,6 +149,18 @@ class ReconcileStaleRuns extends Command
             }
         });
 
+        $restoreCleanupCount = 0;
+        RestoreRun::query()
+            ->where('target_docker_host_id', DockerHost::LOCAL_ID)
+            ->whereDoesntHave('archiveRelay')
+            ->where('docker_container_cleanup_pending', true)
+            ->whereIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
+            ->get()->each(function (RestoreRun $run) use ($cutoff, &$restoreCleanupCount): void {
+                if ($this->recoverRestoreHelper($run, $cutoff)) {
+                    $restoreCleanupCount++;
+                }
+            });
+
         // Runs the sweep just failed (or runs whose worker died during restart)
         // may still have application containers stopped. Restart them now.
         $restartedCount = 0;
@@ -166,7 +184,7 @@ class ReconcileStaleRuns extends Command
             }
         });
 
-        $this->info("Reconciled {$backupCount} stale backup run(s), {$restoreCount} stale restore run(s) and {$groupCount} stale backup group run(s); completed {$containerCleanupCount} pending backup cleanup(s); restarted containers for {$restartedCount} interrupted run(s).");
+        $this->info("Reconciled {$backupCount} stale backup run(s), {$restoreCount} stale restore run(s) and {$groupCount} stale backup group run(s); completed {$containerCleanupCount} pending backup cleanup(s) and {$restoreCleanupCount} pending restore cleanup(s); restarted containers for {$restartedCount} interrupted run(s).");
 
         return self::SUCCESS;
     }
@@ -175,7 +193,10 @@ class ReconcileStaleRuns extends Command
     private function exhaustedBackupPublications(CarbonInterface $cutoff): Collection
     {
         return BackupRun::query()
-            ->whereNull('backup_group_run_id')
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
+            ->where(fn ($query) => $query->whereNull('backup_group_run_id')
+                ->orWhereHas('groupRun', fn ($query) => $query->whereNotNull('member_run_ids')
+                    ->where('status', 'running')->whereColumn('current_member_run_id', 'backup_runs.id')))
             ->where('trigger', '!=', BackupRun::TRIGGER_PRE_RESTORE)
             ->where('status', BackupRun::STATUS_QUEUED)
             ->whereNotNull('dispatch_token')
@@ -184,45 +205,49 @@ class ReconcileStaleRuns extends Command
             ->where('dispatch_attempted_at', '<', $cutoff)
             ->with('job')
             ->get()
-            ->reject(fn (BackupRun $run): bool => $this->backupIsWaitingForVolumeLock($run));
+            ->reject(fn (BackupRun $run): bool => app(HostWorkAdmission::class)->isWaiting($run) || $this->backupIsWaitingForVolumeLock($run));
     }
 
     /** @return Collection<int, RestoreRun> */
     private function exhaustedRestorePublications(CarbonInterface $cutoff): Collection
     {
         return RestoreRun::query()
+            ->where('target_docker_host_id', DockerHost::LOCAL_ID)
             ->where('status', RestoreRun::STATUS_QUEUED)
             ->whereNotNull('dispatch_token')
             ->whereNotNull('dispatch_published_at')
             ->whereColumn('dispatch_attempted_at', '>', 'dispatch_published_at')
             ->where('dispatch_attempted_at', '<', $cutoff)
             ->get()
-            ->reject(fn (RestoreRun $run): bool => $this->volumeHeldByAnotherActiveRun($run->target_volume_name, restoreId: $run->id));
+            ->reject(fn (RestoreRun $run): bool => app(HostWorkAdmission::class)->isWaiting($run) || $this->volumeHeldByAnotherActiveRun($run->target_volume_name, $run->target_docker_host_id, restoreId: $run->id));
     }
 
     /** @return Collection<int, BackupGroupRun> */
     private function exhaustedGroupPublications(CarbonInterface $cutoff): Collection
     {
         return BackupGroupRun::query()
+            ->whereNull('member_run_ids')
+            ->whereDoesntHave('group.members', fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
+            ->whereDoesntHave('memberRuns', fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->where('status', BackupGroupRun::STATUS_QUEUED)
             ->whereNotNull('dispatch_token')
             ->whereNotNull('dispatch_published_at')
             ->whereColumn('dispatch_attempted_at', '>', 'dispatch_published_at')
             ->where('dispatch_attempted_at', '<', $cutoff)
             ->get()
-            ->reject(fn (BackupGroupRun $run): bool => $this->queuedGroupRunHasActivePredecessor($run, $cutoff, []));
+            ->reject(fn (BackupGroupRun $run): bool => app(HostWorkAdmission::class)->isWaiting($run) || $this->queuedGroupRunHasActivePredecessor($run, $cutoff, []));
     }
 
     private function backupOverlapLock(BackupRun $run): Lock
     {
-        $key = VolumeJobLock::key($run->sourceVolumeName(), 'backup-job-'.$run->backup_job_id);
+        $key = VolumeJobLock::key($run->sourceVolumeName(), 'backup-job-'.$run->backup_job_id, $run->docker_host_id);
 
         return Cache::lock(VolumeJobLock::cacheKeyFor($key), 180);
     }
 
     private function restoreOverlapLock(RestoreRun $run): Lock
     {
-        $key = VolumeJobLock::key($run->target_volume_name, 'restore-run-'.$run->id);
+        $key = VolumeJobLock::key($run->target_volume_name, 'restore-run-'.$run->id, $run->target_docker_host_id);
 
         return Cache::lock(VolumeJobLock::cacheKeyFor($key), 180);
     }
@@ -234,6 +259,9 @@ class ReconcileStaleRuns extends Command
     private function staleGroupRuns(CarbonInterface $cutoff, array $reconciledBackupRunIds): Collection
     {
         return BackupGroupRun::query()
+            ->whereNull('member_run_ids')
+            ->whereDoesntHave('group.members', fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
+            ->whereDoesntHave('memberRuns', fn ($query) => $query->where('docker_host_id', '!=', DockerHost::LOCAL_ID))
             ->whereIn('status', [BackupGroupRun::STATUS_QUEUED, BackupGroupRun::STATUS_RUNNING])
             ->get()
             ->filter(fn (BackupGroupRun $run) => $this->groupRunIsStale($run, $cutoff)
@@ -245,17 +273,13 @@ class ReconcileStaleRuns extends Command
     /**
      * A group run drives its members sequentially and updates last_heartbeat_at
      * after each one, so a running group with a stale heartbeat and no in-flight
-     * member is a crashed worker. A queued group is stale only when no active
-     * predecessor explains why its payload has not reached the atomic claim.
+     * member is a crashed worker. Queued groups belong to dispatch recovery,
+     * regardless of age or maintenance history. Only exhaustedGroupPublications
+     * may fail them after repeated unclaimed publications.
      */
     private function groupRunIsStale(BackupGroupRun $run, CarbonInterface $cutoff): bool
     {
-        if ($run->status === BackupGroupRun::STATUS_QUEUED && $run->dispatch_published_at !== null) {
-            return false;
-        }
-
-        if ($run->status === BackupGroupRun::STATUS_QUEUED
-            && $run->dispatch_attempted_at?->isAfter(now()->subMinutes(DispatchQueuedRun::LEASE_MINUTES))) {
+        if ($run->status === BackupGroupRun::STATUS_QUEUED) {
             return false;
         }
 
@@ -309,6 +333,7 @@ class ReconcileStaleRuns extends Command
     private function staleBackupRuns(CarbonInterface $cutoff): Collection
     {
         return BackupRun::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->whereIn('status', [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING])
             ->where(fn ($query) => $this->candidateConstraint($query, $cutoff, BackupRun::STATUS_RUNNING))
             ->with('job')
@@ -321,6 +346,7 @@ class ReconcileStaleRuns extends Command
     private function backupRunsPendingContainerCleanup(): Collection
     {
         return BackupRun::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->where('docker_container_cleanup_pending', true)
             ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
             ->get();
@@ -407,6 +433,9 @@ class ReconcileStaleRuns extends Command
     private function backupIsStale(BackupRun $run, CarbonInterface $cutoff): bool
     {
         if ($run->status !== BackupRun::STATUS_RUNNING) {
+            if ($run->belongsToGroupRun() && $run->groupRun?->member_run_ids !== null) {
+                return false;
+            }
             if (! $run->belongsToGroupRun() && $run->trigger !== BackupRun::TRIGGER_PRE_RESTORE) {
                 return false;
             }
@@ -458,11 +487,13 @@ class ReconcileStaleRuns extends Command
     private function staleRestoreRuns(CarbonInterface $cutoff): Collection
     {
         return RestoreRun::query()
+            ->where('target_docker_host_id', DockerHost::LOCAL_ID)
             ->where('status', RestoreRun::STATUS_RUNNING)
+            ->whereDoesntHave('archiveRelay')
             ->get()
             ->filter(fn (RestoreRun $run) => $this->isStale($run, $cutoff, RestoreRun::STATUS_RUNNING)
                 && ! $this->restoreIsProgressing($run, $cutoff)
-                && ! $this->volumeHeldByAnotherActiveRun($run->target_volume_name, restoreId: $run->id));
+                && ! $this->volumeHeldByAnotherActiveRun($run->target_volume_name, $run->target_docker_host_id, restoreId: $run->id));
     }
 
     /**
@@ -472,9 +503,17 @@ class ReconcileStaleRuns extends Command
      */
     private function markStaleRestoreFailed(RestoreRun $run, CarbonInterface $cutoff, RunRestore $runRestore, string $reason): bool
     {
+        $volumeLock = $run->docker_container_cleanup_pending ? $this->restoreOverlapLock($run) : null;
+
+        if ($volumeLock !== null && ! $volumeLock->get()) {
+            return false;
+        }
+
         $heartbeatLock = Cache::lock(RunHeartbeatLock::restore($run->id), 180);
 
         if (! $heartbeatLock->get()) {
+            $volumeLock?->release();
+
             return false;
         }
 
@@ -483,7 +522,9 @@ class ReconcileStaleRuns extends Command
         try {
             $run->refresh();
 
-            if ($run->status !== RestoreRun::STATUS_RUNNING || $this->restoreIsProgressing($run, $cutoff)) {
+            if ($run->target_docker_host_id !== DockerHost::LOCAL_ID || $run->archiveRelay()->exists()
+                || ($run->docker_container_cleanup_pending && $volumeLock === null)
+                || $run->status !== RestoreRun::STATUS_RUNNING || $this->restoreIsProgressing($run, $cutoff)) {
                 return false;
             }
 
@@ -507,6 +548,10 @@ class ReconcileStaleRuns extends Command
                 }
             }
 
+            if ($run->docker_container_cleanup_pending && ! $this->cleanupRestoreHelper($run)) {
+                return false;
+            }
+
             return $runRestore->markFailed(
                 $run,
                 new RuntimeException($reason),
@@ -521,6 +566,60 @@ class ReconcileStaleRuns extends Command
             if (! $released) {
                 $heartbeatLock->release();
             }
+            $volumeLock?->release();
+        }
+    }
+
+    private function recoverRestoreHelper(RestoreRun $run, CarbonInterface $cutoff): bool
+    {
+        $volumeLock = $this->restoreOverlapLock($run);
+
+        if (! $volumeLock->get()) {
+            return false;
+        }
+
+        $heartbeatLock = Cache::lock(RunHeartbeatLock::restore($run->id), 180);
+
+        if (! $heartbeatLock->get()) {
+            $volumeLock->release();
+
+            return false;
+        }
+
+        try {
+            $run->refresh();
+
+            if ($run->target_docker_host_id !== DockerHost::LOCAL_ID || $run->archiveRelay()->exists()
+                || ! $run->docker_container_cleanup_pending
+                || ! in_array($run->status, [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED], true)
+                || $run->last_heartbeat_at?->greaterThanOrEqualTo($cutoff)) {
+                return false;
+            }
+
+            return $this->cleanupRestoreHelper($run);
+        } finally {
+            $heartbeatLock->release();
+            $volumeLock->release();
+        }
+    }
+
+    /** Called only while holding the worker's volume and heartbeat locks. */
+    private function cleanupRestoreHelper(RestoreRun $run): bool
+    {
+        try {
+            if (! filled($run->docker_container_id)) {
+                throw new RuntimeException('Pending restore helper has no recorded identity; absence cannot be confirmed.');
+            }
+
+            $this->removeDockerContainer->handle($run->docker_container_id);
+            $run->forceFill(['docker_container_id' => null, 'docker_container_cleanup_pending' => false])->save();
+
+            return true;
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->warn("Failed to remove pending restore helper for restore run {$run->id}: {$exception->getMessage()}");
+
+            return false;
         }
     }
 
@@ -542,12 +641,10 @@ class ReconcileStaleRuns extends Command
             return false;
         }
 
-        // A group member run is executed inline by the group worker, not dispatched
-        // as its own queue job, so it is never a WithoutOverlapping lock waiter that
-        // will be redelivered. A crashed worker can leave it stuck queued; it must be
-        // reconciled (failed), not exempted — otherwise it stays queued forever and
-        // also keeps its group run open (groupRunHasActiveMemberRun sees it).
-        if ($run->belongsToGroupRun()) {
+        // Legacy group members execute inline and cannot be queue lock waiters.
+        // Durable coordinated members have their own WithoutOverlapping queue jobs
+        // and need the same active/recently-released holder protection as standalone runs.
+        if ($run->belongsToGroupRun() && $run->groupRun?->member_run_ids === null) {
             return false;
         }
 
@@ -566,12 +663,13 @@ class ReconcileStaleRuns extends Command
     private function lockHeldByAnotherActiveBackup(BackupRun $run, ?string $volume): bool
     {
         if (filled($volume)) {
-            return $this->volumeHeldByAnotherActiveRun($volume, backupRunId: $run->id);
+            return $this->volumeHeldByAnotherActiveRun($volume, $run->docker_host_id, backupRunId: $run->id);
         }
 
         $recentlyReleased = now()->subSeconds(120);
 
         return BackupRun::query()
+            ->where('docker_host_id', $run->docker_host_id)
             ->where('backup_job_id', $run->backup_job_id)
             ->whereKeyNot($run->id)
             // A pre-restore safety backup runs inline and never holds this lock.
@@ -593,7 +691,7 @@ class ReconcileStaleRuns extends Command
      * terminal state within the release window + a buffer as still "busy" bridges
      * that gap, so the waiter survives long enough to pick the lock back up.
      */
-    private function volumeHeldByAnotherActiveRun(?string $volume, ?int $restoreId = null, ?int $backupRunId = null): bool
+    private function volumeHeldByAnotherActiveRun(?string $volume, int $dockerHostId, ?int $restoreId = null, ?int $backupRunId = null): bool
     {
         if (! filled($volume)) {
             return false;
@@ -603,12 +701,14 @@ class ReconcileStaleRuns extends Command
         $recentlyReleased = now()->subSeconds(120);
 
         $restoreHolds = RestoreRun::query()
+            ->where('target_docker_host_id', $dockerHostId)
             ->where('target_volume_name', $volume)
             ->when($restoreId, fn ($query) => $query->whereKeyNot($restoreId))
-            ->where(fn ($query) => $this->stillHoldsVolume($query, $recentlyReleased))
+            ->where(fn ($query) => $this->stillHoldsVolume($query, $recentlyReleased, includeBackupCleanup: true))
             ->exists();
 
         $backupHolds = BackupRun::query()
+            ->where('docker_host_id', $dockerHostId)
             ->where(function ($query) use ($volume): void {
                 $query->where('source_volume_name', $volume)
                     ->orWhere(fn ($query) => $query
@@ -670,6 +770,7 @@ class ReconcileStaleRuns extends Command
     private function backupRunsWithStoppedContainers(CarbonInterface $cutoff): Collection
     {
         return BackupRun::query()
+            ->where('docker_host_id', DockerHost::LOCAL_ID)
             ->whereIn('status', [BackupRun::STATUS_SUCCESS, BackupRun::STATUS_FAILED, BackupRun::STATUS_CANCELLED])
             ->whereNotNull('stopped_container_ids')
             ->whereJsonLength('stopped_container_ids', '>', 0)
@@ -685,6 +786,10 @@ class ReconcileStaleRuns extends Command
                     ->whereDoesntHave('groupRun', fn ($group) => $group
                         ->where('status', BackupGroupRun::STATUS_RUNNING)
                         ->where('last_heartbeat_at', '>=', $cutoff))
+                    // A durable coordinator heartbeat does not imply a live local
+                    // worker. Recovery still takes the worker's volume lock and
+                    // refreshes the member before restarting any containers.
+                    ->orWhereHas('groupRun', fn ($group) => $group->whereNotNull('member_run_ids'))
                     // ...or the worker has already moved on to a later member (a
                     // higher-id member run exists), so this member's restart has
                     // finished or failed and must be recovered now — not left down
@@ -692,6 +797,7 @@ class ReconcileStaleRuns extends Command
                     ->orWhereExists(fn ($exists) => $exists
                         ->selectRaw('1')
                         ->from('backup_runs as later_member')
+                        ->whereColumn('later_member.docker_host_id', 'backup_runs.docker_host_id')
                         ->whereColumn('later_member.backup_group_run_id', 'backup_runs.backup_group_run_id')
                         ->whereColumn('later_member.id', '>', 'backup_runs.id'));
             })
@@ -708,7 +814,7 @@ class ReconcileStaleRuns extends Command
     private function recoverBackupStoppedContainers(BackupRun $run, RunBackup $runBackup): bool
     {
         $run->loadMissing('job');
-        $lockKey = VolumeJobLock::key($run->sourceVolumeName(), 'backup-job-'.$run->backup_job_id);
+        $lockKey = VolumeJobLock::key($run->sourceVolumeName(), 'backup-job-'.$run->backup_job_id, $run->docker_host_id);
         $volumeLock = Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400);
 
         if (! $volumeLock->get()) {
@@ -734,7 +840,7 @@ class ReconcileStaleRuns extends Command
 
     private function recoverRestoreStoppedContainers(RestoreRun $run, RunRestore $runRestore): bool
     {
-        $lockKey = VolumeJobLock::key($run->target_volume_name, 'restore-run-'.$run->id);
+        $lockKey = VolumeJobLock::key($run->target_volume_name, 'restore-run-'.$run->id, $run->target_docker_host_id);
         $volumeLock = Cache::lock(VolumeJobLock::cacheKeyFor($lockKey), 86400);
 
         if (! $volumeLock->get()) {
@@ -773,6 +879,7 @@ class ReconcileStaleRuns extends Command
         }
 
         return BackupRun::query()
+            ->where('docker_host_id', $run->docker_host_id)
             ->where('backup_group_run_id', $run->backup_group_run_id)
             ->whereKeyNot($run->id)
             ->where('status', BackupRun::STATUS_RUNNING)
@@ -795,6 +902,7 @@ class ReconcileStaleRuns extends Command
     private function restoreRunsWithStoppedContainers(): Collection
     {
         return RestoreRun::query()
+            ->where('target_docker_host_id', DockerHost::LOCAL_ID)
             ->whereIn('status', [RestoreRun::STATUS_SUCCESS, RestoreRun::STATUS_FAILED, RestoreRun::STATUS_CANCELLED])
             ->whereNotNull('stopped_container_ids')
             ->whereJsonLength('stopped_container_ids', '>', 0)
@@ -831,7 +939,7 @@ class ReconcileStaleRuns extends Command
         // just-finished child also bridges the handoff until the parent worker can
         // renew its heartbeat after RunBackup returns.
         if ($run->pre_restore_backup_run_id !== null) {
-            $backup = $run->preRestoreBackup()->first();
+            $backup = $run->preRestoreBackup()->where('docker_host_id', $run->target_docker_host_id)->first();
 
             if ($backup && in_array($backup->status, [BackupRun::STATUS_QUEUED, BackupRun::STATUS_RUNNING], true)) {
                 return true;
@@ -861,6 +969,10 @@ class ReconcileStaleRuns extends Command
      */
     private function isStale(Model $run, CarbonInterface $cutoff, string $runningStatus): bool
     {
+        if (app(HostWorkAdmission::class)->isWaiting($run)) {
+            return false;
+        }
+
         if ($run->status === $runningStatus) {
             if (filled($run->docker_container_id)) {
                 $alive = $this->containerIsAlive->handle($run->docker_container_id);

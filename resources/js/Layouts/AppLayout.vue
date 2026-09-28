@@ -106,6 +106,7 @@ const settingsNav = computed(() => [
         { label: t('Installation save'), description: t('Export and import setup'), href: '/installation-save', shortcutKey: 'i' },
     ] : []),
     ...(can.value.manageUsers ? [
+        { label: t('dockerHosts.nav'), description: t('dockerHosts.subtitle'), href: '/docker-hosts', shortcutKey: 'o' },
         { label: t('Users'), description: t('Team access'), href: '/users', shortcutKey: 'u' },
     ] : []),
 ]);

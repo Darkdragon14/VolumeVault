@@ -44,6 +44,107 @@ The recommended setup runs one container. At startup it prepares storage, runs d
 
 Production defaults are built into VolumeVault. Add environment variables only when you need to override them, for example `APP_URL`, `APP_TIMEZONE`, or SMTP settings.
 
+## Deployment Modes and Images
+
+The web application supports `VOLUMEVAULT_MODE=hybrid` (default) and `VOLUMEVAULT_MODE=orchestrator`.
+
+- **Hybrid:** central UI, API, scheduling and local Docker execution, with optional agents.
+- **Orchestrator only:** central UI, API, agent transport, alerts and network-backed finalization, without Docker daemon access. Local discovery, scheduling/execution and stale-run recovery are disabled. Hourly host-path audits still inspect all remote hosts using stored inventory without Docker; local policy is reported as `local_disabled`. Local resources and history remain in the database; their jobs are not silently failed or deleted. Local destination metadata finalizations are held until local execution is available again. Notifications use the bundled Shoutrrr binary instead of starting Docker containers.
+- **Agent:** the separate `ghcr.io/darkdragon14/volumevault-agent` image runs PHP CLI only, without nginx, PHP-FPM, frontend assets, the central scheduler or queue workers. It retains the shared PHP dependencies and execution code. Its default command is `php artisan volumevault:agent`, and its persistent storage remains `/app/storage`.
+
+For orchestrator-only deployment, use the standalone file, not an overlay on the socket-mounted base file:
+
+```bash
+VOLUMEVAULT_AGENT_URL=https://192.168.1.10:8443 \
+  docker compose -f docker-compose.orchestrator.yml up -d
+```
+
+Set `APP_KEY` as for any central installation. `VOLUMEVAULT_VERSION` can pin the application's image tag. Before changing an existing hybrid installation to orchestrator-only, enter maintenance for its local host and wait for active work and cleanup to finish. Keep the same central storage volume. To re-enable local work, return to hybrid with the original Docker endpoint and end maintenance explicitly.
+
+Both container images are built from the same source revision and published with corresponding version tags. Local builds use `docker build --target deploy -t volumevault:local .` and `docker build --target agent -t volumevault-agent:local .`. The default Dockerfile target remains the web application. Building the agent does not include the frontend build artifacts in its runtime image.
+
+## Agent Enrollment and Inventory
+
+Compatible agents provide inventory discovery and execute backups and restores, including members of remote or mixed-host backup groups. Backup forms select a source host; restore forms select a target host. Shared network destinations support A-to-B restore into a new volume. Host-local destinations remain owned and listed by their source host; cross-host restores use the central archive relay and require `archive-relay-v1` on each remote side. Local-central sources and targets work in hybrid mode. Agents advertising `docker-labels-v1` support host-scoped Docker-label reconciliation on complete inventories; configure each host under Settings > Docker label backups, including in orchestrator-only mode. Upgrade older agents to enable reconciliation; their inventories preserve existing label-managed jobs and surface synchronization errors. Agents advertising `destination-v1` also support asynchronous destination testing, paginated browsing and storage measurements. Older agents retain historical same-host restore support. Volumes, Stacks, Dashboard, jobs and histories default to all hosts with host filters and explicit historical identities. Stack backups target one selected host; metadata uses persisted volume labels and unknown container counts remain unknown. The seven secondary-workflow audit gaps are implemented as detailed in Development & Roadmap; this does not assert that every main-screen control has completed independent review.
+
+For unsaved SFTP key discovery, update agents to advertise `sftp-host-key-v1` alongside `destination-v1`. Remote archive metadata retries require `archive-metadata-v1` alongside `destination-v1`. These capabilities are distinct: supporting destination lists does not imply support for key discovery or metadata retries. Installation saves remain central operations, so their network destinations must be centrally reachable even if ordinary backup or measurement work uses an agent.
+
+### Archive relay capacity
+
+Relay defaults in `config/volumevault.php` are:
+
+| Environment variable | Default | Meaning |
+| --- | --- | --- |
+| `VOLUMEVAULT_ARCHIVE_RELAY_MAX_BYTES` | `10737418240` | 10 GiB maximum archive |
+| `VOLUMEVAULT_ARCHIVE_RELAY_MAX_DISK_BYTES` | `53687091200` | 50 GiB central relay disk budget |
+| `VOLUMEVAULT_ARCHIVE_RELAY_TTL_SECONDS` | `86400` | 24-hour transfer lifetime |
+
+Central storage is `storage/app/private/archive-relays`. Admission reserves **3 × maximum archive size per relay** for encryption and local staging, not merely the expected archive size. Source staging requires **2 × maximum archive size** free. With defaults, reserve 30 GiB centrally per admitted relay and 20 GiB for source staging. Keep the scheduler and workers running for transfer reconciliation and cleanup. Expiry blocks new uploads/assignments; it does not discard an assigned agent’s pending cleanup or acknowledgement.
+
+Groups containing remote members use a durable central coordinator and the existing `backup-v1` agent capability; no new agent protocol is needed. Remote-only groups work in orchestrator mode; mixed groups require local execution for their local members. Keep the central scheduler, execution queue and metadata worker running. Membership, failure policy and member sources are snapshotted when the remote/mixed run is queued. Members execute sequentially, each completing its configured stop/backup/restart cycle before the next starts. This does not stop all applications together or provide a consistent cross-host snapshot. Purely local groups retain their synchronous member execution within the queued group job.
+
+The local card shows the Docker engine's server version and total container count (running and stopped), refreshed by the existing volume synchronization. **Last volume sync** is the completion time of the last successful volume discovery; it is not a heartbeat. Only agents show **Last contact**, and their **Last inventory sync** covers the received volume/container snapshot. Failed discovery retains the last successful timestamp; failed metadata probes do not replace known counts with zero. VolumeVault's software version is displayed separately from Docker's version. `main`, `dev` and `development` denote development builds rather than numbered releases. Orchestrator-only cards omit Docker-specific metrics.
+
+Enable the orchestrator's built-in TLS endpoint with an HTTPS origin that every agent can reach. A private LAN IP or DNS name works; a public domain and manually issued certificate are not required. For the repository's Compose setup:
+
+```bash
+VOLUMEVAULT_AGENT_URL=https://192.168.1.10:8443 \
+  docker compose -f docker-compose.yml -f docker-compose.agents.yml up -d
+```
+
+For a custom deployment, set `VOLUMEVAULT_AGENTS_ENABLED=true`, set `VOLUMEVAULT_AGENT_URL` to that HTTPS origin, and publish container port `8443`. If a different host port is published, include it in the origin. The ordinary web interface remains available on port `8080`. Use the built-in TLS endpoint directly or through TCP passthrough: a reverse proxy terminating TLS with a different certificate authority will not match the trust configuration generated for the agent.
+
+1. Open **Docker hosts** as an administrator and add a named host.
+2. Copy the generated `docker run` command and run it on that Docker machine within 15 minutes.
+3. The PHP CLI agent enrolls and sends heartbeats on a 30-second cadence. It collects a complete volume/container inventory at startup, then waits five minutes between collection attempts. Intermediate cycles use only a lightweight Docker availability probe, capped at ten seconds. Heartbeats continue during long Docker inspections; collection has a five-minute total budget and incomplete results are never published. The agent starts no web server, needs no incoming port, and does not need the orchestrator's database or `APP_KEY`.
+
+The command contains the orchestrator's public CA certificate and a one-use enrollment token. Obtain it through a trusted administrator session. The agent validates the TLS certificate and hostname before transmitting credentials. Its unique credential is generated locally and stored under `/app/storage/app/agent` in the named volume included in the command. The central database stores credential hashes only. Retain the named volume when recreating the agent container.
+
+The orchestrator generates its own CA and server certificate in its persistent storage. Server certificates renew automatically before expiry; the CA remains stable across restarts. Keep `/app/storage` persistent and protected. The CA expires after ten years; replacing that trust identity requires new agent trust configuration. Changing the configured origin also requires explicit agent reconfiguration rather than silently trusting another endpoint.
+
+Use **Revoke** to stop accepting an agent's credentials immediately. **Renew enrollment** invalidates its old credentials and generates a new installation command. Stop and remove the old agent container, then run the new command with its existing named volume. A lost enrollment response can be retried by the same persisted agent identity without creating a second registration.
+
+An unreachable agent becomes offline without its inventory being marked missing. Docker failures preserve its last inventory and report Docker as unavailable. Missing volumes are detected only from a newer, successfully collected complete inventory.
+
+If the agent cannot persist its identity or inventory sequence, it exits with a failure code instead of retrying with unusable state. The generated Docker restart policy restarts it so it can reload the same persisted identity after the storage problem is resolved. Enrollment limits are separate from normal traffic limits, and each authenticated agent has its own traffic quota even when several hosts share a NAT address.
+
+Across separate networks, provide connectivity with your existing VPN, Tailscale, or other routing. VolumeVault does not provide NAT traversal or a hosted relay. No Docker daemon needs to be exposed over the network.
+
+To test a locally built image, set `VOLUMEVAULT_AGENT_IMAGE` to the agent image tag on the orchestrator; that image must also be available on the agent machine. By default, installation commands use the agent image tagged with the orchestrator's application version (`latest` for development builds). An empty override retains that default. Execution-capable agents advertise `backup-v1` and `restore-v1` alongside `inventory-v1` and `maintenance-v1`. Older discovery-only agents must be updated before selecting them for execution.
+
+### Running Backups and Restores on Agents
+
+1. Register an execution-capable agent and wait for its source inventory.
+2. Create a backup job, select its Docker host, then select a volume or allowed host path on that host. Choose standalone scheduling or attach it to an existing or new group. Network destinations are shared; filesystem/Docker-volume destinations must be owned by the same host as the job.
+3. Trigger the job (or its group) or let the central scheduler queue it. Offline hosts may retain queued work until the agent returns. The agent launches Offen against its own configured Docker daemon and reports the sanitized result after container cleanup.
+4. Restore a successful run using the target host selector. Another host can restore from a shared network destination into a new volume; the original host's volume does not need to exist there. Existing target names are rechecked by the target agent before any modification.
+
+Only one operation is assigned at a time to each agent. Maintenance prevents new assignments; an accepted operation continues, including cleanup and any safety backup. Completed results are retried until acknowledged, without rerunning the operation. The same persisted identity volume is required after an agent restart.
+
+The agent creates an encrypted operation journal and a private SQLite runtime for each accepted operation under `/app/storage/app/agent`. Its encryption key is local to that agent; it never receives the central `APP_KEY` or database access. The existing backup/restore actions run against that isolated runtime, preserving archive validation and container restart logic. After central acknowledgement, private runtime data is removed and a compact anti-replay receipt is retained. Logs and metadata are returned at completion; active operations send progress heartbeats.
+
+Set `VOLUMEVAULT_HOST_PATH_ALLOWLIST` and, for private network destinations, `VOLUMEVAULT_SSRF_ALLOWED_IPS` on the agent itself. These are authoritative local policies and cannot be overridden by a command from the orchestrator. Local filesystem destinations also require the corresponding mount in the agent container, as in a local VolumeVault installation. Network destination operations default to the central host and its egress policy; explicitly selecting a `destination-v1` agent executes testing, browsing and measurements with that agent's connectivity and policy. Existing provider-specific limitations, including Dropbox archive identity restrictions, continue to apply.
+
+Save the automated measurement executor separately on the destination form to use that agent for scheduled storage thresholds. Choosing an agent for a manual test alone does not change automated checks. Host-path forms show the selected agent's last inventory policy, freshness and timestamp; a known-empty policy forbids all paths, while an unknown report does not grant runtime access. Run `php artisan volumevault:host-path-allowlist:audit --host=2` or `--all` to inspect reports; the scheduler uses `--all` hourly, including in orchestrator-only mode.
+
+A lost connection does not expire an assignment or move it to another agent. If a worker disappears, recovery observes its helper and persisted state instead of replaying a potentially destructive operation. Missing/corrupt journal or runtime data requires intervention; do not delete it to force a retry. Revocation stops control-plane access, but already accepted local work can finish. Recover with the same persistent state and a valid enrollment to report its result.
+
+## Compatibility, Maintenance and Manual Updates
+
+The Docker hosts page distinguishes software version, protocol version and capabilities. Protocol **1** with `inventory-v1` is currently compatible; equality of software versions is not required. Agent software is compared with the installed orchestrator release to show current, update available, or ahead. Development/non-release versions are shown as unknown. This is not a claim that an arbitrary newer protocol is supported. Authenticated requests using an unsupported protocol are rejected and their diagnostic version is recorded for administrators.
+
+1. Update the orchestrator using its existing deployment and retain its storage, `APP_KEY` and TLS identity. Follow release-specific migration and compatibility notes.
+2. Enter maintenance for the agent. This persists a new maintenance nonce and blocks new work admission. Already assigned group members and safety-backup children may complete; the next group member waits if its host is in maintenance. Stale-work recovery and cleanup remain available.
+3. Wait for a fresh agent heartbeat acknowledging that nonce and reporting no active operations. The central ledger must also contain no running operations or pending container cleanup for the host. Waiting, unassigned group members do not prevent that host from becoming maintenance-ready. Queued work remains queued and does not prevent readiness.
+4. Open the manual guide and download the target image using its `docker pull` command. **Pulling alone does not update the container.** Change the image in your existing Docker or Compose deployment and recreate that container, preserving all mounts, networks, environment settings and the existing named volume mounted at `/app/storage`. The guide deliberately does not reconstruct or delete a potentially customized deployment.
+5. Wait for reconnection and compatible protocol/capabilities, then end maintenance. No new enrollment token is required; the stored identity is reused. Keep the orchestrator URL and public CA configuration unchanged.
+
+Queued groups are not considered abandoned merely because their creation time is old: publication recovery handles them until execution starts. On an actual maintenance-to-active transition, the host's waiting top-level backup, restore and group runs receive fresh publication leases on their next dispatch. This prevents stale delivery deadlines accumulated during maintenance from failing them immediately after resume, even if reconciliation runs first. Execution timestamps, internal group/safety-backup children and unrelated hosts are preserved; an already-active host is not reset by repeated resume requests.
+
+The local hybrid host also supports maintenance; update it through its existing central deployment, not through the agent guide. The pure orchestrator card is not a local execution target.
+
+An offline, incompatible, or older agent without maintenance acknowledgment cannot be declared ready automatically. For such agents, verify their state on the host and use the existing deployment to recover or update them manually; do not renew enrollment simply to change an image. Manual updates are the initial workflow. Remote self-update, container replacement and rollback supervision are a priority follow-up, not implemented by this page.
+
 ## Docker TCP Endpoint
 
 VolumeVault normally connects through `unix:///var/run/docker.sock`. To use a TCP endpoint such as a socket proxy in front of the same Docker engine, remove the socket mount and set the container's `DOCKER_HOST`.
@@ -93,7 +194,7 @@ Leave `VOLUMEVAULT_DOCKER_NETWORK` empty when the endpoint is already reachable 
 
 This setting does **not** add support for managing a Docker engine on another host. Bind mounts are resolved by the daemon, while VolumeVault also needs direct access to some local files. In particular, local destinations may be unavailable when the endpoint controls another machine. Uploaded SSH private keys do not rely on a bind mount: VolumeVault copies them into the temporary backup container through the Docker API. Use a TCP socket proxy for the same Docker engine VolumeVault normally accesses, not a remote-host deployment.
 
-Host-path backup sources refer to paths on the Docker host because bind mounts are resolved by the daemon. `VOLUMEVAULT_HOST_PATH_ALLOWLIST` must contain the permitted paths. VolumeVault canonicalizes paths that are visible in its own filesystem and validates the bind by launching a temporary container. Paths that are not visible to VolumeVault can only be checked lexically, which is another reason remote-host deployments are unsupported.
+Host-path backup sources refer to paths on the Docker host because bind mounts are resolved by the daemon. `VOLUMEVAULT_HOST_PATH_ALLOWLIST` must contain the permitted paths. VolumeVault canonicalizes paths that are visible in its own filesystem and validates the bind by launching a temporary container. Paths that are not visible to VolumeVault can only be checked lexically, which is another reason direct remote-daemon deployments are unsupported. Use an agent with its own host-path allowlist for a remote host.
 
 ### TCP access security
 
@@ -102,7 +203,7 @@ Docker API access is effectively root access to the Docker host. Anyone who can 
 - Never publish an unencrypted Docker TCP endpoint on the internet or an untrusted LAN.
 - Restrict access with a private network, VPN, firewall, or a dedicated Docker socket proxy.
 - A proxy API allowlist reduces unrelated exposure, but VolumeVault legitimately creates containers with bind mounts, so its access remains highly privileged.
-- This version accepts a `tcp://` endpoint through `DOCKER_HOST` but does not manage Docker TLS client certificates or remote Docker hosts. Protect the connection at the network or proxy layer.
+- This version accepts a `tcp://` endpoint through `DOCKER_HOST` but does not manage Docker TLS client certificates or direct remote-daemon connections. Agent discovery uses the separate TLS transport described above. Protect Docker TCP connections at the network or proxy layer.
 
 The conventional unencrypted Docker port is `2375`. Do not expose it publicly. Modern Docker versions also restrict starting an unauthenticated remotely reachable daemon, so a secured proxy or private tunnel is preferable to binding the daemon directly.
 

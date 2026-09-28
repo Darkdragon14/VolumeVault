@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue';
+import HostScope from '@/Components/HostScope.vue';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import StatCard from '@/Components/Dashboard/StatCard.vue';
 import DashboardSection from '@/Components/Dashboard/DashboardSection.vue';
@@ -13,6 +14,8 @@ import { formatBytes } from '@/Composables/useFormatBytes';
 type WidgetPref = { key: string; visible: boolean };
 
 const props = defineProps<{
+    hosts: any[];
+    filters: { docker_host_id: number | null };
     stats: Record<string, any>;
     recentBackupRuns: any[];
     recentGroupRuns: any[];
@@ -137,6 +140,7 @@ const save = () => {
             </div>
         </template>
 
+        <HostScope :hosts="hosts" :filters="filters" />
         <!-- Display mode -->
         <template v-if="!editing">
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

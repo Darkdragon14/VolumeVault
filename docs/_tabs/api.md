@@ -10,6 +10,38 @@ VolumeVault exposes a versioned HTTP API secured with Laravel Sanctum tokens and
 
 This makes the project friendly to automation tools, monitoring scripts, dashboards, and AI agents that need to inspect backup state or trigger explicit operations without scraping the web UI.
 
+Volumes, jobs and backup runs include `docker_host_id`; restore runs include `source_docker_host_id` and `target_docker_host_id`. Backup job creation accepts `docker_host_id` (default `1`, the built-in local host); updates preserve the current host when omitted. Changing a source or host is refused while a run or cleanup remains outstanding. Inventory validation always uses the selected host. Remote jobs can be standalone or grouped, including groups spanning multiple agents or local and remote members. Remote Docker-label reconciliation requires agents advertising `docker-labels-v1`.
+
+### Operational host scope
+
+Dashboard, volume, stack, backup-job and run lists default to **all hosts**. Omit `docker_host_id` for all hosts, or supply an existing integer host ID (`1` is local); the literal `all` is rejected. Collections return safe `hosts` summaries and `filters.docker_host_id` alongside `data`; the dashboard places these inside `data`.
+
+Backup histories use the execution host captured on each run. Restore histories filter by `target_docker_host_id` and expose both `source_docker_host` and `target_docker_host`. Matching a historical group member includes its entire group; aggregate counts are whole-group counts. Volume and stack identities include the host, and volume `create_job_url` includes both volume name and host ID.
+
+Respect record/host `canSync`, `canBackup` and `backup_unavailable_reason`. The UI explicitly sends `{ "async": true, "docker_host_id": 1 }` when synchronizing local volumes. `POST /api/v1/volumes/sync` preserves the legacy synchronous local sync and HTTP `200` response when the body is omitted. Queued synchronization is opt-in: send `{ "async": true, "docker_host_id": 1 }` for an HTTP `202` response. Remote inventory refresh only reads the last accepted agent snapshot; it does not dispatch a sync command. Stack metadata comes from persisted Compose/Swarm volume labels (`inventory_basis: volume_labels`), with `container_count: null` meaning unknown.
+
+`POST /api/v1/stacks/backup` accepts an optional `docker_host_id`, defaulting to the local host (`1`), and supports eligible remote hosts with `backup-v1`. Unlike list scope, omitting the host does **not** target all hosts. Send the selected stack’s host explicitly, for example `{ "stack": "app", "docker_host_id": 2 }` for an already configured remote stack; `stack: null` selects only that host’s volumes without a stack. To create missing jobs, also send `backup_destination_id`, `schedule_type`, `schedule_config` and optionally `timezone`. Destinations must be active and shared or owned by the selected host. Existing settings, notifications and label reservations are preserved; grouped jobs remain on their group schedule. The response retains the `created`, `queued`, `skipped` and `grouped` summary counts.
+
+### Docker-label backup settings
+
+Administrators can read `GET /api/v1/settings/docker-label-backups?docker_host_id=2` with the `read` token ability and update `PUT /api/v1/settings/docker-label-backups` with the `write` ability. Include `docker_host_id` in the update body; omitting the selector defaults to the built-in local host (`1`) for both endpoints. Send the full settings fields when updating, including `enabled`, `backup_destination_id` and schedule/retention/filter/notification defaults.
+
+Responses include `settings` (with `docker_host_id`, `last_sync_error` and `last_synced_at`), safe `hosts` summaries with `supports_docker_labels`, active shared or same-host `destinations`, `notificationChannels` and `timezones`. Remote changes reconcile on the next complete compatible agent inventory. Older or incomplete inventories preserve existing label-managed jobs and surface synchronization errors. The web settings page uses the same selector on `GET` and `PUT /settings/docker-label-backups`.
+
+Agents use a separate, versioned HTTPS protocol under `/agent/v1`, with agent-specific credentials that cannot authenticate to the public API or administrator routes. Enrollment and revocation are managed through the administrator-only Docker hosts page. Remote work requires a registered, non-revoked protocol-v1 agent advertising `backup-v1` or `restore-v1` for the requested operation. Configuration and queuing do not require the agent to be online; execution is claimed when it polls. Public API user tokens cannot authenticate as agents.
+
+Agent execution uses POST `/agent/v1/operations/pull`, `/agent/v1/operations/{uuid}/progress` and `/agent/v1/operations/{uuid}/complete`. Pull responses carry credential-bound encrypted envelopes, not plaintext destination configurations. Assignments remain bound to their host until a cleanup-complete result is acknowledged. Repeated pull/result delivery is idempotent; these endpoints are not a generic Docker or shell proxy.
+
+Agent heartbeats additionally report protocol/capabilities and active operation counts, and acknowledge a server-issued maintenance nonce. Maintenance and manual update guides are administrator-only web endpoints. In orchestrator-only mode, local execution mutations return validation errors while remote jobs and groups remain configurable and scheduled. Maintenance admission is checked on the execution host (the target for restores). An assigned group member may drain during maintenance, but the next member waits when its host is in maintenance.
+
+Groups may contain local, remote or mixed-host members. Each member retains its own host-scoped source and destination: local filesystem and Docker-volume destinations must belong to that member's host. Remote members reuse `backup-v1`; there is no group-specific agent protocol. Group detail members and group-run member records expose `docker_host_id` and a safe `docker_host` identity (`id`, `name`, `is_local`).
+
+Remote/mixed runs snapshot membership, sources and the `continue`/`stop` failure policy and use a durable central coordinator. Execution is sequential: each member completes its configured stop/backup/restart cycle before the next member is dispatched. A failed member makes the aggregate outcome fail; `continue` processes remaining members and `stop` skips them. Notifications remain one group start and one aggregate success/failure notification, not per-member notifications. This is not a consistent cross-host snapshot and does not stop all containers together. Purely local groups retain their synchronous execution path. Cross-host host-local archives use the central relay with `archive-relay-v1` on remote sides; destination browsing/testing uses the separate `destination-v1` capability below.
+
+For a host-local archive, request listing/exact historical lookup on the **destination owner**, even when `target_docker_host_id` names another host. Submit its fresh `destination_operation_id` with the exact `selected_backup_key` and matching `backup_run_id` (when restoring a historical run). The backend validates the receipt’s source ownership and its relation to the selected restore target. Cross-host relay restores require `mode=new_volume`; target volume names must be unused on that target. Changing the target does not change the archive owner or renew a receipt’s expiry.
+
+Host-local destinations (`local` and `docker_volume`) accept `docker_host_id`, defaulting to `1` on creation and preserving the owner on update. A backup job cannot use another host's local destination. Network destinations have no host owner. Remote bind paths are checked lexically against the agent's reported allowlist without mounting or resolving them centrally; the agent revalidates its authoritative policy at execution. Destination secrets remain encrypted and are never returned or prefilled.
+
 API tokens are created by admins from the `API tokens` screen. Tokens are displayed only once at creation and stored hashed after that.
 
 Tokens expire by default to limit the blast radius of a leaked token. The default lifetime is 60 days and is configurable with `SANCTUM_TOKEN_EXPIRATION` (in minutes); set it to `null` to allow non-expiring tokens. A per-token expiry chosen at creation can only shorten this window, never extend it.
@@ -31,9 +63,88 @@ Write operations still require an admin user, and secrets are never returned in 
 
 `GET /api/v1/backup-jobs` accepts `sort=created_at|name|next_run_at|last_run_at` and `direction=asc|desc`. Date sorts always place jobs without a date last and use the job name as a stable tie-breaker.
 
-When restoring, `selected_backup_key` must be one of the keys returned by `GET /api/v1/backup-jobs/{id}/backups` - it is checked against the destination listing, so arbitrary or path-traversal keys are rejected. Volume names (`volume_name`, `target_volume_name`) must match `^[A-Za-z0-9_.-]+$`.
+When restoring, `selected_backup_key` must be an exact provider key from a verified listing or a known historical record. A destination operation listing can provide a host-bound receipt as described below. Keys are opaque: do not normalize case, trim them, replace them with display names, or reconstruct Dropbox IDs. Volume names (`volume_name`, `target_volume_name`) must match `^[A-Za-z0-9_.-]+$`.
+
+### Asynchronous destination operations
+
+The following capabilities are distinct and must be checked explicitly:
+
+| Capability | Use |
+| --- | --- |
+| `destination-v1` | Saved-destination tests, lists and storage measurements; also required alongside the two capabilities below |
+| `sftp-host-key-v1` | Credential-free discovery of an unsaved SFTP endpoint on an agent |
+| `archive-metadata-v1` | Durable archive-metadata retries on the backup's assigned agent |
+
+Upgrade agents manually to enable new capabilities. A missing capability never silently redirects a private endpoint to central execution.
+
+#### Automated storage measurements
+
+Destination create/update accepts the top-level nullable foreign key `storage_measurement_host_id`. For network destinations, creation defaults to `null` (central host `1`); explicit `1` also means central execution. Omitting the field on update preserves its saved value; sending `null` explicitly resets network measurements to central execution. An agent selection must support `destination-v1`. This persisted setting controls automated storage-usage/threshold checks, independently of the `docker_host_id` chosen for an individual manual operation. Administrator authorization still applies. Maintenance is a work-admission concern, not a reason to discard the saved setting.
+
+For `local` and `docker_volume`, measurements always execute on `docker_host_id`, the destination owner. A different measurement host is rejected. When changing provider or owner, submit the appropriate owner or reset the network measurement setting explicitly; do not carry an unrelated agent across that change. Only current measurements for the saved host and destination context can satisfy automated checks. Pending, stale or failed measurements are not zero usage. Private endpoints must be reachable under the selected executor's egress policy.
+
+#### Unsaved SFTP host-key discovery
+
+Administrators with `write` can send `POST /api/v1/destinations/host-key` with `{ "host": "sftp.internal", "port": 22, "docker_host_id": 2 }`. No destination record, username, password or private key is needed. Omit `docker_host_id` (or use `1`) for central network execution: HTTP **200** returns `{ "data": { "key": "...", "fingerprint": "..." } }`. An explicit agent requires both `destination-v1` and `sftp-host-key-v1` and returns HTTP **202** with `{ "data": operation }`.
+
+Poll `GET /api/v1/destinations/host-key/operations/{id}` with administrator access and `read`. The operation has `destination_id: null`, `action: "host_key"`, `docker_host_id`, an immutable `endpoint: { "host": "sftp.internal", "port": 22 }`, and the standard `pending` / `running` / `completed` status. On success, `result.status` is `success` and `result.data` contains `key` and `fingerprint`. Failure is reported in `result.error_message`. Never treat `completed` alone as success.
+
+The web form uses `POST /destinations/host-key` and `GET /destinations/host-key/operations/{id}` with session/CSRF protection. Its legacy central **200** body is directly `{ "key": "...", "fingerprint": "..." }` (without the API `data` wrapper); agent responses retain the operation wrapper. Capture host, port, executor and provider before starting. Discard late POST or poll responses after any context change or unmount, and require the exact endpoint, executor and operation ID on poll responses. Manual key edits must not be overwritten by an in-flight scan. Compare fingerprints through an independent trusted channel. Discovery does not remove Offen's host-key verification limitation for backup uploads.
+
+#### Remote archive metadata and notification finalization
+
+If remote archive metadata is pending, a durable encrypted snapshot preserves the destination and archive identity for retries on the original assigned host. Retries require both `archive-metadata-v1` and `destination-v1`; they are internal metadata operations, not another backup upload or a public `action` accepted by the saved-destination endpoint. Dropbox still requires a proven stable file ID; retries never infer identity from a filename.
+
+Finalizations allow **five attempts**, with retry delays of **60, 300, 900 and 3600 seconds**. Waiting on a pending/running agent metadata operation reschedules a check after **one minute** without consuming an attempt. Each operation has a **30-minute deadline**; an unclaimed expired operation can be cancelled, while an assigned operation is not duplicated or reassigned. Terminal exhaustion releases metadata-dependent notifications with unknown metadata rather than inventing an archive size.
+
+Remote backup, restore and group starts use durable notification outbox rows. Restore starts use the job or group notification settings as applicable. Finished notifications wait for outstanding start notifications to settle; group completion also waits for its snapshotted member metadata finalizations. Channel configuration is snapshotted and encrypted; matching start/finish notifications reuse that snapshot so later edits do not silently change their endpoint or template. Retries are independently tracked per notification. Internal deduplication does **not** promise exactly-once delivery to external services: a crash after external acceptance can still lead to a retry. Keep the central scheduler and metadata worker running, including in orchestrator-only mode.
+
+Administrators with the `write` token ability can submit `POST /api/v1/destinations/{id}/operations`:
+
+```json
+{ "action": "list", "docker_host_id": 2, "limit": 100, "cursor": null }
+```
+
+- `action` is required: `test`, `stats`, or `list`.
+- `backup_run_id` is optional and allowed only for `list`. It requests an exact historical archive lookup using the run's server-resolved destination snapshot and provider identity, including a Dropbox stable file ID even if the archive moved outside the configured folder. The result contains zero or one object and `next_cursor: null`; do not combine this lookup with a pagination cursor. The operation response includes `backup_run_id` (or `null` for generic listings). Clients must match this run context when resuming or polling a listing receipt and use the resolved run ID after historical-context navigation. Arbitrary `selected_backup_key` or `selected_backup` request parameters are prohibited.
+- `docker_host_id` is optional. Shared network destinations default to central host `1`; host-local destinations default to their owner and reject any other host. Remote execution requires a registered compatible agent advertising `destination-v1` and accepting work outside maintenance.
+- `limit` is an integer from **1–1000**, default **1000**, for each list page.
+- `cursor` is optional and only meaningful for `list`. Pass `result.data.next_cursor` unchanged when requesting the next page with the **same destination, locator, host and limit**. Cursors expire one hour after the listing operation completes; invalid, changed-context or expired cursors return validation errors. Restart listing without a cursor to recover.
+
+The response is **202**, with `{ "data": operation }`. Poll `GET /api/v1/destinations/{id}/operations/{operation}` using the `read` ability. Its `data` includes:
+
+```json
+{
+  "id": "operation-uuid",
+  "destination_id": 9,
+  "docker_host_id": 2,
+  "action": "list",
+  "status": "pending",
+  "result": null,
+  "locator_current": true,
+  "fresh_until": null
+}
+```
+
+Status progresses through `pending`, `running`, and `completed`. Offline agents may leave work pending. Completion does **not** imply success: inspect `result.status` (`success` or `failed`) and any `result.error_message`. Successful `result.data` is action-specific:
+
+| Action | Data |
+| --- | --- |
+| `test` | `{ "ok": true }` |
+| `stats` | `{ "used_bytes": 1234, "object_count": 10 }` |
+| `list` | `{ "objects": [{ "key": "opaque-key", "display_name": "backup.tar.gz", "size": 1234, "last_modified": null }], "next_cursor": null }` |
+
+`last_modified` may instead contain a date string. Failed results have `data: null`. Results are limited to **2 MiB**, and lists to the requested limit (at most **1000 objects per page**). Use smaller pages if necessary. Offset-based pagination over changing directories is **not a snapshot**: concurrent additions/removals can cause skipped or repeated objects. Clients should deduplicate by exact key, not display name.
+
+`locator_current: false` means the destination location changed since the operation was created. `fresh_until` is the claim time (or creation time for unclaimed operations) plus **30 minutes**, exposed after completion. Polling or reusing a cursor does not extend freshness. For a restore chosen from a listing, send `destination_operation_id` with `selected_backup_key` and `target_docker_host_id` to the restore endpoint. The receipt must be a successful fresh **list** operation matching the destination's current locator, listing host and exact key on that receipt's page. The listing host is the **source owner** for host-local archives, even when restoring to another host, and the **execution target** for shared network destinations. Keep the original page receipt when selecting an archive after fetching later pages. Refresh and reselect if expired; a stats/test operation is not a restore receipt.
+
+The authenticated web UI uses the same JSON contract at `POST /destinations/{id}/operations` and `GET /destinations/{id}/operations/{operation}` with session authentication and CSRF protection. These JSON calls do not use Inertia page navigation.
 
 `POST /api/v1/backup-jobs/{id}/restore` accepts these restore modes:
+
+The optional `target_docker_host_id` defaults to the job's current host. With a shared network destination, `new_volume` can restore an archive from host A onto host B, including the same volume name when absent on B. The source host and source name come from the selected historical `backup_run_id`, not the job's current configuration. In-place restores require an available volume on the target and exact typed confirmation. A safety backup additionally requires the job and its current destination to be usable on that target host.
+
+Without a destination-operation receipt, network archive keys retain central verification. For an agent-owned local destination, a successful historical `backup_run_id` with its exact `selected_backup_key` and unchanged destination locator remains supported without a receipt, including older agents. The backup-list endpoint can return known matching runs with `backup_run_id`, `verification_deferred: true` and `listing_supported: false` for the older-agent fallback; actual archive existence is checked by the agent before modifying the target. When selecting a compatible remote listing host via `docker_host_id`, listing can instead return a `202` operation to poll. Cross-host host-local restores require the central relay and `archive-relay-v1` on every remote side; the historical fallback does not bypass this capability check.
 
 - `new_volume`: restore into a fresh Docker volume. Provide `target_volume_name`; this is the safest mode and is also the only mode available for host-path backup jobs.
 - `inplace`: overwrite the source Docker volume. This is available only for Docker-volume backup jobs and requires `confirmation_text` to exactly match the source volume name.
@@ -43,9 +154,11 @@ For `inplace` and `safe_inplace`, set `backup_before_overwrite` to `true` to tak
 
 `POST /api/v1/stacks/backup` backs up a whole Compose or Swarm stack in one call. Pass `{ "stack": "<name>" }` (use `null` for volumes that carry no stack label). For every Docker volume in the stack that has no backup job yet, a job is created from `backup_destination_id` and the `schedule_type` / `schedule_config` / `timezone` you provide, then a manual run is queued for every Docker-volume job in the stack. When the stack is already fully configured, those fields can be omitted to simply queue a run for each existing job. The response (`202`) is a `{ "data": { "created", "queued", "skipped", "grouped" } }` summary; jobs that cannot run right now (inactive, already running, missing volume) are counted in `skipped` instead of aborting the batch. Volumes whose job belongs to a backup group are counted in `grouped` and are not run by the stack backup — they back up on their group's own schedule (trigger the group with `POST /api/v1/backup-groups/{id}/run` if you need them now).
 
-Host-path backup sources and local destinations (`settings.archive_path` / `archive_mount_source`) must match the fail-closed `VOLUMEVAULT_HOST_PATH_ALLOWLIST`. `GET /api/v1/host-path-allowlist` returns the allowed prefixes (`configured: false` means host paths are refused), so an integration can validate paths before creating a job or destination instead of relying on `422` errors.
+Host-path backup sources and local destinations (`settings.archive_path` / `archive_mount_source`) must match the executing host's fail-closed `VOLUMEVAULT_HOST_PATH_ALLOWLIST`. `GET /api/v1/host-path-allowlist?docker_host_id=2` selects one host; omission defaults to local host `1`. The response identifies `docker_host_id`, `host_name`, `configuration_target` (`local` or `remote_agent`), `policy_status` (`known`, `policy_unknown` or `local_disabled`), `reported_at`, `freshness`, `prefixes`, `blocked_paths`, `unknown_paths`, and suggested configuration when known. `configured: false` with a known empty policy means no host paths are allowed; `configured: null` means unknown, not allowed or centrally blocked. Remote audits read stored inventory without probing the agent filesystem or Docker.
 
-For SSH/SFTP destinations, set `settings.host_key` (an OpenSSH public host key line or a `SHA256:` fingerprint) on create/update to pin the server and block man-in-the-middle attacks. `POST /api/v1/destinations/host-key` (`{ "host": "...", "port": 22 }`) connects without authenticating and returns the key and fingerprint a server currently presents, so an integration can pin it (trust on first use).
+Backup-job create/edit page props already include `hosts[].host_path_policy: { status: "known" | "unknown" | "local_disabled", reported_at, freshness: "current" | "fresh" | "stale" | "unavailable", prefixes: [] }`; no extra API request is needed. This replaces raw allowlist arrays. A remote policy is known only with fresh inventory, an online agent and a reported allowlist; inventory older than 15 minutes is stale, and a heartbeat does not refresh its age. Treat the report as advisory: unknown does not authorize unvalidated runtime access. The executing agent always enforces its actual policy. Configure remote prefixes on that agent, not on the central server.
+
+For SSH/SFTP destinations, set `settings.host_key` (an OpenSSH public host key line or a `SHA256:` fingerprint) on create/update to pin VolumeVault's SFTP operations. Use the discovery contract above or enter the key manually. The Offen backup container cannot verify host keys; this remains a backup-upload limitation.
 
 `POST /api/v1/backup-groups` creates a backup group that owns the schedule, notifications and failure policy (`continue` or `stop`) for a set of member jobs. Attach a job to a group by creating or updating a backup job with `planning_mode: "group"` and either `backup_job_group_id` (an existing group) or `group_selection: "new"` plus a `new_group` object. `POST /api/v1/backup-groups/{id}/run` queues one group run that backs up every active member volume and emits a single start and success/fail notification; `GET /api/v1/backup-group-runs/{id}` returns the aggregated outcome with its per-volume member runs. A group cannot be deleted while it still has members. Group run payloads (`GET /api/v1/backup-group-runs`, the `recent_group_runs` lists and the dashboard) include `total_backup_size_bytes`, the sum of the member archive sizes; it stays `null` until at least one member size has been recorded, because sizes are written asynchronously shortly after each volume finishes. The dashboard stats also expose `last_successful_group_backup_size`, the aggregated size of the most recent successful group run.
 
@@ -87,10 +200,13 @@ GET    /api/v1/restore-runs/{id}
 GET    /api/v1/destinations
 POST   /api/v1/destinations
 POST   /api/v1/destinations/host-key
+GET    /api/v1/destinations/host-key/operations/{id}
 GET    /api/v1/destinations/{id}
 PUT    /api/v1/destinations/{id}
 DELETE /api/v1/destinations/{id}
 POST   /api/v1/destinations/{id}/test
+POST   /api/v1/destinations/{id}/operations
+GET    /api/v1/destinations/{id}/operations/{operation}
 GET    /api/v1/notifications
 GET    /api/v1/notifications/{id}
 POST   /api/v1/notifications/{id}/test

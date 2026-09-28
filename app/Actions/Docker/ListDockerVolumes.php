@@ -12,7 +12,7 @@ class ListDockerVolumes
         private readonly InspectDockerVolume $inspectDockerVolume,
     ) {}
 
-    public function handle(): array
+    public function handle(bool $strict = false): array
     {
         $result = $this->dockerProcess->run(['docker', 'volume', 'ls', '--format', '{{json .}}'], 60);
 
@@ -32,12 +32,19 @@ class ListDockerVolumes
             $name = $summary['Name'] ?? null;
 
             if (! filled($name)) {
+                if ($strict) {
+                    throw new RuntimeException('Unable to parse complete Docker volume inventory.');
+                }
+
                 continue;
             }
 
             try {
                 $volumes[] = $this->inspectDockerVolume->handle($name);
-            } catch (RuntimeException) {
+            } catch (RuntimeException $exception) {
+                if ($strict) {
+                    throw $exception;
+                }
                 $volumes[] = [
                     'name' => $name,
                     'driver' => $summary['Driver'] ?? null,

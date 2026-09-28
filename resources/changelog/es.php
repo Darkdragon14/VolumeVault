@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'remote_agent_execution' => [
+        'title' => 'Copias de seguridad de varios hosts con agentes',
+        'description' => 'Gestiona las copias y restauraciones de varios hosts Docker desde una sola interfaz, con grupos, stacks, etiquetas y destinos. Elige el modo híbrido para mantener la ejecución local o el modo orquestador sin acceso al Docker local.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Restaurar un archivo local en otro host',
+        'description' => 'Restaura las copias almacenadas localmente en un volumen nuevo de otro host mediante una transferencia cifrada a través del orquestador. El archivo original se conserva.',
+    ],
+    'restore_volume_ownership' => [
+        'title' => 'Protección de volúmenes durante la restauración',
+        'description' => 'La restauración verifica que el volumen nuevo le pertenece antes de escribir en él. En caso de fallo, el volumen de destino se conserva para inspeccionarlo y eliminarlo manualmente si es necesario.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Rechazo anticipado de copias de seguridad previas en Dropbox',
         'description' => 'Las restauraciones en el mismo volumen rechazan la copia de seguridad previa solicitada antes de entrar en cola si el destino actual es Dropbox. El formulario explica la limitación y conserva tu elección hasta que la cambies explícitamente.',

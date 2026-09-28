@@ -5,6 +5,7 @@ use App\Jobs\DispatchDueBackupJobsJob;
 use App\Jobs\RunAlertChecksJob;
 use App\Jobs\SyncDockerVolumesJob;
 use App\Models\User;
+use App\Support\DeploymentMode;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -60,9 +61,10 @@ Artisan::command('volumevault:reset-password {email : The account email address}
 
 Schedule::job(new DispatchDueBackupJobsJob)->everyMinute()->withoutOverlapping();
 Schedule::job(new DispatchDueBackupGroupsJob)->everyMinute()->withoutOverlapping();
-Schedule::job(new SyncDockerVolumesJob)->everyFiveMinutes()->withoutOverlapping();
+Schedule::job(new SyncDockerVolumesJob)->everyFiveMinutes()->withoutOverlapping()->when(fn () => DeploymentMode::localExecutionEnabled());
 Schedule::job(new RunAlertChecksJob)->everyFiveMinutes()->withoutOverlapping();
-Schedule::command('volumevault:reconcile-stale-runs')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('volumevault:reconcile-stale-runs')->everyFiveMinutes()->withoutOverlapping()->when(fn () => DeploymentMode::localExecutionEnabled());
 Schedule::command('volumevault:dispatch-queued-runs')->everyMinute()->withoutOverlapping(5);
+Schedule::call(fn () => app(\App\Services\Agents\ArchiveRelays::class)->coordinate())->name('archive-relay-coordinator')->everyMinute()->withoutOverlapping();
 Schedule::command('volumevault:sweep-run-finalizations')->everyMinute()->withoutOverlapping(5);
-Schedule::command('volumevault:host-path-allowlist:audit')->hourly()->withoutOverlapping();
+Schedule::command('volumevault:host-path-allowlist:audit --all')->hourly()->withoutOverlapping();

@@ -1,7 +1,11 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        ['type' => 'feature', 'key' => 'remote_agent_execution'],
+        ['type' => 'feature', 'key' => 'cross_host_archive_relay'],
+        ['type' => 'change', 'key' => 'restore_volume_ownership'],
+    ],
     'releases' => [
         'v1.23.0' => [
             'date' => '2026-09-17',

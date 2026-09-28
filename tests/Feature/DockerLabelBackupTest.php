@@ -863,6 +863,7 @@ class DockerLabelBackupTest extends TestCase
         $this->assertTrue(Schema::hasTable('docker_label_backup_settings'));
         $this->assertDatabaseCount('docker_label_backup_settings', 1);
 
+        (require database_path('migrations/2026_09_18_151946_scope_docker_label_backup_settings_to_hosts.php'))->up();
         $settings = DockerLabelBackupSetting::current();
 
         $this->assertSame(1, $settings->id);

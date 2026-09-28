@@ -26,6 +26,12 @@ if [ -n "$docker_socket" ] && [ -S "$docker_socket" ]; then
     fi
 fi
 
+if [ "${1:-}" = "php" ] && [ "${2:-}" = "artisan" ] && [ "${3:-}" = "volumevault:agent" ]; then
+    mkdir -p /app/storage/app/agent /app/storage/app/docker-cli /app/storage/logs /app/bootstrap/cache
+    chown -R www-data:www-data /app/storage/app/agent /app/storage/app/docker-cli /app/storage/logs /app/bootstrap/cache
+    exec /command/s6-setuidgid www-data "$@"
+fi
+
 if [ "${1:-/init}" != "/init" ]; then
     exec "$@"
 fi
@@ -46,6 +52,19 @@ mkdir -p \
 
 touch /app/storage/database/database.sqlite
 chown -R www-data:www-data /app/storage /app/bootstrap/cache
+
+case "${VOLUMEVAULT_AGENTS_ENABLED:-false}" in
+    true|1|\(true\))
+        /command/s6-setuidgid www-data php artisan volumevault:agent-tls:prepare
+        export SSL_MODE=mixed
+        export SSL_CERTIFICATE_FILE=/app/storage/app/private/agent-tls/server.crt
+        export SSL_PRIVATE_KEY_FILE=/app/storage/app/private/agent-tls/server.key
+        if [ ! -s "$SSL_CERTIFICATE_FILE" ] || [ ! -s "$SSL_PRIVATE_KEY_FILE" ]; then
+            echo "Agent TLS certificate files are unavailable." >&2
+            exit 1
+        fi
+        ;;
+esac
 
 export SERVERSIDEUP_DEFAULT_COMMAND=true
 export S6_INITIALIZED=true

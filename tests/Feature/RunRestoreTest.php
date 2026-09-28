@@ -662,6 +662,8 @@ class RunRestoreTest extends TestCase
             /** @var array<int, string> */
             public array $verifyCommand = [];
 
+            private ?array $createdLabels = null;
+
             public function __construct(private readonly bool $volumeExists, private readonly array $containers, private readonly array $containerStates, private readonly bool $archiveReadable) {}
 
             public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
@@ -672,12 +674,25 @@ class RunRestoreTest extends TestCase
                     $this->volumeSubcommands[] = (string) ($command[2] ?? '');
 
                     if (($command[2] ?? null) === 'inspect') {
+                        if ($this->createdLabels !== null) {
+                            return new DockerProcessResult($command, 0, json_encode([['Name' => $command[3], 'Labels' => $this->createdLabels]]), '');
+                        }
+
                         return $this->volumeExists
                             ? new DockerProcessResult($command, 0, '[{"Name":"app_data"}]', '')
                             : new DockerProcessResult($command, 1, '', 'no such volume');
                     }
 
+                    if (($command[2] ?? null) === 'create') {
+                        [$key, $value] = explode('=', $command[4], 2);
+                        $this->createdLabels = [$key => $value];
+                    }
+
                     return new DockerProcessResult($command, 0, '', '');
+                }
+
+                if ($verb === 'create') {
+                    return new DockerProcessResult($command, 0, str_repeat('a', 64), '');
                 }
 
                 if ($verb === 'ps') {

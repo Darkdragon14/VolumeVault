@@ -1,0 +1,18 @@
+services:
+  volumevault:
+    image: ghcr.io/darkdragon14/volumevault:${VOLUMEVAULT_VERSION:-latest}
+    ports:
+      - "${VOLUMEVAULT_HTTP_PORT:-8080}:8080"
+      - "${VOLUMEVAULT_AGENT_PORT:-8443}:8443"
+    volumes:
+      - volumevault_data:/app/storage
+    environment:
+      APP_KEY: ${APP_KEY:?Set APP_KEY before starting VolumeVault}
+      VOLUMEVAULT_MODE: orchestrator
+      VOLUMEVAULT_AGENTS_ENABLED: "true"
+      VOLUMEVAULT_AGENT_URL: ${VOLUMEVAULT_AGENT_URL:?Set the HTTPS origin reachable by your agents}
+      VOLUMEVAULT_AGENT_IMAGE: ${VOLUMEVAULT_AGENT_IMAGE:-}
+    restart: unless-stopped
+
+volumes:
+  volumevault_data:

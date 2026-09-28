@@ -15,6 +15,7 @@ use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Support\DeploymentMode;
 use App\Support\FormatBytes;
 use Illuminate\Database\Eloquent\Collection;
 use RuntimeException;
@@ -26,6 +27,7 @@ class SendShoutrrrNotification
     public function __construct(
         private readonly DockerProcess $dockerProcess,
         private readonly ResolveNotificationChannels $resolveNotificationChannels,
+        private readonly NativeShoutrrrProcess $nativeShoutrrrProcess,
     ) {}
 
     /**
@@ -94,6 +96,17 @@ class SendShoutrrrNotification
      * (a start is not a failure), mirroring restore start. Webhook channels ping
      * their start URL — the piece Healthchecks needs to measure run duration.
      */
+    public function sendBackupRunStartedToChannel(BackupRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('job.destination', 'snapshotDestination', 'initiatedBy');
+        $run = clone $run;
+        $run->status = BackupRun::STATUS_RUNNING;
+        $result = $this->send($channel, $this->backupRunTitle($run, $channel), $this->backupRunMessage($run, $channel), NotificationEvent::Start);
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Backup start notification delivery failed.');
+        }
+    }
+
     public function sendBackupRunStarted(BackupRun $run, ?callable $afterEach = null): void
     {
         $run->loadMissing('job.destination', 'snapshotDestination', 'initiatedBy');
@@ -189,6 +202,15 @@ class SendShoutrrrNotification
         }
     }
 
+    public function sendGroupRunStartedToChannel(BackupGroupRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('group', 'initiatedBy');
+        $result = $this->send($channel, $this->groupRunTitle($run), $this->groupRunMessage($run), NotificationEvent::Start);
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Backup group start notification delivery failed.');
+        }
+    }
+
     /**
      * Notify the backup job's channels about a restore lifecycle event
      * (started / succeeded / failed). Reuses the job's channels and its
@@ -231,6 +253,17 @@ class SendShoutrrrNotification
             if ($afterEach !== null) {
                 $afterEach();
             }
+        }
+    }
+
+    public function sendRestoreRunStartedToChannel(RestoreRun $run, NotificationChannel $channel): void
+    {
+        $run->loadMissing('job.destination', 'initiatedBy');
+        $run = clone $run;
+        $run->status = RestoreRun::STATUS_RUNNING;
+        $result = $this->send($channel, $this->restoreRunTitle($run, $channel), $this->restoreRunMessage($run, $channel), NotificationEvent::Start);
+        if (! $result->successful() && $result->errorOutput !== 'No webhook URL configured for this event.') {
+            throw new RuntimeException('Restore start notification delivery failed.');
         }
     }
 
@@ -366,6 +399,10 @@ class SendShoutrrrNotification
         // failed run) still stays silent with no side effects.
         if ($url === null) {
             return new DockerProcessResult([], 1, '', 'No webhook URL configured for this event.');
+        }
+
+        if (DeploymentMode::isOrchestrator()) {
+            return $this->nativeShoutrrrProcess->send($url, $title, $message);
         }
 
         $command = [

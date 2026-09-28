@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'remote_agent_execution' => [
+        'title' => 'Hostübergreifende Backups mit Agenten',
+        'description' => 'Verwalten Sie Backups und Wiederherstellungen mehrerer Docker-Hosts über eine Oberfläche, einschließlich Gruppen, Stacks, Labels und Zielen. Wählen Sie den Hybridmodus für weiterhin lokale Ausführung oder den Orchestrator-Modus ohne lokalen Docker-Zugriff.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Lokale Archive auf einem anderen Host wiederherstellen',
+        'description' => 'Stellen Sie lokal gespeicherte Backups über eine verschlüsselte Übertragung durch den Orchestrator in einem neuen Volume auf einem anderen Host wieder her. Das ursprüngliche Archiv bleibt erhalten.',
+    ],
+    'restore_volume_ownership' => [
+        'title' => 'Schutz der Volumes bei Wiederherstellungen',
+        'description' => 'Die Wiederherstellung prüft vor dem Schreiben, ob das neue Volume ihr gehört. Bei einem Fehler bleibt das Zielvolume zur Prüfung und bei Bedarf zur manuellen Löschung erhalten.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Nicht unterstützte Dropbox-Sicherheitskopien frühzeitig ablehnen',
         'description' => 'In-place-Wiederherstellungen lehnen eine angeforderte Sicherheitskopie vor dem Einreihen ab, wenn das aktuelle Auftragsziel Dropbox ist. Das Formular erklärt die Einschränkung und behält deine Auswahl bei, bis du sie ausdrücklich änderst.',

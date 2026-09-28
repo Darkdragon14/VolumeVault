@@ -15,7 +15,7 @@ class SecureLocalArchiveReader
     ) {}
 
     /** @param array<string|int, int> $expectedRootStat */
-    public function copy(string $archiveRoot, string $key, string $targetPath, array $expectedRootStat, ?callable $progress = null): void
+    public function copy(string $archiveRoot, string $key, string $targetPath, array $expectedRootStat, ?callable $progress = null, ?int $maxBytes = null): void
     {
         if (! is_executable($this->binary)) {
             throw new RuntimeException('The secure local archive reader is not installed.');
@@ -47,6 +47,7 @@ class SecureLocalArchiveReader
                 $targetPath,
                 (string) $expectedRootStat['dev'],
                 (string) $expectedRootStat['ino'],
+                ...($maxBytes === null ? [] : [(string) $maxBytes]),
             ]);
             $errorOutput = '';
             $lastProgressAt = microtime(true);
@@ -56,16 +57,27 @@ class SecureLocalArchiveReader
             }
 
             $process->setTimeout(self::TIMEOUT_SECONDS);
-            $process->start();
+            $copied = 0;
+            $process->start($maxBytes === null ? null : function (string $type, string $buffer) use ($targetHandle, $maxBytes, $process, &$copied): void {
+                if ($type !== Process::OUT) {
+                    return;
+                }
+                $copied += strlen($buffer);
+                if ($copied > $maxBytes) {
+                    throw new RuntimeException('Archive exceeds the relay size limit.');
+                }
+                $this->writeChunk($targetHandle, $buffer);
+                $process->clearOutput();
+            });
 
             do {
                 $isRunning = $process->isRunning();
                 $output = $process->getOutput();
 
-                if ($output !== '') {
+                if ($output !== '' && $maxBytes === null) {
                     $this->writeChunk($targetHandle, $output);
-                    $process->clearOutput();
                 }
+                $process->clearOutput();
 
                 $errorOutput .= $process->getErrorOutput();
                 $process->clearErrorOutput();

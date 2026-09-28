@@ -19,9 +19,14 @@ use App\Models\ActivityLog;
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\JobAlertConfig;
 use App\Models\NotificationChannel;
+use App\Services\Agents\AgentExecution;
+use App\Services\Agents\OperationalHostScope;
+use App\Services\BackupDestinations\DestinationOperations;
 use App\Services\BackupDestinations\ListBackupObjects;
+use App\Services\Docker\LocalDockerExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,15 +44,16 @@ class BackupJobController extends Controller
         private readonly DeleteBackupJob $deleteBackupJob,
     ) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, OperationalHostScope $scope): JsonResponse
     {
-        $query = BackupJob::with(['destination', 'notificationChannels', 'alertConfigs']);
+        $query = $scope->query(BackupJob::class)->with(['destination', 'notificationChannels', 'alertConfigs', 'dockerHost']);
         ($this->applyBackupJobSort)($query, $request->query('sort'), $request->query('direction'));
 
         return response()->json([
+            ...$scope->props(),
             'data' => $query
                 ->get()
-                ->map(fn (BackupJob $job) => $this->serializeJob($job)),
+                ->map(fn (BackupJob $job) => [...$this->serializeJob($job), 'docker_host' => $scope->summary($job->docker_host_id)]),
         ]);
     }
 
@@ -91,19 +97,22 @@ class BackupJobController extends Controller
                 return $job;
             },
             $group !== null ? [$group->id] : [],
+            dockerHostId: $request->integer('docker_host_id'),
         );
 
         return response()->json(['data' => $this->serializeJob($job->load(['destination', 'notificationChannels', 'alertConfigs']))], 201);
     }
 
-    public function show(BackupJob $backupJob): JsonResponse
+    public function show(BackupJob $backupJob, OperationalHostScope $scope): JsonResponse
     {
         $backupJob->load(['destination', 'notificationChannels', 'alertConfigs']);
 
         return response()->json([
+            ...$scope->props(),
             'data' => [
                 ...$this->serializeJob($backupJob),
-                'runs' => $backupJob->runs()->limit(50)->get(),
+                'docker_host' => $scope->summary($backupJob->docker_host_id),
+                'runs' => $scope->apply($backupJob->runs()->getQuery())->with('job')->limit(50)->get()->map($scope->serialize(...)),
             ],
         ]);
     }
@@ -130,6 +139,7 @@ class BackupJobController extends Controller
             $newVolumeName = $request->input('source_type') === BackupJob::SOURCE_TYPE_DOCKER_VOLUME ? $request->input('volume_name') : null;
             $volumeNames = collect([$current->volume_name, $newVolumeName])->filter()->all();
             $references = [
+                'docker_host_id' => (int) $current->docker_host_id,
                 'destination_id' => (int) $current->backup_destination_id,
                 'backup_job_group_id' => $current->backup_job_group_id !== null ? (int) $current->backup_job_group_id : null,
                 'source_type' => $current->sourceType(),
@@ -151,6 +161,7 @@ class BackupJobController extends Controller
                             abort(404);
                         }
                         $lockedReferences = [
+                            'docker_host_id' => (int) $lockedJob->docker_host_id,
                             'destination_id' => (int) $lockedJob->backup_destination_id,
                             'backup_job_group_id' => $lockedJob->backup_job_group_id !== null ? (int) $lockedJob->backup_job_group_id : null,
                             'source_type' => $lockedJob->sourceType(),
@@ -202,6 +213,7 @@ class BackupJobController extends Controller
                     },
                     [$references['backup_job_group_id'], $group?->id],
                     [$backupJob->id],
+                    $request->integer('docker_host_id'),
                 );
                 break;
             } catch (RetryDockerLabelMutation) {
@@ -262,7 +274,7 @@ class BackupJobController extends Controller
 
     public function backups(Request $request, BackupJob $backupJob, ListBackupObjects $listBackupObjects, ResolveRestoreDestination $resolveRestoreDestination): JsonResponse
     {
-        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer']]);
+        $validated = $request->validate(['backup_run_id' => ['nullable', 'integer'], 'docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id'], 'cursor' => ['nullable', 'string', 'max:32768'], 'limit' => ['sometimes', 'integer', 'min:1', 'max:1000']]);
         $destination = $resolveRestoreDestination->handle(
             $backupJob,
             isset($validated['backup_run_id']) ? (int) $validated['backup_run_id'] : null,
@@ -274,6 +286,20 @@ class BackupJobController extends Controller
 
         if (ListBackupObjects::isRunUnverifiable($destination, $run)) {
             return response()->json(['message' => ListBackupObjects::UNVERIFIABLE_RUN_MESSAGE], 422);
+        }
+
+        $operations = app(DestinationOperations::class);
+        if (! isset($validated['docker_host_id']) && $destination->isHostBound() && (int) $destination->docker_host_id !== DockerHost::LOCAL_ID
+            && ! app(AgentExecution::class)->supportsHost($destination->dockerHost, 'destination-v1')) {
+            return response()->json(['data' => $resolveRestoreDestination->knownRemoteBackups($backupJob, $destination, $run), 'listing_supported' => false]);
+        }
+        $hostId = $operations->hostId($destination, isset($validated['docker_host_id']) ? (int) $validated['docker_host_id'] : null);
+        if ($hostId !== DockerHost::LOCAL_ID) {
+            return response()->json(['data' => $operations->safe($operations->create($destination, 'list', $hostId, $validated['cursor'] ?? null, (int) ($validated['limit'] ?? 1000), $run?->id))], 202);
+        }
+
+        if ($destination->isHostBound()) {
+            LocalDockerExecution::validate();
         }
 
         try {
@@ -296,7 +322,8 @@ class BackupJobController extends Controller
      */
     private function changesSource(BackupJobRequest $request, BackupJob $job): bool
     {
-        return (string) $request->input('source_type') !== (string) $job->source_type
+        return $request->integer('docker_host_id') !== (int) $job->docker_host_id
+            || (string) $request->input('source_type') !== (string) $job->source_type
             || (string) $request->input('volume_name') !== (string) $job->volume_name
             || (string) $request->input('host_path') !== (string) $job->host_path;
     }
@@ -322,6 +349,7 @@ class BackupJobController extends Controller
         $isHostPath = $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH;
 
         $base = [
+            'docker_host_id' => $request->integer('docker_host_id'),
             'name' => $request->input('name'),
             'source_type' => $sourceType,
             'volume_name' => $isHostPath ? null : $request->input('volume_name'),
@@ -377,7 +405,7 @@ class BackupJobController extends Controller
 
         return [
             ...$job->toArray(),
-            'destination' => $job->destination?->safeForFrontend(),
+            'destination' => $job->destination ? [...$job->destination->safeForFrontend(), 'docker_host_id' => $job->destination->docker_host_id] : null,
             'notification_channel_ids' => $job->notificationChannels->pluck('id')->values()->all(),
             'alert_configs' => $job->alertConfigs->map(fn (JobAlertConfig $config): array => [
                 'alert_rule_id' => $config->alert_rule_id,

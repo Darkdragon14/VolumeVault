@@ -6,6 +6,7 @@ import BackupRunShow from './Show.vue';
 
 const inertia = vi.hoisted(() => ({
     usePoll: vi.fn(),
+    deployment: undefined as any,
 }));
 
 vi.mock('@inertiajs/vue3', () => ({
@@ -17,6 +18,7 @@ vi.mock('@inertiajs/vue3', () => ({
     usePage: () => ({
         props: {
             can: { runDockerActions: true },
+            deployment: inertia.deployment,
         },
     }),
     usePoll: inertia.usePoll,
@@ -95,6 +97,15 @@ describe('Backup run detail', () => {
 
     beforeEach(() => {
         inertia.usePoll.mockClear();
+        inertia.deployment = undefined;
+    });
+
+    it.each([false, 0, '0', 'false'])('keeps history visible but hides local restore when execution is %s', (flag) => {
+        inertia.deployment = { mode: 'orchestrator', local_execution_enabled: flag };
+        const wrapper = mountPage({ ...queuedRun, status: 'success', backup_key: 'daily/backup.tar.gz' });
+        expect(wrapper.text()).not.toContain('Restore this backup');
+        expect(wrapper.text()).toContain('Back to job');
+        expect(wrapper.text()).toContain('success');
     });
 
     it('configures polling for only the run prop in rest mode', () => {

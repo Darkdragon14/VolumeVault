@@ -7,6 +7,7 @@ use App\Actions\Backup\ReconcileDockerLabelBackupJobs;
 use App\Actions\Backup\WithDockerLabelMutationLocks;
 use App\Actions\Docker\ListDockerLabelBackupContainers;
 use App\Actions\Docker\ListDockerVolumes;
+use App\Actions\Docker\ReadDockerHostInfo;
 use App\Actions\Docker\SyncDockerVolumes;
 use App\Jobs\SyncDockerVolumesJob;
 use App\Models\BackupDestination;
@@ -24,6 +25,12 @@ use Tests\TestCase;
 class MissingVolumeDetectionTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->mock(ReadDockerHostInfo::class)->shouldReceive('handle')->andReturn(['version' => '29.0.0', 'containers' => 0]);
+    }
 
     public function test_job_referencing_missing_volume_is_marked_error(): void
     {

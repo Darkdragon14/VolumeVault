@@ -9,7 +9,7 @@ class ListDockerContainers
 {
     public function __construct(private readonly DockerProcess $dockerProcess) {}
 
-    public function handle(): array
+    public function handle(bool $strict = false): array
     {
         $result = $this->dockerProcess->run(['docker', 'ps', '-a', '--format', '{{json .}}'], 60);
 
@@ -28,7 +28,15 @@ class ListDockerContainers
             $payload = json_decode($line, true);
 
             if (! is_array($payload)) {
+                if ($strict) {
+                    throw new RuntimeException('Unable to parse complete Docker container inventory.');
+                }
+
                 continue;
+            }
+
+            if ($strict && ! filled($payload['ID'] ?? $payload['Id'] ?? null)) {
+                throw new RuntimeException('Incomplete Docker container identity.');
             }
 
             $containers[] = [

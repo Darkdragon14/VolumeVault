@@ -29,6 +29,7 @@ class BackupRun extends Model
     public const TRIGGER_PRE_RESTORE = 'pre_restore';
 
     protected $fillable = [
+        'docker_host_id',
         'backup_job_id',
         'backup_group_run_id',
         'initiated_by_user_id',
@@ -69,6 +70,7 @@ class BackupRun extends Model
     protected function casts(): array
     {
         return [
+            'docker_host_id' => 'integer',
             'dispatch_attempted_at' => 'datetime',
             'dispatch_published_at' => 'datetime',
             'scheduled_for' => 'datetime',
@@ -82,6 +84,13 @@ class BackupRun extends Model
             'archive_metadata_pending' => 'boolean',
             'execution_options_snapshot' => 'array',
         ];
+    }
+
+    protected $attributes = ['docker_host_id' => DockerHost::LOCAL_ID];
+
+    public function dockerHost(): BelongsTo
+    {
+        return $this->belongsTo(DockerHost::class);
     }
 
     public function job(): BelongsTo
@@ -157,6 +166,8 @@ class BackupRun extends Model
         }
 
         $job->setRelation('destination', $this->destinationForRun());
+        $job->forceFill(['docker_host_id' => $this->docker_host_id]);
+        $job->unsetRelation('dockerHost');
 
         return $job;
     }

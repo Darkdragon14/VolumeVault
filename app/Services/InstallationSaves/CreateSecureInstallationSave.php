@@ -151,6 +151,9 @@ class CreateSecureInstallationSave
                 'driver' => 'sqlite',
                 'relative_path' => $databaseRelativePath,
             ],
+            'archive_relay' => [
+                'relative_path' => $this->relativePath((string) config('volumevault.archive_relay.directory'), storage_path()),
+            ],
             'excluded_paths' => self::EXCLUDED_PREFIXES,
         ];
     }

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
+import DestinationOperations from '@/Components/DestinationOperations.vue';
+import type { DestinationOperationHost } from '@/Composables/useDestinationOperations';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import Pagination from '@/Components/Pagination.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -16,6 +18,7 @@ interface PaginatedData<T> {
 const props = defineProps<{
     destinations: PaginatedData<any>;
     defaultPerPage: number;
+    destinationOperationHosts?: DestinationOperationHost[];
 }>();
 const { t } = useI18n();
 const search = ref('');
@@ -41,7 +44,8 @@ const destroyDestination = (id: number) => {
     }
 };
 
-const testDestination = (id: number) => router.post(`/destinations/${id}/test`);
+const operationDestination = ref<number | null>(null);
+const testDestination = (id: number) => { operationDestination.value = operationDestination.value === id ? null : id; };
 const toggleDestinationActive = (destination: any) => router.patch(`/destinations/${destination.id}/active`, { is_active: !destination.is_active }, { preserveScroll: true });
 </script>
 
@@ -56,6 +60,7 @@ const toggleDestinationActive = (destination: any) => router.patch(`/destination
             <Link href="/destinations/create" class="btn-primary hidden sm:inline-flex">{{ t('New destination') }}</Link>
         </template>
 
+        <DestinationOperations v-if="operationDestination && destinations.data.some((destination) => destination.id === operationDestination)" :destination="destinations.data.find((destination) => destination.id === operationDestination)" :hosts="destinationOperationHosts ?? []" />
         <div class="card overflow-hidden">
             <div v-if="destinations.data.length">
                 <div class="divide-y divide-white/10 md:hidden">

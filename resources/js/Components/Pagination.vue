@@ -10,6 +10,7 @@ const props = defineProps<{
     extraParams?: Record<string, string | number | undefined>;
     /** Query param name carrying the page number (lets several paginators coexist on one page). */
     pageParam?: string;
+    disabled?: boolean;
 }>();
 
 const { t } = useI18n();
@@ -33,6 +34,7 @@ function buildQuery(overrides: Record<string, string | number>) {
 }
 
 function goToPage(page: number) {
+    if (props.disabled) return;
     if (page < 1 || page > totalPages.value || page === currentPage.value) return;
 
     router.get(props.baseUrl, buildQuery({
@@ -42,6 +44,7 @@ function goToPage(page: number) {
 }
 
 function changePerPage(event: Event) {
+    if (props.disabled) return;
     const value = (event.target as HTMLSelectElement).value;
     const perPage = value === 'all' || value === '0' ? 'all' : Number(value);
 
@@ -104,6 +107,7 @@ const visiblePages = computed(() => {
             <label class="flex items-center gap-1.5">
                 <span>{{ t('Per page') }}</span>
                 <select
+                    :disabled="disabled"
                     :value="currentPerPage"
                     class="input !w-[5rem] !rounded-lg !px-2 !py-1 !text-xs dark:[color-scheme:dark]"
                     @change="changePerPage"
@@ -117,7 +121,7 @@ const visiblePages = computed(() => {
             <button
                 type="button"
                 class="rounded px-2.5 py-1.5 text-sm text-slate-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                :disabled="currentPage === 1"
+                :disabled="disabled || currentPage === 1"
                 @click="goToPage(currentPage - 1)"
             >
                 {{ t('Previous') }}
@@ -127,6 +131,7 @@ const visiblePages = computed(() => {
                 <span v-if="page === '...'" class="px-2 py-1 text-sm text-slate-600">…</span>
                 <button
                     v-else
+                    :disabled="disabled"
                     type="button"
                     class="min-w-[2rem] rounded px-2.5 py-1.5 text-sm font-medium"
                     :class="page === currentPage ? 'bg-sky-500/20 text-sky-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'"
@@ -139,7 +144,7 @@ const visiblePages = computed(() => {
             <button
                 type="button"
                 class="rounded px-2.5 py-1.5 text-sm text-slate-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                :disabled="currentPage === totalPages"
+                :disabled="disabled || currentPage === totalPages"
                 @click="goToPage(currentPage + 1)"
             >
                 {{ t('Next') }}

@@ -1,0 +1,8 @@
+services:
+  volumevault:
+    ports:
+      - "${VOLUMEVAULT_AGENT_PORT:-8443}:8443"
+    environment:
+      VOLUMEVAULT_AGENTS_ENABLED: "true"
+      VOLUMEVAULT_AGENT_URL: ${VOLUMEVAULT_AGENT_URL:?Set the HTTPS origin reachable by your agents, for example https://192.168.1.10:8443}
+      VOLUMEVAULT_AGENT_IMAGE: ${VOLUMEVAULT_AGENT_IMAGE:-}

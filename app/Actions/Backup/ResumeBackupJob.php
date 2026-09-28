@@ -4,6 +4,7 @@ namespace App\Actions\Backup;
 
 use App\Models\BackupJob;
 use App\Models\BackupJobGroup;
+use App\Services\Agents\AgentExecution;
 use App\Services\Scheduling\BackupScheduleCalculator;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -20,12 +21,13 @@ class ResumeBackupJob
     {
         for ($attempt = 0; $attempt < 3; $attempt++) {
             $current = BackupJob::query()->findOrFail($job->id);
+            app(AgentExecution::class)->validateHost((int) $current->docker_host_id, 'backup-v1');
             $references = $this->references($current);
 
             try {
                 return $this->withGroupLocks->handle(
                     [$references['backup_job_group_id']],
-                    fn (Collection $groups): BackupJob => $this->withDockerLabelLocks->handleForJobs(
+                    fn (Collection $groups): BackupJob => $this->withDockerLabelLocks->handleForJobsOnHost(
                         $references['configuration_source'] === BackupJob::CONFIGURATION_SOURCE_DOCKER_LABEL ? [$job->id] : [],
                         [$references['destination_id']],
                         function ($destinations, $settings, $managedJobs, $volumes, $channels, $explicitJobs) use ($job, $references, $groups): BackupJob {
@@ -78,6 +80,7 @@ class ResumeBackupJob
                         },
                         $current->isDockerVolumeSource() ? [$references['volume_name']] : [],
                         explicitJobIds: [$job->id],
+                        dockerHostId: $current->docker_host_id,
                     ),
                 );
             } catch (RetryDockerLabelMutation) {
@@ -104,11 +107,12 @@ class ResumeBackupJob
     }
 
     /**
-     * @return array{destination_id: int, backup_job_group_id: ?int, configuration_source: string, source_type: string, volume_name: ?string, host_path: ?string}
+     * @return array{docker_host_id: int, destination_id: int, backup_job_group_id: ?int, configuration_source: string, source_type: string, volume_name: ?string, host_path: ?string}
      */
     private function references(BackupJob $job): array
     {
         return [
+            'docker_host_id' => (int) $job->docker_host_id,
             'destination_id' => (int) $job->backup_destination_id,
             'backup_job_group_id' => $job->backup_job_group_id !== null ? (int) $job->backup_job_group_id : null,
             'configuration_source' => (string) $job->configuration_source,

@@ -43,12 +43,14 @@ const upload = () => uploadForm.post('/installation-save/upload');
                 </dl>
 
                 <a href="/installation-save/download" class="btn-primary inline-flex">{{ t('Download secure save') }}</a>
+                <p class="text-sm text-slate-400">{{ t('remoteAudit.importRecovery') }}</p>
             </section>
 
             <form class="card space-y-5 p-4 sm:p-6" @submit.prevent="upload">
                 <div>
                     <h2 class="text-xl font-semibold text-white">{{ t('Upload to destination') }}</h2>
                     <p class="mt-2 text-sm text-slate-400">{{ t('Pushes the encrypted .vvsave to an active backup destination under installation-saves/ when the provider supports paths.') }}</p>
+                    <p class="mt-2 text-sm text-slate-400">{{ t('remoteAudit.saveCentral') }}</p>
                 </div>
 
                 <div v-if="!destinations.length" class="rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">

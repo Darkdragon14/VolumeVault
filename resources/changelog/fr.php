@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'remote_agent_execution' => [
+        'title' => 'Sauvegardes multi-hôtes avec des agents',
+        'description' => 'Gérez les sauvegardes et restaurations de plusieurs hôtes Docker depuis une seule interface, avec les groupes, stacks, labels et destinations. Choisissez le mode hybride pour conserver l’exécution locale ou le mode orchestrateur sans accès au Docker local.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Restaurer une archive locale sur un autre hôte',
+        'description' => 'Restaurez sur un autre hôte les sauvegardes stockées localement, dans un nouveau volume, grâce à un transfert chiffré via l’orchestrateur. L’archive d’origine est conservée.',
+    ],
+    'restore_volume_ownership' => [
+        'title' => 'Protection des volumes lors d’une restauration',
+        'description' => 'La restauration vérifie que le nouveau volume lui appartient avant d’y écrire. En cas d’échec, le volume cible est conservé pour inspection et éventuelle suppression manuelle.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Refus anticipé des sauvegardes de sécurité Dropbox non prises en charge',
         'description' => 'Les restaurations sur place refusent désormais une sauvegarde de sécurité demandée avant la mise en file si la destination actuelle de la tâche est Dropbox. Le formulaire explique cette limite et conserve votre choix jusqu’à sa modification explicite.',

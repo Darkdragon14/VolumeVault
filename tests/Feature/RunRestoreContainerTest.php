@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Docker\CreateDockerVolume;
 use App\Actions\Docker\RunBackupContainer;
 use App\Actions\Docker\RunRestoreContainer;
 use App\Models\BackupDestination;
@@ -10,6 +11,8 @@ use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Assert;
+use RuntimeException;
 use Tests\TestCase;
 
 class RunRestoreContainerTest extends TestCase
@@ -78,6 +81,189 @@ class RunRestoreContainerTest extends TestCase
         $this->assertSame(1, $heartbeats);
     }
 
+    public function test_new_volume_is_pinned_then_checked_before_start_and_helper_is_removed(): void
+    {
+        $run = $this->ownedRun();
+        $docker = $this->pinnedDocker($run);
+
+        $result = (new RunRestoreContainer($docker))->handle($run, '/tmp/archive');
+
+        $this->assertTrue($result->successful());
+        $this->assertSame(['create', 'volume', 'start', 'rm'], array_column($docker->commands, 1));
+        $this->assertContains('type=volume,source=app_data_restored,target=/restore,volume-nocopy', $docker->commands[0]);
+        $this->assertContains('-xzf', $docker->commands[0]);
+        $this->assertSame(['docker', 'start', '--attach', '--interactive', str_repeat('a', 64)], $docker->commands[2]);
+        $this->assertSame('/tmp/archive', $docker->inputPath);
+        $this->assertTrue($docker->removalDeniedWhilePinned);
+        $this->assertFalse($docker->pinned);
+        $this->assertNull($run->fresh()->docker_container_id);
+        $this->assertFalse($run->fresh()->docker_container_cleanup_pending);
+    }
+
+    public function test_replacement_before_helper_creation_never_starts_extraction(): void
+    {
+        $run = $this->ownedRun();
+        $docker = $this->pinnedDocker($run);
+        $docker->foreignReplacement = true;
+
+        try {
+            (new RunRestoreContainer($docker))->handle($run, '/tmp/archive');
+            $this->fail('Foreign replacement must be rejected.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('ownership could not be verified', $exception->getMessage());
+        }
+
+        $this->assertSame(['create', 'volume', 'rm'], array_column($docker->commands, 1));
+        $this->assertFalse($docker->pinned);
+        $this->assertNull($run->fresh()->docker_container_id);
+    }
+
+    public function test_partial_helper_creation_failure_is_cleaned_using_persisted_name(): void
+    {
+        $run = $this->ownedRun();
+        $docker = $this->pinnedDocker($run);
+        $docker->failCreate = true;
+
+        try {
+            (new RunRestoreContainer($docker))->handle($run, '/tmp/archive');
+            $this->fail('Create must fail.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('create response lost', $exception->getMessage());
+        }
+
+        $this->assertSame(['create', 'rm'], array_column($docker->commands, 1));
+        $this->assertSame($docker->commands[0][3], $docker->commands[1][3]);
+        $this->assertFalse($docker->pinned);
+        $this->assertNull($run->fresh()->docker_container_id);
+    }
+
+    public function test_stream_exception_still_forcibly_removes_helper(): void
+    {
+        $run = $this->ownedRun();
+        $docker = $this->pinnedDocker($run);
+        $docker->failStream = true;
+
+        try {
+            (new RunRestoreContainer($docker))->handle($run, '/tmp/archive');
+            $this->fail('Stream must fail.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('stream interrupted', $exception->getMessage());
+        }
+
+        $this->assertSame(['docker', 'rm', '--force', str_repeat('a', 64)], $docker->commands[3]);
+        $this->assertFalse($docker->pinned);
+        $this->assertNull($run->fresh()->docker_container_id);
+    }
+
+    public function test_missing_nonce_fails_closed_without_creating_or_starting_helper(): void
+    {
+        $run = $this->ownedRun();
+        $run->forceFill(['target_volume_ownership_token' => null])->save();
+        $docker = $this->pinnedDocker($run);
+
+        try {
+            (new RunRestoreContainer($docker))->handle($run, '/tmp/archive');
+            $this->fail('Missing ownership must be rejected.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('ownership token is missing', $exception->getMessage());
+        }
+
+        $this->assertSame(['rm'], array_column($docker->commands, 1));
+    }
+
+    public function test_failed_helper_removal_retains_identity_for_recovery(): void
+    {
+        $run = $this->ownedRun();
+        $docker = $this->pinnedDocker($run);
+        $docker->failRemove = true;
+
+        try {
+            (new RunRestoreContainer($docker))->handle($run, '/tmp/archive');
+            $this->fail('Cleanup failure must surface.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('daemon unavailable', $exception->getMessage());
+        }
+
+        $this->assertSame(str_repeat('a', 64), $run->fresh()->docker_container_id);
+        $this->assertTrue($run->fresh()->docker_container_cleanup_pending);
+    }
+
+    private function ownedRun(): RestoreRun
+    {
+        $run = $this->restoreRun();
+        $run->forceFill(['mode' => RestoreRun::MODE_NEW_VOLUME, 'target_volume_ownership_token' => bin2hex(random_bytes(32))])->save();
+
+        return $run;
+    }
+
+    private function pinnedDocker(RestoreRun $run): DockerProcess
+    {
+        return new class($run) extends DockerProcess
+        {
+            public array $commands = [];
+
+            public bool $pinned = false;
+
+            public bool $foreignReplacement = false;
+
+            public bool $removalDeniedWhilePinned = false;
+
+            public bool $failCreate = false;
+
+            public bool $failStream = false;
+
+            public bool $failRemove = false;
+
+            public ?string $inputPath = null;
+
+            public function __construct(private RestoreRun $restoreRun) {}
+
+            public function run(array $command, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                $this->commands[] = $command;
+
+                if ($command[1] === 'create') {
+                    Assert::assertSame($command[3], $this->restoreRun->fresh()->docker_container_id);
+                    Assert::assertTrue($this->restoreRun->fresh()->docker_container_cleanup_pending);
+                    $this->pinned = true;
+
+                    return new DockerProcessResult($command, $this->failCreate ? 1 : 0, $this->failCreate ? '' : str_repeat('a', 64), $this->failCreate ? 'create response lost' : '');
+                }
+
+                if ($command[1] === 'volume') {
+                    Assert::assertTrue($this->pinned, 'Ownership must be checked while Docker holds the mount.');
+                    $this->removalDeniedWhilePinned = $this->pinned;
+
+                    return new DockerProcessResult($command, 0, json_encode([['Labels' => [CreateDockerVolume::RESTORE_OWNERSHIP_LABEL => $this->foreignReplacement ? 'foreign' : $this->restoreRun->target_volume_ownership_token]]]), '');
+                }
+
+                Assert::assertSame('rm', $command[1]);
+
+                if ($this->failRemove) {
+                    return new DockerProcessResult($command, 1, '', 'daemon unavailable');
+                }
+
+                $this->pinned = false;
+
+                return new DockerProcessResult($command, 0, '', '');
+            }
+
+            public function runWithInputFile(array $command, string $inputPath, int $timeout = 300, array $environment = []): DockerProcessResult
+            {
+                $this->commands[] = $command;
+                $this->inputPath = $inputPath;
+                Assert::assertTrue($this->pinned);
+                Assert::assertSame(str_repeat('a', 64), $this->restoreRun->fresh()->docker_container_id);
+
+                if ($this->failStream) {
+                    throw new RuntimeException('stream interrupted');
+                }
+
+                return new DockerProcessResult($command, 0, 'restored', '');
+            }
+        };
+    }
+
     private function restoreRun(): RestoreRun
     {
         $destination = BackupDestination::create([
@@ -105,7 +291,7 @@ class RunRestoreContainerTest extends TestCase
             'selected_backup_key' => 'backup.tar.gz',
             'source_volume_name' => 'app_data',
             'target_volume_name' => 'app_data_restored',
-            'mode' => RestoreRun::MODE_NEW_VOLUME,
+            'mode' => RestoreRun::MODE_INPLACE,
             'status' => RestoreRun::STATUS_QUEUED,
         ]);
     }

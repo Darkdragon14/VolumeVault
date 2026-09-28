@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import StatusBadge from '@/Components/StatusBadge.vue';
+import HostIdentity from '@/Components/HostIdentity.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Head, Link, usePage, usePoll } from '@inertiajs/vue3';
+import { useDeployment } from '@/Composables/useDeployment';
+import { Head, Link, usePoll } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
 import { formatBytes } from '@/Composables/useFormatBytes';
 import { computed } from 'vue';
@@ -9,8 +11,7 @@ import { computed } from 'vue';
 const props = defineProps<{ run: any }>();
 
 const { t, formatDate } = useI18n();
-const page = usePage();
-const can = page.props.can as { runDockerActions?: boolean };
+const { canManageBackups } = useDeployment();
 
 const restoreHref = computed(() => `/backup-jobs/${props.run.job.id}/restore?backup=${encodeURIComponent(props.run.backup_key ?? '')}&backup_run_id=${props.run.id}`);
 
@@ -21,12 +22,14 @@ usePoll(2000, { only: ['run'] }, { mode: 'rest' });
     <Head :title="t('Backup run #{id}', { id: run.id })" />
     <AppLayout :title="t('Backup run #{id}', { id: run.id })" :subtitle="t('Inspect container output, status, timing, and errors for this backup run.')">
         <template #actions>
-            <Link v-if="can.runDockerActions && run.status === 'success' && run.backup_key && !run.restore_unverifiable" :href="restoreHref" class="btn-secondary">{{ t('Restore this backup') }}</Link>
+            <Link v-if="canManageBackups && run.status === 'success' && run.backup_key && !run.restore_unverifiable" :href="restoreHref" class="btn-secondary">{{ t('Restore this backup') }}</Link>
             <Link :href="`/backup-jobs/${run.job.id}`" class="btn-secondary">{{ t('Back to job') }}</Link>
         </template>
 
         <section class="card p-4 sm:p-5">
             <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div><dt class="label">{{ t('hostWorkflow.sourceHost') }}</dt><dd><HostIdentity :host="run.docker_host" /></dd></div>
+                <div><dt class="label">{{ t('Source') }}</dt><dd class="break-all">{{ run.source_name }}</dd></div>
                 <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Job') }}</dt><dd class="mt-1 break-words text-white">{{ run.job.name }}</dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="run.status" /></dd></div>
                 <div><dt class="text-xs uppercase text-slate-400">{{ t('Trigger') }}</dt><dd class="mt-1 text-white">{{ t(run.trigger) }}</dd></div>

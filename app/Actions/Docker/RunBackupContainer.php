@@ -6,11 +6,14 @@ use App\Actions\Backup\RenderBackupFilename;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Services\Backup\BackupContainerEngine;
+use App\Services\Backup\BackupContainerPlan;
 use App\Services\Backup\IncludePathsToExcludeRegexp;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
 use App\Services\Docker\DockerVolumeName;
+use App\Services\Docker\LocalDockerExecution;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Throwable;
@@ -46,119 +49,49 @@ class RunBackupContainer
 
     public function handle(BackupRun $run, ?callable $heartbeat = null): DockerProcessResult
     {
+        LocalDockerExecution::assertHost((int) $run->docker_host_id);
         $run->loadMissing('job.destination', 'snapshotDestination');
         $run->setRelation('job', $run->executionJob());
 
         $containerName = 'volumevault-backup-'.$run->id.'-'.Str::lower(Str::random(8));
-        $containerCreationIssued = false;
+        $containerCleaned = true;
 
         try {
             $runtime = $this->runtime($run);
-            $environment = $runtime['environment'];
-            $dockerHost = (string) config('volumevault.docker_host', 'unix:///var/run/docker.sock');
-            $dockerNetwork = trim((string) config('volumevault.docker_network', ''));
-            $environment['DOCKER_HOST'] = $dockerHost;
-            $copies = $runtime['copies'];
-            $command = [
-                'docker',
-                $copies === [] ? 'run' : 'create',
-            ];
-
-            if ($copies === []) {
-                $command[] = '--rm';
-            }
-
-            array_push($command,
-                '--name',
-                $containerName,
-                '--entrypoint',
-                '/usr/bin/backup',
+            $plan = new BackupContainerPlan(
+                containerName: $containerName,
+                image: self::IMAGE,
+                dockerHost: (string) config('volumevault.docker_host', 'unix:///var/run/docker.sock'),
+                dockerNetwork: (string) config('volumevault.docker_network', ''),
+                sourceMountArguments: $this->sourceMountArguments($run->job),
+                mounts: $runtime['mounts'],
+                environment: $runtime['environment'],
+                copies: $runtime['copies'],
+            );
+            $engine = new BackupContainerEngine(
+                $this->dockerProcess->run(...),
+                $this->dockerProcess->whileMonitoring(...),
+                $this->removeDockerContainer->handle(...),
             );
 
-            if ($dockerNetwork !== '') {
-                $command[] = '--network';
-                $command[] = $dockerNetwork;
-            }
+            return $engine->handle(
+                $plan,
+                function (string $name) use ($run): void {
+                    $run->forceFill([
+                        'docker_container_id' => $name,
+                        'docker_container_cleanup_pending' => true,
+                    ])->save();
+                },
+                function (bool $cleaned, ?Throwable $exception) use (&$containerCleaned): void {
+                    $containerCleaned = $cleaned;
 
-            foreach ($this->sourceMountArguments($run->job) as $argument) {
-                $command[] = $argument;
-            }
-
-            if (str_starts_with($dockerHost, 'unix://')) {
-                $socketPath = substr($dockerHost, strlen('unix://'));
-
-                if ($socketPath !== '') {
-                    $command[] = '-v';
-                    $command[] = $socketPath.':'.$socketPath.':ro';
-                }
-            }
-
-            foreach ($runtime['mounts'] as $mount) {
-                $command[] = '-v';
-                $command[] = $mount;
-            }
-
-            foreach (array_keys($environment) as $key) {
-                $command[] = '--env';
-                $command[] = $key;
-            }
-
-            $command[] = self::IMAGE;
-
-            $run->forceFill(['docker_container_id' => $containerName])->save();
-
-            if ($copies !== []) {
-                $execute = function () use ($command, $environment, $copies, $containerName, &$containerCreationIssued): DockerProcessResult {
-                    $containerCreationIssued = true;
-                    $createResult = $this->dockerProcess->run($command, 300, $environment);
-
-                    if (! $createResult->successful()) {
-                        return $createResult;
+                    if ($exception !== null) {
+                        report($exception);
                     }
-
-                    foreach ($copies as $source => $destination) {
-                        $copyResult = $this->dockerProcess->run([
-                            'docker',
-                            'cp',
-                            $source,
-                            $containerName.':'.$destination,
-                        ]);
-
-                        if (! $copyResult->successful()) {
-                            return $copyResult;
-                        }
-                    }
-
-                    return $this->dockerProcess->run([
-                        'docker',
-                        'start',
-                        '--attach',
-                        $containerName,
-                    ], 0);
-                };
-
-                return $heartbeat === null
-                    ? $execute()
-                    : $this->dockerProcess->whileMonitoring($heartbeat, $execute);
-            }
-
-            $execute = fn (): DockerProcessResult => $this->dockerProcess->run($command, 0, $environment);
-
-            return $heartbeat === null
-                ? $execute()
-                : $this->dockerProcess->whileMonitoring($heartbeat, $execute);
+                },
+                $heartbeat,
+            );
         } finally {
-            $containerCleaned = ! $containerCreationIssued;
-
-            if ($containerCreationIssued) {
-                try {
-                    $this->removeDockerContainer->handle($containerName);
-                    $containerCleaned = true;
-                } catch (Throwable $exception) {
-                    report($exception);
-                }
-            }
-
             $secretFilesCleaned = false;
 
             try {
@@ -182,6 +115,8 @@ class RunBackupContainer
     {
         $job = $run->job;
         $destination = $job->destination;
+
+        LocalDockerExecution::assertDestination($destination);
 
         $this->assertSourceAndDestinationDiffer($job, $destination);
 

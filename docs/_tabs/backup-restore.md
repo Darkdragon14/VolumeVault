@@ -12,7 +12,23 @@ Restore runs download and verify the selected archive through VolumeVault's dest
 
 Docker commands are built with array arguments through Symfony Process. Secrets are passed as process environment variables or temporary mounted secret files and are not logged by VolumeVault.
 
+### Browsing archives on the restore target
+
+The restore archive selector browses host-local destinations through their source owner and shared network destinations through the selected execution target when the listing host supports `destination-v1`. It shows asynchronous progress, failures and freshness, and loads additional pages without changing provider keys. Each listed archive retains the receipt from the page that returned that exact key. A receipt must match the current destination locator and listing host (source owner for host-local archives, execution target for network archives) and remain within its 30-minute freshness window when the restore is submitted.
+
+Changing the target host resets overwrite mode, safety-backup choice and typed confirmation. For shared network destinations, it also clears the selection and receipt and reloads the listing on the new target. For host-local destinations, listing stays on the owner and an eligible fresh owner receipt remains selected. Selecting a historical run still loads its server-resolved source/destination snapshot before proceeding; validation errors preserve the current form. Older agents can continue restoring known successful historical records without a listing receipt. This fallback does not enable arbitrary archive browsing or bypass the relay capability requirement for cross-host host-local restores. Restore to a new volume remains the default.
+
 ## Backup Jobs
+
+### Working across hosts
+
+Dashboard, Volumes, Stacks, Backup jobs and job histories open with **All hosts** selected. Choose a Docker host to narrow the view; switching hosts resets pagination while retaining search and other filters. Host names and IDs distinguish identical volume or Compose project names on different machines. Volume shortcuts preserve the selected volume’s host.
+
+**Refresh** reads the last accepted inventory snapshot and shows its timestamp and host availability. It does not command a remote agent to synchronize. **Sync local host** explicitly queues local inventory synchronization when allowed; wait for an agent inventory for remote changes. Offline snapshots remain visible. Stack metadata uses saved Compose/Swarm volume labels; unknown container counts are shown as unknown rather than zero. The seven secondary-workflow gaps are implemented; see Development & Roadmap for their scope and the intentional v1 boundaries.
+
+**Back up stack** supports eligible local and remote hosts, including remote hosts in orchestrator-only deployments. Check the host name and ID in the dialog: the action targets only that host, even in **All hosts** when another host has the same project or volume names. Choose an active shared destination or a host-local destination owned by that host, plus a schedule for missing jobs. Existing jobs retain their settings and notification channels; new jobs use the default notification channel. Label-managed and pending label-reserved jobs are not overwritten. Grouped jobs remain on their group schedule, and inactive, running or otherwise unavailable jobs are skipped. Fully configured stacks offer **Run all jobs** without changing destinations or schedules. The result summarizes created jobs, queued runs, skipped jobs and grouped volumes.
+
+Backup history identifies the run’s historical execution host and source, even if the job later changes. Restore history identifies both source and target and filters by the target host. Dashboard groups match current members for job groups and historical members for group runs; totals include the entire matching group.
 
 To create a backup job:
 
@@ -36,7 +52,9 @@ Backup jobs can also define an archive name template without the extension. Supp
 
 ## Docker Label Backups
 
-Administrators can enable declarative backups under `Settings > Docker label backups`. Choose an active default destination, schedule, retention, filtering, and notification settings first. VolumeVault then inspects containers during the existing five-minute volume synchronization. For a Compose service, running replicas are authoritative; stopped replicas are considered only when no replica is running, so a container temporarily stopped by VolumeVault remains configured during its backup.
+Administrators can enable declarative backups under `Settings > Docker label backups`. Select a Docker host, then choose an active default destination, schedule, retention, filtering, and notification settings. Defaults belong to that host; destinations must be shared or belong to the selected host. Switching hosts reloads settings and destination choices and discards unsaved edits. Remote configuration remains available in orchestrator-only deployments where local execution is disabled.
+
+For the local host, VolumeVault inspects containers during the existing five-minute volume synchronization. Remote agents require the `docker-labels-v1` capability; settings changes are reconciled on the next complete agent inventory. Older agents or incomplete inventories preserve existing label-managed jobs and report synchronization errors rather than treating missing declarations as removals. The settings page shows the selected host, last synchronization and any synchronization error. For a Compose service, running replicas are authoritative; stopped replicas are considered only when no replica is running, so a container temporarily stopped by VolumeVault remains configured during its backup.
 
 A container must opt in with `dev.darkdragon14.volumevault.enable=true`. A named backup uses labels under `dev.darkdragon14.volumevault.backup.<name>.*`; the name becomes the backup job name. For a single backup, omit `<name>` and use the shortcut `dev.darkdragon14.volumevault.backup.*`. Each definition must select exactly one named volume by its actual Docker name (`volume`) or its container mount path (`mount`).
 
@@ -76,6 +94,10 @@ VOLUMEVAULT_HOST_PATH_ALLOWLIST=/srv,/mnt/data,/opt/stacks
 
 Jobs outside those prefixes fail validation when saved (the error is shown on the host path field) and are re-checked at run time. VolumeVault canonicalizes every path visible in its own filesystem, regardless of Docker transport, so a resolvable symlink swapped outside the allowlist is refused. Paths unavailable to VolumeVault receive lexical-only validation; keep allowlisted directories protected from untrusted symlink replacement.
 
+For remote sources, the form displays the **selected host's** policy status, prefixes, inventory timestamp and freshness. Configure `VOLUMEVAULT_HOST_PATH_ALLOWLIST` on that agent; central configuration applies only to the local host. A known empty policy forbids all host paths. An unknown policy (including stale or unavailable inventory) neither grants access nor proves a central block: the executing agent still enforces its authoritative allowlist and filesystem checks at runtime. Remote policy reports do not probe Docker or the filesystem. Local execution disabled in orchestrator mode is shown separately.
+
+Audit one host with `php artisan volumevault:host-path-allowlist:audit --host=2`, or all hosts with `php artisan volumevault:host-path-allowlist:audit --all`. With no option, the command retains the local-host default. `--host` and `--all` are mutually exclusive. The hourly scheduler audits all hosts, including remote reports in orchestrator-only mode, while skipping disabled local execution. Unknown reports request fresh inventory rather than suggesting an unverified allowlist.
+
 > **Upgrading from a version without the fail-closed allowlist?** Earlier releases allowed any host path when `VOLUMEVAULT_HOST_PATH_ALLOWLIST` was empty. After upgrading, existing host-path sources and local destinations are refused until their paths are allowlisted. Run the audit command to get the exact value to add to your `.env`:
 >
 > ```bash
@@ -107,6 +129,18 @@ php artisan schedule:work
 A backup group backs up several volumes as a single scheduled operation, with **one** start notification and **one** success/failure notification for the whole set. This suits monitors that treat a check like a dead man's switch (for example Healthchecks.io), where a single endpoint should cover many volumes without one endpoint per volume.
 
 The group owns the schedule, the notification channels, and the failure policy. Each volume is still an ordinary backup job with its own destination, retention, and archive, so restores stay per-volume and unchanged.
+
+Groups can span local and remote hosts. Select the source host in each member's job form; host-local destinations must belong to that same host. Group member and run views show host names and IDs to distinguish identically named volumes. Remote-only groups also work in orchestrator mode, while mixed groups need local execution enabled for their local members.
+
+The group list and details disable `Run now` when the group has no runnable members, is inactive or already queued/running, or a member's execution host is ineligible. Offline compatible agents may still receive queued work. New group admission also checks maintenance on paused members' hosts. Configuration remains editable independently of run eligibility; execution rechecks admission when a run is requested.
+
+Remote/mixed runs use a durable central coordinator with snapshotted membership, source identity and failure policy. Existing `backup-v1` agents execute the members; no new agent protocol is required. Members run sequentially, each completing its configured container stop, backup and restart before the next starts. **This is not a consistent cross-host snapshot and does not stop all containers together.** Already assigned work drains during maintenance, while the next member waits if its host is in maintenance. Purely local groups retain their synchronous member execution within the queued group job.
+
+### Restore a host-local archive onto another host
+
+Choose the archive from its destination owner, then choose a restore target with relay support. Both remote sides require `archive-relay-v1`; local-central sources or targets are supported in hybrid mode. The wizard uses the backend’s per-target capability checks. Only a new volume is allowed for a cross-host relay, and its name must be unused on the target host. Selecting a target clears destructive confirmations while preserving an eligible, fresh owner receipt. Historical restores look up the exact archive using the recorded run identity on the owner, independently of the target.
+
+Restore details refresh transfer phase, uploaded/downloaded bytes, expiry, errors and cleanup state. The original archive is preserved. Central chunks are encrypted with `APP_KEY`; agent staging is private temporary plaintext retained as needed until acknowledgement. See Installation for relay capacity limits and Security for storage requirements. The transfer uses central TLS connections, with no direct agent-to-agent connection.
 
 To create a group:
 
@@ -146,6 +180,10 @@ Existing jobs with no archive name template keep that legacy pattern.
 
 Restore-to-new-volume remains the default and safest mode because it never overwrites the source. Host path backups are always restored into a new Docker volume.
 
+New-volume restores create an extraction helper that pins the target with a `volume-nocopy` mount, then verify the persisted random ownership label before starting that exact helper ID. This prevents extraction into an externally created same-name replacement.
+
+**If a new-volume restore fails, its target volume is retained and is never automatically deleted.** Inspect the run logs and the target volume, then remove it manually if appropriate or retry with a different unused target name. The retained volume may contain incomplete data. This safety behavior applies to all new-volume restores, including same-host and cross-host restores: Docker cannot atomically verify ownership and delete a volume, so automatic deletion could remove an externally created replacement. Temporary archive or relay cleanup is separate from retaining the failed target volume.
+
 Available restore modes:
 
 - `Restore to new volume`: creates a new Docker volume, downloads and verifies the selected archive, then extracts into the new volume.
@@ -180,7 +218,9 @@ Notification levels:
 - `Errors only`: sends notifications only for failed backup and restore runs.
 - `Every backup and restore run`: sends notifications for successful backup runs and restore start/success events, in addition to failures.
 
-Restore failures are sent to every selected channel, including channels configured as `Errors only`. Restore start and success messages are sent only to channels configured for every run. Start notifications are immediate; completion recipients are frozen when a backup, restore, or group run becomes terminal and each channel is retried independently by the metadata worker. Notification delivery errors never interrupt the backup or restore itself.
+Restore failures are sent to every selected channel, including channels configured as `Errors only`. Restore start and success messages are sent only to channels configured for every run. Remote backup, restore and group start notifications use a durable outbox rather than depending on immediate delivery during assignment. Restore starts follow the job or group notification settings as applicable. Completion recipients are selected when a backup, restore, or group run becomes terminal; each channel is retried independently by the metadata worker. Encrypted channel snapshots preserve endpoints and templates, and a matching finish uses its start snapshot. Finished notifications wait for outstanding start rows to settle; aggregate group finishes also wait for snapshotted member metadata. Notification delivery errors never interrupt the backup or restore itself. External delivery is not guaranteed exactly once: a crash after acceptance but before recording success can cause a retry.
+
+Remote metadata retries use the original assigned agent and an encrypted destination/archive snapshot, requiring `archive-metadata-v1` plus `destination-v1`. They do not rerun the backup. Finalization allows five attempts, delayed by 60/300/900/3600 seconds after failures. Pending agent operations are checked each minute without spending an attempt, with a 30-minute operation deadline. Exhaustion settles pending metadata and allows dependent notifications to proceed with unknown values. Group size totals update as member metadata arrives; unknown size is not zero. Keep the scheduler and metadata worker running. Dropbox archives without a proven stable file ID remain unverifiable; a retry does not infer that identity.
 
 Per-job notification configuration:
 
@@ -198,4 +238,4 @@ Backup template tokens: `{{ job }}`, `{{ source }}`, `{{ volume }}`, `{{ destina
 
 Restore template tokens: `{{ job }}`, `{{ source }}`, `{{ target }}`, `{{ mode }}`, `{{ status }}`, `{{ user }}`, `{{ duration }}`, and `{{ error }}`.
 
-Notification tests and delivery run the Shoutrrr CLI image through Docker. Only admins can create, edit, delete, or test notification channels.
+Notification tests and delivery use the Shoutrrr CLI image through Docker in hybrid mode and the bundled native CLI without Docker in orchestrator-only mode. Only admins can create, edit, delete, or test notification channels.

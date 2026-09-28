@@ -256,8 +256,12 @@ int main(int argc, char **argv)
 {
     int write_mode = argc == 7 && strcmp(argv[1], "write") == 0;
 
-    if (argc != 6 && !write_mode) {
+    if (argc != 6 && argc != 7) {
         return fail("Invalid secure local archive reader arguments.");
+    }
+    uintmax_t max_bytes = UINTMAX_MAX;
+    if (!write_mode && argc == 7 && (!parse_identifier(argv[6], &max_bytes) || max_bytes == 0)) {
+        return fail("Invalid secure local archive size limit.");
     }
 
     int root_index = write_mode ? 2 : 1;
@@ -301,6 +305,12 @@ int main(int argc, char **argv)
     }
 
     while (segment != NULL) {
+        if (strcmp(segment, ".") == 0 || strcmp(segment, "..") == 0) {
+            free(key);
+            close(directory_fd);
+
+            return fail("Invalid local archive key.");
+        }
         char *next = strtok_r(NULL, "/", &state);
         int flags = O_RDONLY | O_NOFOLLOW | O_CLOEXEC;
 
@@ -336,6 +346,11 @@ int main(int argc, char **argv)
     }
 
     struct stat target_stat;
+    if ((uintmax_t) source_stat.st_size > max_bytes) {
+        close(directory_fd);
+
+        return fail("Archive exceeds the relay size limit.");
+    }
 
     if (stat(argv[3], &target_stat) == 0) {
         if (source_stat.st_dev == target_stat.st_dev && source_stat.st_ino == target_stat.st_ino) {
@@ -376,6 +391,11 @@ int main(int argc, char **argv)
         }
 
         total_bytes += (uintmax_t) bytes_read;
+        if (total_bytes > max_bytes) {
+            close(directory_fd);
+
+            return fail("Archive exceeds the relay size limit.");
+        }
 
         ssize_t offset = 0;
 
@@ -402,7 +422,13 @@ int main(int argc, char **argv)
         }
     }
 
-    if (total_bytes != (uintmax_t) source_stat.st_size) {
+    struct stat final_stat;
+    if (total_bytes != (uintmax_t) source_stat.st_size || fstat(directory_fd, &final_stat) != 0
+        || final_stat.st_size != source_stat.st_size
+        || final_stat.st_mtim.tv_sec != source_stat.st_mtim.tv_sec
+        || final_stat.st_mtim.tv_nsec != source_stat.st_mtim.tv_nsec
+        || final_stat.st_ctim.tv_sec != source_stat.st_ctim.tv_sec
+        || final_stat.st_ctim.tv_nsec != source_stat.st_ctim.tv_nsec) {
         close(directory_fd);
 
         return fail("Unable to stream the local backup file.");

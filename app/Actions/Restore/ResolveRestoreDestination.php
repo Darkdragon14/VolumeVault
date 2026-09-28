@@ -9,6 +9,25 @@ use Illuminate\Validation\ValidationException;
 
 class ResolveRestoreDestination
 {
+    /** @return array<int, array<string, mixed>> */
+    public function knownRemoteBackups(BackupJob $job, BackupDestination $destination, ?BackupRun $run = null): array
+    {
+        return BackupRun::query()->where('backup_job_id', $job->id)
+            ->when($run !== null, fn ($query) => $query->whereKey($run->id))
+            ->where('status', BackupRun::STATUS_SUCCESS)
+            ->whereNotNull('backup_key')
+            ->where('backup_destination_id_snapshot', $destination->id)
+            ->where('backup_destination_locator_fingerprint', $destination->locatorFingerprint())
+            ->latest()->get()->map(fn (BackupRun $backup): array => [
+                'key' => $backup->backup_key,
+                'backup_run_id' => $backup->id,
+                'size' => $backup->backup_size_bytes,
+                'last_modified' => $backup->finished_at?->toIso8601String(),
+                'belongs_to_job' => true,
+                'verification_deferred' => true,
+            ])->all();
+    }
+
     public function handle(BackupJob $job, ?int $backupRunId = null, bool $lockForUpdate = false): BackupDestination
     {
         $run = $this->backupRun($job, $backupRunId, $lockForUpdate);

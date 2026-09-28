@@ -323,6 +323,29 @@ class AlertSystemTest extends TestCase
         $this->assertSame(AlertStatus::Resolved, $alert->fresh()->status);
     }
 
+    public function test_agent_storage_alert_preserves_stale_alert_and_resumes_from_fresh_receipt(): void
+    {
+        config(['volumevault.mode' => 'orchestrator']);
+        $host = \App\Models\DockerHost::factory()->create(['driver' => 'agent', 'agent_registered_at' => now(), 'agent_protocol_version' => 1, 'agent_capabilities' => ['inventory-v1', 'destination-v1']]);
+        $destination = BackupDestination::create(['name' => 'Remote storage', 'provider' => 'local', 'bucket' => '', 'access_key_id' => '', 'secret_access_key' => '', 'docker_host_id' => $host->id, 'is_active' => true, 'settings' => ['archive_path' => '/srv/archives', 'storage_limit_warning_bytes' => 100]]);
+        $rule = $this->enabledRule(AlertType::DestinationStorageLimit);
+        app(RunAllAlertChecks::class)->handle($rule);
+        $this->assertSame(0, Alert::count());
+        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        $receipt = ['status' => 'success', 'logs' => '', 'data' => ['used_bytes' => 200, 'object_count' => 1], 'cleanup_complete' => true, 'duration_seconds' => 1, 'finished_at' => now()->toIso8601String()];
+        $operations->complete(\App\Models\AgentOperation::firstOrFail(), $receipt);
+        app(RunAllAlertChecks::class)->handle($rule);
+        $alert = Alert::firstOrFail();
+        $this->assertSame(AlertSeverity::Warning, $alert->severity);
+        $this->travel(31)->minutes();
+        app(RunAllAlertChecks::class)->handle($rule);
+        $this->assertNotSame(AlertStatus::Resolved, $alert->fresh()->status);
+        $pending = \App\Models\AgentOperation::where('status', 'pending')->firstOrFail();
+        $operations->complete($pending, [...$receipt, 'data' => ['used_bytes' => 20, 'object_count' => 1]]);
+        app(RunAllAlertChecks::class)->handle($rule);
+        $this->assertSame(AlertStatus::Resolved, $alert->fresh()->status);
+    }
+
     public function test_resolved_alert_notifications_use_neutral_message_without_stale_context(): void
     {
         $directory = $this->storageLimitDirectory('resolved-message');

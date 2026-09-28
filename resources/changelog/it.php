@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'remote_agent_execution' => [
+        'title' => 'Backup di più host con gli agenti',
+        'description' => 'Gestisci backup e ripristini di più host Docker da un’unica interfaccia, con gruppi, stack, etichette e destinazioni. Scegli la modalità ibrida per mantenere l’esecuzione locale o la modalità orchestratore senza accesso al Docker locale.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Ripristinare un archivio locale su un altro host',
+        'description' => 'Ripristina i backup archiviati localmente in un nuovo volume su un altro host tramite un trasferimento cifrato attraverso l’orchestratore. L’archivio originale viene conservato.',
+    ],
+    'restore_volume_ownership' => [
+        'title' => 'Protezione dei volumi durante il ripristino',
+        'description' => 'Il ripristino verifica che il nuovo volume gli appartenga prima di scrivervi. In caso di errore, il volume di destinazione viene conservato per l’ispezione e l’eventuale eliminazione manuale.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Rifiuto anticipato dei backup di sicurezza Dropbox non supportati',
         'description' => 'I ripristini sul posto rifiutano ora un backup di sicurezza richiesto prima della messa in coda se la destinazione attuale del processo è Dropbox. Il modulo spiega il limite e conserva la scelta fino alla modifica esplicita.',

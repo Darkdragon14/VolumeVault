@@ -9,6 +9,7 @@ use App\Models\Alert;
 use App\Models\AlertRule;
 use App\Models\BackupDestination;
 use App\Services\BackupDestinations\DestinationStorage;
+use App\Support\DeploymentMode;
 use App\Support\FormatBytes;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -45,6 +46,12 @@ class DestinationStorageLimitCheck implements AlertCheckAction
             ->orderBy('id')
             ->get()
             ->each(function (BackupDestination $destination) use ($rule, &$findings): void {
+                if (DeploymentMode::isOrchestrator() && $destination->isHostBound() && (int) $destination->docker_host_id === \App\Models\DockerHost::LOCAL_ID) {
+                    $this->erroredSubjectKeys[] = $destination->getMorphClass().':'.$destination->getKey();
+
+                    return;
+                }
+
                 $thresholds = $this->thresholds($destination);
 
                 if ($thresholds === null) {
@@ -89,6 +96,8 @@ class DestinationStorageLimitCheck implements AlertCheckAction
                     'message' => 'Destination "'.$destination->name.'" is using '.FormatBytes::format($usedBytes).' of backup storage.',
                     'context' => [
                         'destination_id' => $destination->id,
+                        'storage_measurement_host_id' => $destination->storageMeasurementHostId(),
+                        'storage_measurement_fingerprint' => $destination->storageMeasurementFingerprint(),
                         'destination' => $destination->name,
                         'provider' => $destination->provider,
                         'target' => $destination->targetLabel(),
@@ -156,7 +165,7 @@ class DestinationStorageLimitCheck implements AlertCheckAction
     /** @return array{previous_used_bytes: int|null, delta_bytes: int|null} */
     private function recordUsageDelta(BackupDestination $destination, int $usedBytes): array
     {
-        $cacheKey = 'destination_storage_delta_baseline_'.$destination->id;
+        $cacheKey = 'destination_storage_delta_baseline_'.$destination->id.'_'.$destination->storageMeasurementFingerprint();
         $previousUsedBytes = Cache::get($cacheKey);
 
         Cache::put($cacheKey, $usedBytes, now()->addDays(30));
@@ -182,5 +191,4 @@ class DestinationStorageLimitCheck implements AlertCheckAction
             ->where('status', AlertStatus::Active->value)
             ->first();
     }
-
 }

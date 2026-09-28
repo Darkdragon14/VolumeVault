@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'remote_agent_execution' => [
+        'title' => 'Zálohování více hostitelů pomocí agentů',
+        'description' => 'Spravujte zálohy a obnovy více hostitelů Dockeru z jednoho rozhraní, včetně skupin, stacků, štítků a cílů. Zvolte hybridní režim pro zachování místního spouštění nebo režim orchestrátoru bez přístupu k místnímu Dockeru.',
+    ],
+    'cross_host_archive_relay' => [
+        'title' => 'Obnova místního archivu na jiném hostiteli',
+        'description' => 'Obnovte místně uložené zálohy do nového svazku na jiném hostiteli pomocí šifrovaného přenosu přes orchestrátor. Původní archiv zůstává zachován.',
+    ],
+    'restore_volume_ownership' => [
+        'title' => 'Ochrana svazků při obnově',
+        'description' => 'Obnova před zápisem ověří, že jí nový svazek patří. Při selhání zůstane cílový svazek zachován pro kontrolu a případné ruční odstranění.',
+    ],
     'dropbox_safety_backup_validation' => [
         'title' => 'Včasné odmítnutí nepodporovaných bezpečnostních záloh na Dropbox',
         'description' => 'Obnovení na místě nyní odmítne požadovanou bezpečnostní zálohu před zařazením do fronty, pokud je aktuálním cílem úlohy Dropbox. Formulář vysvětluje omezení a zachová vaši volbu, dokud ji výslovně nezměníte.',

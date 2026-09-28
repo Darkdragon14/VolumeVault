@@ -43,6 +43,7 @@ class BackupJob extends Model
     public const CONFIGURATION_SOURCE_DOCKER_LABEL = 'docker_label';
 
     protected $fillable = [
+        'docker_host_id',
         'name',
         'backup_job_group_id',
         'source_type',
@@ -79,6 +80,7 @@ class BackupJob extends Model
     ];
 
     protected $attributes = [
+        'docker_host_id' => DockerHost::LOCAL_ID,
         'notifications_enabled' => true,
         'use_custom_alert_settings' => false,
         'alert_notifications_enabled' => true,
@@ -92,6 +94,7 @@ class BackupJob extends Model
     protected function casts(): array
     {
         return [
+            'docker_host_id' => 'integer',
             'schedule_config' => 'array',
             'last_run_at' => 'datetime',
             'next_run_at' => 'datetime',
@@ -112,6 +115,11 @@ class BackupJob extends Model
     public function destination(): BelongsTo
     {
         return $this->belongsTo(BackupDestination::class, 'backup_destination_id');
+    }
+
+    public function dockerHost(): BelongsTo
+    {
+        return $this->belongsTo(DockerHost::class);
     }
 
     public function group(): BelongsTo
