@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'public_api_health' => [
+        'title' => 'Öffentliche API-Verfügbarkeitsprüfung',
+        'description' => 'Überwachen Sie die HTTP-Verfügbarkeit der Anwendung über den öffentlichen, in OpenAPI dokumentierten Endpunkt /api/v1/health. Docker, Worker und Backup-Ziele werden nicht geprüft; /up bleibt verfügbar.',
+    ],
     'api_token_display_after_creation' => [
         'title' => 'Neue API-Token werden nach der Erstellung angezeigt',
         'description' => 'Der neu erstellte API-Token erscheint sofort, damit Sie ihn vor dem Verlassen der Seite kopieren können.',

@@ -10,6 +10,12 @@ VolumeVault exposes a versioned HTTP API secured with Laravel Sanctum tokens and
 
 This makes the project friendly to automation tools, monitoring scripts, dashboards, and AI agents that need to inspect backup state or trigger explicit operations without scraping the web UI.
 
+### Public health check
+
+`GET /api/v1/health` requires no token and returns HTTP `200` with `{"status":"ok"}` when the HTTP application can respond. It is documented as `/health` in the OpenAPI schema, whose base URL is `/api/v1`.
+
+This is a lightweight availability probe, not a readiness check: it does not check the database, Docker, workers, agents or backup destinations, and does not guarantee that backups can run. The existing `/up` endpoint remains unchanged.
+
 Volumes, jobs and backup runs include `docker_host_id`; restore runs include `source_docker_host_id` and `target_docker_host_id`. Backup job creation accepts `docker_host_id` (default `1`, the built-in local host); updates preserve the current host when omitted. Changing a source or host is refused while a run or cleanup remains outstanding. Inventory validation always uses the selected host. Remote jobs can be standalone or grouped, including groups spanning multiple agents or local and remote members. Remote Docker-label reconciliation requires agents advertising `docker-labels-v1`.
 
 ### Operational host scope

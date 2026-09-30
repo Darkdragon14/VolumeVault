@@ -1,7 +1,9 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        ['type' => 'feature', 'key' => 'public_api_health'],
+    ],
     'releases' => [
         'v2.0.1' => [
             'date' => '2026-09-30',
