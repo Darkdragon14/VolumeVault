@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'api_token_display_after_creation' => [
+        'title' => 'New API tokens are displayed after creation',
+        'description' => 'The newly created API token now appears immediately so you can copy it before leaving the page.',
+    ],
     'remote_agent_execution' => [
         'title' => 'Multi-host backups with agents',
         'description' => 'Manage backups and restores across multiple Docker hosts from one interface, including groups, stacks, labels and destinations. Choose hybrid mode to keep local execution or orchestrator mode without local Docker access.',

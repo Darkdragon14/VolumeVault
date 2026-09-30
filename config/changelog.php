@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'api_token_display_after_creation',
+        ],
+    ],
     'releases' => [
         'v2.0.0' => [
             'date' => '2026-09-28',

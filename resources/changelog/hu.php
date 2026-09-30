@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'api_token_display_after_creation' => [
+        'title' => 'Az új API-tokenek létrehozás után megjelennek',
+        'description' => 'Az újonnan létrehozott API-token azonnal megjelenik, így az oldal elhagyása előtt lemásolható.',
+    ],
     'remote_agent_execution' => [
         'title' => 'Több gazdagép mentése ügynökökkel',
         'description' => 'Kezelje több Docker-gazdagép mentéseit és visszaállításait egyetlen felületről, csoportokkal, vermekkel, címkékkel és célhelyekkel. Válassza a hibrid módot a helyi végrehajtás megtartásához, vagy az orchestrátor módot a helyi Docker elérése nélkül.',

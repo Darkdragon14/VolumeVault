@@ -4,6 +4,7 @@ import Pagination from '@/Components/Pagination.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
+import { computed } from 'vue';
 
 interface PaginatedData<T> {
     data: T[];
@@ -16,7 +17,7 @@ defineProps<{
 }>();
 
 const page = usePage();
-const flash = page.props.flash as { api_token?: string };
+const flash = computed(() => (page.props.flash || {}) as { api_token?: string });
 const { t, formatDate } = useI18n();
 const form = useForm({
     user_id: '',
