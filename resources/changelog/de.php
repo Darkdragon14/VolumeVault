@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'api_token_display_after_creation' => [
+        'title' => 'Neue API-Token werden nach der Erstellung angezeigt',
+        'description' => 'Der neu erstellte API-Token erscheint sofort, damit Sie ihn vor dem Verlassen der Seite kopieren können.',
+    ],
     'remote_agent_execution' => [
         'title' => 'Hostübergreifende Backups mit Agenten',
         'description' => 'Verwalten Sie Backups und Wiederherstellungen mehrerer Docker-Hosts über eine Oberfläche, einschließlich Gruppen, Stacks, Labels und Zielen. Wählen Sie den Hybridmodus für weiterhin lokale Ausführung oder den Orchestrator-Modus ohne lokalen Docker-Zugriff.',

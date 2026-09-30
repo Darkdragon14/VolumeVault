@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'api_token_display_after_creation' => [
+        'title' => 'Affichage des nouveaux tokens API après leur création',
+        'description' => 'Le nouveau token API apparaît immédiatement pour vous permettre de le copier avant de quitter la page.',
+    ],
     'remote_agent_execution' => [
         'title' => 'Sauvegardes multi-hôtes avec des agents',
         'description' => 'Gérez les sauvegardes et restaurations de plusieurs hôtes Docker depuis une seule interface, avec les groupes, stacks, labels et destinations. Choisissez le mode hybride pour conserver l’exécution locale ou le mode orchestrateur sans accès au Docker local.',

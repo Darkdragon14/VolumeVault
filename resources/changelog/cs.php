@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'api_token_display_after_creation' => [
+        'title' => 'Nové API tokeny se zobrazí po vytvoření',
+        'description' => 'Nově vytvořený API token se okamžitě zobrazí, abyste jej mohli zkopírovat před opuštěním stránky.',
+    ],
     'remote_agent_execution' => [
         'title' => 'Zálohování více hostitelů pomocí agentů',
         'description' => 'Spravujte zálohy a obnovy více hostitelů Dockeru z jednoho rozhraní, včetně skupin, stacků, štítků a cílů. Zvolte hybridní režim pro zachování místního spouštění nebo režim orchestrátoru bez přístupu k místnímu Dockeru.',

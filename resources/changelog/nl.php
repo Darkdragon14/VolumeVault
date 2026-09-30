@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'api_token_display_after_creation' => [
+        'title' => 'Nieuwe API-tokens worden na aanmaak getoond',
+        'description' => 'Het nieuwe API-token verschijnt meteen, zodat je het kunt kopiëren voordat je de pagina verlaat.',
+    ],
     'remote_agent_execution' => [
         'title' => 'Back-ups van meerdere hosts met agents',
         'description' => 'Beheer back-ups en herstel van meerdere Docker-hosts vanuit één interface, met groepen, stacks, labels en bestemmingen. Kies de hybride modus om lokaal te blijven uitvoeren of de orchestratormodus zonder toegang tot de lokale Docker.',
