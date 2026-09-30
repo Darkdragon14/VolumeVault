@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'public_api_health' => [
+        'title' => 'Openbare API-beschikbaarheidscontrole',
+        'description' => 'Controleer de HTTP-beschikbaarheid van de applicatie via het openbare endpoint /api/v1/health, gedocumenteerd in OpenAPI. Docker, workers en back-upbestemmingen worden niet gecontroleerd; /up blijft beschikbaar.',
+    ],
     'api_token_display_after_creation' => [
         'title' => 'Nieuwe API-tokens worden na aanmaak getoond',
         'description' => 'Het nieuwe API-token verschijnt meteen, zodat je het kunt kopiëren voordat je de pagina verlaat.',

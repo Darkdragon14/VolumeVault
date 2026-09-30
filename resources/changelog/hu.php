@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'public_api_health' => [
+        'title' => 'Nyilvános API-elérhetőségi ellenőrzés',
+        'description' => 'Az alkalmazás HTTP-elérhetősége az OpenAPI-ban dokumentált nyilvános /api/v1/health végponton figyelhető. Nem ellenőrzi a Dockert, a feldolgozókat vagy a mentési célhelyeket; a /up továbbra is elérhető.',
+    ],
     'api_token_display_after_creation' => [
         'title' => 'Az új API-tokenek létrehozás után megjelennek',
         'description' => 'Az újonnan létrehozott API-token azonnal megjelenik, így az oldal elhagyása előtt lemásolható.',

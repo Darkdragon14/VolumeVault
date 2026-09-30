@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\BackupJobGroupController;
 use App\Http\Controllers\Api\V1\BackupRunController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DestinationController;
+use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\HostPathAllowlistController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\NotificationChannelController;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::get('/openapi.json', OpenApiController::class);
+    Route::get('/health', HealthController::class);
 
     Route::middleware(['auth:sanctum', 'abilities:read'])->group(function () {
         Route::get('/me', MeController::class);

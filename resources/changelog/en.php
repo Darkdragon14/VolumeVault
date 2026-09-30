@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'public_api_health' => [
+        'title' => 'Public API health check',
+        'description' => 'Monitor HTTP application availability through the public /api/v1/health endpoint, documented in OpenAPI. It does not check Docker, workers or backup destinations; /up remains available.',
+    ],
     'api_token_display_after_creation' => [
         'title' => 'New API tokens are displayed after creation',
         'description' => 'The newly created API token now appears immediately so you can copy it before leaving the page.',

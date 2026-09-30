@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'public_api_health' => [
+        'title' => 'Comprobación pública de disponibilidad de la API',
+        'description' => 'Supervise la disponibilidad HTTP de la aplicación mediante /api/v1/health, un endpoint público documentado en OpenAPI. No comprueba Docker, los workers ni los destinos de copia de seguridad; /up sigue disponible.',
+    ],
     'api_token_display_after_creation' => [
         'title' => 'Los nuevos tokens de API se muestran tras crearlos',
         'description' => 'El token de API recién creado aparece de inmediato para que puedas copiarlo antes de salir de la página.',

@@ -47,6 +47,17 @@ class OpenApiController extends Controller
             '/openapi.json' => [
                 'get' => $this->operation('Read the OpenAPI document.', [], public: true),
             ],
+            '/health' => [
+                'get' => $this->operation('Check HTTP application availability only; does not check database, Docker, workers, agents or destinations.', [], public: true, response: [
+                    'type' => 'object',
+                    'required' => ['status'],
+                    'additionalProperties' => false,
+                    'properties' => [
+                        'status' => ['type' => 'string', 'enum' => ['ok']],
+                    ],
+                    'example' => ['status' => 'ok'],
+                ]),
+            ],
             '/me' => ['get' => $this->operation('Inspect current authenticated user and token.', ['read'])],
             '/settings/docker-label-backups' => [
                 'get' => $this->operation('Read Docker label settings, eligible destinations, notification channels and hosts. Omitting docker_host_id selects local host 1.', ['read'], admin: true, queryParameters: [

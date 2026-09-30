@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'public_api_health' => [
+        'title' => 'Veřejná kontrola dostupnosti API',
+        'description' => 'Sledujte dostupnost aplikace přes HTTP pomocí veřejného endpointu /api/v1/health, zdokumentovaného v OpenAPI. Nekontroluje Docker, workery ani cíle záloh; /up zůstává dostupný.',
+    ],
     'api_token_display_after_creation' => [
         'title' => 'Nové API tokeny se zobrazí po vytvoření',
         'description' => 'Nově vytvořený API token se okamžitě zobrazí, abyste jej mohli zkopírovat před opuštěním stránky.',
