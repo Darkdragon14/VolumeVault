@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'api_token_display_after_creation',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.1' => [
+            'date' => '2026-09-30',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.1',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'api_token_display_after_creation',
+                ],
+            ],
+        ],
         'v2.0.0' => [
             'date' => '2026-09-28',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.0',
