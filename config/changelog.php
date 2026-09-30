@@ -1,10 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        ['type' => 'feature', 'key' => 'public_api_health'],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.2' => [
+            'date' => '2026-09-30',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.2',
+            'items' => [
+                [
+                    'type' => 'feature',
+                    'key' => 'public_api_health',
+                ],
+            ],
+        ],
         'v2.0.1' => [
             'date' => '2026-09-30',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.1',
