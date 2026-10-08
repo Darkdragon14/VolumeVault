@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Récupération des tâches interrompues par un agent indisponible',
+        'description' => 'Les opérations distantes bloquées échouent après un délai configurable ou la révocation/réinscription de l’agent, libérant les relais inutilisés sans rejouer les tâches. Le nettoyage distant reste protégé. Une alerte configurable d’agent hors ligne est activée par défaut.',
+    ],
     'count_based_backup_retention' => [
         'title' => 'Rétention des sauvegardes par nombre fonctionnelle',
         'description' => 'Après une sauvegarde réussie, VolumeVault supprime les archives les plus anciennes dépassant la limite du job. Les nouvelles archives sont identifiées par job pour protéger les destinations partagées ; les anciennes archives sans cette identification sont conservées. Les identifiants de destination doivent autoriser la lecture de la liste et la suppression. Mettez les agents distants à jour pour utiliser cette fonctionnalité.',

@@ -2,6 +2,7 @@
 
 return [
     'unreleased' => [
+        ['type' => 'change', 'key' => 'agent_outage_recovery'],
         [
             'type' => 'change',
             'key' => 'count_based_backup_retention',

@@ -11,6 +11,7 @@ use App\Models\BackupDestination;
 use App\Models\BackupGroupRun;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Models\DockerHost;
 use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Services\Docker\DockerProcess;
@@ -381,7 +382,7 @@ class SendShoutrrrNotification
             return $this->resolveNotificationChannels->forJobAlerts($job);
         }
 
-        if ($alert->subject instanceof BackupDestination) {
+        if ($alert->subject instanceof BackupDestination || $alert->subject instanceof DockerHost) {
             return $this->resolveNotificationChannels->forAlertRule($alert->rule);
         }
 
@@ -631,6 +632,8 @@ class SendShoutrrrNotification
             $lines[] = 'Destination: '.$subject->name;
             $lines[] = 'Provider: '.$subject->provider;
             $lines[] = 'Target: '.$subject->targetLabel();
+        } elseif ($subject instanceof DockerHost) {
+            $lines[] = 'Agent: '.$subject->name;
         }
 
         $lines[] = 'Message: '.($type === 'resolved' ? 'Alert condition is resolved.' : $alert->message);

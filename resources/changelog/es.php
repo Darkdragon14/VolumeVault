@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Recuperación tras la indisponibilidad de un agente',
+        'description' => 'Las operaciones remotas bloqueadas fallan tras un plazo configurable o al revocar/registrar de nuevo el agente, liberando relés sin repetir tareas. La limpieza remota sigue protegida. La alerta configurable de agente desconectado está activada por defecto.',
+    ],
     'count_based_backup_retention' => [
         'title' => 'Retención por número de copias funcional',
         'description' => 'Tras una copia correcta, VolumeVault elimina los archivos más antiguos que superan el límite del trabajo. Los archivos nuevos se identifican por trabajo para proteger los destinos compartidos; los antiguos sin identificación se conservan. Las credenciales deben permitir listar y eliminar archivos. Actualiza los agentes remotos para usar esta función.',

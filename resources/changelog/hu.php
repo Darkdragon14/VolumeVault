@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Helyreállítás az ügynök kiesése után',
+        'description' => 'Az elakadt távoli műveletek beállítható határidő vagy az ügynök visszavonása/újraregisztrálása után hibával lezárulnak, felszabadítva a nem használt átviteli kapacitást a munka ismétlése nélkül. A távoli takarítás védelme megmarad. A beállítható offlineügynök-riasztás alapértelmezetten engedélyezett.',
+    ],
     'count_based_backup_retention' => [
         'title' => 'Működő darabszám alapú biztonsági mentés megőrzés',
         'description' => 'Sikeres mentés után a VolumeVault törli a feladat megőrzési korlátját meghaladó legrégebbi archívumokat. Az új archívumok feladatonként azonosíthatók a megosztott célok védelméhez; a régebbi, azonosító nélküli archívumok megmaradnak. A hitelesítő adatoknak engedélyezniük kell a listázást és a törlést. A funkcióhoz frissítse a távoli ügynököket.',

@@ -1,4 +1,10 @@
 {
+  "agent_offline": "agent hors ligne",
+  "Agent offline": "Agent hors ligne",
+  "Minutes offline": "Minutes hors ligne",
+  "Agent alert channels": "Canaux d’alerte des agents",
+  "Alert when an enrolled agent stops sending heartbeats. Agents in maintenance are excluded.": "Alerter lorsqu’un agent enregistré cesse d’envoyer des signaux de présence. Les agents en maintenance sont exclus.",
+  "Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.": "Choisissez les canaux recevant les notifications de déconnexion et de rétablissement des agents. Sans sélection, les alertes restent visibles uniquement dans VolumeVault.",
   "remoteAudit.savedUnavailable": "{host} — exécuteur enregistré indisponible",
   "remoteAudit.measureUnavailableHelp": "L’identifiant de l’hôte enregistré est conservé. Si l’enregistrement est refusé, choisissez un hôte compatible ou le réseau central, ou rétablissez l’inscription de cet agent et mettez-le à jour pour prendre en charge destination-v1.",
   "remoteAudit.pathRuntime": "Le dossier doit exister sur l’hôte sélectionné et être autorisé par sa liste de chemins faisant autorité lors de l’exécution.",

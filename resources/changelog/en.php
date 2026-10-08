@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Recover work interrupted by unavailable agents',
+        'description' => 'Stalled remote operations now fail after a configurable deadline or agent revocation/re-enrollment, freeing unused relay capacity without replaying work. Remote cleanup remains protected. A configurable offline-agent alert is enabled by default.',
+    ],
     'count_based_backup_retention' => [
         'title' => 'Working count-based backup retention',
         'description' => 'VolumeVault now deletes the oldest archives exceeding a job’s retention count after a successful backup. New archives are identified per job so shared destinations remain safe; older unscoped archives are preserved. Destination credentials must allow listing and deletion. Update remote agents to use this feature.',

@@ -804,6 +804,83 @@ class ArchiveRelayTest extends TestCase
         return [$run, $run->archiveRelay->fresh()];
     }
 
+    public function test_lost_export_frees_quota_but_retains_remote_cleanup_fence(): void
+    {
+        [$run, $source, $target] = $this->restore();
+        $export = app(AgentOperationBroker::class)->pull($source);
+        $relay = $run->archiveRelay;
+        app(ArchiveRelays::class)->transfer($source, $export['id'], $export['token'], [
+            'action' => 'upload', 'offset' => 0, 'chunk' => base64_encode('abc'), 'size_bytes' => 3, 'sha256' => hash('sha256', 'abc'),
+        ]);
+        $this->travel(16)->minutes();
+        app(\App\Services\Agents\ReconcileAgentOperations::class)->handle();
+        $this->assertSame('failed', $run->refresh()->status);
+        $this->assertSame('cancelled', AgentOperation::findOrFail($export['id'])->status);
+        app(ArchiveRelays::class)->coordinate();
+        $this->assertNotNull($relay->refresh()->cleaned_at);
+        $this->assertDirectoryDoesNotExist(app(ArchiveRelayStorage::class)->directory($relay->id));
+        $this->assertSame(0, (int) ArchiveRelay::whereNull('cleaned_at')->sum('reserved_bytes'));
+        $this->assertTrue(app(\App\Services\Agents\ReconcileAgentOperations::class)->cleanupPending($source));
+        app(AgentOperationBroker::class)->complete($source, $export['id'], $export['token'], $this->receipt());
+        $this->assertSame('failed', $run->refresh()->status);
+        $this->assertFalse(app(\App\Services\Agents\ReconcileAgentOperations::class)->cleanupPending($source));
+        $this->assertNull(app(AgentOperationBroker::class)->pull($target));
+        [$next] = $this->restore();
+        $this->assertNotNull($next->archiveRelay);
+    }
+
+    public function test_lost_target_frees_spool_only_after_central_verification_lock_is_released(): void
+    {
+        [$run, $source, $target] = $this->restore();
+        $export = app(AgentOperationBroker::class)->pull($source);
+        $relay = $run->archiveRelay;
+        app(ArchiveRelays::class)->transfer($source, $export['id'], $export['token'], [
+            'action' => 'upload', 'offset' => 0, 'chunk' => base64_encode('abc'), 'size_bytes' => 3, 'sha256' => hash('sha256', 'abc'),
+        ]);
+        app(AgentOperationBroker::class)->complete($source, $export['id'], $export['token'], $this->receipt());
+        app(DispatchQueuedRun::class)->handle($run);
+        $restore = app(AgentOperationBroker::class)->pull($target);
+        $directory = app(ArchiveRelayStorage::class)->directory($relay->id);
+        $lock = fopen($directory.'/verify.lock', 'c');
+        flock($lock, LOCK_EX);
+        $this->travel(16)->minutes();
+        app(\App\Services\Agents\ReconcileAgentOperations::class)->handle();
+        app(ArchiveRelays::class)->coordinate();
+        $this->assertSame('failed', $run->refresh()->status);
+        $this->assertNull($relay->refresh()->cleaned_at);
+        $this->assertDirectoryExists($directory);
+        fclose($lock);
+        app(ArchiveRelays::class)->coordinate();
+        $this->assertNotNull($relay->refresh()->cleaned_at);
+        $this->assertSame('cancelled', AgentOperation::findOrFail($restore['id'])->status);
+        $this->assertTrue(app(\App\Services\Agents\ReconcileAgentOperations::class)->cleanupPending($target));
+    }
+
+    public function test_offline_remote_target_cancels_unstarted_local_export_and_releases_reservation(): void
+    {
+        [$run] = $this->restore(localSource: true);
+        $relay = $run->archiveRelay;
+        $this->travel(16)->minutes();
+        app(\App\Services\Agents\ReconcileAgentOperations::class)->handle();
+        app(ArchiveRelays::class)->coordinate();
+        $this->assertSame('failed', $run->refresh()->status);
+        $this->assertSame('cancelled', $relay->sourceAgentOperation->refresh()->status);
+        $this->assertNotNull($relay->refresh()->cleaned_at);
+        Queue::assertNotPushed(ExportLocalArchiveRelay::class);
+    }
+
+    public function test_lost_remote_export_to_local_target_does_not_call_central_docker(): void
+    {
+        [$run, $source] = $this->restore(localTarget: true);
+        $relay = $run->archiveRelay;
+        app(AgentOperationBroker::class)->pull($source);
+        $this->travel(16)->minutes();
+        app(\App\Services\Agents\ReconcileAgentOperations::class)->handle();
+        app(ArchiveRelays::class)->coordinate();
+        $this->assertSame('failed', $run->refresh()->status);
+        $this->assertNotNull($relay->refresh()->cleaned_at);
+    }
+
     private function restore(bool $localSource = false, bool $localTarget = false): array
     {
         if ($localSource || $localTarget) {

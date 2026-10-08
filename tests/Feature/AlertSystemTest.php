@@ -38,12 +38,13 @@ class AlertSystemTest extends TestCase
         config(['volumevault.host_path_allowlist' => [sys_get_temp_dir()]]);
     }
 
-    public function test_alert_rules_are_initialized_disabled_by_default(): void
+    public function test_only_agent_offline_alert_rule_is_enabled_by_default(): void
     {
         app(EnsureAlertRules::class)->handle();
 
-        $this->assertSame(5, AlertRule::count());
+        $this->assertSame(6, AlertRule::count());
         $this->assertTrue(AlertRule::where('enabled', false)->count() === 5);
+        $this->assertTrue(AlertRule::where('type', AlertType::AgentOffline->value)->firstOrFail()->enabled);
     }
 
     public function test_backup_too_old_alert_triggers_and_resolves(): void
@@ -508,12 +509,12 @@ class AlertSystemTest extends TestCase
     {
         Cache::flush();
         app(EnsureAlertRules::class)->handle();
-        $this->assertSame(5, AlertRule::count());
+        $this->assertSame(6, AlertRule::count());
 
         $handled = [];
         $mock = Mockery::mock(RunAllAlertChecks::class);
         $mock->shouldReceive('handle')
-            ->times(5)
+            ->times(6)
             ->andReturnUsing(function (AlertRule $rule) use (&$handled): void {
                 $handled[] = $rule->id;
 
@@ -525,7 +526,7 @@ class AlertSystemTest extends TestCase
 
         app()->call([new RunAlertChecksJob, 'handle']);
 
-        $this->assertCount(5, $handled, 'Every rule should be evaluated even when one throws.');
+        $this->assertCount(6, $handled, 'Every rule should be evaluated even when one throws.');
         $this->assertDatabaseHas('activity_logs', [
             'event_type' => 'alert_check_failed',
         ]);

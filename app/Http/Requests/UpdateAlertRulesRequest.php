@@ -30,6 +30,7 @@ class UpdateAlertRulesRequest extends FormRequest
             'rules.*.config.backup_too_old_days' => ['nullable', 'integer', 'min:1'],
             'rules.*.config.job_never_succeeded_min_runs' => ['nullable', 'integer', 'min:1'],
             'rules.*.config.job_in_error_days' => ['nullable', 'integer', 'min:1'],
+            'rules.*.config.agent_offline_minutes' => ['nullable', 'integer', 'min:1'],
             'rules.*.config.backup_size_out_of_range_min_bytes' => ['nullable', 'integer', 'min:0'],
             'rules.*.config.backup_size_out_of_range_max_bytes' => ['nullable', 'integer', 'min:1'],
         ];
@@ -70,6 +71,7 @@ class UpdateAlertRulesRequest extends FormRequest
             'backup_too_old_days',
             'job_never_succeeded_min_runs',
             'job_in_error_days',
+            'agent_offline_minutes',
             'backup_size_out_of_range_min_bytes',
             'backup_size_out_of_range_max_bytes',
         ])->filter(fn (string $key): bool => array_key_exists($key, $config))

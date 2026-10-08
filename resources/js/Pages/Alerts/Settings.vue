@@ -26,6 +26,7 @@ const alertRuleLabel = (type: string) => ({
     job_in_error_too_long: 'Job in error too long',
     backup_size_out_of_range: 'Backup size out of range',
     destination_storage_limit: 'Destination storage limit',
+    agent_offline: 'Agent offline',
 }[type] || type);
 const alertRuleDescription = (type: string) => ({
     backup_too_old: 'Warn when a job has not produced a successful backup recently.',
@@ -33,6 +34,7 @@ const alertRuleDescription = (type: string) => ({
     job_in_error_too_long: 'Escalate jobs that stay in error longer than expected.',
     backup_size_out_of_range: 'Detect unusually small or large successful backup archives.',
     destination_storage_limit: 'Warn when a backup destination exceeds its configured absolute storage thresholds.',
+    agent_offline: 'Alert when an enrolled agent stops sending heartbeats. Agents in maintenance are excluded.',
 }[type] || '');
 const sizeUnitKey = (id: number, key: string) => `${id}.${key}`;
 const selectedSizeUnit = (rule: any, key: string): SizeUnit => sizeUnitSelections.value[sizeUnitKey(rule.id, key)] || bestSizeUnit(rule.config[key]);
@@ -125,6 +127,11 @@ const submit = () => form.put('/alerts/settings');
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
+                    <label v-if="rule.type === 'agent_offline'" class="space-y-2">
+                        <span class="label">{{ t('Minutes offline') }}</span>
+                        <input v-model.number="rule.config.agent_offline_minutes" class="input" type="number" min="1">
+                        <span v-if="ruleConfigError(index, 'agent_offline_minutes')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'agent_offline_minutes') }}</span>
+                    </label>
                     <label v-if="rule.type === 'backup_too_old'" class="space-y-2">
                         <span class="label">{{ t('Days without success') }}</span>
                         <input v-model.number="rule.config.backup_too_old_days" class="input" type="number" min="1">
@@ -178,10 +185,10 @@ const submit = () => form.put('/alerts/settings');
                     </template>
                 </div>
 
-                <section v-if="rule.type === 'destination_storage_limit'" class="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <section v-if="['destination_storage_limit', 'agent_offline'].includes(rule.type)" class="rounded-xl border border-white/10 bg-slate-950/60 p-4">
                     <div class="flex flex-col gap-1">
-                        <h3 class="font-semibold text-white">{{ t('Destination alert channels') }}</h3>
-                        <p class="text-sm text-slate-400">{{ t('Choose which channels receive destination storage limit notifications. If none are selected, alerts stay visible only in VolumeVault.') }}</p>
+                        <h3 class="font-semibold text-white">{{ t(rule.type === 'agent_offline' ? 'Agent alert channels' : 'Destination alert channels') }}</h3>
+                        <p class="text-sm text-slate-400">{{ t(rule.type === 'agent_offline' ? 'Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.' : 'Choose which channels receive destination storage limit notifications. If none are selected, alerts stay visible only in VolumeVault.') }}</p>
                     </div>
                     <div v-if="notificationChannels.length" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <button

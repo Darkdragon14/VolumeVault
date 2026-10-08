@@ -16,7 +16,7 @@ class EnsureAlertRules
             $config = array_replace($this->defaultConfig($type), $rule->config ?? []);
 
             if (! $rule->exists) {
-                $rule->enabled = false;
+                $rule->enabled = $type === AlertType::AgentOffline;
             }
 
             $rule->config = $config;
@@ -58,6 +58,11 @@ class EnsureAlertRules
                 'backup_size_out_of_range_max_bytes' => $defaults['backup_size_out_of_range_max_bytes'] ?? 10737418240,
             ],
             AlertType::DestinationStorageLimit => $common,
+            AlertType::AgentOffline => [
+                ...$common,
+                'check_interval_minutes' => (int) ($defaults['agent_offline_check_interval_minutes'] ?? 5),
+                'agent_offline_minutes' => (int) ($defaults['agent_offline_minutes'] ?? 15),
+            ],
         };
     }
 }

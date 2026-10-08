@@ -1,4 +1,10 @@
 {
+  "agent_offline": "agent offline",
+  "Agent offline": "Agent offline",
+  "Minutes offline": "Minuty offline",
+  "Agent alert channels": "Kanály upozornění agentů",
+  "Alert when an enrolled agent stops sending heartbeats. Agents in maintenance are excluded.": "Upozornit, když registrovaný agent přestane posílat signály aktivity. Agenti v údržbě jsou vyloučeni.",
+  "Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.": "Vyberte kanály pro oznámení o odpojení a obnovení agentů. Bez výběru zůstanou upozornění viditelná pouze ve VolumeVault.",
   "remoteAudit.savedUnavailable": "{host} — uložený vykonavatel není dostupný",
   "remoteAudit.measureUnavailableHelp": "ID uloženého hostitele zůstává zachováno. Pokud je uložení odmítnuto, vyberte kompatibilního hostitele nebo centrální síť, případně obnovte registraci agenta a aktualizujte jej pro podporu destination-v1.",
   "remoteAudit.pathRuntime": "Adresář musí existovat na vybraném hostiteli a při spuštění splňovat jeho autoritativní seznam povolených cest.",

@@ -341,7 +341,7 @@ class BackupJobController extends Controller
                 ->orderBy('name')->get()->map(fn (BackupDestination $destination): array => [...$destination->safeForFrontend(), 'docker_host_id' => $destination->docker_host_id]),
             'notificationChannels' => NotificationChannel::with('backupJobs')->orderBy('name')->get()->map->safeForFrontend(),
             'defaultNotificationChannelIds' => $this->defaultNotificationChannelIds(),
-            'alertRules' => AlertRule::where('type', '!=', AlertType::DestinationStorageLimit->value)
+            'alertRules' => AlertRule::whereNotIn('type', [AlertType::DestinationStorageLimit->value, AlertType::AgentOffline->value])
                 ->orderBy('id')
                 ->get()
                 ->map(fn (AlertRule $rule): array => $this->serializeAlertRule($rule)),

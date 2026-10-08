@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Obnova po výpadku agenta',
+        'description' => 'Zablokované vzdálené operace selžou po nastavitelné lhůtě nebo odvolání/opětovné registraci agenta a uvolní nepoužívané přenosy bez opakování práce. Vzdálené čištění zůstává chráněné. Nastavitelné upozornění na agenta offline je ve výchozím stavu zapnuté.',
+    ],
     'count_based_backup_retention' => [
         'title' => 'Funkční uchovávání podle počtu záloh',
         'description' => 'Po úspěšné záloze VolumeVault odstraní nejstarší archivy překračující limit úlohy. Nové archivy jsou označeny podle úlohy, aby byly sdílené cíle bezpečné; starší neoznačené archivy zůstávají zachovány. Přihlašovací údaje musí umožňovat výpis a mazání archivů. Pro tuto funkci aktualizujte vzdálené agenty.',

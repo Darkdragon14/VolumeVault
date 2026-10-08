@@ -232,7 +232,7 @@ class AgentOperationProtocolTest extends TestCase
         $this->assertDatabaseCount('run_finalizations', 0);
     }
 
-    public function test_reenrollment_cannot_repull_old_assignment_but_can_complete_known_receipt(): void
+    public function test_reenrollment_cannot_repull_old_assignment_or_acknowledge_unconfirmed_cleanup(): void
     {
         [$host, $body, $token] = $this->registered();
         $run = $this->backup($host);
@@ -244,8 +244,65 @@ class AgentOperationProtocolTest extends TestCase
         $this->sendAgent('operations/pull', $token, $body)->assertUnauthorized();
         $this->sendAgent('operations/pull', $newToken, $newBody)->assertOk()->assertJsonPath('operation', null);
         $this->assertSame($body['instance_id'], $pending->fresh()->owner_instance_id);
-        $this->complete($newBody, $newToken, $operation)->assertOk();
-        $this->assertSame('success', $run->fresh()->status);
+        $this->complete($newBody, $newToken, $operation)->assertNotFound();
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        $this->assertSame('failed', $run->fresh()->status);
+    }
+
+    #[DataProvider('completedReceiptStatuses')]
+    public function test_reenrolled_agent_can_progress_then_acknowledge_a_completed_receipt_without_replay(string $status): void
+    {
+        [$host, $body, $token] = $this->registered();
+        [$other, $otherBody, $otherToken] = $this->registered();
+        $run = $this->backup($host);
+        $run->job->update(['notifications_enabled' => true]);
+        $channel = NotificationChannel::create(['name' => 'Lost acknowledgement', 'service' => NotificationChannel::SERVICE_ADVANCED,
+            'notification_level' => NotificationChannel::LEVEL_INFO, 'is_active' => true, 'url' => 'ntfy://notify.test/receipt']);
+        $run->job->notificationChannels()->attach($channel);
+        $ledger = $this->enqueue($run);
+        $operation = $this->pull($body, $token);
+        $this->complete($body, $token, $operation, ['status' => $status])->assertOk();
+        $history = $run->refresh()->getAttributes();
+        $completed = $ledger->refresh()->getAttributes();
+        $finalizations = RunFinalization::all()->toArray();
+        $finishedEvents = ActivityLog::where('event_type', 'agent_operation_finished')->count();
+
+        [$sameHost, $enrollment, $newBody] = $this->pending($host);
+        $this->sendAgent('enroll', $enrollment, $newBody)->assertOk();
+        $newToken = $sameHost->uuid.'.'.$newBody['credential'];
+        $this->sendAgent('heartbeat', $newToken, [...$newBody, 'docker_status' => 'ready', 'active_operations' => 1])->assertOk();
+        $this->assertNotSame($body['instance_id'], $newBody['instance_id']);
+        $this->assertSame('completed', $ledger->refresh()->status);
+        $this->assertSame($body['instance_id'], $ledger->owner_instance_id);
+
+        foreach (['progress', 'complete'] as $endpoint) {
+            $path = 'operations/'.$operation['id'].'/'.$endpoint;
+            $data = ['token' => $operation['token'], 'result' => $this->operationResult()];
+            $this->sendAgent($path, $token, [...$body, ...$data])->assertUnauthorized();
+            $this->sendAgent($path, $otherToken, [...$otherBody, ...$data])->assertNotFound();
+            $this->sendAgent($path, $newToken, [...$newBody, ...$data, 'token' => str_repeat('0', 64)])->assertNotFound();
+        }
+
+        $this->sendAgent('operations/'.$operation['id'].'/progress', $newToken, [...$newBody, 'token' => $operation['token']])
+            ->assertOk()->assertJsonPath('acknowledged', true);
+        $this->complete($newBody, $newToken, $operation, ['status' => $status === 'success' ? 'failed' : 'success',
+            'error_message' => 'conflicting retained receipt', 'backup_key' => 'wrong', 'logs' => 'late conflicting diagnostics'])
+            ->assertOk()->assertJsonPath('acknowledged', true);
+        $this->assertSame($history, $run->refresh()->getAttributes());
+        $this->assertSame($completed, $ledger->refresh()->getAttributes());
+        $this->assertSame($finalizations, RunFinalization::all()->toArray());
+        $this->assertSame($finishedEvents, ActivityLog::where('event_type', 'agent_operation_finished')->count());
+        $this->sendAgent('operations/pull', $newToken, $newBody)->assertOk()->assertJsonPath('operation', null);
+
+        $this->sendAgent('heartbeat', $newToken, [...$newBody, 'docker_status' => 'ready', 'active_operations' => 0])->assertOk();
+        $next = $this->enqueue($this->backup($sameHost));
+        $this->assertSame($next->id, $this->pull($newBody, $newToken)['id']);
+        $this->assertSame('completed', $ledger->refresh()->status);
+    }
+
+    public static function completedReceiptStatuses(): array
+    {
+        return ['successful run' => ['success'], 'failed run' => ['failed']];
     }
 
     public function test_completion_persists_history_once_without_overwrite_or_duplicate_finalization(): void
@@ -704,6 +761,28 @@ class AgentOperationProtocolTest extends TestCase
         $this->assertSame(1, $run->fresh()->failed_members);
         $this->assertSame(1, $run->fresh()->succeeded_members);
         $this->assertSame(BackupJob::STATUS_PAUSED, $first->job->fresh()->status);
+    }
+
+    public function test_stalled_remote_group_member_fails_and_coordinator_advances_without_expiring_future_member(): void
+    {
+        [$first, $body, $token] = $this->registered();
+        [$second, $secondBody, $secondToken] = $this->registered();
+        $run = $this->groupRun([$first, $second]);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->pull($body, $token);
+        $children = $run->memberRuns()->orderBy('id')->get();
+        $this->travel(16)->minutes();
+        $second->forceFill(['last_seen_at' => now()])->save();
+        $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
+        $this->assertSame('failed', $children[0]->refresh()->status);
+        $this->assertSame('queued', $children[1]->refresh()->status);
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $operation = $this->pull($secondBody, $secondToken);
+        $this->complete($secondBody, $secondToken, $operation)->assertOk();
+        app(AdvanceBackupGroupRun::class)->handle($run);
+        $this->assertSame('failed', $run->refresh()->status);
+        $this->assertSame(1, $run->failed_members);
+        $this->assertSame(1, $run->succeeded_members);
     }
 
     private function groupRun(array $hosts, string $policy = BackupJobGroup::FAILURE_POLICY_CONTINUE, bool $starts = true): BackupGroupRun

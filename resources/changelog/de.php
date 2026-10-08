@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Wiederherstellung nach Agent-Ausfällen',
+        'description' => 'Blockierte Remote-Vorgänge schlagen nach einer konfigurierbaren Frist oder dem Widerruf/der Neuregistrierung des Agenten fehl und geben ungenutzte Relay-Kapazität frei, ohne Arbeit erneut auszuführen. Die Remote-Bereinigung bleibt geschützt. Eine konfigurierbare Offline-Agent-Warnung ist standardmäßig aktiviert.',
+    ],
     'count_based_backup_retention' => [
         'title' => 'Funktionierende Aufbewahrung nach Backup-Anzahl',
         'description' => 'Nach einem erfolgreichen Backup löscht VolumeVault die ältesten Archive, die die Aufbewahrungsanzahl eines Jobs überschreiten. Neue Archive werden pro Job gekennzeichnet, um gemeinsame Ziele zu schützen; ältere Archive ohne Kennzeichnung bleiben erhalten. Die Zugangsdaten müssen das Auflisten und Löschen erlauben. Aktualisieren Sie entfernte Agenten für diese Funktion.',

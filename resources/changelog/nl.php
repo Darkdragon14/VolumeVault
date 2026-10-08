@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Herstel na uitval van agents',
+        'description' => 'Vastgelopen externe bewerkingen mislukken na een instelbare termijn of intrekking/herinschrijving van de agent en geven ongebruikte relaycapaciteit vrij zonder werk opnieuw uit te voeren. Externe opruiming blijft beschermd. Een instelbare melding voor offline agents is standaard ingeschakeld.',
+    ],
     'count_based_backup_retention' => [
         'title' => 'Werkende retentie op back-upaantal',
         'description' => 'Na een geslaagde back-up verwijdert VolumeVault de oudste archieven boven de bewaarlimiet van de taak. Nieuwe archieven worden per taak geïdentificeerd om gedeelde bestemmingen te beschermen; oudere archieven zonder identificatie blijven behouden. De inloggegevens moeten het weergeven en verwijderen van archieven toestaan. Werk externe agents bij om deze functie te gebruiken.',
