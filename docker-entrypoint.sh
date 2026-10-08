@@ -63,6 +63,11 @@ case "${VOLUMEVAULT_AGENTS_ENABLED:-false}" in
             echo "Agent TLS certificate files are unavailable." >&2
             exit 1
         fi
+        # Rebuild from the image's web template on every boot, without accumulating
+        # locations or retaining a previously generated general HTTPS listener.
+        cat /opt/volumevault/nginx/http.conf.template /opt/volumevault/nginx/agent-http.conf > /etc/nginx/site-opts.d/http.conf.template
+        cp /opt/volumevault/nginx/agent-https.conf.template /etc/nginx/site-opts.d/https.conf.template
+        rm -f /etc/nginx/site-opts.d/http.conf /etc/nginx/site-opts.d/https.conf /etc/nginx/conf.d/default.conf
         ;;
 esac
 
@@ -73,6 +78,10 @@ export DOCKER_CMD="$*"
 find /etc/entrypoint.d/ -type f -name '*.sh' | sort -V | while IFS= read -r script; do
     sh "$script"
 done
+
+case "${VOLUMEVAULT_AGENTS_ENABLED:-false}" in
+    true|1|\(true\)) nginx -t ;;
+esac
 
 if [ "${VOLUMEVAULT_MIGRATIONS_ENABLED:-true}" = "true" ]; then
     /command/s6-setuidgid www-data php artisan migrate --force

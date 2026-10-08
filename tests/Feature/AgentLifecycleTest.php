@@ -42,7 +42,7 @@ class AgentLifecycleTest extends TestCase
         Http::preventStrayRequests();
         Process::preventStrayProcesses();
         $this->withoutVite();
-        $this->withServerVariables(['HTTPS' => 'on']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
     }
 
     public function test_guests_and_viewers_cannot_change_maintenance_or_read_update_guide(): void

@@ -5,6 +5,10 @@ return [
         'title' => 'Conservazione in giorni più sicura per ogni processo',
         'description' => 'Ci scusiamo: la conservazione per numero era pubblicizzata, ma non è supportata. I valori non vuoti di retention_count e le etichette retention-count vengono ora rifiutati; scegli i giorni esplicitamente, senza conversione automatica. I nuovi archivi iniziano sempre con volumevault-job-<UUID persistente del processo>-, anche con modelli personalizzati; BACKUP_PRUNING_PREFIX limita la pulizia per giorni ai nuovi archivi di quel processo. I vecchi archivi restano esclusi dalla pulizia automatica per evitare eliminazioni massive: rimuovili manualmente. I backup di sicurezza usano volumevault-safety- e non vengono mai eliminati automaticamente. Le vecchie esecuzioni in coda senza prefisso non effettuano pulizia. Aggiorna insieme orchestratore e agenti: gli agenti precedenti rifiutano il nuovo campo facoltativo backup_pruning_prefix, senza ripiego non sicuro.',
     ],
+    'agent_transport_isolation' => [
+        'title' => 'Trasporto TLS degli agenti isolato',
+        'description' => 'Con gli agenti abilitati, la porta 8080 serve l’interfaccia web e l’API pubblica, ma rifiuta /agent/v1 e i percorsi sottostanti. La porta TLS 8443 serve solo /agent/v1/*; tutti gli altri percorsi, inclusi i controlli di integrità e i file statici, restituiscono 404. La rimappatura delle porte dell’host resta supportata. Usare TLS diretto o passthrough TCP e limitare l’accesso alla porta degli agenti agli IP o alle reti degli host Docker come protezione aggiuntiva.',
+    ],
     'public_api_health' => [
         'title' => 'Controllo pubblico della disponibilità API',
         'description' => 'Monitora la disponibilità HTTP dell’applicazione tramite l’endpoint pubblico /api/v1/health, documentato in OpenAPI. Non verifica Docker, i worker o le destinazioni dei backup; /up rimane disponibile.',

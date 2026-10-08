@@ -5,6 +5,10 @@ return [
         'title' => 'Rétention en jours limitée à chaque tâche',
         'description' => 'Nous sommes désolés : la rétention par nombre était annoncée, mais n’est pas prise en charge. Les valeurs non vides de retention_count et des labels retention-count sont désormais refusées ; choisissez les jours explicitement, sans conversion automatique. Les nouvelles archives commencent toujours par volumevault-job-<UUID persistant de la tâche>-, même avec un modèle personnalisé ; BACKUP_PRUNING_PREFIX limite la purge en jours aux nouvelles archives de cette tâche. Les anciennes archives restent hors purge automatique pour éviter une suppression massive : nettoyez-les manuellement. Les sauvegardes de sécurité utilisent volumevault-safety- et ne sont jamais purgées automatiquement. Les anciennes exécutions en attente sans préfixe ne purgent rien. Mettez à jour ensemble l’orchestrateur et les agents : les anciens agents refusent le nouveau champ facultatif backup_pruning_prefix, sans repli dangereux.',
     ],
+    'agent_transport_isolation' => [
+        'title' => 'Transport TLS des agents isolé',
+        'description' => 'Lorsque les agents sont activés, le port 8080 sert l’interface web et l’API publique, mais refuse /agent/v1 et ses sous-chemins. Le port TLS 8443 sert uniquement /agent/v1/* ; tous les autres chemins, y compris les contrôles de disponibilité et les fichiers statiques, renvoient 404. Le remappage des ports de l’hôte reste possible. Utilisez TLS directement ou le passthrough TCP et limitez l’accès au port des agents aux adresses IP ou réseaux des hôtes Docker pour une protection supplémentaire.',
+    ],
     'public_api_health' => [
         'title' => 'Contrôle public de disponibilité de l’API',
         'description' => 'Surveillez la disponibilité HTTP de l’application avec la route publique /api/v1/health, documentée dans OpenAPI. Elle ne vérifie pas Docker, les workers ni les destinations de sauvegarde ; /up reste disponible.',

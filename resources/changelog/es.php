@@ -5,6 +5,10 @@ return [
         'title' => 'Retención en días más segura por tarea',
         'description' => 'Lo sentimos: se anunciaba la retención por cantidad, pero no es compatible. Ahora se rechazan los valores no vacíos de retention_count y las etiquetas retention-count; elija días explícitamente, sin conversión automática. Los nuevos archivos siempre empiezan por volumevault-job-<UUID persistente de la tarea>-, incluso con plantillas personalizadas; BACKUP_PRUNING_PREFIX limita la limpieza por días a los nuevos archivos de esa tarea. Los archivos antiguos quedan fuera de la limpieza automática para evitar una eliminación masiva: elimínelos manualmente. Las copias de seguridad previas a una restauración usan volumevault-safety- y nunca se eliminan automáticamente. Las ejecuciones antiguas en cola sin prefijo no realizan limpieza. Actualice el orquestador y los agentes juntos: los agentes antiguos rechazan el nuevo campo opcional backup_pruning_prefix, sin alternativa insegura.',
     ],
+    'agent_transport_isolation' => [
+        'title' => 'Transporte TLS de agentes aislado',
+        'description' => 'Con los agentes habilitados, el puerto 8080 sirve la interfaz web y la API pública, pero rechaza /agent/v1 y sus rutas descendientes. El puerto TLS 8443 solo sirve /agent/v1/*; todas las demás rutas, incluidas las comprobaciones de estado y los archivos estáticos, devuelven 404. Sigue siendo posible remapear los puertos del host. Use TLS directo o passthrough TCP y restrinja el acceso al puerto de agentes a las IP o redes de los hosts Docker como defensa adicional.',
+    ],
     'public_api_health' => [
         'title' => 'Comprobación pública de disponibilidad de la API',
         'description' => 'Supervise la disponibilidad HTTP de la aplicación mediante /api/v1/health, un endpoint público documentado en OpenAPI. No comprueba Docker, los workers ni los destinos de copia de seguridad; /up sigue disponible.',

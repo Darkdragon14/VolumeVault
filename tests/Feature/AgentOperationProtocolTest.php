@@ -32,6 +32,7 @@ use App\Services\Agents\AgentOperationSpecification;
 use App\Services\Agents\AgentRegistry;
 use App\Services\Agents\AgentTlsIdentity;
 use App\Services\Agents\DispatchAgentOperation;
+use App\Services\BackupDestinations\DestinationOperations;
 use App\Services\Docker\DockerProcess;
 use App\Services\Notifications\SendShoutrrrNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -65,7 +66,7 @@ class AgentOperationProtocolTest extends TestCase
         Log::listen(function (MessageLogged $event): void {
             $this->logs[] = [$event->message, $event->context];
         });
-        $this->withServerVariables(['HTTPS' => 'on']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
     }
 
     public function test_orchestrator_enqueue_is_idempotent_and_does_not_execute_central_docker(): void
@@ -93,7 +94,7 @@ class AgentOperationProtocolTest extends TestCase
         $body['capabilities'][] = 'destination-v1';
         $host->forceFill(['agent_capabilities' => $body['capabilities']])->save();
         $destination = $this->backup($host)->job->destination;
-        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        $operations = app(DestinationOperations::class);
         $requested = $operations->create($destination, 'stats', $host->id);
         $operation = $this->pull($body, $token);
         $this->assertSame('destination', $operation['kind']);
@@ -171,7 +172,7 @@ class AgentOperationProtocolTest extends TestCase
         $body['capabilities'][] = 'destination-v1';
         $host->forceFill(['agent_capabilities' => $body['capabilities']])->save();
         $destination = $this->backup($host)->job->destination;
-        $requested = app(\App\Services\BackupDestinations\DestinationOperations::class)->create($destination, 'list', $host->id);
+        $requested = app(DestinationOperations::class)->create($destination, 'list', $host->id);
         $operation = $this->pull($body, $token);
         $key = ' broker-access-secret/archive.tar.gz';
         $receipt = ['status' => 'success', 'logs' => 'broker-private-secret', 'data' => ['objects' => [['key' => $key, 'display_name' => $key, 'size' => 42, 'last_modified' => null]], 'next_cursor' => ' opaque-token '], 'cleanup_complete' => true, 'duration_seconds' => 1, 'finished_at' => now()->toIso8601String()];

@@ -1,0 +1,34 @@
+listen ${NGINX_HTTPS_PORT} ssl default_server;
+listen [::]:${NGINX_HTTPS_PORT} ssl default_server;
+http2 on;
+
+server_name _;
+root $NGINX_WEBROOT;
+absolute_redirect off;
+
+ssl_certificate $SSL_CERTIFICATE_FILE;
+ssl_certificate_key $SSL_PRIVATE_KEY_FILE;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+
+add_header X-Content-Type-Options nosniff always;
+
+# Always dispatch directly to Laravel: never serve files or redirect to /index.php.
+location = /agent/v1 {
+    return 404;
+}
+
+location ^~ /agent/v1/ {
+    include fastcgi_params;
+    fastcgi_param SCRIPT_NAME /index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+    fastcgi_param VOLUMEVAULT_AGENT_TRANSPORT tls;
+    fastcgi_pass 127.0.0.1:9000;
+    fastcgi_buffers $NGINX_FASTCGI_BUFFERS;
+    fastcgi_buffer_size $NGINX_FASTCGI_BUFFER_SIZE;
+    fastcgi_read_timeout $PHP_MAX_EXECUTION_TIME;
+}
+
+location / {
+    return 404;
+}

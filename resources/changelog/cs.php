@@ -5,6 +5,10 @@ return [
         'title' => 'Bezpečnější uchovávání podle dnů pro jednotlivé úlohy',
         'description' => 'Omlouváme se: uchovávání podle počtu bylo nabízeno, ale není podporováno. Neprázdné hodnoty retention_count a štítky retention-count se nyní odmítají; zvolte počet dnů výslovně, bez automatického převodu. Nové archivy vždy začínají volumevault-job-<trvalé UUID úlohy>-, i s vlastní šablonou; BACKUP_PRUNING_PREFIX omezuje mazání podle dnů na nové archivy dané úlohy. Staré archivy zůstávají mimo automatické mazání, aby nedošlo k hromadnému odstranění: vyčistěte je ručně. Bezpečnostní zálohy používají volumevault-safety- a nikdy se nemažou automaticky. Staré běhy ve frontě bez předpony nic nemažou. Aktualizujte orchestrátor i agenty společně: starší agenti odmítají nové volitelné pole backup_pruning_prefix, bez nebezpečné náhradní varianty.',
     ],
+    'agent_transport_isolation' => [
+        'title' => 'Oddělený TLS přenos agentů',
+        'description' => 'Při zapnutých agentech port 8080 poskytuje webové rozhraní a veřejné API, ale odmítá /agent/v1 a všechny podřízené cesty. TLS port 8443 obsluhuje pouze /agent/v1/*; všechny ostatní cesty včetně kontrol dostupnosti a statických souborů vracejí 404. Přemapování portů hostitele zůstává podporováno. Používejte přímé TLS nebo TCP passthrough a jako další ochranu omezte přístup k portu agentů na IP adresy nebo sítě hostitelů Dockeru.',
+    ],
     'public_api_health' => [
         'title' => 'Veřejná kontrola dostupnosti API',
         'description' => 'Sledujte dostupnost aplikace přes HTTP pomocí veřejného endpointu /api/v1/health, zdokumentovaného v OpenAPI. Nekontroluje Docker, workery ani cíle záloh; /up zůstává dostupný.',
