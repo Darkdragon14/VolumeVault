@@ -5,6 +5,14 @@ return [
         'title' => 'Obnova po výpadku agenta',
         'description' => 'Zablokované vzdálené operace selžou po nastavitelné lhůtě nebo odvolání/opětovné registraci agenta a uvolní nepoužívané přenosy bez opakování práce. Vzdálené čištění zůstává chráněné. Nastavitelné upozornění na agenta offline je ve výchozím stavu zapnuté.',
     ],
+    'count_based_backup_retention' => [
+        'title' => 'Funkční uchovávání podle počtu záloh',
+        'description' => 'Po úspěšné záloze VolumeVault odstraní nejstarší archivy překračující limit úlohy. Nové archivy jsou označeny podle úlohy, aby byly sdílené cíle bezpečné; starší neoznačené archivy zůstávají zachovány. Přihlašovací údaje musí umožňovat výpis a mazání archivů. Pro tuto funkci aktualizujte vzdálené agenty.',
+    ],
+    'agent_transport_isolation' => [
+        'title' => 'Oddělený TLS přenos agentů',
+        'description' => 'Při zapnutých agentech port 8080 poskytuje webové rozhraní a veřejné API, ale odmítá /agent/v1 a všechny podřízené cesty. TLS port 8443 obsluhuje pouze /agent/v1/*; všechny ostatní cesty včetně kontrol dostupnosti a statických souborů vracejí 404. Přemapování portů hostitele zůstává podporováno. Používejte přímé TLS nebo TCP passthrough a jako další ochranu omezte přístup k portu agentů na IP adresy nebo sítě hostitelů Dockeru.',
+    ],
     'public_api_health' => [
         'title' => 'Veřejná kontrola dostupnosti API',
         'description' => 'Sledujte dostupnost aplikace přes HTTP pomocí veřejného endpointu /api/v1/health, zdokumentovaného v OpenAPI. Nekontroluje Docker, workery ani cíle záloh; /up zůstává dostupný.',

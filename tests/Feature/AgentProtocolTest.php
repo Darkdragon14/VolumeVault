@@ -10,6 +10,7 @@ use App\Services\Agents\AgentRegistry;
 use App\Services\Agents\AgentTlsIdentity;
 use App\Services\Agents\ReceiveAgentInventory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -36,7 +37,7 @@ class AgentProtocolTest extends TestCase
         Log::listen(function (MessageLogged $event): void {
             $this->logs[] = [$event->message, $event->context];
         });
-        $this->withServerVariables(['HTTPS' => 'on']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
     }
 
     public function test_enrollment_is_idempotent_after_response_loss_and_expiry_and_stores_only_hashes(): void
@@ -73,13 +74,59 @@ class AgentProtocolTest extends TestCase
     public function test_plain_http_and_spoofed_forwarded_proto_are_rejected_before_consumption(): void
     {
         [$host, $token, $body] = $this->pending();
-        $this->withServerVariables(['HTTPS' => 'off', 'REMOTE_ADDR' => '192.0.2.123']);
+        $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => 8080, 'REMOTE_ADDR' => '192.0.2.123']);
         foreach ([[], ['X-Forwarded-Proto' => 'https']] as $headers) {
-            $this->postJson('http://orchestrator.test/agent/v1/enroll', $body, ['Authorization' => 'Bearer '.$token, ...$headers])->assertStatus(426);
+            $this->postJson('http://orchestrator.test:8080/agent/v1/enroll', $body, ['Authorization' => 'Bearer '.$token, ...$headers])->assertNotFound();
             $this->assertNull($host->fresh()->agent_registered_at);
         }
-        $this->withServerVariables(['HTTPS' => 'on']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
         $this->sendAgent('enroll', $token, $body)->assertOk();
+    }
+
+    public function test_trusted_proxy_headers_cannot_expose_agent_transport_or_consume_enrollment(): void
+    {
+        [$host, $token, $body] = $this->pending();
+        TrustProxies::at(['192.0.2.123']);
+
+        foreach ([[], ['VOLUMEVAULT_AGENT_TRANSPORT' => 'web']] as $marker) {
+            $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => 8080, 'REMOTE_ADDR' => '192.0.2.123', ...$marker]);
+            $this->postJson('http://orchestrator.test:8080/agent/v1/enroll', $body, [
+                'Authorization' => 'Bearer '.$token,
+                'X-Forwarded-Proto' => 'https',
+                'X-Forwarded-Port' => '8443',
+                'VOLUMEVAULT-AGENT-TRANSPORT' => 'tls',
+            ])->assertNotFound();
+            $this->assertNull($host->fresh()->agent_registered_at);
+            $this->assertNull($host->fresh()->agent_token_hash);
+        }
+
+        $this->withServerVariables(['HTTPS' => 'on', 'SERVER_PORT' => 8443, 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
+        $this->sendAgent('enroll', $token, $body)->assertOk();
+        $this->assertNotNull($host->fresh()->agent_registered_at);
+    }
+
+    public function test_https_without_private_tls_marker_does_not_consume_enrollment(): void
+    {
+        [$host, $token, $body] = $this->pending();
+
+        foreach ([[], ['VOLUMEVAULT_AGENT_TRANSPORT' => 'web']] as $marker) {
+            $this->withServerVariables(['HTTPS' => 'on', ...$marker]);
+            $this->sendAgent('enroll', $token, $body)->assertNotFound();
+            $this->assertNull($host->fresh()->agent_registered_at);
+            $this->assertNull($host->fresh()->agent_token_hash);
+        }
+
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
+        $this->sendAgent('enroll', $token, $body)->assertOk();
+    }
+
+    public function test_private_tls_marker_still_requires_a_secure_request(): void
+    {
+        [$host, $token, $body] = $this->pending();
+        $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => 8080, 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
+        $this->postJson('http://orchestrator.test:8080/agent/v1/enroll', $body, ['Authorization' => 'Bearer '.$token])->assertStatus(426);
+        $this->assertNull($host->fresh()->agent_registered_at);
+        $this->assertNull($host->fresh()->agent_token_hash);
     }
 
     public function test_disabled_transport_rejects_every_endpoint_without_consuming_enrollment(): void
@@ -316,7 +363,7 @@ class AgentProtocolTest extends TestCase
     public function test_ten_heartbeats_do_not_exhaust_enrollment_from_the_same_ip(): void
     {
         $this->freezeTime();
-        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.123']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls', 'REMOTE_ADDR' => '192.0.2.123']);
         [, , $body, $token] = $this->registered();
 
         for ($request = 0; $request < 10; $request++) {
@@ -330,7 +377,7 @@ class AgentProtocolTest extends TestCase
     public function test_agent_traffic_quota_is_shared_across_endpoints_but_isolated_by_authenticated_host(): void
     {
         $this->freezeTime();
-        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.123']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls', 'REMOTE_ADDR' => '192.0.2.123']);
         [, , $body, $token] = $this->registered();
         [$other, , $otherBody, $otherToken] = $this->registered();
 
@@ -351,7 +398,7 @@ class AgentProtocolTest extends TestCase
     public function test_ten_enrollments_exhaust_only_the_enrollment_quota_for_that_ip(): void
     {
         $this->freezeTime();
-        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.123']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls', 'REMOTE_ADDR' => '192.0.2.123']);
         [, $enrollment, $body, $token] = $this->registered();
 
         for ($request = 1; $request < 10; $request++) {
@@ -361,14 +408,14 @@ class AgentProtocolTest extends TestCase
         $this->sendAgent('enroll', $enrollment, $body)->assertTooManyRequests();
         $this->sendAgent('heartbeat', $token, $this->heartbeat($body))->assertOk();
 
-        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.124']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls', 'REMOTE_ADDR' => '192.0.2.124']);
         $this->sendAgent('enroll', $enrollment, $body)->assertOk();
     }
 
     public function test_unauthorized_traffic_does_not_consume_authenticated_host_quota(): void
     {
         $this->freezeTime();
-        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.123']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls', 'REMOTE_ADDR' => '192.0.2.123']);
         [$host, , $body, $token] = $this->registered();
 
         for ($request = 0; $request < 180; $request++) {

@@ -184,6 +184,17 @@ class ChangelogTest extends TestCase
         $this->assertSame([], $errors);
     }
 
+    public function test_count_retention_has_an_unreleased_note_in_every_locale(): void
+    {
+        $this->assertContains('count_based_backup_retention', array_column(config('changelog.unreleased'), 'key'));
+
+        foreach (User::SUPPORTED_LOCALES as $locale) {
+            $translations = require resource_path('changelog/'.$locale.'.php');
+            $this->assertNotEmpty($translations['count_based_backup_retention']['title']);
+            $this->assertNotEmpty($translations['count_based_backup_retention']['description']);
+        }
+    }
+
     public function test_changelog_translation_validation_uses_supplied_data(): void
     {
         $errors = app(Changelog::class)->validateTranslationsForLocales([User::DEFAULT_LOCALE], [

@@ -3,6 +3,14 @@
 return [
     'unreleased' => [
         ['type' => 'change', 'key' => 'agent_outage_recovery'],
+        [
+            'type' => 'change',
+            'key' => 'count_based_backup_retention',
+        ],
+        [
+            'type' => 'change',
+            'key' => 'agent_transport_isolation',
+        ],
     ],
     'releases' => [
         'v2.0.2' => [

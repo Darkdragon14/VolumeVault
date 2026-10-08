@@ -87,6 +87,8 @@ ENV APP_VERSION=${APP_VERSION}
 COPY --from=vendor --chown=www-data:www-data /app /app
 COPY --from=assets --chown=www-data:www-data /app/public/build /app/public/build
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint
+COPY docker/nginx /opt/volumevault/nginx
+RUN cp /etc/nginx/site-opts.d/http.conf.template /opt/volumevault/nginx/http.conf.template
 COPY --chmod=755 docker/s6-rc.d/volumevault-queue/run /etc/s6-overlay/s6-rc.d/volumevault-queue/run
 COPY --chmod=755 docker/s6-rc.d/volumevault-queue-metadata/run /etc/s6-overlay/s6-rc.d/volumevault-queue-metadata/run
 COPY --chmod=755 docker/s6-rc.d/volumevault-scheduler/run /etc/s6-overlay/s6-rc.d/volumevault-scheduler/run

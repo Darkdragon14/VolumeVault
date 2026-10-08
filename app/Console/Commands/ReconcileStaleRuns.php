@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Actions\Docker\CleanupBackupRetentionHelper;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Backup\RunBackupGroup;
 use App\Actions\Docker\CleanupBackupRunSecretFiles;
@@ -143,8 +144,11 @@ class ReconcileStaleRuns extends Command
         });
 
         $containerCleanupCount = 0;
-        $this->backupRunsPendingContainerCleanup()->each(function (BackupRun $run) use ($runBackup, &$containerCleanupCount): void {
-            if ($this->cleanupBackupContainer($run)) {
+        $this->backupRunsPendingContainerCleanup()->each(function (BackupRun $run) use ($runBackup, $cutoff, &$containerCleanupCount): void {
+            $cleaned = CleanupBackupRetentionHelper::owns($run)
+                ? $this->recoverRetentionHelper($run, $cutoff)
+                : $this->cleanupBackupContainer($run);
+            if ($cleaned) {
                 $containerCleanupCount++;
                 $runBackup->applyPendingLabelReconciliationIfReady($run);
             }
@@ -447,6 +451,25 @@ class ReconcileStaleRuns extends Command
         $progressedAt = $run->last_heartbeat_at ?? $run->started_at ?? $run->created_at;
 
         return $progressedAt !== null && $progressedAt->lessThan($cutoff);
+    }
+
+    private function recoverRetentionHelper(BackupRun $run, CarbonInterface $cutoff): bool
+    {
+        $lock = Cache::lock(RunHeartbeatLock::backup($run->id), 180);
+        if (! $lock->get()) {
+            return false;
+        }
+        try {
+            $run->refresh();
+            $progressedAt = $run->last_heartbeat_at ?? $run->finished_at ?? $run->created_at;
+            if (! $run->docker_container_cleanup_pending || $progressedAt === null || ! $progressedAt->lessThan($cutoff)) {
+                return false;
+            }
+
+            return app(CleanupBackupRetentionHelper::class)->handle($run);
+        } finally {
+            $lock->release();
+        }
     }
 
     private function cleanupBackupContainer(BackupRun $run): bool

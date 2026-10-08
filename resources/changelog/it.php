@@ -5,6 +5,14 @@ return [
         'title' => 'Recupero dopo l’indisponibilità di un agente',
         'description' => 'Le operazioni remote bloccate falliscono dopo una scadenza configurabile o la revoca/nuova registrazione dell’agente, liberando i relay inutilizzati senza ripetere il lavoro. La pulizia remota resta protetta. Un avviso configurabile per gli agenti offline è attivo per impostazione predefinita.',
     ],
+    'count_based_backup_retention' => [
+        'title' => 'Conservazione per numero di backup funzionante',
+        'description' => 'Dopo un backup riuscito, VolumeVault elimina gli archivi più vecchi che superano il limite del processo. I nuovi archivi sono identificati per processo per proteggere le destinazioni condivise; quelli precedenti senza identificazione vengono conservati. Le credenziali devono consentire di elencare ed eliminare gli archivi. Aggiorna gli agenti remoti per usare questa funzione.',
+    ],
+    'agent_transport_isolation' => [
+        'title' => 'Trasporto TLS degli agenti isolato',
+        'description' => 'Con gli agenti abilitati, la porta 8080 serve l’interfaccia web e l’API pubblica, ma rifiuta /agent/v1 e i percorsi sottostanti. La porta TLS 8443 serve solo /agent/v1/*; tutti gli altri percorsi, inclusi i controlli di integrità e i file statici, restituiscono 404. La rimappatura delle porte dell’host resta supportata. Usare TLS diretto o passthrough TCP e limitare l’accesso alla porta degli agenti agli IP o alle reti degli host Docker come protezione aggiuntiva.',
+    ],
     'public_api_health' => [
         'title' => 'Controllo pubblico della disponibilità API',
         'description' => 'Monitora la disponibilità HTTP dell’applicazione tramite l’endpoint pubblico /api/v1/health, documentato in OpenAPI. Non verifica Docker, i worker o le destinazioni dei backup; /up rimane disponibile.',

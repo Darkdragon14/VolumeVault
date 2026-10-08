@@ -128,14 +128,6 @@ class RunBackupContainer
             'EXEC_FORWARD_OUTPUT' => 'true',
         ];
 
-        if ($job->retention_days) {
-            $environment['BACKUP_RETENTION_DAYS'] = (string) $job->retention_days;
-        }
-
-        if ($job->retention_count) {
-            $environment['BACKUP_RETENTION_COUNT'] = (string) $job->retention_count;
-        }
-
         if ($job->backup_filter_mode === BackupJob::FILTER_MODE_INCLUDE) {
             $paths = preg_split('/\s*,\s*/', (string) $job->backup_include_paths, -1, PREG_SPLIT_NO_EMPTY) ?: [];
             // offen only supports exclusion, so translate the "keep only these paths"

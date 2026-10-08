@@ -159,6 +159,44 @@ class SecureLocalArchiveReader
         }
     }
 
+    /**
+     * @param  list<string>  $keys
+     * @param  array<string|int, int>  $expectedRootStat
+     */
+    public function delete(string $archiveRoot, array $keys, array $expectedRootStat, ?callable $progress = null): void
+    {
+        if (! is_executable($this->binary)) {
+            throw new RuntimeException('The secure local archive reader is not installed.');
+        }
+        $process = $this->createProcess([$this->binary, 'delete', $archiveRoot, (string) $expectedRootStat['dev'], (string) $expectedRootStat['ino'], ...$keys]);
+        $process->setTimeout(120);
+        if ($progress === null) {
+            $process->run();
+        } else {
+            $lastProgressAt = microtime(true);
+            $progress();
+            try {
+                $process->start();
+                while ($process->isRunning()) {
+                    $process->checkTimeout();
+                    if (microtime(true) - $lastProgressAt >= $this->progressIntervalSeconds()) {
+                        $lastProgressAt = microtime(true);
+                        $progress();
+                    }
+                    usleep(200000);
+                }
+                $process->wait();
+            } finally {
+                if ($process->isRunning()) {
+                    $process->stop(0);
+                }
+            }
+        }
+        if (! $process->isSuccessful()) {
+            throw new RuntimeException('Unable to delete selected local backup archives safely.');
+        }
+    }
+
     /** @param list<string> $command */
     protected function createProcess(array $command): Process
     {

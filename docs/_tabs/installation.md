@@ -92,7 +92,14 @@ VOLUMEVAULT_AGENT_URL=https://192.168.1.10:8443 \
   docker compose -f docker-compose.yml -f docker-compose.agents.yml up -d
 ```
 
-For a custom deployment, set `VOLUMEVAULT_AGENTS_ENABLED=true`, set `VOLUMEVAULT_AGENT_URL` to that HTTPS origin, and publish container port `8443`. If a different host port is published, include it in the origin. The ordinary web interface remains available on port `8080`. Use the built-in TLS endpoint directly or through TCP passthrough: a reverse proxy terminating TLS with a different certificate authority will not match the trust configuration generated for the agent.
+For a custom deployment, set `VOLUMEVAULT_AGENTS_ENABLED=true`, set `VOLUMEVAULT_AGENT_URL` to that HTTPS origin, and publish container port `8443`. Public host port remapping is supported: for example, publish `9443:8443` and use `https://192.168.1.10:9443` as the origin. Use the built-in TLS endpoint directly or through TCP passthrough: a reverse proxy terminating TLS with a different certificate authority will not match the trust configuration generated for the agent.
+
+With agents enabled, the two container listeners are isolated:
+
+- **Port `8080`:** serves the normal web interface and public API. `/agent/v1` and all its descendants return `404`; agent traffic must use the TLS listener.
+- **Port `8443` (TLS):** serves only `/agent/v1/*` agent transport routes. All other paths return `404`, including the web interface, public API, `/up`, `/healthcheck`, and static assets. Keep web and HTTP health checks on the `8080` listener, directly or through your web reverse proxy.
+
+As defense in depth, restrict access to the published agent TLS port to the IP addresses or networks of your Docker hosts using firewall rules, a private network, or a VPN. These network restrictions complement TLS and agent authentication; they do not replace them.
 
 1. Open **Docker hosts** as an administrator and add a named host.
 2. Copy the generated `docker run` command and run it on that Docker machine within 15 minutes.
@@ -230,6 +237,8 @@ Offen also connects to the endpoint from inside the backup container. It always 
 ## Reverse Proxy And HTTPS Termination
 
 When VolumeVault runs behind a reverse proxy such as Pangolin, Caddy, Traefik, or nginx, TLS is usually terminated by the proxy and the container receives plain HTTP traffic on port `8080`. In that setup, configure Laravel to trust your proxy so generated URLs, redirects, and Vite assets use the original HTTPS scheme.
+
+This HTTPS termination setup applies only to the web interface and public API on port `8080`. Agent transport must reach the separate TLS listener on container port `8443` directly or through TCP passthrough; the web listener rejects `/agent/v1` and its descendants.
 
 Use the reverse proxy container IP or Docker network CIDR for `TRUSTED_PROXIES`:
 

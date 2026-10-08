@@ -31,7 +31,7 @@ class RemoteDockerLabelBackupTest extends TestCase
         parent::setUp();
         config(['volumevault.mode' => 'orchestrator', 'volumevault.agents.enabled' => true]);
         Process::preventStrayProcesses();
-        $this->withServerVariables(['HTTPS' => 'on']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
     }
 
     public function test_complete_inventory_reconciles_identical_names_on_two_hosts_without_touching_local_settings(): void

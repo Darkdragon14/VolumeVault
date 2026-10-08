@@ -38,6 +38,32 @@ class AgentDockerIntegrationTest extends TestCase
         return [['hybrid'], ['orchestrator']];
     }
 
+    public function test_disabled_agents_keep_the_web_listener_without_a_tls_listener(): void
+    {
+        $image = getenv('VOLUMEVAULT_AGENT_TEST_IMAGE');
+        if (! is_string($image) || $image === '') {
+            $this->markTestSkipped('Set VOLUMEVAULT_AGENT_TEST_IMAGE to a built image and provide a Docker daemon.');
+        }
+        $server = 'volumevault-web-test-'.bin2hex(random_bytes(6));
+        $this->containers[] = $server;
+        $this->runDocker(['run', '-d', '--name', $server, '-e', 'APP_KEY=base64:'.base64_encode(random_bytes(32)), '-e', 'VOLUMEVAULT_AGENTS_ENABLED=false', $image]);
+        $ready = false;
+        for ($attempt = 0; $attempt < 60; $attempt++) {
+            $process = new Process(['docker', 'exec', $server, 'curl', '--fail', '--silent', '--max-time', '2', 'http://localhost:8080/up']);
+            $process->run();
+            if ($process->isSuccessful()) {
+                $ready = true;
+                break;
+            }
+            usleep(500000);
+        }
+        $this->assertTrue($ready, 'The web listener did not become ready.');
+        $this->assertSame('200', $this->httpStatus($server, 'http://localhost:8080/onboarding'));
+        $this->assertSame('200', $this->httpStatus($server, 'http://localhost:8080/api/v1/health'));
+        $this->assertSame('404', $this->httpStatus($server, 'http://localhost:8080/agent/v1/heartbeat', 'POST'));
+        $this->assertDoesNotMatchRegularExpression('/listen\s+(?:\[::\]:)?8443\b/', $this->runDocker(['exec', $server, 'nginx', '-T']));
+    }
+
     #[DataProvider('deploymentModes')]
     public function test_built_image_enrolls_over_real_nginx_tls_and_recovers_identity_after_restarts(string $mode): void
     {
@@ -64,9 +90,11 @@ class AgentDockerIntegrationTest extends TestCase
             '-e', 'VOLUMEVAULT_MODE='.$mode,
             '-e', 'VOLUMEVAULT_AGENTS_ENABLED=true', '-e', 'VOLUMEVAULT_AGENT_URL=https://orchestrator:8443',
             '-e', 'VOLUMEVAULT_AGENT_IMAGE='.$agentImage,
+            '-e', 'TRUSTED_PROXIES=*',
             $image,
         ]);
         $this->waitForTls($server);
+        $this->assertListenerIsolation($server);
         $enrollment = $this->control($server, 'issue');
         $this->assertNotEmpty($enrollment['token']);
         $this->assertNotEmpty($enrollment['ca']);
@@ -107,6 +135,10 @@ PHP);
 
         $this->runDocker(['restart', $server]);
         $this->waitForTls($server);
+        $this->assertListenerIsolation($server);
+        $this->runDocker(['exec', $server, 'php', 'artisan', 'volumevault:agent-tls:prepare']);
+        $this->runDocker(['exec', $server, 'nginx', '-s', 'reload']);
+        $this->assertListenerIsolation($server);
         if ($agentImage !== $image) {
             $this->runDocker(['rm', $agent]);
             $this->createAgent($agent, $agentVolume, $agentImage, '', $enrollment['ca'], dedicated: true);
@@ -139,14 +171,51 @@ PHP);
     private function waitForTls(string $server): void
     {
         for ($attempt = 0; $attempt < 60; $attempt++) {
-            $process = new Process(['docker', 'exec', $server, 'curl', '--fail', '--silent', '--max-time', '2', '--cacert', '/app/storage/app/private/agent-tls/ca.crt', 'https://orchestrator:8443/up']);
+            $process = new Process(['docker', 'exec', $server, 'curl', '--silent', '--max-time', '2', '--output', '/dev/null', '--write-out', '%{http_code}', '--cacert', '/app/storage/app/private/agent-tls/ca.crt', '-H', 'Content-Type: application/json', '--data', '{}', 'https://orchestrator:8443/agent/v1/heartbeat']);
             $process->run();
-            if ($process->isSuccessful()) {
+            if ($process->isSuccessful() && $process->getOutput() === '401') {
                 return;
             }
             usleep(500000);
         }
         $this->fail('The built orchestrator did not become reachable with validated nginx TLS.');
+    }
+
+    private function assertListenerIsolation(string $server): void
+    {
+        $this->runDocker(['exec', $server, 'nginx', '-t']);
+        foreach (['/', '/login', '/api/v1/health', '/up', '/healthcheck', '/index.php', '/robots.txt', '/favicon.ico', '/build/manifest.json', '/agent/v1', '/agent/v10/heartbeat', '/agent/v1/../../login', '/agent/v1/%2e%2e/%2e%2e/login', '/index.php/agent/v1/heartbeat'] as $path) {
+            $this->assertSame('404', $this->httpStatus($server, 'https://orchestrator:8443'.$path), 'TLS exposed '.$path);
+        }
+        foreach (['/agent/v1', '/agent/v1/enroll', '/agent/v1/heartbeat', '/agent/v1/operations/pull', '/agent/v1/example.php', '/agent%2fv1/heartbeat', '//agent/v1/heartbeat', '/index.php/agent/v1/heartbeat'] as $path) {
+            foreach (['GET', 'POST', 'OPTIONS'] as $method) {
+                $this->assertSame('404', $this->httpStatus($server, 'http://orchestrator:8080'.$path, $method, [
+                    'X-Forwarded-Proto: https', 'X-Forwarded-Port: 8443', 'VOLUMEVAULT_AGENT_TRANSPORT: tls', 'Host: orchestrator:8443',
+                ]), 'Web exposed '.$method.' '.$path);
+            }
+        }
+        foreach (['/up', '/healthcheck', '/api/v1/health', '/build/manifest.json'] as $path) {
+            $this->assertSame('200', $this->httpStatus($server, 'http://orchestrator:8080'.$path), 'Web failed '.$path);
+        }
+        $this->assertSame('200', $this->httpStatus($server, 'http://orchestrator:8080/onboarding'));
+        $this->assertSame('404', $this->httpStatus($server, 'https://orchestrator:8443/login', headers: ['Host: unexpected.example']));
+    }
+
+    /** @param list<string> $headers */
+    private function httpStatus(string $server, string $url, string $method = 'GET', array $headers = []): string
+    {
+        $arguments = ['exec', $server, 'curl', '--silent', '--show-error', '--max-time', '5', '--path-as-is', '--output', '/dev/null', '--write-out', '%{http_code}', '-X', $method];
+        if (str_starts_with($url, 'https://')) {
+            array_push($arguments, '--cacert', '/app/storage/app/private/agent-tls/ca.crt');
+        }
+        foreach ($headers as $header) {
+            array_push($arguments, '-H', $header);
+        }
+        if ($method === 'POST') {
+            array_push($arguments, '-H', 'Content-Type: application/json', '--data', '{}');
+        }
+
+        return $this->runDocker([...$arguments, $url]);
     }
 
     /** @return array<string, mixed> */

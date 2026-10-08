@@ -5,6 +5,14 @@ return [
         'title' => 'Récupération des tâches interrompues par un agent indisponible',
         'description' => 'Les opérations distantes bloquées échouent après un délai configurable ou la révocation/réinscription de l’agent, libérant les relais inutilisés sans rejouer les tâches. Le nettoyage distant reste protégé. Une alerte configurable d’agent hors ligne est activée par défaut.',
     ],
+    'count_based_backup_retention' => [
+        'title' => 'Rétention des sauvegardes par nombre fonctionnelle',
+        'description' => 'Après une sauvegarde réussie, VolumeVault supprime les archives les plus anciennes dépassant la limite du job. Les nouvelles archives sont identifiées par job pour protéger les destinations partagées ; les anciennes archives sans cette identification sont conservées. Les identifiants de destination doivent autoriser la lecture de la liste et la suppression. Mettez les agents distants à jour pour utiliser cette fonctionnalité.',
+    ],
+    'agent_transport_isolation' => [
+        'title' => 'Transport TLS des agents isolé',
+        'description' => 'Lorsque les agents sont activés, le port 8080 sert l’interface web et l’API publique, mais refuse /agent/v1 et ses sous-chemins. Le port TLS 8443 sert uniquement /agent/v1/* ; tous les autres chemins, y compris les contrôles de disponibilité et les fichiers statiques, renvoient 404. Le remappage des ports de l’hôte reste possible. Utilisez TLS directement ou le passthrough TCP et limitez l’accès au port des agents aux adresses IP ou réseaux des hôtes Docker pour une protection supplémentaire.',
+    ],
     'public_api_health' => [
         'title' => 'Contrôle public de disponibilité de l’API',
         'description' => 'Surveillez la disponibilité HTTP de l’application avec la route publique /api/v1/health, documentée dans OpenAPI. Elle ne vérifie pas Docker, les workers ni les destinations de sauvegarde ; /up reste disponible.',

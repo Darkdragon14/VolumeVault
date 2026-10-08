@@ -39,6 +39,11 @@ static int open_verified_root(const char *path, uintmax_t expected_device, uintm
     char *segment = copy == NULL ? NULL : strtok_r(copy, "/", &state);
 
     while (directory_fd >= 0 && segment != NULL) {
+        if (strcmp(segment, ".") == 0 || strcmp(segment, "..") == 0) {
+            close(directory_fd);
+            directory_fd = -1;
+            break;
+        }
         int child_fd = openat(directory_fd, segment, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
         close(directory_fd);
         directory_fd = child_fd;
@@ -252,8 +257,182 @@ static int write_archive(const char *root, const char *archive_key, const char *
     return result;
 }
 
+struct deletion_parent {
+    int fd;
+    int parent_fd;
+    char *name;
+    struct stat identity;
+    struct deletion_parent *parent;
+    struct deletion_parent *next;
+};
+
+static int verify_deletion_parent(struct deletion_parent *parent)
+{
+    for (; parent != NULL; parent = parent->parent) {
+        struct stat current;
+        if (fstatat(parent->parent_fd, parent->name, &current, AT_SYMLINK_NOFOLLOW) != 0
+            || !S_ISDIR(current.st_mode)
+            || current.st_dev != parent->identity.st_dev || current.st_ino != parent->identity.st_ino) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+struct deletion_target {
+    int parent_fd;
+    struct deletion_parent *parent;
+    char *key;
+    char *name;
+    struct stat identity;
+};
+
+static int delete_archives(const char *root, uintmax_t device, uintmax_t inode, int count, char **keys)
+{
+    int root_fd = open_verified_root(root, device, inode);
+    struct deletion_target *targets = calloc((size_t) count, sizeof(*targets));
+    if (root_fd < 0 || targets == NULL) {
+        if (root_fd >= 0) {
+            close(root_fd);
+        }
+        free(targets);
+        return fail("Unable to open the local archive deletion root.");
+    }
+    for (int index = 0; index < count; index++) {
+        targets[index].parent_fd = -1;
+    }
+    int result = 0;
+    struct deletion_parent *parents = NULL;
+    for (int index = 0; index < count; index++) {
+        const char *requested = keys[index];
+        size_t length = strlen(requested);
+        if (length == 0 || length > 1024 || requested[0] == '/' || requested[length - 1] == '/'
+            || strstr(requested, "//") != NULL || strchr(requested, '\\') != NULL) {
+            result = 1;
+            break;
+        }
+        for (size_t offset = 0; offset < length; offset++) {
+            unsigned char character = (unsigned char) requested[offset];
+            if (character < 32 || character == 127) {
+                result = 1;
+                break;
+            }
+        }
+        if (result != 0) {
+            break;
+        }
+        targets[index].key = strdup(requested);
+        targets[index].parent_fd = root_fd;
+        if (targets[index].key == NULL) {
+            result = 1;
+            break;
+        }
+        char *state = NULL;
+        char *segment = strtok_r(targets[index].key, "/", &state);
+        while (segment != NULL) {
+            if (strcmp(segment, ".") == 0 || strcmp(segment, "..") == 0 || strlen(segment) > 255) {
+                result = 1;
+                break;
+            }
+            char *next = strtok_r(NULL, "/", &state);
+            if (next == NULL) {
+                targets[index].name = segment;
+                if (fstatat(targets[index].parent_fd, segment, &targets[index].identity, AT_SYMLINK_NOFOLLOW) != 0
+                    || !S_ISREG(targets[index].identity.st_mode) || targets[index].identity.st_nlink != 1) {
+                    result = 1;
+                }
+                break;
+            }
+            struct deletion_parent *parent = parents;
+            while (parent != NULL && (parent->parent_fd != targets[index].parent_fd || strcmp(parent->name, segment) != 0)) {
+                parent = parent->next;
+            }
+            if (parent == NULL) {
+                int child = openat(targets[index].parent_fd, segment, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+                parent = calloc(1, sizeof(*parent));
+                if (child < 0 || parent == NULL) {
+                    if (child >= 0) {
+                        close(child);
+                    }
+                    free(parent);
+                    result = 1;
+                    break;
+                }
+                parent->fd = child;
+                parent->parent_fd = targets[index].parent_fd;
+                parent->name = strdup(segment);
+                parent->parent = targets[index].parent;
+                parent->next = parents;
+                parents = parent;
+                if (parent->name == NULL || fstat(child, &parent->identity) != 0) {
+                    result = 1;
+                    break;
+                }
+            }
+            if (!verify_deletion_parent(parent)) {
+                result = 1;
+                break;
+            }
+            targets[index].parent = parent;
+            targets[index].parent_fd = parent->fd;
+            segment = next;
+        }
+        if (result != 0) {
+            break;
+        }
+    }
+    if (result == 0) {
+        int current_root = open_verified_root(root, device, inode);
+        if (current_root < 0) {
+            result = 1;
+        } else {
+            close(current_root);
+        }
+        for (struct deletion_parent *parent = parents; result == 0 && parent != NULL; parent = parent->next) {
+            if (!verify_deletion_parent(parent)) {
+                result = 1;
+            }
+        }
+    }
+    if (result == 0) {
+        for (int index = 0; index < count; index++) {
+            struct stat current;
+            struct deletion_target *target = &targets[index];
+            if (!verify_deletion_parent(target->parent)
+                || fstatat(target->parent_fd, target->name, &current, AT_SYMLINK_NOFOLLOW) != 0
+                || !S_ISREG(current.st_mode) || current.st_nlink != 1
+                || current.st_dev != target->identity.st_dev || current.st_ino != target->identity.st_ino
+                || unlinkat(target->parent_fd, target->name, 0) != 0) {
+                result = 1;
+                break;
+            }
+        }
+    }
+    for (int index = 0; index < count; index++) {
+        free(targets[index].key);
+    }
+    while (parents != NULL) {
+        struct deletion_parent *next = parents->next;
+        close(parents->fd);
+        free(parents->name);
+        free(parents);
+        parents = next;
+    }
+    close(root_fd);
+    free(targets);
+    return result == 0 ? 0 : fail("Unable to delete selected local backup archives safely.");
+}
+
 int main(int argc, char **argv)
 {
+    if (argc >= 6 && strcmp(argv[1], "delete") == 0) {
+        uintmax_t device;
+        uintmax_t inode;
+        if (!parse_identifier(argv[3], &device) || !parse_identifier(argv[4], &inode)) {
+            return fail("Invalid secure local archive root identity.");
+        }
+        return delete_archives(argv[2], device, inode, argc - 5, &argv[5]);
+    }
     int write_mode = argc == 7 && strcmp(argv[1], "write") == 0;
 
     if (argc != 6 && argc != 7) {
