@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_transport_isolation' => [
+        'title' => 'Isolierter TLS-Transport für Agenten',
+        'description' => 'Bei aktivierten Agenten stellt Port 8080 die Weboberfläche und öffentliche API bereit, weist aber /agent/v1 und alle untergeordneten Pfade ab. Der TLS-Listener auf Port 8443 bedient nur /agent/v1/*; alle anderen Pfade, einschließlich Zustandsprüfungen und statischer Dateien, liefern 404. Die Zuordnung anderer Host-Ports bleibt möglich. Verwenden Sie direktes TLS oder TCP-Passthrough und beschränken Sie den Zugriff auf den Agenten-Port zur zusätzlichen Absicherung auf IP-Adressen oder Netzwerke Ihrer Docker-Hosts.',
+    ],
     'public_api_health' => [
         'title' => 'Öffentliche API-Verfügbarkeitsprüfung',
         'description' => 'Überwachen Sie die HTTP-Verfügbarkeit der Anwendung über den öffentlichen, in OpenAPI dokumentierten Endpunkt /api/v1/health. Docker, Worker und Backup-Ziele werden nicht geprüft; /up bleibt verfügbar.',

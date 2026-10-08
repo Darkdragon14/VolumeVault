@@ -169,8 +169,8 @@ PHP, ['runs' => [...$stack['runs'], ...$group['children']], 'markers' => $marker
                 '-e', 'VOLUMEVAULT_SSRF_ALLOWED_IPS='.$subnet,
             ]);
             $this->waitFor(fn (): bool => $this->succeeds([
-                'exec', $server, 'curl', '--fail', '--silent', '--max-time', '2',
-                '--cacert', '/app/storage/app/private/agent-tls/ca.crt', 'https://orchestrator:8443/up',
+                'exec', $server, 'sh', '-c',
+                '[ "$(curl --silent --show-error --max-time 2 --output /dev/null --write-out "%{http_code}" --cacert /app/storage/app/private/agent-tls/ca.crt -H "Content-Type: application/json" --data "{}" https://orchestrator:8443/agent/v1/heartbeat)" = 401 ]',
             ]), 'orchestrator validated TLS readiness', 60);
             $this->waitFor(fn (): bool => $this->succeeds(['exec', $server, 'curl', '--fail', '--silent', '--max-time', '2', $endpoint.'/minio/health/ready']), 'MinIO readiness', 30);
             $guard = $this->control($server, <<<'PHP'

@@ -21,6 +21,7 @@ use App\Models\ArchiveRelay;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\DockerHost;
+use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Services\Agents\AgentCompatibility;
 use App\Services\Agents\AgentLifecycle;
@@ -71,7 +72,7 @@ class ArchiveRelayTest extends TestCase
     {
         [$run, $source, $target] = $this->restore();
         $run->job->update(['notifications_enabled' => true]);
-        $channel = \App\Models\NotificationChannel::create(['name' => 'Restore events', 'service' => 'advanced', 'url' => 'ntfy://notify.test/restore', 'notification_level' => 'info', 'is_active' => true]);
+        $channel = NotificationChannel::create(['name' => 'Restore events', 'service' => 'advanced', 'url' => 'ntfy://notify.test/restore', 'notification_level' => 'info', 'is_active' => true]);
         $run->job->notificationChannels()->attach($channel);
         $relay = $run->archiveRelay;
         $this->assertFalse(app(DispatchQueuedRun::class)->handle($run));
@@ -298,7 +299,7 @@ class ArchiveRelayTest extends TestCase
     public function test_transport_enforces_host_instance_assignment_and_body_bounds(): void
     {
         config(['volumevault.agents.enabled' => true, 'volumevault.agents.url' => 'https://orchestrator.test:8443']);
-        $this->withServerVariables(['HTTPS' => 'on']);
+        $this->withServerVariables(['HTTPS' => 'on', 'VOLUMEVAULT_AGENT_TRANSPORT' => 'tls']);
         [$run, $source, $target] = $this->restore();
         $operation = app(AgentOperationBroker::class)->pull($source);
         $url = 'https://orchestrator.test:8443/agent/v1/operations/'.$operation['id'].'/relay';

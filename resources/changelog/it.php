@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_transport_isolation' => [
+        'title' => 'Trasporto TLS degli agenti isolato',
+        'description' => 'Con gli agenti abilitati, la porta 8080 serve l’interfaccia web e l’API pubblica, ma rifiuta /agent/v1 e i percorsi sottostanti. La porta TLS 8443 serve solo /agent/v1/*; tutti gli altri percorsi, inclusi i controlli di integrità e i file statici, restituiscono 404. La rimappatura delle porte dell’host resta supportata. Usare TLS diretto o passthrough TCP e limitare l’accesso alla porta degli agenti agli IP o alle reti degli host Docker come protezione aggiuntiva.',
+    ],
     'public_api_health' => [
         'title' => 'Controllo pubblico della disponibilità API',
         'description' => 'Monitora la disponibilità HTTP dell’applicazione tramite l’endpoint pubblico /api/v1/health, documentato in OpenAPI. Non verifica Docker, i worker o le destinazioni dei backup; /up rimane disponibile.',

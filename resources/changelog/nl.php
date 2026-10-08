@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_transport_isolation' => [
+        'title' => 'Geïsoleerd TLS-transport voor agents',
+        'description' => 'Met ingeschakelde agents biedt poort 8080 de webinterface en openbare API aan, maar weigert /agent/v1 en alle onderliggende paden. De TLS-listener op poort 8443 bedient alleen /agent/v1/*; alle andere paden, inclusief gezondheidscontroles en statische bestanden, geven 404 terug. Andere hostpoorttoewijzingen blijven ondersteund. Gebruik directe TLS of TCP-passthrough en beperk toegang tot de agentpoort tot IP-adressen of netwerken van Docker-hosts als extra beveiligingslaag.',
+    ],
     'public_api_health' => [
         'title' => 'Openbare API-beschikbaarheidscontrole',
         'description' => 'Controleer de HTTP-beschikbaarheid van de applicatie via het openbare endpoint /api/v1/health, gedocumenteerd in OpenAPI. Docker, workers en back-upbestemmingen worden niet gecontroleerd; /up blijft beschikbaar.',

@@ -14,7 +14,7 @@ class AgentTlsStartupTest extends TestCase
     {
         parent::setUp();
         $this->directory = sys_get_temp_dir().'/volumevault-startup-'.bin2hex(random_bytes(10));
-        foreach (['bin', 'app', 'native'] as $directory) {
+        foreach (['bin', 'app', 'native', 'nginx/site-opts.d', 'nginx/conf.d', 'templates'] as $directory) {
             File::makeDirectory($this->directory.'/'.$directory, 0700, true);
         }
         $this->script('bin/chown', 'echo permissions >> "$TRACE"');
@@ -30,9 +30,13 @@ fi
 SH);
         $this->script('native/10-ssl.sh', 'echo "ssl:${SSL_MODE:-off}:${SSL_CERTIFICATE_FILE:-}:${SSL_PRIVATE_KEY_FILE:-}" >> "$TRACE"');
         $this->script('bin/init', 'echo init >> "$TRACE"');
+        $this->script('bin/nginx', 'echo "nginx:$*" >> "$TRACE"; [ "${FAIL_NGINX:-false}" != true ]');
+        file_put_contents($this->directory.'/templates/http.conf.template', "web-template\n");
+        File::copy(base_path('docker/nginx/agent-http.conf'), $this->directory.'/templates/agent-http.conf');
+        File::copy(base_path('docker/nginx/agent-https.conf.template'), $this->directory.'/templates/agent-https.conf.template');
         $entrypoint = str_replace(
-            ['/command/s6-setuidgid', '/etc/entrypoint.d/', '/init'],
-            [$this->directory.'/bin/setuidgid', $this->directory.'/native/', $this->directory.'/bin/init'],
+            ['/command/s6-setuidgid', '/etc/entrypoint.d/', '/init', '/opt/volumevault/nginx', '/etc/nginx'],
+            [$this->directory.'/bin/setuidgid', $this->directory.'/native/', $this->directory.'/bin/init', $this->directory.'/templates', $this->directory.'/nginx'],
             preg_replace('~(?<![\w/])/app\b~', $this->directory.'/app', file_get_contents(base_path('docker-entrypoint.sh'))),
         );
         file_put_contents($this->directory.'/entrypoint', $entrypoint);
@@ -53,6 +57,30 @@ SH);
         $this->assertLessThan(strpos($trace, 'ssl:mixed:'), strpos($trace, 'php:artisan volumevault:agent-tls:prepare'));
         $this->assertStringContainsString('ssl:mixed:'.$this->directory.'/app/storage/app/private/agent-tls/server.crt:'.$this->directory.'/app/storage/app/private/agent-tls/server.key', $trace);
         $this->assertStringContainsString('init', $trace);
+        $this->assertStringContainsString('nginx:-t', $trace);
+        $this->assertStringContainsString('location ^~ /agent/v1/', file_get_contents($this->directory.'/nginx/site-opts.d/http.conf.template'));
+        $this->assertSame(file_get_contents($this->directory.'/templates/agent-https.conf.template'), file_get_contents($this->directory.'/nginx/site-opts.d/https.conf.template'));
+    }
+
+    public function test_restarts_replace_generated_configs_without_duplicating_agent_locations(): void
+    {
+        $environment = ['APP_KEY' => 'test', 'VOLUMEVAULT_AGENTS_ENABLED' => 'true'];
+        $this->assertTrue($this->runEntrypoint([], $environment)->isSuccessful());
+        foreach (['site-opts.d/http.conf', 'site-opts.d/https.conf', 'conf.d/default.conf'] as $file) {
+            file_put_contents($this->directory.'/nginx/'.$file, 'old general listener');
+        }
+        $this->assertTrue($this->runEntrypoint([], $environment)->isSuccessful());
+        $this->assertSame(1, substr_count(file_get_contents($this->directory.'/nginx/site-opts.d/http.conf.template'), 'location ^~ /agent/v1/'));
+        foreach (['site-opts.d/http.conf', 'site-opts.d/https.conf', 'conf.d/default.conf'] as $file) {
+            $this->assertFileDoesNotExist($this->directory.'/nginx/'.$file);
+        }
+    }
+
+    public function test_invalid_nginx_configuration_blocks_startup(): void
+    {
+        $process = $this->runEntrypoint([], ['APP_KEY' => 'test', 'VOLUMEVAULT_AGENTS_ENABLED' => 'true', 'FAIL_NGINX' => 'true']);
+        $this->assertFalse($process->isSuccessful());
+        $this->assertStringNotContainsString("\ninit\n", file_get_contents($this->directory.'/trace'));
     }
 
     public function test_failed_preparation_blocks_native_ssl_startup(): void
