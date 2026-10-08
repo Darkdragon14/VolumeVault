@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'container_image_publication_recovery' => [
+        'title' => 'Publicación de imágenes de contenedor restaurada',
+        'description' => 'Se corrigió el registro de servicios para la imagen base S6 actualizada para que las imágenes puedan compilarse e iniciar correctamente los trabajadores de cola, el planificador y el servicio TLS de los agentes.',
+    ],
     'agent_outage_recovery' => [
         'title' => 'Recuperación tras la indisponibilidad de un agente',
         'description' => 'Las operaciones remotas bloqueadas fallan tras un plazo configurable o al revocar/registrar de nuevo el agente, liberando relés sin repetir tareas. La limpieza remota sigue protegida. La alerta configurable de agente desconectado está activada por defecto.',

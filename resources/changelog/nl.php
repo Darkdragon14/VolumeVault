@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'container_image_publication_recovery' => [
+        'title' => 'Publicatie van containerimages hersteld',
+        'description' => 'De serviceregistratie voor het bijgewerkte S6-basisimage is gecorrigeerd, zodat containerimages kunnen worden gebouwd en wachtrijworkers, de planner en de TLS-service voor agents correct starten.',
+    ],
     'agent_outage_recovery' => [
         'title' => 'Herstel na uitval van agents',
         'description' => 'Vastgelopen externe bewerkingen mislukken na een instelbare termijn of intrekking/herinschrijving van de agent en geven ongebruikte relaycapaciteit vrij zonder werk opnieuw uit te voeren. Externe opruiming blijft beschermd. Een instelbare melding voor offline agents is standaard ingeschakeld.',

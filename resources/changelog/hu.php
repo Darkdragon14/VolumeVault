@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'container_image_publication_recovery' => [
+        'title' => 'A konténerképek közzététele helyreállítva',
+        'description' => 'Javítottuk a szolgáltatások regisztrációját a frissített S6-alapképhez, hogy a konténerképek felépíthetők legyenek, és a feldolgozók, az ütemező és az ügynökök TLS-szolgáltatása megfelelően elinduljon.',
+    ],
     'agent_outage_recovery' => [
         'title' => 'Helyreállítás az ügynök kiesése után',
         'description' => 'Az elakadt távoli műveletek beállítható határidő vagy az ügynök visszavonása/újraregisztrálása után hibával lezárulnak, felszabadítva a nem használt átviteli kapacitást a munka ismétlése nélkül. A távoli takarítás védelme megmarad. A beállítható offlineügynök-riasztás alapértelmezetten engedélyezett.',

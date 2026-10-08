@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'container_image_publication_recovery' => [
+        'title' => 'Veröffentlichung der Container-Images wiederhergestellt',
+        'description' => 'Die Dienstregistrierung für das aktualisierte S6-Basisimage wurde korrigiert, damit Container-Images gebaut werden können und Warteschlangen-Worker, Scheduler und Agent-TLS-Dienst korrekt starten.',
+    ],
     'agent_outage_recovery' => [
         'title' => 'Wiederherstellung nach Agent-Ausfällen',
         'description' => 'Blockierte Remote-Vorgänge schlagen nach einer konfigurierbaren Frist oder dem Widerruf/der Neuregistrierung des Agenten fehl und geben ungenutzte Relay-Kapazität frei, ohne Arbeit erneut auszuführen. Die Remote-Bereinigung bleibt geschützt. Eine konfigurierbare Offline-Agent-Warnung ist standardmäßig aktiviert.',

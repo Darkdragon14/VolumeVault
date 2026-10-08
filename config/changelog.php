@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'container_image_publication_recovery',
+        ],
+    ],
     'releases' => [
         'v2.0.3' => [
             'date' => '2026-10-08',

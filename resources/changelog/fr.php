@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'container_image_publication_recovery' => [
+        'title' => 'Publication des images de conteneur rétablie',
+        'description' => 'Correction de l’enregistrement des services pour la nouvelle image de base S6 afin que les images puissent être construites et démarrer correctement les workers de file d’attente, le planificateur et le service TLS des agents.',
+    ],
     'agent_outage_recovery' => [
         'title' => 'Récupération des tâches interrompues par un agent indisponible',
         'description' => 'Les opérations distantes bloquées échouent après un délai configurable ou la révocation/réinscription de l’agent, libérant les relais inutilisés sans rejouer les tâches. Le nettoyage distant reste protégé. Une alerte configurable d’agent hors ligne est activée par défaut.',

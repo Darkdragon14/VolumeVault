@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'container_image_publication_recovery' => [
+        'title' => 'Obnoveno publikování obrazů kontejnerů',
+        'description' => 'Opravena registrace služeb pro aktualizovaný základní obraz S6, aby bylo možné sestavit obrazy kontejnerů a správně spustit pracovníky front, plánovač a službu TLS agentů.',
+    ],
     'agent_outage_recovery' => [
         'title' => 'Obnova po výpadku agenta',
         'description' => 'Zablokované vzdálené operace selžou po nastavitelné lhůtě nebo odvolání/opětovné registraci agenta a uvolní nepoužívané přenosy bez opakování práce. Vzdálené čištění zůstává chráněné. Nastavitelné upozornění na agenta offline je ve výchozím stavu zapnuté.',

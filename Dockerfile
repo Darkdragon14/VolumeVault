@@ -101,10 +101,10 @@ RUN mkdir -p /app/storage/database /app/storage/framework/cache /app/storage/fra
     && printf 'longrun\n' > /etc/s6-overlay/s6-rc.d/volumevault-queue-metadata/type \
     && printf 'longrun\n' > /etc/s6-overlay/s6-rc.d/volumevault-scheduler/type \
     && printf 'longrun\n' > /etc/s6-overlay/s6-rc.d/volumevault-agent-tls/type \
-    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/volumevault-agent-tls \
-    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/volumevault-queue \
-    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/volumevault-queue-metadata \
-    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/volumevault-scheduler
+    && touch /etc/s6-overlay/user-bundles.d/user/contents.d/volumevault-agent-tls \
+    && touch /etc/s6-overlay/user-bundles.d/user/contents.d/volumevault-queue \
+    && touch /etc/s6-overlay/user-bundles.d/user/contents.d/volumevault-queue-metadata \
+    && touch /etc/s6-overlay/user-bundles.d/user/contents.d/volumevault-scheduler
 
 EXPOSE 8080 8443
 

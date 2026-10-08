@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'container_image_publication_recovery' => [
+        'title' => 'Restored container image publication',
+        'description' => 'Fixed service registration for the updated S6 base image so container images can build and start the queue workers, scheduler and agent TLS service correctly.',
+    ],
     'agent_outage_recovery' => [
         'title' => 'Recover work interrupted by unavailable agents',
         'description' => 'Stalled remote operations now fail after a configurable deadline or agent revocation/re-enrollment, freeing unused relay capacity without replaying work. Remote cleanup remains protected. A configurable offline-agent alert is enabled by default.',

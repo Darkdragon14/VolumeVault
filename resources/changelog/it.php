@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'container_image_publication_recovery' => [
+        'title' => 'Pubblicazione delle immagini dei container ripristinata',
+        'description' => 'Corretta la registrazione dei servizi per l’immagine di base S6 aggiornata, consentendo la compilazione delle immagini e il corretto avvio dei worker delle code, dello scheduler e del servizio TLS degli agenti.',
+    ],
     'agent_outage_recovery' => [
         'title' => 'Recupero dopo l’indisponibilità di un agente',
         'description' => 'Le operazioni remote bloccate falliscono dopo una scadenza configurabile o la revoca/nuova registrazione dell’agente, liberando i relay inutilizzati senza ripetere il lavoro. La pulizia remota resta protetta. Un avviso configurabile per gli agenti offline è attivo per impostazione predefinita.',
