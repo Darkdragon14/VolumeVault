@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'count_based_backup_retention' => [
+        'title' => 'Working count-based backup retention',
+        'description' => 'VolumeVault now deletes the oldest archives exceeding a job’s retention count after a successful backup. New archives are identified per job so shared destinations remain safe; older unscoped archives are preserved. Destination credentials must allow listing and deletion. Update remote agents to use this feature.',
+    ],
     'agent_transport_isolation' => [
         'title' => 'Isolated agent TLS transport',
         'description' => 'With agents enabled, port 8080 serves the web interface and public API but rejects /agent/v1 and its descendants. The TLS listener on port 8443 serves only /agent/v1/*; all other paths, including health checks and static assets, return 404. Host port remapping remains supported. Use direct TLS or TCP passthrough and restrict agent port access to Docker host IPs or networks as defense in depth.',

@@ -34,7 +34,9 @@ class AgentExecution
         }
         $host = DockerHost::find($id);
         if (! $this->supportsHost($host, $capability)) {
-            throw ValidationException::withMessages(['docker_host_id' => 'Select a registered agent supporting this operation.']);
+            throw ValidationException::withMessages(['docker_host_id' => $capability === 'retention-v1'
+                ? 'Upgrade the selected agent to support safe per-job backup retention before running this job.'
+                : 'Select a registered agent supporting this operation.']);
         }
     }
 

@@ -134,6 +134,7 @@ class AgentOperationProtocolTest extends TestCase
         $seed = $this->backup($host);
         $destinationId = $seed->job->backup_destination_id;
         $seed->job->delete();
+        $body['capabilities'][] = 'retention-v1';
         $host->refresh()->forceFill(['agent_capabilities' => [...$body['capabilities'], 'docker-labels-v1']])->save();
         DockerLabelBackupSetting::current($host->id)->update(['enabled' => true, 'backup_destination_id' => $destinationId]);
         $inventory = [

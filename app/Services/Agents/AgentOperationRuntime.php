@@ -5,14 +5,18 @@ namespace App\Services\Agents;
 use App\Actions\Backup\CreateBackupRunRecord;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Docker\CleanupBackupRunSecretFiles;
+use App\Actions\Docker\CleanupBackupRetentionHelper;
+use App\Actions\Docker\CleanupDestinationOperationHelper;
 use App\Actions\Docker\ContainerIsAlive;
 use App\Actions\Docker\RemoveDockerContainer;
 use App\Actions\Restore\RunRestore;
+use App\Exceptions\ArchiveRelayConnectionException;
 use App\Models\ActivityLog;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\RestoreRun;
+use App\Services\BackupDestinations\ExecuteDestinationOperation;
 use App\Services\Logging\AppendRunLog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Encryption\Encrypter;
@@ -49,7 +53,7 @@ class AgentOperationRuntime
             $this->protectPersistedErrors();
             if ($operation['kind'] === 'archive_export') {
                 $helper = $operation['spec']['destination']['provider'] === 'docker_volume'
-                    ? \App\Actions\Docker\CleanupDestinationOperationHelper::name($id) : null;
+                    ? CleanupDestinationOperationHelper::name($id) : null;
                 if ($operation['phase'] !== 'accepted' && $helper !== null && ($operation['helper_name'] ?? null) !== $helper) {
                     return false;
                 }
@@ -57,10 +61,10 @@ class AgentOperationRuntime
                 try {
                     $result = app(ArchiveRelayRuntime::class)->export($operation, $this->store->directory($id), $operation['phase'] === 'accepted',
                         fn (array $data): array => app(AgentClient::class)->relayTransfer($id, $operation['token'], $data));
-                } catch (\App\Exceptions\ArchiveRelayConnectionException) {
+                } catch (ArchiveRelayConnectionException) {
                     return false;
                 } catch (\Throwable) {
-                    if ($helper !== null && ! app(\App\Actions\Docker\CleanupDestinationOperationHelper::class)->handle($id)) {
+                    if ($helper !== null && ! app(CleanupDestinationOperationHelper::class)->handle($id)) {
                         return false;
                     }
                     $result = $this->failure('Archive relay export failed; original archive retained.');
@@ -73,17 +77,17 @@ class AgentOperationRuntime
                 return true;
             }
             if ($operation['kind'] === 'destination') {
-                $execute = app(\App\Services\BackupDestinations\ExecuteDestinationOperation::class);
+                $execute = app(ExecuteDestinationOperation::class);
                 try {
                     if ($operation['phase'] === 'accepted') {
                         app(AgentOperationSpecification::class)->validateLocalPolicy($operation);
                         $helper = $operation['spec']['destination']['provider'] === 'docker_volume'
-                            ? \App\Actions\Docker\CleanupDestinationOperationHelper::name($id) : null;
+                            ? CleanupDestinationOperationHelper::name($id) : null;
                         $this->store->markExecuting($id, $helper);
                         $result = $execute->handle($operation['spec'], $id);
                     } else {
                         if ($operation['spec']['destination']['provider'] === 'docker_volume'
-                            && ($operation['helper_name'] ?? null) !== \App\Actions\Docker\CleanupDestinationOperationHelper::name($id)) {
+                            && ($operation['helper_name'] ?? null) !== CleanupDestinationOperationHelper::name($id)) {
                             return false;
                         }
                         $result = $execute->recover($operation['spec'], $id);
@@ -104,7 +108,7 @@ class AgentOperationRuntime
                     app(AgentOperationSpecification::class)->validateLocalPolicy($operation);
                     $relayArchive = app(ArchiveRelayRuntime::class)->download($operation['spec']['relay'], $this->store->directory($id),
                         fn (array $data): array => app(AgentClient::class)->relayTransfer($id, $operation['token'], $data));
-                } catch (\App\Exceptions\ArchiveRelayConnectionException) {
+                } catch (ArchiveRelayConnectionException) {
                     return false;
                 } catch (\Throwable) {
                     $this->store->finish($id, $this->failure('Archive relay download failed integrity, storage or local policy checks.'));
@@ -264,12 +268,15 @@ class AgentOperationRuntime
                 $jobData['host_path'] = null;
             }
             $job = BackupJob::create([
-                ...$jobData, 'docker_host_id' => 1, 'backup_destination_id' => $jobDestination->id,
+                ...array_diff_key($jobData, ['archive_namespace' => true]), 'docker_host_id' => 1, 'backup_destination_id' => $jobDestination->id,
                 'status' => 'active', 'schedule_type' => 'daily', 'schedule_config' => ['time' => '00:00'],
                 'timezone' => $jobData['timezone'] ?? 'UTC',
                 'notifications_enabled' => false, 'alert_notifications_enabled' => false,
                 'backup_filename_template' => 'agent-'.$operation['id'].'-run-{id}',
             ]);
+            if (isset($jobData['archive_namespace'])) {
+                $job->forceFill(['archive_namespace' => $jobData['archive_namespace']])->save();
+            }
             if ($operation['kind'] === 'backup') {
                 $run = app(CreateBackupRunRecord::class)->handle($job, ['status' => 'queued', 'trigger' => 'manual']);
                 $run->forceFill(['backup_filename' => $spec['run']['backup_filename']])->save();
@@ -290,6 +297,11 @@ class AgentOperationRuntime
     {
         $runs = BackupRun::all()->concat(RestoreRun::all());
         foreach ($runs as $run) {
+            if ($run instanceof BackupRun && CleanupBackupRetentionHelper::owns($run)) {
+                if (! app(CleanupBackupRetentionHelper::class)->handle($run)) {
+                    return false;
+                }
+            }
             if ($run->docker_container_id && app(ContainerIsAlive::class)->handle($run->docker_container_id) !== false) {
                 return false;
             }

@@ -96,6 +96,14 @@ VOLUMEVAULT_SSRF_ALLOWED_IPS=192.168.1.0/24
 
 The host is resolved just before connecting, so a determined attacker controlling DNS could still rebind it afterwards — accepted here because every guarded action is admin-gated. Notification channels (Gotify, Ntfy, SMTP, …) are **not** guarded: they are blind, admin-configured, and commonly self-hosted on the LAN.
 
+### Backup retention
+
+`retention_count` keeps the newest N archives belonging to a backup job on its destination. After a successful regular backup, VolumeVault lists the actual archives and deletes only the oldest excess files. Failed backups and pre-restore safety backups do not trigger count retention.
+
+New archives carry a stable per-job prefix and a unique run ID, including when a custom filename template is used. Safety backups use a separate prefix. Both count and day retention are handled by VolumeVault and apply only to regular archives in the job namespace; if both limits are set, an archive exceeding either limit is eligible for deletion, except the newly uploaded archive. Archives from other jobs, unrelated files and older archives without this prefix are preserved. Existing files are not renamed; clean up legacy archives manually if needed.
+
+Destination credentials must permit both listing and deletion, and private destinations must be allowed by `VOLUMEVAULT_SSRF_ALLOWED_IPS`. Update remote agents before using count retention. Check the backup run logs for cleanup failures: a successful upload does not guarantee that destination cleanup succeeded.
+
 ### Serving over HTTPS
 
 When you serve VolumeVault over HTTPS (directly or behind a TLS-terminating reverse proxy), set `SESSION_SECURE_COOKIE=true` so the session cookie is only sent over HTTPS. **Leave it off for plain-HTTP or LAN-only access** — a `Secure` cookie is never sent over plain HTTP, so enabling it without TLS breaks login. Behind a reverse proxy, this works once `TRUSTED_PROXIES` is set and the proxy forwards `X-Forwarded-Proto: https` (see the docs for the full reverse-proxy setup).

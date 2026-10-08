@@ -4,6 +4,10 @@ return [
     'unreleased' => [
         [
             'type' => 'change',
+            'key' => 'count_based_backup_retention',
+        ],
+        [
+            'type' => 'change',
             'key' => 'agent_transport_isolation',
         ],
     ],

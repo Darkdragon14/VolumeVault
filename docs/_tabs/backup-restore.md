@@ -48,7 +48,15 @@ Backup jobs can optionally filter which files end up in the archive. Two modes a
 
 In the web form, creating a job defaults to the simple include mode, while existing jobs keep their stored mode. Through the API the behavior differs for backward compatibility: `backup_filter_mode` is optional and defaults to `exclude` when omitted, so an API client that wants include mode must set `backup_filter_mode` to `include` explicitly. The related API fields are `backup_include_paths` (used in include mode) and `backup_exclude_regexp` (used in exclude mode).
 
-Backup jobs can also define an archive name template without the extension. Supported tokens are `{name}`, `{source}`, `{id}`, `{run}`, `{year}`, `{month}`, `{day}`, `{time}`, `{hour}`, `{minute}`, and `{second}`. `{name}` is the job name sanitized for filenames, `{source}` is the Docker volume or host path source, and `{id}` / `{run}` is the backup run ID. VolumeVault appends `.tar.gz` automatically. Include a uniqueness token such as `{id}` or `{time}` to avoid overwriting earlier archives with the same generated name.
+Backup jobs can also define an archive name template without the extension. Supported tokens are `{name}`, `{source}`, `{id}`, `{run}`, `{year}`, `{month}`, `{day}`, `{time}`, `{hour}`, `{minute}`, and `{second}`. `{name}` is the job name sanitized for filenames, `{source}` is the Docker volume or host path source, and `{id}` / `{run}` is the backup run ID. VolumeVault adds a stable per-job namespace and a unique run ID before the rendered template, then appends `.tar.gz` automatically. Even constant templates produce unique filenames. Safety backups use a separate prefix. Existing archives are not renamed.
+
+### Retention by archive count
+
+Set `retention_count` (or the Docker label `retention-count`) to a positive integer to keep that many recent archives for the job. VolumeVault counts the actual archives on the destination, not the number of run-history records, and deletes an explicit list of the oldest excess files only after a successful regular backup. Archives belonging to other jobs and legacy archives without the job prefix are preserved. Failed backups and pre-restore safety backups do not trigger count retention.
+
+Both day and count retention are performed by VolumeVault within the job namespace. If both are configured, exceeding either limit makes an archive eligible for deletion, but the newly uploaded archive is always retained. Legacy unprefixed archives are no longer removed automatically by day retention either; review them manually after upgrading.
+
+The destination must allow listing and deletion. Private destination hosts must be allowed by `VOLUMEVAULT_SSRF_ALLOWED_IPS`. Cleanup failures appear in the backup run logs without undoing a successful upload; inspect these logs to confirm retention is working. Remote agents must be updated to support safe retention.
 
 ## Docker Label Backups
 

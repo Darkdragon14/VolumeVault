@@ -26,12 +26,19 @@ class RenderBackupFilename
         $run->loadMissing('job');
 
         $template = trim((string) $run->job->backup_filename_template);
+        $namespace = $run->execution_options_snapshot['archive_namespace'] ?? null;
+        $prefix = $namespace === null ? '' : self::archivePrefix($namespace, $run->trigger === BackupRun::TRIGGER_PRE_RESTORE).'run-'.$run->id.'-';
 
         if ($template === '') {
-            return $this->finalize('volumevault-'.$this->safeRunSource($run).'-run-'.$run->id);
+            return $this->finalize($prefix.'volumevault-'.$this->safeRunSource($run).'-run-'.$run->id);
         }
 
-        return $this->finalize($this->renderTemplate($template, $run));
+        return $this->finalize($prefix.$this->renderTemplate($template, $run));
+    }
+
+    public static function archivePrefix(string $namespace, bool $safety = false): string
+    {
+        return 'volumevault-'.($safety ? 'safety-' : '').$namespace.'-';
     }
 
     public function validationError(?string $template): ?string

@@ -213,7 +213,7 @@ class BackupRunMetadataTest extends TestCase
         ]);
 
         $run = $run->fresh();
-        $this->assertSame($initialOptions, $run->execution_options_snapshot);
+        $this->assertSame(['archive_namespace' => $run->job->archive_namespace, ...$initialOptions], $run->execution_options_snapshot);
         $executionJob = $run->executionJob();
 
         foreach ($initialOptions as $field => $value) {
@@ -385,7 +385,7 @@ class BackupRunMetadataTest extends TestCase
         app(RunBackup::class)->recordArchiveMetadata($run->id);
         $run->refresh();
 
-        $this->assertSame('volumevault-app_data-run-'.$run->id.'.tar.gz', $run->backup_key);
+        $this->assertSame($run->backup_filename, $run->backup_key);
         $this->assertSame(1536, $run->backup_size_bytes);
         $this->assertFalse($run->archive_metadata_pending);
     }

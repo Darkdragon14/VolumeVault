@@ -228,18 +228,19 @@ class RunBackupContainerTest extends TestCase
         $this->assertSame('volumevault-srv_data-run-'.$run->id.'.tar.gz', $docker->environment['BACKUP_FILENAME']);
     }
 
-    public function test_retention_settings_are_forwarded_only_when_set(): void
+    public function test_retention_is_not_delegated_to_the_backup_engine_and_filters_are_still_forwarded(): void
     {
         $docker = $this->recordingDocker();
         $run = $this->backupRun($this->s3Destination(), [
             'volume_name' => 'app_data',
             'retention_days' => 7,
+            'retention_count' => 3,
             'backup_exclude_regexp' => '\.tmp$',
         ]);
 
         (new RunBackupContainer($docker))->handle($run);
 
-        $this->assertSame('7', $docker->environment['BACKUP_RETENTION_DAYS'] ?? null);
+        $this->assertArrayNotHasKey('BACKUP_RETENTION_DAYS', $docker->environment);
         $this->assertSame('\.tmp$', $docker->environment['BACKUP_EXCLUDE_REGEXP'] ?? null);
         $this->assertArrayNotHasKey('BACKUP_RETENTION_COUNT', $docker->environment);
     }

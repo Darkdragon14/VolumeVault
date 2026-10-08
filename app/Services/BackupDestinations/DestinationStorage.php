@@ -4,6 +4,7 @@ namespace App\Services\BackupDestinations;
 
 use App\Actions\Docker\RunBackupContainer;
 use App\Models\BackupDestination;
+use App\Models\DockerHost;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerVolumeName;
@@ -11,6 +12,7 @@ use App\Services\Docker\LocalDockerExecution;
 use App\Services\S3\S3ClientFactory;
 use App\Services\Security\OutboundHostGuard;
 use App\Support\SshHostKey;
+use Closure;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -26,6 +28,32 @@ class DestinationStorage
     private ?string $operationHelperName = null;
 
     private ?int $operationMaxBytes = null;
+
+    private ?Closure $operationProgress = null;
+
+    private float $lastOperationProgressAt = 0;
+
+    public function useOperationProgress(?callable $progress): void
+    {
+        $this->operationProgress = $progress === null ? null : Closure::fromCallable($progress);
+        $this->lastOperationProgressAt = 0;
+        $this->progress();
+    }
+
+    private function progress(): void
+    {
+        if ($this->operationProgress !== null && microtime(true) - $this->lastOperationProgressAt >= 30) {
+            $this->lastOperationProgressAt = microtime(true);
+            ($this->operationProgress)();
+        }
+    }
+
+    private function monitorDockerOperation(callable $operation): mixed
+    {
+        return $this->operationProgress === null
+            ? $operation()
+            : $this->dockerProcess->whileMonitoring(fn () => $this->progress(), $operation);
+    }
 
     public function useOperationLimit(?int $bytes): void
     {
@@ -138,6 +166,246 @@ class DestinationStorage
         };
     }
 
+    /**
+     * Delete only explicitly selected, currently listed archives. Validate the entire
+     * selection before issuing any destructive request; never expand a prefix or glob.
+     *
+     * @param  list<string>  $keys
+     */
+    public function deleteBackupObjects(BackupDestination $destination, array $keys): void
+    {
+        if ($keys === []) {
+            return;
+        }
+
+        try {
+            $this->guardOutbound($destination);
+            if ($destination->provider === BackupDestination::PROVIDER_GOOGLE_DRIVE
+                && preg_match('/^[A-Za-z0-9_-]+$/D', (string) $destination->setting('folder_id')) !== 1) {
+                throw new RuntimeException('Invalid destination folder.');
+            }
+            if ($destination->provider === BackupDestination::PROVIDER_DROPBOX) {
+                $root = trim((string) $destination->setting('remote_path'), '/');
+                if ($root !== '') {
+                    $this->assertLocalKey($root);
+                }
+            }
+            if ($destination->provider === BackupDestination::PROVIDER_LOCAL) {
+                $this->assertLocalDeletionRoot($destination);
+            }
+            if ($destination->provider === BackupDestination::PROVIDER_AZURE_BLOB
+                && preg_match('/^(?:[a-z0-9][a-z0-9-]{1,61}[a-z0-9]|\$root)$/D', (string) $destination->setting('container')) !== 1) {
+                throw new RuntimeException('Invalid destination container.');
+            }
+            foreach ($keys as $key) {
+                if (! is_string($key) || $key === '' || preg_match('/[\x00-\x1F\x7F\\\\]/', $key)) {
+                    throw new RuntimeException('Invalid archive selection.');
+                }
+                if ($destination->provider === BackupDestination::PROVIDER_GOOGLE_DRIVE) {
+                    if (preg_match('/^gdrive:[A-Za-z0-9_-]+$/D', $key) !== 1) {
+                        throw new RuntimeException('Invalid archive identity.');
+                    }
+                } elseif ($destination->provider === BackupDestination::PROVIDER_DROPBOX) {
+                    if (preg_match('/^id:[A-Za-z0-9_-]+$/D', $key) !== 1) {
+                        throw new RuntimeException('Invalid archive identity.');
+                    }
+                } else {
+                    $this->assertLocalKey($key);
+                    if (in_array($destination->provider, BackupDestination::S3_PROVIDERS, true)) {
+                        $prefix = trim((string) $destination->setting('path_prefix'), '/');
+                        if ($prefix !== '' && ! str_starts_with($key, $prefix.'/')) {
+                            throw new RuntimeException('Archive is outside the destination.');
+                        }
+                    }
+                }
+            }
+
+            $keys = array_values(array_unique($keys));
+            $listed = [];
+            $cursor = null;
+            do {
+                $page = $this->listBackupObjectsPage($destination, $cursor);
+                foreach ($page['objects'] as $object) {
+                    $identity = (string) $object['key'];
+                    if (in_array($identity, $keys, true)) {
+                        $listed[$identity] = true;
+                    }
+                }
+                $cursor = $page['next_cursor'];
+            } while ($cursor !== null && count($listed) < count($keys));
+
+            foreach ($keys as $key) {
+                $this->progress();
+                if (! isset($listed[$key])) {
+                    throw new RuntimeException('Archive selection is not present in the destination.');
+                }
+                if ($destination->provider === BackupDestination::PROVIDER_GOOGLE_DRIVE) {
+                    $response = Http::withToken($this->googleDriveToken($destination))->connectTimeout(15)->timeout(60)->get(
+                        $this->googleDriveEndpoint($destination).'/files/'.rawurlencode(Str::after($key, 'gdrive:')),
+                        ['fields' => 'id,name,parents,trashed,mimeType', 'supportsAllDrives' => 'true'],
+                    );
+                    if (! $response->successful() || $response->json('id') !== Str::after($key, 'gdrive:')
+                        || $response->json('trashed', false)
+                        || str_starts_with((string) $response->json('mimeType'), 'application/vnd.google-apps.')
+                        || ! $this->plausibleBackupKey((string) $response->json('name'))
+                        || ! in_array((string) $destination->setting('folder_id'), $response->json('parents', []), true)) {
+                        throw new RuntimeException('Archive is outside the destination.');
+                    }
+                } elseif ($destination->provider === BackupDestination::PROVIDER_DROPBOX) {
+                    $response = Http::withToken($this->dropboxToken($destination))->connectTimeout(15)->timeout(60)
+                        ->post('https://api.dropboxapi.com/2/files/get_metadata', ['path' => $key, 'include_deleted' => false]);
+                    $metadata = (array) $response->json();
+                    $name = $this->dropboxDisplayName($destination, $metadata);
+                    if (! $response->successful() || ($metadata['id'] ?? null) !== $key
+                        || ($metadata['.tag'] ?? null) !== 'file' || $name === null || ! $this->plausibleBackupKey($name)) {
+                        throw new RuntimeException('Archive is outside the destination.');
+                    }
+                }
+            }
+
+            if ($destination->provider === BackupDestination::PROVIDER_SSH) {
+                $this->deleteSftpArchives($destination, $keys);
+            } elseif ($destination->provider === BackupDestination::PROVIDER_DOCKER_VOLUME) {
+                $this->deleteDockerVolumeArchives($destination, $keys);
+            } elseif ($destination->provider === BackupDestination::PROVIDER_LOCAL) {
+                $this->deleteLocalArchives($destination, $keys);
+            } else {
+                foreach ($keys as $key) {
+                    $this->progress();
+                    match ($destination->provider) {
+                        BackupDestination::PROVIDER_AWS_S3,
+                        BackupDestination::PROVIDER_CLOUDFLARE_R2,
+                        BackupDestination::PROVIDER_CUSTOM_S3 => $this->s3ClientFactory->make($destination)->deleteObject(['Bucket' => $destination->setting('bucket'), 'Key' => $key, '@http' => ['connect_timeout' => 15, 'timeout' => 60]]),
+                        BackupDestination::PROVIDER_WEBDAV => $this->webDavRequest($destination, 'DELETE', $this->webDavUrl($destination, $this->joinRelative($this->configuredWebDavPath($destination), $key))),
+                        BackupDestination::PROVIDER_AZURE_BLOB => $this->azureBlobRequest($destination, 'DELETE', $key),
+                        BackupDestination::PROVIDER_DROPBOX => $this->ensureDropboxOk(Http::withToken($this->dropboxToken($destination))->withOptions(['allow_redirects' => false])->connectTimeout(15)->timeout(60)->post('https://api.dropboxapi.com/2/files/delete_v2', ['path' => $key])),
+                        BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->deleteGoogleDriveArchive($destination, $key),
+                        default => throw new RuntimeException('Unsupported destination.'),
+                    };
+                }
+            }
+        } catch (Throwable) {
+            // Provider exceptions can include signed URLs, credentials, or response bodies.
+            throw new RuntimeException('Unable to delete selected backup archives safely.');
+        }
+    }
+
+    private function deleteGoogleDriveArchive(BackupDestination $destination, string $key): void
+    {
+        $response = Http::withToken($this->googleDriveToken($destination))->withOptions(['allow_redirects' => false])->connectTimeout(15)->timeout(60)
+            ->delete($this->googleDriveEndpoint($destination).'/files/'.rawurlencode(Str::after($key, 'gdrive:')).'?supportsAllDrives=true');
+        if (! $response->successful()) {
+            throw new RuntimeException('Google Drive archive deletion failed.');
+        }
+    }
+
+    /** @param list<string> $keys */
+    private function deleteLocalArchives(BackupDestination $destination, array $keys): void
+    {
+        clearstatcache();
+        $this->assertLocalDeletionRoot($destination);
+        $root = rtrim((string) $destination->setting('archive_path'), '/');
+        $stat = @lstat($root);
+        if ($stat === false || ($stat['mode'] & 0170000) !== 0040000) {
+            throw new RuntimeException('Local archive root changed.');
+        }
+        $this->secureLocalArchiveReader->delete($root, $keys, $stat, $this->operationProgress);
+    }
+
+    private function assertLocalDeletionRoot(BackupDestination $destination): void
+    {
+        $root = (string) $destination->setting('archive_path');
+        $this->hostPathPolicy->assertValidAtRuntime($root);
+        $path = '';
+        foreach (explode('/', trim($root, '/')) as $segment) {
+            $path .= '/'.$segment;
+            $stat = @lstat($path);
+            if ($stat === false || ($stat['mode'] & 0170000) !== 0040000) {
+                throw new RuntimeException('Archive root must contain only regular directories.');
+            }
+        }
+    }
+
+    /** @param list<string> $keys */
+    private function deleteSftpArchives(BackupDestination $destination, array $keys): void
+    {
+        $sftp = $this->sftp($destination);
+        try {
+            $sftp->setTimeout(60);
+            $sftp->disableStatCache();
+            $this->assertSftpDeletionRoot($sftp, $destination);
+            foreach ($keys as $key) {
+                if (! $this->sftpObjectIsRegularFile($sftp, $destination, $key)) {
+                    throw new RuntimeException('SFTP archive is not a regular file.');
+                }
+            }
+            foreach ($keys as $key) {
+                $this->progress();
+                $this->assertSftpDeletionRoot($sftp, $destination);
+                if (! $this->sftpObjectIsRegularFile($sftp, $destination, $key)
+                    || ! $sftp->delete($this->joinAbsolute((string) $destination->setting('remote_path', '/'), $key), false)) {
+                    throw new RuntimeException('SFTP archive deletion failed.');
+                }
+            }
+        } finally {
+            $sftp->disconnect();
+        }
+    }
+
+    private function assertSftpDeletionRoot(SFTP $sftp, BackupDestination $destination): void
+    {
+        $root = (string) $destination->setting('remote_path', '/');
+        if (! str_starts_with($root, '/')) {
+            throw new RuntimeException('SFTP root must be absolute.');
+        }
+        $path = '';
+        foreach (array_filter(explode('/', trim($root, '/')), fn (string $segment): bool => $segment !== '') as $segment) {
+            $this->assertLocalKey($segment);
+            $path .= '/'.$segment;
+            if (! $this->sftpRootIsDirectory($sftp, $path)) {
+                throw new RuntimeException('SFTP root must contain only regular directories.');
+            }
+        }
+    }
+
+    /** @param list<string> $keys */
+    private function deleteDockerVolumeArchives(BackupDestination $destination, array $keys): void
+    {
+        [$volume, $dir] = $this->dockerVolumeTarget($destination);
+        $paths = array_map(fn (string $key): string => $dir.'/'.DockerVolumeName::assertKey($key), $keys);
+        $script = <<<'SH'
+set -e
+check_file() {
+    [ ! -L "$1" ] && [ -f "$1" ] || return 1
+    parent=${1%/*}
+    while [ "$parent" != / ]; do
+        [ ! -L "$parent" ] && [ -d "$parent" ] || return 1
+        parent=${parent%/*}
+        [ -n "$parent" ] || parent=/
+    done
+}
+for path do check_file "$path" || exit 1; done
+for path do
+    (
+        check_file "$path" || exit 1
+        parent=${path%/*}
+        cd -P "$parent" || exit 1
+        [ "$(pwd -P)" = "$parent" ] || exit 1
+        name=${path##*/}
+        [ ! -L "$name" ] && [ -f "$name" ] || exit 1
+        rm -- "$name" || exit 1
+    ) || exit 1
+done
+SH;
+        $command = ['docker', 'run', '--rm', '-v', $volume.':'.DockerVolumeName::MOUNT_POINT, '--entrypoint', 'sh', RunBackupContainer::IMAGE, '-c', $script, 'sh', ...$paths];
+        if ($this->operationHelperName !== null) {
+            array_splice($command, 3, 0, ['--name', $this->operationHelperName]);
+        }
+        if (! $this->monitorDockerOperation(fn () => $this->dockerProcess->run($command, 120))->successful()) {
+            throw new RuntimeException('Docker volume archive deletion failed.');
+        }
+    }
+
     /** @return array<string, mixed>|null */
     public function findBackupObjectByFilename(BackupDestination $destination, string $filename): ?array
     {
@@ -192,7 +460,7 @@ class DestinationStorage
     /** @return array{used_bytes: int, object_count: int} */
     public function storageUsage(BackupDestination $destination): array
     {
-        if ($destination->storageMeasurementHostId() !== \App\Models\DockerHost::LOCAL_ID) {
+        if ($destination->storageMeasurementHostId() !== DockerHost::LOCAL_ID) {
             return app(DestinationOperations::class)->usage($destination);
         }
         LocalDockerExecution::assertDestination($destination);
@@ -216,12 +484,13 @@ class DestinationStorage
     /** Pages contain at most 1000 objects; provider tokens never enter diagnostics. */
     public function listBackupObjectsPage(BackupDestination $destination, ?string $cursor = null, int $limit = 1000): array
     {
+        $this->progress();
         $this->guardOutbound($destination);
         if ($limit < 1 || $limit > 1000) {
             throw new RuntimeException('Invalid listing page size.');
         }
         if (in_array($destination->provider, BackupDestination::S3_PROVIDERS, true)) {
-            $params = ['Bucket' => $destination->setting('bucket'), 'Prefix' => trim((string) $destination->setting('path_prefix'), '/'), 'MaxKeys' => $limit];
+            $params = ['Bucket' => $destination->setting('bucket'), 'Prefix' => trim((string) $destination->setting('path_prefix'), '/'), 'MaxKeys' => $limit, '@http' => ['connect_timeout' => 15, 'timeout' => 60]];
             if ($cursor !== null) {
                 $params['ContinuationToken'] = $cursor;
             }
@@ -231,6 +500,9 @@ class DestinationStorage
                 $objects[] = ['key' => (string) $object['Key'], 'display_name' => (string) $object['Key'], 'size' => (int) ($object['Size'] ?? 0), 'last_modified' => isset($object['LastModified']) ? $object['LastModified']->format(DATE_ATOM) : null];
             }
             $next = ($page['IsTruncated'] ?? false) ? ($page['NextContinuationToken'] ?? null) : null;
+            if (($page['IsTruncated'] ?? false) && (! is_string($next) || $next === '')) {
+                throw new RuntimeException('Incomplete S3 listing.');
+            }
         } elseif (in_array($destination->provider, [BackupDestination::PROVIDER_AZURE_BLOB, BackupDestination::PROVIDER_GOOGLE_DRIVE, BackupDestination::PROVIDER_DROPBOX], true)) {
             [$objects, $next] = $this->cloudObjectPage($destination, $cursor, $limit);
         } else {
@@ -246,7 +518,7 @@ class DestinationStorage
                 BackupDestination::PROVIDER_DROPBOX => $this->listDropbox($destination, $count),
                 BackupDestination::PROVIDER_GOOGLE_DRIVE => $this->listGoogleDrive($destination, $count),
                 BackupDestination::PROVIDER_LOCAL => $this->listLocal($destination, $count),
-                BackupDestination::PROVIDER_DOCKER_VOLUME => $this->listDockerVolume($destination, $count),
+                BackupDestination::PROVIDER_DOCKER_VOLUME => $this->monitorDockerOperation(fn () => $this->listDockerVolume($destination, $count)),
                 default => throw new RuntimeException('Unsupported destination.'),
             };
             $next = count($all) > $offset + $limit ? (string) ($offset + $limit) : null;
@@ -270,7 +542,8 @@ class DestinationStorage
                 throw new RuntimeException('Invalid Azure listing.');
             }
             foreach ($xml->Blobs->Blob ?? [] as $blob) {
-                $objects[] = ['key' => (string) $blob->Name, 'display_name' => (string) $blob->Name, 'size' => (int) $blob->Properties->{'Content-Length'}, 'last_modified' => date(DATE_ATOM, strtotime((string) $blob->Properties->{'Last-Modified'}))];
+                $lastModified = strtotime((string) $blob->Properties->{'Last-Modified'});
+                $objects[] = ['key' => (string) $blob->Name, 'display_name' => (string) $blob->Name, 'size' => (int) $blob->Properties->{'Content-Length'}, 'last_modified' => $lastModified === false ? null : date(DATE_ATOM, $lastModified)];
             }
 
             return [$objects, ((string) ($xml->NextMarker ?? '')) ?: null];
@@ -284,20 +557,20 @@ class DestinationStorage
             if ($cursor !== null) {
                 $query['pageToken'] = $cursor;
             }
-            $response = Http::withToken($this->googleDriveToken($destination))->get($this->googleDriveEndpoint($destination).'/files', $query);
+            $response = Http::withToken($this->googleDriveToken($destination))->connectTimeout(15)->timeout(60)->get($this->googleDriveEndpoint($destination).'/files', $query);
             if ($response->failed()) {
                 throw new RuntimeException('Google Drive listing failed.');
             }
             foreach ($response->json('files') ?? [] as $file) {
-                if (($file['mimeType'] ?? null) === 'application/vnd.google-apps.folder') {
+                if (str_starts_with((string) ($file['mimeType'] ?? ''), 'application/vnd.google-apps.')) {
                     continue;
                 }
-                $objects[] = ['key' => (string) $file['id'], 'display_name' => (string) $file['name'], 'size' => (int) ($file['size'] ?? 0), 'last_modified' => $file['modifiedTime'] ?? null];
+                $objects[] = ['key' => 'gdrive:'.$file['id'], 'display_name' => (string) $file['name'], 'size' => (int) ($file['size'] ?? 0), 'last_modified' => $file['modifiedTime'] ?? null];
             }
 
             return [$objects, $response->json('nextPageToken') ?: null];
         }
-        $request = Http::withToken($this->dropboxToken($destination));
+        $request = Http::withToken($this->dropboxToken($destination))->connectTimeout(15)->timeout(60);
         $response = $cursor === null
             ? $request->post('https://api.dropboxapi.com/2/files/list_folder', ['path' => $this->dropboxPath($destination), 'recursive' => true, 'include_deleted' => false, 'limit' => $limit])
             : $request->post('https://api.dropboxapi.com/2/files/list_folder/continue', ['cursor' => $cursor]);
@@ -312,7 +585,12 @@ class DestinationStorage
             }
         }
 
-        return [$objects, $response->json('has_more') ? $response->json('cursor') : null];
+        $next = $response->json('has_more') ? $response->json('cursor') : null;
+        if ($response->json('has_more') && (! is_string($next) || $next === '')) {
+            throw new RuntimeException('Incomplete Dropbox listing.');
+        }
+
+        return [$objects, $next];
     }
 
     /**
@@ -546,6 +824,7 @@ class DestinationStorage
         $baseUrlPath = rtrim($this->decodeWebDavUrlPath((string) parse_url($baseUrl, PHP_URL_PATH)), '/');
 
         foreach ($xml->children('DAV:')->response as $entry) {
+            $this->progress();
             $dav = $entry->children('DAV:');
             $hrefUrlPath = (string) parse_url((string) $dav->href, PHP_URL_PATH);
 
@@ -627,14 +906,21 @@ class DestinationStorage
     {
         $allowedStatuses = $options['allowed_statuses'] ?? [];
         unset($options['allowed_statuses']);
+        if ($method === 'DELETE') {
+            $options['allow_redirects'] = false;
+        }
 
-        $request = Http::withOptions(['verify' => ! (bool) $destination->setting('insecure', false)]);
+        $request = Http::withOptions(['verify' => ! (bool) $destination->setting('insecure', false)])->connectTimeout(15)->timeout(60);
 
         if (filled($destination->secret('username')) || filled($destination->secret('password'))) {
             $request = $request->withBasicAuth((string) $destination->secret('username'), (string) $destination->secret('password'));
         }
 
         $response = $request->send($method, $url, $options);
+
+        if ($method === 'DELETE' && ! in_array($response->status(), [200, 204], true)) {
+            throw new RuntimeException('WebDAV archive deletion failed.');
+        }
 
         if ($response->failed() && ! in_array($response->status(), $allowedStatuses, true)) {
             throw new RuntimeException('WebDAV request failed with HTTP '.$response->status().'.');
@@ -985,9 +1271,14 @@ class DestinationStorage
             return;
         }
 
-        $entries = $sftp->rawlist($directory) ?: [];
+        $this->progress();
+        $entries = $sftp->rawlist($directory);
+        if (! is_array($entries)) {
+            throw new RuntimeException('Unable to list the complete SFTP archive tree.');
+        }
 
         foreach ($entries as $name => $attributes) {
+            $this->progress();
             if ($name === '.' || $name === '..' || $count >= $limit) {
                 continue;
             }
@@ -1052,11 +1343,12 @@ class DestinationStorage
                     break;
                 }
 
+                $lastModified = strtotime((string) $blob->Properties->{'Last-Modified'});
                 $objects[] = [
                     'key' => (string) $blob->Name,
                     'display_name' => (string) $blob->Name,
                     'size' => (int) $blob->Properties->{'Content-Length'},
-                    'last_modified' => date(DATE_ATOM, strtotime((string) $blob->Properties->{'Last-Modified'})),
+                    'last_modified' => $lastModified === false ? null : date(DATE_ATOM, $lastModified),
                 ];
             }
 
@@ -1134,6 +1426,9 @@ class DestinationStorage
         }
 
         $options = [];
+        if ($method === 'DELETE') {
+            $options['allow_redirects'] = false;
+        }
         if ($body !== null) {
             $options['body'] = $body;
         }
@@ -1144,9 +1439,9 @@ class DestinationStorage
             $options['progress'] = $progress;
         }
 
-        $response = Http::withHeaders($headers)->send($method, $url, $options);
+        $response = Http::withHeaders($headers)->connectTimeout(15)->timeout(60)->send($method, $url, $options);
 
-        if ($response->failed() && ! in_array($response->status(), $allowedStatuses, true)) {
+        if (($response->failed() || ($method === 'DELETE' && ! $response->successful())) && ! in_array($response->status(), $allowedStatuses, true)) {
             throw new RuntimeException('Azure Blob request failed with HTTP '.$response->status().'.');
         }
 
@@ -1399,7 +1694,7 @@ class DestinationStorage
 
     private function dropboxToken(BackupDestination $destination): string
     {
-        $response = Http::asForm()->post('https://api.dropboxapi.com/oauth2/token', [
+        $response = Http::asForm()->connectTimeout(15)->timeout(60)->post('https://api.dropboxapi.com/oauth2/token', [
             'grant_type' => 'refresh_token',
             'refresh_token' => $destination->secret('refresh_token'),
             'client_id' => $destination->secret('app_key'),
@@ -1413,7 +1708,7 @@ class DestinationStorage
 
     private function ensureDropboxOk(Response $response): void
     {
-        if ($response->failed()) {
+        if (! $response->successful()) {
             throw new RuntimeException('Dropbox request failed with HTTP '.$response->status().'.');
         }
     }
@@ -1614,7 +1909,7 @@ class DestinationStorage
             throw new RuntimeException('Unable to sign Google Drive service account assertion.');
         }
 
-        $response = Http::asForm()->post($tokenUrl, [
+        $response = Http::asForm()->connectTimeout(15)->timeout(60)->post($tokenUrl, [
             'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
             'assertion' => $unsigned.'.'.$this->base64Url($signature),
         ]);
@@ -1694,6 +1989,7 @@ class DestinationStorage
         $objects = [];
 
         foreach ($iterator as $file) {
+            $this->progress();
             if ($file->isLink() || ! $file->isFile()) {
                 continue;
             }
