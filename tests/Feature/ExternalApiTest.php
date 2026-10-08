@@ -31,6 +31,9 @@ class ExternalApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('openapi', '3.1.0')
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.source_type.enum.1', 'host_path')
+            ->assertJsonPath('components.schemas.BackupJobRequest.properties.retention_count.type', 'null')
+            ->assertJsonPath('components.schemas.BackupJobRequest.properties.retention_count.deprecated', true)
+            ->assertJsonPath('components.schemas.DockerLabelBackupSettingsRequest.properties.retention_count.type', 'null')
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.backup_exclude_regexp.maxLength', 1000)
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.notifications_enabled.default', true)
             ->assertJsonPath('components.schemas.BackupJobRequest.properties.alert_configs.items.properties.alert_rule_id.type', 'integer')
@@ -253,6 +256,58 @@ class ExternalApiTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_web_and_api_reject_nonempty_retention_count_without_mutating_jobs(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $destination = BackupDestination::create([
+            'name' => 'Local',
+            'provider' => BackupDestination::PROVIDER_LOCAL,
+            'bucket' => 'local',
+            'access_key_id' => '',
+            'secret_access_key' => '',
+            'settings' => ['archive_path' => '/archive', 'archive_mount_source' => '/host/archive'],
+            'is_active' => true,
+        ]);
+        DockerVolume::create(['name' => 'app-data', 'exists' => true]);
+        $payload = [
+            'name' => 'Daily app data',
+            'volume_name' => 'app-data',
+            'backup_destination_id' => $destination->id,
+            'schedule_type' => BackupJob::SCHEDULE_DAILY,
+            'schedule_config' => ['time' => '02:00'],
+            'retention_days' => 14,
+        ];
+        $token = $admin->createToken('retention', ['read', 'write'])->plainTextToken;
+        $this->actingAs($admin)->withToken($token);
+
+        foreach ([7, 0, false, 'unsupported', [1]] as $count) {
+            $this->postJson('/api/v1/backup-jobs', [...$payload, 'retention_count' => $count])
+                ->assertUnprocessable()
+                ->assertJsonPath('errors.retention_count.0', 'Count-based retention is unsupported. Use retention_days instead.');
+            $this->post(route('backup-jobs.store'), [...$payload, 'retention_count' => $count])
+                ->assertSessionHasErrors('retention_count');
+            $this->assertDatabaseCount('backup_jobs', 0);
+        }
+
+        $this->postJson('/api/v1/backup-jobs', $payload)->assertCreated();
+        $job = BackupJob::firstOrFail();
+        foreach (["/api/v1/backup-jobs/{$job->id}", route('backup-jobs.update', $job)] as $url) {
+            $this->putJson($url, [...$payload, 'name' => 'Rejected update', 'retention_count' => 5])
+                ->assertUnprocessable()->assertJsonValidationErrors('retention_count');
+            $this->assertSame('Daily app data', $job->refresh()->name);
+            foreach ([[], ['retention_count' => null]] as $input) {
+                BackupJob::query()->whereKey($job->id)->update(['retention_count' => 7]);
+                $response = $this->putJson($url, [...$payload, ...$input]);
+                if (str_starts_with($url, '/api/')) {
+                    $response->assertOk();
+                } else {
+                    $response->assertRedirect()->assertSessionHasNoErrors();
+                }
+                $this->assertNull($job->refresh()->retention_count);
+            }
+        }
+    }
+
     public function test_admin_write_token_can_create_backup_job(): void
     {
         $admin = User::factory()->admin()->create();
@@ -283,7 +338,7 @@ class ExternalApiTest extends TestCase
                 'backup_destination_id' => $destination->id,
                 'schedule_type' => BackupJob::SCHEDULE_DAILY,
                 'schedule_config' => ['time' => '02:00'],
-                'retention_count' => 7,
+                'retention_days' => 7,
                 'backup_exclude_regexp' => '\\.log$',
                 'stop_containers_before_backup' => false,
             ])
@@ -653,7 +708,7 @@ class ExternalApiTest extends TestCase
                 'backup_destination_id' => $destination->id,
                 'schedule_type' => BackupJob::SCHEDULE_DAILY,
                 'schedule_config' => ['time' => '02:00'],
-                'retention_count' => 7,
+                'retention_days' => 7,
             ])
             ->assertCreated()
             ->assertJsonPath('data.source_type', BackupJob::SOURCE_TYPE_HOST_PATH)

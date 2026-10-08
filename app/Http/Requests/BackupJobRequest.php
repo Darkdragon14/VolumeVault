@@ -108,7 +108,7 @@ class BackupJobRequest extends FormRequest
             'schedule_config' => ['nullable', 'array'],
             'timezone' => ['nullable', 'string', Rule::in(\DateTimeZone::listIdentifiers())],
             'retention_days' => ['nullable', 'integer', 'min:1'],
-            'retention_count' => ['nullable', 'integer', 'min:1'],
+            'retention_count' => ['prohibited'],
             'backup_exclude_regexp' => ['nullable', 'string', 'max:1000'],
             // Not nullable: prepareForValidation already maps absent/null/blank to
             // the default, so only the two enum values are ever accepted here.
@@ -138,6 +138,13 @@ class BackupJobRequest extends FormRequest
             'stop_containers_before_backup' => ['boolean'],
             'stop_container_names' => ['nullable', 'array'],
             'stop_container_names.*' => ['string', 'max:255'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'retention_count.prohibited' => 'Count-based retention is unsupported. Use retention_days instead.',
         ];
     }
 

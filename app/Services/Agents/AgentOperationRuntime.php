@@ -257,6 +257,7 @@ class AgentOperationRuntime
                 $jobDestination = BackupDestination::create([...$spec['safety_destination'], 'docker_host_id' => 1, 'is_active' => true]);
             }
             $jobData = $spec['job'];
+            unset($jobData['retention_count']);
             if ($operation['kind'] === 'restore' && ($spec['run']['mode'] ?? 'new_volume') !== 'new_volume') {
                 // Safety backups protect the target on this host, not A's source.
                 $jobData['source_type'] = 'docker_volume';
@@ -272,7 +273,13 @@ class AgentOperationRuntime
             ]);
             if ($operation['kind'] === 'backup') {
                 $run = app(CreateBackupRunRecord::class)->handle($job, ['status' => 'queued', 'trigger' => 'manual']);
-                $run->forceFill(['backup_filename' => $spec['run']['backup_filename']])->save();
+                $run->forceFill([
+                    'backup_filename' => $spec['run']['backup_filename'],
+                    'execution_options_snapshot' => [
+                        ...$run->execution_options_snapshot,
+                        'backup_pruning_prefix' => $spec['run']['backup_pruning_prefix'] ?? null,
+                    ],
+                ])->save();
 
                 return $run;
             }

@@ -213,7 +213,7 @@ class DockerLabelReferenceNameRevalidationTest extends TestCase
             'started_at' => now(),
         ]);
         $list = Mockery::mock(ListDockerLabelBackupContainers::class);
-        $list->shouldReceive('handle')->once()->andReturn([$this->container(['retention-count' => '8'])]);
+        $list->shouldReceive('handle')->once()->andReturn([$this->container(['retention-days' => '8'])]);
 
         $this->reconcile($list, app(WithDockerLabelMutationLocks::class));
 
@@ -228,7 +228,7 @@ class DockerLabelReferenceNameRevalidationTest extends TestCase
 
         $this->assertTrue(app(ApplyPendingDockerLabelReconciliation::class)->handle($job));
         $this->assertSame(BackupJob::STATUS_ACTIVE, $job->refresh()->status);
-        $this->assertSame(8, $job->retention_count);
+        $this->assertSame(8, $job->retention_days);
     }
 
     private function reconcile(ListDockerLabelBackupContainers $list, WithDockerLabelMutationLocks $locks): array

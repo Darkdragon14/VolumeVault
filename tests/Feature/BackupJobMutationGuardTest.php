@@ -18,11 +18,32 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class BackupJobMutationGuardTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_job_forms_only_expose_archive_namespace_after_it_has_been_assigned(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+        $this->get(route('backup-jobs.create'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('BackupJobs/Form')
+                ->where('archiveFilenamePrefix', null));
+
+        $job = $this->job('vol_a');
+        $this->get(route('backup-jobs.edit', $job))
+            ->assertInertia(fn (Assert $page) => $page->where('archiveFilenamePrefix', null));
+        $this->assertNull($job->fresh()->retention_uuid);
+
+        $uuid = '12345678-1234-4234-8234-123456789abc';
+        $job->forceFill(['retention_uuid' => $uuid])->save();
+        $this->get(route('backup-jobs.edit', $job))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('archiveFilenamePrefix', 'volumevault-job-'.$uuid.'-'));
+    }
 
     public function test_explicit_manual_job_is_locked_in_job_stage_before_notification_channels(): void
     {

@@ -236,12 +236,53 @@ class RunBackupContainerTest extends TestCase
             'retention_days' => 7,
             'backup_exclude_regexp' => '\.tmp$',
         ]);
+        $prefix = 'volumevault-job-11111111-1111-4111-8111-111111111111-';
+        $run->forceFill([
+            'execution_options_snapshot' => ['retention_days' => 7, 'backup_pruning_prefix' => $prefix],
+            'backup_filename' => $prefix.'app_data.tar.gz',
+        ])->save();
 
         (new RunBackupContainer($docker))->handle($run);
 
         $this->assertSame('7', $docker->environment['BACKUP_RETENTION_DAYS'] ?? null);
+        $this->assertSame($prefix, $docker->environment['BACKUP_PRUNING_PREFIX'] ?? null);
+        $this->assertArrayNotHasKey('BACKUP_PRUNING_LEEWAY', $docker->environment);
         $this->assertSame('\.tmp$', $docker->environment['BACKUP_EXCLUDE_REGEXP'] ?? null);
         $this->assertArrayNotHasKey('BACKUP_RETENTION_COUNT', $docker->environment);
+    }
+
+    public function test_historical_runs_do_not_prune_even_when_the_job_has_retention_settings(): void
+    {
+        $docker = $this->recordingDocker();
+        $run = $this->backupRun($this->s3Destination(), ['retention_days' => 7, 'retention_count' => 3]);
+
+        (new RunBackupContainer($docker))->handle($run);
+
+        $this->assertArrayNotHasKey('BACKUP_RETENTION_DAYS', $docker->environment);
+        $this->assertArrayNotHasKey('BACKUP_RETENTION_COUNT', $docker->environment);
+        $this->assertArrayNotHasKey('BACKUP_PRUNING_PREFIX', $docker->environment);
+    }
+
+    public function test_invalid_or_mismatched_prefixes_and_safety_runs_do_not_prune(): void
+    {
+        $prefix = 'volumevault-job-11111111-1111-4111-8111-111111111111-';
+        foreach ([
+            ['volumevault-', 'volumevault-old.tar.gz', BackupRun::TRIGGER_MANUAL],
+            [$prefix, 'old.tar.gz', BackupRun::TRIGGER_MANUAL],
+            [$prefix, $prefix.'safety.tar.gz', BackupRun::TRIGGER_PRE_RESTORE],
+        ] as [$candidate, $filename, $trigger]) {
+            $docker = $this->recordingDocker();
+            $run = $this->backupRun($this->s3Destination(), ['retention_days' => 7]);
+            $run->forceFill([
+                'execution_options_snapshot' => ['retention_days' => 7, 'backup_pruning_prefix' => $candidate],
+                'backup_filename' => $filename, 'trigger' => $trigger,
+            ])->save();
+
+            (new RunBackupContainer($docker))->handle($run);
+
+            $this->assertArrayNotHasKey('BACKUP_RETENTION_DAYS', $docker->environment);
+            $this->assertArrayNotHasKey('BACKUP_PRUNING_PREFIX', $docker->environment);
+        }
     }
 
     public function test_ssh_private_key_is_copied_into_the_created_container_and_cleaned_up(): void

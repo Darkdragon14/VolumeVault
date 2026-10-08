@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'job_scoped_day_retention' => [
+        'title' => 'Bezpečnější uchovávání podle dnů pro jednotlivé úlohy',
+        'description' => 'Omlouváme se: uchovávání podle počtu bylo nabízeno, ale není podporováno. Neprázdné hodnoty retention_count a štítky retention-count se nyní odmítají; zvolte počet dnů výslovně, bez automatického převodu. Nové archivy vždy začínají volumevault-job-<trvalé UUID úlohy>-, i s vlastní šablonou; BACKUP_PRUNING_PREFIX omezuje mazání podle dnů na nové archivy dané úlohy. Staré archivy zůstávají mimo automatické mazání, aby nedošlo k hromadnému odstranění: vyčistěte je ručně. Bezpečnostní zálohy používají volumevault-safety- a nikdy se nemažou automaticky. Staré běhy ve frontě bez předpony nic nemažou. Aktualizujte orchestrátor i agenty společně: starší agenti odmítají nové volitelné pole backup_pruning_prefix, bez nebezpečné náhradní varianty.',
+    ],
     'public_api_health' => [
         'title' => 'Veřejná kontrola dostupnosti API',
         'description' => 'Sledujte dostupnost aplikace přes HTTP pomocí veřejného endpointu /api/v1/health, zdokumentovaného v OpenAPI. Nekontroluje Docker, workery ani cíle záloh; /up zůstává dostupný.',

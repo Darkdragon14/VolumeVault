@@ -7,6 +7,7 @@ use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Services\Agents\AgentExecution;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class CreateBackupRunRecord
@@ -31,6 +32,9 @@ class CreateBackupRunRecord
                     }
 
                     $lockedJob->setRelation('destination', $lockedDestination);
+                    if (($attributes['trigger'] ?? null) !== BackupRun::TRIGGER_PRE_RESTORE && $lockedJob->retention_uuid === null) {
+                        $lockedJob->forceFill(['retention_uuid' => (string) Str::uuid()])->save();
+                    }
                     app(AgentExecution::class)->validateHost((int) $lockedJob->docker_host_id, 'backup-v1');
                     if ($lockedDestination->isHostBound() && (int) $lockedDestination->docker_host_id !== (int) $lockedJob->docker_host_id) {
                         throw ValidationException::withMessages(['destination' => 'The destination belongs to another Docker host.']);
@@ -47,15 +51,18 @@ class CreateBackupRunRecord
                         'backup_destination_name' => $lockedDestination->name,
                         'backup_destination_provider' => $lockedDestination->provider,
                         'backup_destination_locator_fingerprint' => $lockedDestination->locatorFingerprint(),
-                        'execution_options_snapshot' => $lockedJob->only([
-                            'retention_days',
-                            'retention_count',
-                            'backup_exclude_regexp',
-                            'backup_filter_mode',
-                            'backup_include_paths',
-                            'stop_containers_before_backup',
-                            'stop_container_names',
-                        ]),
+                        'execution_options_snapshot' => [
+                            'backup_pruning_prefix' => ($attributes['trigger'] ?? null) === BackupRun::TRIGGER_PRE_RESTORE
+                                ? null : 'volumevault-job-'.$lockedJob->retention_uuid.'-',
+                            ...$lockedJob->only([
+                                'retention_days',
+                                'backup_exclude_regexp',
+                                'backup_filter_mode',
+                                'backup_include_paths',
+                                'stop_containers_before_backup',
+                                'stop_container_names',
+                            ]),
+                        ],
                     ]);
 
                     $run->setRelation('job', $lockedJob);

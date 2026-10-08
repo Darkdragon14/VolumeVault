@@ -52,7 +52,6 @@ const settings = {
     },
     timezone: null,
     retention_days: null,
-    retention_count: null,
     backup_filter_mode: 'exclude' as const,
     backup_include_paths: null,
     backup_exclude_regexp: null,
@@ -65,12 +64,12 @@ const settings = {
     last_synced_at: null,
 };
 
-function mountPage(errors: Record<string, string> = {}, notificationChannels: Array<{ id: number; name: string }> = []) {
+function mountPage(errors: Record<string, string> = {}, notificationChannels: Array<{ id: number; name: string }> = [], initialSettings = settings) {
     inertia.errors = errors;
 
     return mount(DockerLabelBackups, {
         props: {
-            settings,
+            settings: initialSettings,
             hosts: [
                 { id: 1, name: 'Local', supports_docker_labels: true },
                 { id: 2, name: 'Remote NAS', supports_docker_labels: true },
@@ -97,6 +96,21 @@ describe('Docker label backup settings schedule', () => {
         inertia.canManage = true;
         inertia.get.mockReset();
         inertia.payload = null;
+    });
+
+    it('omits historical retention count from controls and payload across host changes', async () => {
+        const wrapper = mountPage({}, [], { ...settings, retention_days: 14, retention_count: 5 } as typeof settings);
+        expect(wrapper.text()).not.toContain('Retention count');
+        expect(inertia.form).not.toHaveProperty('retention_count');
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.payload).toMatchObject({ docker_host_id: 1, retention_days: 14 });
+        expect(inertia.payload).not.toHaveProperty('retention_count');
+
+        await wrapper.setProps({ settings: { ...settings, docker_host_id: 2, retention_days: 7, retention_count: 9 } as typeof settings });
+        expect(inertia.form).not.toHaveProperty('retention_count');
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.payload).toMatchObject({ docker_host_id: 2, retention_days: 7 });
+        expect(inertia.payload).not.toHaveProperty('retention_count');
     });
 
     it('reloads host context, resets errors and edits, and submits only the loaded host payload', async () => {

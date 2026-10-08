@@ -110,6 +110,61 @@ class AgentOperationProtocolTest extends TestCase
         $this->assertSame(42, $requested->fresh()->result['data']['used_bytes']);
     }
 
+    public function test_backup_dispatch_forwards_only_snapshot_retention_namespace_and_omits_count(): void
+    {
+        [$host] = $this->registered();
+        $run = $this->backup($host);
+        $prefix = 'volumevault-job-12345678-1234-4321-8765-123456789abc-';
+        $run->forceFill([
+            'backup_filename' => $prefix.'frozen.tar.gz',
+            'execution_options_snapshot' => [...$run->execution_options_snapshot, 'backup_pruning_prefix' => $prefix],
+        ])->save();
+        $run->job->forceFill(['retention_count' => 3])->save();
+        $dispatch = app(DispatchAgentOperation::class);
+        $spec = $dispatch->specification($run);
+        $this->assertSame($prefix, $spec['run']['backup_pruning_prefix']);
+        $this->assertSame($run->backup_filename, $spec['run']['backup_filename']);
+        $this->assertArrayNotHasKey('retention_count', $spec['job']);
+        $run->forceFill(['execution_options_snapshot' => []])->save();
+        $this->assertNull($dispatch->specification($run)['run']['backup_pruning_prefix']);
+        $run->forceFill(['trigger' => BackupRun::TRIGGER_PRE_RESTORE, 'execution_options_snapshot' => ['backup_pruning_prefix' => $prefix]])->save();
+        $this->assertNull($dispatch->specification($run)['run']['backup_pruning_prefix']);
+    }
+
+    #[DataProvider('invalidBackupPruningPrefixes')]
+    public function test_specification_rejects_unsafe_backup_pruning_prefixes(mixed $prefix, string $filename): void
+    {
+        $operation = AgentOperationRuntimeTest::operation();
+        $operation['spec']['run'] = ['backup_filename' => $filename, 'backup_pruning_prefix' => $prefix];
+        $this->expectExceptionMessage('Agent operation specification is invalid.');
+        app(AgentOperationSpecification::class)->validate($operation);
+    }
+
+    public static function invalidBackupPruningPrefixes(): array
+    {
+        $prefix = 'volumevault-job-12345678-1234-4321-8765-123456789abc-';
+
+        return [
+            'empty' => ['', 'archive.tar.gz'],
+            'broad prefix' => ['volumevault-job-', 'volumevault-job-archive.tar.gz'],
+            'non uuid' => ['volumevault-job-not-a-uuid-', 'volumevault-job-not-a-uuid-archive.tar.gz'],
+            'missing boundary' => [rtrim($prefix, '-'), $prefix.'archive.tar.gz'],
+            'mismatched filename' => [$prefix, 'other-job.tar.gz'],
+            'wrong type' => [123, 'archive.tar.gz'],
+            'array' => [[], 'archive.tar.gz'],
+        ];
+    }
+
+    public function test_specification_accepts_legacy_count_and_missing_or_null_pruning_prefix(): void
+    {
+        $operation = AgentOperationRuntimeTest::operation();
+        $operation['spec']['job']['retention_count'] = 3;
+        app(AgentOperationSpecification::class)->validate($operation);
+        $operation['spec']['run']['backup_pruning_prefix'] = null;
+        app(AgentOperationSpecification::class)->validate($operation);
+        $this->assertTrue(true);
+    }
+
     public function test_destination_listing_transport_preserves_whitespace_and_secret_substrings_in_resource_identity(): void
     {
         [$host, $body, $token] = $this->registered();

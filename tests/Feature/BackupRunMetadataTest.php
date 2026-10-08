@@ -190,7 +190,6 @@ class BackupRunMetadataTest extends TestCase
         File::ensureDirectoryExists($archivePath);
         $initialOptions = [
             'retention_days' => 7,
-            'retention_count' => 3,
             'backup_exclude_regexp' => '\\.cache$',
             'backup_filter_mode' => BackupJob::FILTER_MODE_INCLUDE,
             'backup_include_paths' => '/data /config',
@@ -204,7 +203,6 @@ class BackupRunMetadataTest extends TestCase
         ]);
         $run->job->update([
             'retention_days' => 30,
-            'retention_count' => 10,
             'backup_exclude_regexp' => null,
             'backup_filter_mode' => BackupJob::FILTER_MODE_EXCLUDE,
             'backup_include_paths' => null,
@@ -213,7 +211,10 @@ class BackupRunMetadataTest extends TestCase
         ]);
 
         $run = $run->fresh();
-        $this->assertSame($initialOptions, $run->execution_options_snapshot);
+        $this->assertSame([
+            'backup_pruning_prefix' => 'volumevault-job-'.$run->job->retention_uuid.'-',
+            ...$initialOptions,
+        ], $run->execution_options_snapshot);
         $executionJob = $run->executionJob();
 
         foreach ($initialOptions as $field => $value) {
@@ -385,7 +386,7 @@ class BackupRunMetadataTest extends TestCase
         app(RunBackup::class)->recordArchiveMetadata($run->id);
         $run->refresh();
 
-        $this->assertSame('volumevault-app_data-run-'.$run->id.'.tar.gz', $run->backup_key);
+        $this->assertSame('volumevault-job-'.$job->fresh()->retention_uuid.'-volumevault-app_data-run-'.$run->id.'.tar.gz', $run->backup_key);
         $this->assertSame(1536, $run->backup_size_bytes);
         $this->assertFalse($run->archive_metadata_pending);
     }

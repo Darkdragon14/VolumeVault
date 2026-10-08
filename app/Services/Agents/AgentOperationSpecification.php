@@ -69,8 +69,9 @@ class AgentOperationSpecification
                 'spec.job.timezone' => ['nullable', 'timezone'],
                 'spec.destination' => ['required', 'array:name,provider,endpoint,region,bucket,path_prefix,access_key_id,secret_access_key,use_path_style_endpoint,settings,secrets'],
                 'spec.safety_destination' => ['sometimes', 'array:name,provider,endpoint,region,bucket,path_prefix,access_key_id,secret_access_key,use_path_style_endpoint,settings,secrets'],
-                'spec.run' => ['present', 'array:backup_filename,selected_backup_key,source_volume_name,target_volume_name,mode,backup_before_overwrite,confirmation_text'],
+                'spec.run' => ['present', 'array:backup_filename,backup_pruning_prefix,selected_backup_key,source_volume_name,target_volume_name,mode,backup_before_overwrite,confirmation_text'],
                 'spec.run.backup_filename' => ['nullable', 'string', 'max:255', 'regex:/\A[a-zA-Z0-9][a-zA-Z0-9_.-]*\z/'],
+                'spec.run.backup_pruning_prefix' => ['sometimes', 'nullable', 'string', 'regex:/\Avolumevault-job-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-\z/'],
                 'spec.run.selected_backup_key' => ['nullable', 'string', 'max:4096'],
                 'spec.run.source_volume_name' => ['nullable', 'string', 'max:4096'],
                 'spec.run.target_volume_name' => ['nullable', 'string', 'max:255'],
@@ -232,8 +233,17 @@ class AgentOperationSpecification
             if (empty($run['backup_filename'])) {
                 throw new RuntimeException;
             }
+            if (isset($run['backup_pruning_prefix']) && (
+                preg_match('/\Avolumevault-job-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-\z/', $run['backup_pruning_prefix']) !== 1
+                || ! str_starts_with($run['backup_filename'], $run['backup_pruning_prefix'])
+            )) {
+                throw new RuntimeException;
+            }
 
             return;
+        }
+        if (array_key_exists('backup_pruning_prefix', $run)) {
+            throw new RuntimeException;
         }
         $this->volume($run['target_volume_name'] ?? '');
         if (empty($run['selected_backup_key']) || empty($run['source_volume_name'])) {

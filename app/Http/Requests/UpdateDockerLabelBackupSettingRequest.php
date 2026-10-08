@@ -39,7 +39,7 @@ class UpdateDockerLabelBackupSettingRequest extends FormRequest
             'schedule_config' => ['required', 'array'],
             'timezone' => ['nullable', 'string', Rule::in(\DateTimeZone::listIdentifiers())],
             'retention_days' => ['nullable', 'integer', 'min:1'],
-            'retention_count' => ['nullable', 'integer', 'min:1'],
+            'retention_count' => ['prohibited'],
             'backup_filter_mode' => ['required', Rule::in([BackupJob::FILTER_MODE_EXCLUDE, BackupJob::FILTER_MODE_INCLUDE])],
             'backup_include_paths' => ['nullable', 'string', 'max:2000'],
             'backup_exclude_regexp' => ['nullable', 'string', 'max:1000'],
@@ -49,6 +49,13 @@ class UpdateDockerLabelBackupSettingRequest extends FormRequest
             'notification_channel_ids.*' => ['integer', 'distinct', 'exists:notification_channels,id'],
             'alert_notifications_enabled' => ['required', 'boolean'],
             'stop_containers_before_backup' => ['required', 'boolean'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'retention_count.prohibited' => 'Count-based retention is unsupported. Use retention_days instead.',
         ];
     }
 
@@ -97,6 +104,6 @@ class UpdateDockerLabelBackupSettingRequest extends FormRequest
     {
         $validated = $this->validated();
 
-        return collect($validated)->except(['enabled', 'backup_destination_id', 'docker_host_id'])->all();
+        return collect($validated)->except(['enabled', 'backup_destination_id', 'docker_host_id', 'retention_count'])->all();
     }
 }

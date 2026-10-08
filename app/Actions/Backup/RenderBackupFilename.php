@@ -28,10 +28,10 @@ class RenderBackupFilename
         $template = trim((string) $run->job->backup_filename_template);
 
         if ($template === '') {
-            return $this->finalize('volumevault-'.$this->safeRunSource($run).'-run-'.$run->id);
+            return $this->finalize($this->archivePrefix($run).'volumevault-'.$this->safeRunSource($run).'-run-'.$run->id);
         }
 
-        return $this->finalize($this->renderTemplate($template, $run));
+        return $this->finalize($this->archivePrefix($run).$this->renderTemplate($template, $run));
     }
 
     public function validationError(?string $template): ?string
@@ -77,12 +77,15 @@ class RenderBackupFilename
         $run->forceFill([
             'id' => $runId ?? 123,
             'started_at' => $time ?? now(),
+            'execution_options_snapshot' => [
+                'backup_pruning_prefix' => 'volumevault-job-'.($job->retention_uuid ?: '00000000-0000-0000-0000-000000000000').'-',
+            ],
         ]);
         $run->setRelation('job', $job);
 
         $template = trim((string) $template);
 
-        return $this->finalize($this->renderTemplate($template === '' ? self::DEFAULT_TEMPLATE : $template, $run));
+        return $this->finalize($this->archivePrefix($run).$this->renderTemplate($template === '' ? self::DEFAULT_TEMPLATE : $template, $run));
     }
 
     private function renderTemplate(string $template, BackupRun $run): string
@@ -103,6 +106,15 @@ class RenderBackupFilename
             '{minute}' => $time->format('i'),
             '{second}' => $time->format('s'),
         ]);
+    }
+
+    private function archivePrefix(BackupRun $run): string
+    {
+        if ($run->trigger === BackupRun::TRIGGER_PRE_RESTORE) {
+            return 'volumevault-safety-';
+        }
+
+        return (string) ($run->execution_options_snapshot['backup_pruning_prefix'] ?? '');
     }
 
     private function filenameTime(BackupRun $run): Carbon

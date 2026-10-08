@@ -126,7 +126,7 @@ class RunBackupAtomicFinalizationTest extends TestCase
         $this->assertNotNull($run->finished_at);
         $this->assertSame(BackupJob::STATUS_PAUSED, $job->status);
         $this->assertSame('Maintenance window.', $job->pause_reason);
-        $this->assertSame(9, $job->retention_count);
+        $this->assertSame(9, $job->retention_days);
         $this->assertNull($job->pending_label_reconciliation);
     }
 
@@ -144,7 +144,7 @@ class RunBackupAtomicFinalizationTest extends TestCase
         $this->assertNotNull($run->finished_at);
         $this->assertSame(BackupJob::STATUS_ACTIVE, $job->status);
         $this->assertNull($job->pause_reason);
-        $this->assertSame(9, $job->retention_count);
+        $this->assertSame(9, $job->retention_days);
         $this->assertNull($job->pending_label_reconciliation);
     }
 
@@ -189,7 +189,7 @@ class RunBackupAtomicFinalizationTest extends TestCase
         $job = $run->job()->firstOrFail();
         DockerVolume::create(['name' => $job->volume_name, 'exists' => true]);
         $payload = $job->only($job->getFillable());
-        $payload['retention_count'] = 9;
+        $payload['retention_days'] = 9;
 
         $job->update([
             'status' => $status,

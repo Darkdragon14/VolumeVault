@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'job_scoped_day_retention' => [
+        'title' => 'Veiligere bewaartermijn in dagen per taak',
+        'description' => 'Onze excuses: bewaren op basis van aantallen werd aangeboden, maar wordt niet ondersteund. Niet-lege retention_count-waarden en retention-count-labels worden nu geweigerd; kies expliciet dagen, zonder automatische omzetting. Nieuwe archieven beginnen altijd met volumevault-job-<vaste taak-UUID>-, ook bij eigen sjablonen; BACKUP_PRUNING_PREFIX beperkt opruimen op basis van dagen tot nieuwe archieven van die taak. Oude archieven blijven buiten automatisch opruimen om massale verwijdering te voorkomen: ruim ze handmatig op. Veiligheidsback-ups gebruiken volumevault-safety- en worden nooit automatisch opgeruimd. Oude taken in de wachtrij zonder voorvoegsel ruimen niets op. Werk de orchestrator en agents samen bij: oudere agents weigeren het nieuwe optionele veld backup_pruning_prefix, zonder onveilige terugval.',
+    ],
     'public_api_health' => [
         'title' => 'Openbare API-beschikbaarheidscontrole',
         'description' => 'Controleer de HTTP-beschikbaarheid van de applicatie via het openbare endpoint /api/v1/health, gedocumenteerd in OpenAPI. Docker, workers en back-upbestemmingen worden niet gecontroleerd; /up blijft beschikbaar.',

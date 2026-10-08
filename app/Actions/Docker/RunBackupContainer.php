@@ -128,12 +128,13 @@ class RunBackupContainer
             'EXEC_FORWARD_OUTPUT' => 'true',
         ];
 
-        if ($job->retention_days) {
+        $pruningPrefix = $run->execution_options_snapshot['backup_pruning_prefix'] ?? null;
+        if ($job->retention_days && $run->trigger !== BackupRun::TRIGGER_PRE_RESTORE
+            && is_string($pruningPrefix)
+            && preg_match('/\Avolumevault-job-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-\z/', $pruningPrefix) === 1
+            && str_starts_with($environment['BACKUP_FILENAME'], $pruningPrefix)) {
             $environment['BACKUP_RETENTION_DAYS'] = (string) $job->retention_days;
-        }
-
-        if ($job->retention_count) {
-            $environment['BACKUP_RETENTION_COUNT'] = (string) $job->retention_count;
+            $environment['BACKUP_PRUNING_PREFIX'] = $pruningPrefix;
         }
 
         if ($job->backup_filter_mode === BackupJob::FILTER_MODE_INCLUDE) {

@@ -157,6 +157,9 @@ class BackupJobController extends Controller
         return Inertia::render('BackupJobs/Form', [
             ...$this->formProps(),
             'job' => $this->serializeJob($backupJob),
+            'archiveFilenamePrefix' => $backupJob->retention_uuid !== null
+                ? 'volumevault-job-'.$backupJob->retention_uuid.'-'
+                : null,
         ]);
     }
 
@@ -328,6 +331,7 @@ class BackupJobController extends Controller
 
         return [
             'job' => null,
+            'archiveFilenamePrefix' => null,
             'hosts' => DockerHost::query()->when(DeploymentMode::isOrchestrator(), fn ($query) => $query->where('id', '!=', DockerHost::LOCAL_ID))->orderBy('name')->get()->map(fn (DockerHost $host): array => [
                 ...app(AgentExecution::class)->summary($host),
                 'host_path_policy' => $policyAudit->policyReport($host),
@@ -418,7 +422,7 @@ class BackupJobController extends Controller
             'status' => $status ?: BackupJob::STATUS_ACTIVE,
             ...$this->syncAlertSettings->payload($request, $job),
             'retention_days' => $request->input('retention_days'),
-            'retention_count' => $request->input('retention_count'),
+            'retention_count' => null,
             'backup_exclude_regexp' => $backupExcludeRegexp !== '' ? $backupExcludeRegexp : null,
             'backup_filter_mode' => $backupFilterMode,
             'backup_include_paths' => $backupIncludePaths !== '' ? $backupIncludePaths : null,

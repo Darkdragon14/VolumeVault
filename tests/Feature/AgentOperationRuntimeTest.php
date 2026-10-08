@@ -34,6 +34,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Mockery;
 use PHPUnit\Framework\Assert;
@@ -89,6 +90,7 @@ class AgentOperationRuntimeTest extends TestCase
         $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->once()->with('source-on-a')->andReturn([]);
         $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()->andReturnUsing(function (BackupRun $run): DockerProcessResult {
             $this->assertSame('central-unique.tar.gz', $run->backup_filename);
+            $this->assertNull($run->execution_options_snapshot['backup_pruning_prefix']);
             $this->assertSame(1, $run->docker_host_id);
 
             return new DockerProcessResult([], 0, 'Uploaded using test-secret', '');
@@ -141,6 +143,37 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertSame($result, $store->read($second['id'])['result']);
         $database = new \PDO('sqlite:'.$store->directory($second['id']).'/runtime.sqlite');
         $this->assertSame(0, (int) $database->query('select count(*) from backup_runs')->fetchColumn());
+    }
+
+    #[DataProvider('backupPruningPrefixes')]
+    public function test_backup_preserves_submitted_retention_namespace_and_filename(?string $prefix): void
+    {
+        $operation = self::operation();
+        $filename = ($prefix ?? '').'submitted.tar.gz';
+        $operation['spec']['run'] = ['backup_filename' => $filename, 'backup_pruning_prefix' => $prefix];
+        $operation['spec']['job']['retention_days'] = 14;
+        $operation['spec']['job']['retention_count'] = 2;
+        app(AgentOperationStore::class)->accept($operation);
+        $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->once()->andReturn([]);
+        $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()->andReturnUsing(function (BackupRun $run) use ($prefix, $filename): DockerProcessResult {
+            $this->assertSame($filename, $run->backup_filename);
+            $this->assertSame($prefix, $run->execution_options_snapshot['backup_pruning_prefix']);
+            $this->assertSame(14, $run->executionJob()->retention_days);
+            $this->assertNull($run->job->retention_count);
+
+            return new DockerProcessResult([], 0, '', '');
+        });
+        $this->mock(ListBackupObjects::class)->shouldReceive('findByFilename')->once()->andReturn(['key' => $filename]);
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $this->assertSame('success', app(AgentOperationSupervisor::class)->pendingResult()['result']['status']);
+    }
+
+    public static function backupPruningPrefixes(): array
+    {
+        return [
+            'submitted namespace' => ['volumevault-job-12345678-1234-4321-8765-123456789abc-'],
+            'explicit no pruning' => [null],
+        ];
     }
 
     public function test_export_runtime_uploads_with_real_client_from_child_state_while_parent_loop_is_open(): void
@@ -435,6 +468,7 @@ class AgentOperationRuntimeTest extends TestCase
         $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()->andReturnUsing(function (BackupRun $run): DockerProcessResult {
             $this->assertSame('target-on-b', $run->executionJob()->volume_name);
             $this->assertSame('pre_restore', $run->trigger);
+            $this->assertNull($run->execution_options_snapshot['backup_pruning_prefix']);
             $this->assertSame('safety-bucket', $run->executionJob()->destination->bucket);
             $this->assertSame('safety-only-secret', $run->executionJob()->destination->secret_access_key);
 
@@ -468,6 +502,81 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertDirectoryDoesNotExist(app(AgentOperationStore::class)->directory($operation['id']));
         $this->assertSame('safety.tar.gz', $receipt['result']['safety_backup']['backup_key']);
         $this->assertSame($filename, $receipt['result']['safety_backup']['backup_filename']);
+    }
+
+    public function test_executing_legacy_restore_resumes_with_safety_backup_without_migration_or_replay(): void
+    {
+        $operation = self::operation('restore');
+        $operation['spec']['run'] = [...$operation['spec']['run'], 'mode' => 'inplace', 'backup_before_overwrite' => true, 'confirmation_text' => 'target-on-b'];
+        $store = app(AgentOperationStore::class);
+        $store->accept($operation);
+        $this->mock(RunRestore::class)->shouldReceive('handle')->once()->andThrow(new RuntimeException('Crash before claim'));
+        $runtime = app(AgentOperationRuntime::class);
+        $this->assertFalse($runtime->handle($operation['id']));
+        $restoreId = RestoreRun::sole()->id;
+        $this->assertSame('executing', $store->read($operation['id'])['phase']);
+        $this->assertSame('queued', RestoreRun::sole()->status);
+        $this->assertNull(RestoreRun::sole()->started_at);
+        $this->assertSame(0, BackupRun::count());
+
+        $migration = require database_path('migrations/2026_10_08_071227_add_retention_uuid_to_backup_jobs_table.php');
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('backup_jobs', 'retention_uuid'));
+        DB::purge('sqlite');
+        $this->app->forgetInstance(RunRestore::class);
+
+        $events = [];
+        $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->twice()->with('target-on-b')->andReturn([]);
+        $this->mock(DestinationStorage::class)->shouldReceive('download')->once()->andReturnUsing(function ($destination, $key, $path) use (&$events): void {
+            $events[] = 'download';
+            file_put_contents($path, 'archive');
+        });
+        $this->mock(VerifyRestoreArchive::class)->shouldReceive('handle')->once()->andReturnUsing(function () use (&$events): DockerProcessResult {
+            $events[] = 'verify';
+
+            return new DockerProcessResult([], 0, '', '');
+        });
+        $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()->andReturnUsing(function (BackupRun $run) use (&$events): DockerProcessResult {
+            $events[] = 'safety';
+            $this->assertSame('target-on-b', $run->executionJob()->volume_name);
+            $this->assertSame('pre_restore', $run->trigger);
+            $this->assertNull($run->execution_options_snapshot['backup_pruning_prefix']);
+            $this->assertStringStartsWith('volumevault-safety-', $run->backup_filename);
+            $this->assertFalse(Schema::hasColumn('backup_jobs', 'retention_uuid'));
+
+            return new DockerProcessResult([], 0, '', '');
+        });
+        $this->mock(ListBackupObjects::class)->shouldReceive('findByFilename')->once()->andReturn(['key' => 'safety.tar.gz', 'size' => 20]);
+        $this->mock(ClearDockerVolume::class)->shouldReceive('handle')->once()->with('target-on-b', Mockery::any(), Mockery::any())->andReturnUsing(function () use (&$events): void {
+            $events[] = 'clear';
+            $this->assertSame('success', BackupRun::sole()->status);
+            $this->assertSame('safety.tar.gz', BackupRun::sole()->backup_key);
+        });
+        $this->mock(RunRestoreContainer::class)->shouldReceive('handle')->once()->andReturnUsing(function (RestoreRun $run) use ($restoreId, &$events): DockerProcessResult {
+            $events[] = 'restore';
+            $this->assertSame($restoreId, $run->id);
+            $this->assertSame(BackupRun::sole()->id, $run->pre_restore_backup_run_id);
+
+            return new DockerProcessResult([], 0, '', '');
+        });
+
+        $this->assertTrue($runtime->handle($operation['id']));
+        $this->assertSame(['download', 'verify', 'safety', 'clear', 'restore'], $events);
+        $this->assertSame($restoreId, RestoreRun::sole()->id);
+        $this->assertSame('success', RestoreRun::sole()->status);
+        $this->assertFalse(Schema::hasColumn('backup_jobs', 'retention_uuid'));
+        $receipt = $store->read($operation['id']);
+        $this->assertSame('finished', $receipt['phase']);
+        $this->assertSame('success', $receipt['result']['status']);
+        $this->assertTrue($receipt['result']['cleanup_complete']);
+        $this->assertSame('success', $receipt['result']['safety_backup']['status']);
+        $this->assertSame('safety.tar.gz', $receipt['result']['safety_backup']['backup_key']);
+
+        $this->assertTrue($runtime->handle($operation['id']));
+        $this->assertSame($receipt, $store->read($operation['id']));
+        $this->assertSame(['download', 'verify', 'safety', 'clear', 'restore'], $events);
+        $this->assertSame(1, BackupRun::count());
+        $this->assertSame(1, RestoreRun::count());
     }
 
     public function test_safety_receipt_redacts_diagnostics_without_rewriting_archive_identity(): void

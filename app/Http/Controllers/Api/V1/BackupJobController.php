@@ -358,7 +358,7 @@ class BackupJobController extends Controller
             'status' => $status ?: BackupJob::STATUS_ACTIVE,
             ...$this->syncAlertSettings->payload($request, $job),
             'retention_days' => $request->input('retention_days'),
-            'retention_count' => $request->input('retention_count'),
+            'retention_count' => null,
             'backup_exclude_regexp' => $backupExcludeRegexp !== '' ? $backupExcludeRegexp : null,
             'backup_filter_mode' => $backupFilterMode,
             'backup_include_paths' => $backupIncludePaths !== '' ? $backupIncludePaths : null,

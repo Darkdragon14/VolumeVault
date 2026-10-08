@@ -59,12 +59,16 @@ class DispatchAgentOperation
         $spec = [
             'version' => 1,
             'job' => $job->only([
-                'name', 'source_type', 'volume_name', 'host_path', 'retention_days', 'retention_count',
+                'name', 'source_type', 'volume_name', 'host_path', 'retention_days',
                 'backup_filter_mode', 'backup_exclude_regexp', 'backup_include_paths',
                 'stop_containers_before_backup', 'stop_container_names', 'timezone',
             ]),
             'destination' => $relay?->destination_snapshot ?? $this->destination($destination),
-            'run' => $run instanceof BackupRun ? ['backup_filename' => $run->backup_filename] : $run->only([
+            'run' => $run instanceof BackupRun ? [
+                'backup_filename' => $run->backup_filename,
+                'backup_pruning_prefix' => $run->trigger === BackupRun::TRIGGER_PRE_RESTORE
+                    ? null : ($run->execution_options_snapshot['backup_pruning_prefix'] ?? null),
+            ] : $run->only([
                 'selected_backup_key', 'source_volume_name', 'target_volume_name', 'mode',
                 'backup_before_overwrite', 'confirmation_text',
             ]),

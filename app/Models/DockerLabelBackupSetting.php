@@ -54,7 +54,6 @@ class DockerLabelBackupSetting extends Model
             'schedule_config' => ['time' => '02:00'],
             'timezone' => null,
             'retention_days' => null,
-            'retention_count' => null,
             'backup_filter_mode' => BackupJob::FILTER_MODE_EXCLUDE,
             'backup_include_paths' => null,
             'backup_exclude_regexp' => null,
@@ -68,7 +67,7 @@ class DockerLabelBackupSetting extends Model
 
     public function resolvedDefaults(): array
     {
-        return array_replace_recursive(self::defaultValues(), $this->defaults ?? []);
+        return array_replace_recursive(self::defaultValues(), collect($this->defaults ?? [])->except('retention_count')->all());
     }
 
     public static function usesEnabledDestination(BackupDestination $destination): bool

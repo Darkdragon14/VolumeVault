@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'job_scoped_day_retention' => [
+        'title' => 'Safer, job-scoped retention in days',
+        'description' => 'Sorry: count-based retention was advertised but is unsupported. Nonempty retention_count submissions and retention-count labels are now rejected; choose days explicitly, without automatic conversion. New archives always start with volumevault-job-<persistent job UUID>-, even with custom templates; BACKUP_PRUNING_PREFIX limits day pruning to that job’s new archives. Old archives remain outside automatic pruning to avoid mass deletion: clean them up manually. Safety backups use volumevault-safety- and are never automatically pruned. Old queued runs without a prefix do not prune. Upgrade the orchestrator and agents together: older agents reject the new optional backup_pruning_prefix field, with no unsafe fallback.',
+    ],
     'public_api_health' => [
         'title' => 'Public API health check',
         'description' => 'Monitor HTTP application availability through the public /api/v1/health endpoint, documented in OpenAPI. It does not check Docker, workers or backup destinations; /up remains available.',

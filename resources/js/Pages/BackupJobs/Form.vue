@@ -19,6 +19,7 @@ const props = defineProps<{
     timezones: string[];
     appTimezone: string;
     groups?: any[];
+    archiveFilenamePrefix?: string | null;
 }>();
 
 const page = usePage();
@@ -69,7 +70,6 @@ const form = useForm({
     schedule_config: props.job?.schedule_config || { time: '02:00', everyHours: 6, dayOfWeek: 'sunday', expression: '0 2 * * *' },
     timezone: props.job?.timezone || '',
     retention_days: props.job?.retention_days || '',
-    retention_count: props.job?.retention_count || '',
     backup_exclude_regexp: props.job?.backup_exclude_regexp || '',
     // New jobs default to the simple include mode; editing keeps the stored mode.
     backup_filter_mode: props.job?.backup_filter_mode || (props.job ? 'exclude' : 'include'),
@@ -211,7 +211,7 @@ const archiveFilenamePreview = computed(() => {
         '{second}': String(now.getSeconds()).padStart(2, '0'),
     };
 
-    return Object.entries(replacements).reduce(
+    return (props.archiveFilenamePrefix ?? 'volumevault-job-{job-uuid}-') + Object.entries(replacements).reduce(
         (filename, [token, value]) => filename.split(token).join(value),
         archiveTemplate.value || 'volumevault-{source}-run-{id}',
     ) + '.tar.gz';
@@ -573,14 +573,10 @@ const submit = () => {
                 <span v-if="form.errors.timezone" class="mt-2 block text-sm text-rose-300">{{ form.errors.timezone }}</span>
             </section>
 
-            <div class="grid gap-4 sm:grid-cols-3">
+            <div class="grid gap-4 sm:grid-cols-2">
                 <label class="space-y-2">
                     <span class="label">{{ t('Retention days') }}</span>
                     <input v-model="form.retention_days" class="input" type="number" min="1" :placeholder="t('Optional')">
-                </label>
-                <label class="space-y-2">
-                    <span class="label">{{ t('Retention count') }}</span>
-                    <input v-model="form.retention_count" class="input" type="number" min="1" :placeholder="t('Optional')">
                 </label>
                 <div class="flex items-center justify-between gap-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm sm:mt-7">
                     <div class="flex items-center gap-2">
@@ -606,7 +602,7 @@ const submit = () => {
                     <label for="backup_filename_template" class="label">{{ t('Archive name template') }}</label>
                     <input id="backup_filename_template" v-model="form.backup_filename_template" class="input font-mono" :placeholder="t('Default: {template}', { template: 'volumevault-{source}-run-{id}' })">
                     <p class="text-sm text-slate-300">{{ t('Optional template without extension. VolumeVault adds .tar.gz automatically.') }}</p>
-                    <p class="break-all rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-100">
+                    <p data-archive-filename-preview class="break-all rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-100">
                         {{ t('Preview: {filename}', { filename: archiveFilenamePreview }) }}
                     </p>
                     <p class="text-sm text-slate-400">{{ t('Available tokens: {tokens}', { tokens: '{name}, {source}, {id}, {run}, {year}, {month}, {day}, {time}, {hour}, {minute}, {second}' }) }}</p>

@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'job_scoped_day_retention',
+        ],
+    ],
     'releases' => [
         'v2.0.2' => [
             'date' => '2026-09-30',

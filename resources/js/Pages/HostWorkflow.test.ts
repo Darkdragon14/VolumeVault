@@ -36,7 +36,7 @@ vi.mock('@inertiajs/vue3', () => ({
     },
 }));
 vi.mock('@/i18n', () => ({ useI18n: () => ({
-    t: (key: string, values?: any) => key + (values?.paths ? ` ${values.paths}` : ''),
+    t: (key: string, values?: any) => key + (values?.paths ? ` ${values.paths}` : '') + (values?.filename ? ` ${values.filename}` : ''),
     translateError: (key: string) => key, formatDate: (value: any) => value ?? '—', timezone: { value: 'UTC' },
 }) }));
 
@@ -87,6 +87,40 @@ beforeEach(() => {
 afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
 
 describe('Host-scoped backup and restore workflows', () => {
+    it.each([null, false, true])('omits retention count from controls and submitted payload with legacy custom alerts=%s', async (customAlerts) => {
+        const editing = customAlerts !== null;
+        const wrapper = render(JobForm, { ...jobProps(), job: editing ? {
+            id: 7, docker_host_id: 2, volume_name: 'data', retention_days: 14,
+            retention_count: 5, use_custom_alert_settings: customAlerts,
+        } : null });
+
+        expect(wrapper.text()).not.toContain('Retention count');
+        expect(inertia.form).not.toHaveProperty('retention_count');
+        if (!editing) await wrapper.get('input[autocomplete="off"]').setValue('data');
+        await wrapper.get('form').trigger('submit');
+
+        expect(inertia.submitted).toHaveBeenCalledOnce();
+        const [url, payload] = inertia.submitted.mock.calls[0];
+        expect(url).toBe(editing ? '/backup-jobs/7' : '/backup-jobs');
+        expect(payload).not.toHaveProperty('retention_count');
+        expect(payload.retention_days).toBe(editing ? 14 : '');
+    });
+
+    it('previews the server archive prefix without adding it to the editable template or payload', async () => {
+        const prefix = 'volumevault-job-0195d464-7850-7e3c-b5fd-3d0e225c28ba-';
+        const wrapper = render(JobForm, { ...jobProps(), archiveFilenamePrefix: prefix,
+            job: { id: 7, docker_host_id: 2, volume_name: 'data', backup_filename_template: '{source}-run-{id}' },
+        });
+        expect(wrapper.get('[data-archive-filename-preview]').text()).toContain(`${prefix}data-run-123.tar.gz`);
+        expect(wrapper.get('[data-archive-filename-preview]').classes()).toContain('break-all');
+        await wrapper.get('form').trigger('submit');
+        expect(inertia.submitted.mock.calls[0][1].backup_filename_template).toBe('{source}-run-{id}');
+        expect(inertia.submitted.mock.calls[0][1]).not.toHaveProperty('archiveFilenamePrefix');
+
+        await wrapper.setProps({ archiveFilenamePrefix: undefined });
+        expect(wrapper.get('[data-archive-filename-preview]').text()).toContain('volumevault-job-{job-uuid}-data-run-123.tar.gz');
+    });
+
     it('explains central installation saves and key rotation while using the backend-filtered destinations', async () => {
         const wrapper = render(InstallationSaves, { destinations: [destinations[3]] });
         expect(wrapper.text()).toContain('remoteAudit.saveCentral');

@@ -62,6 +62,10 @@ class ParseDockerLabelBackupDefinitions
                 throw new InvalidArgumentException('Unknown backup label '.$label.'.');
             }
 
+            if ($field === 'retention-count' && filled($value)) {
+                throw new InvalidArgumentException('retention-count is unsupported. Use retention-days instead.');
+            }
+
             $definitions[$name][$field] = $value;
         }
 

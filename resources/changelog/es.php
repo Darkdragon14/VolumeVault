@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'job_scoped_day_retention' => [
+        'title' => 'Retención en días más segura por tarea',
+        'description' => 'Lo sentimos: se anunciaba la retención por cantidad, pero no es compatible. Ahora se rechazan los valores no vacíos de retention_count y las etiquetas retention-count; elija días explícitamente, sin conversión automática. Los nuevos archivos siempre empiezan por volumevault-job-<UUID persistente de la tarea>-, incluso con plantillas personalizadas; BACKUP_PRUNING_PREFIX limita la limpieza por días a los nuevos archivos de esa tarea. Los archivos antiguos quedan fuera de la limpieza automática para evitar una eliminación masiva: elimínelos manualmente. Las copias de seguridad previas a una restauración usan volumevault-safety- y nunca se eliminan automáticamente. Las ejecuciones antiguas en cola sin prefijo no realizan limpieza. Actualice el orquestador y los agentes juntos: los agentes antiguos rechazan el nuevo campo opcional backup_pruning_prefix, sin alternativa insegura.',
+    ],
     'public_api_health' => [
         'title' => 'Comprobación pública de disponibilidad de la API',
         'description' => 'Supervise la disponibilidad HTTP de la aplicación mediante /api/v1/health, un endpoint público documentado en OpenAPI. No comprueba Docker, los workers ni los destinos de copia de seguridad; /up sigue disponible.',

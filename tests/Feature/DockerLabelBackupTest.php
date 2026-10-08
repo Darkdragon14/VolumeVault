@@ -64,6 +64,70 @@ class DockerLabelBackupTest extends TestCase
         );
     }
 
+    public function test_obsolete_retention_count_labels_reject_all_definitions_without_partial_configuration_updates(): void
+    {
+        $destination = $this->destination();
+        $settings = $this->settings($destination);
+        DockerVolume::create(['name' => 'project_database', 'exists' => true]);
+        $job = $this->managedJob($destination, ['retention_days' => 14]);
+        $container = $this->labeledContainer(['retention-days' => '30']);
+        $container['labels']['dev.darkdragon14.volumevault.backup.other.volume'] = 'project_database';
+        $container['labels']['dev.darkdragon14.volumevault.backup.other.retention-count'] = '5';
+
+        $result = $this->reconcile([$container]);
+
+        $this->assertSame(0, $result['created']);
+        $this->assertSame(0, $result['updated']);
+        $this->assertSame(1, $result['errors']);
+        $this->assertDatabaseCount('backup_jobs', 1);
+        $this->assertSame(14, $job->refresh()->retention_days);
+        $this->assertSame('retention-count is unsupported. Use retention-days instead.', $job->label_reconciliation_error);
+        $this->assertStringContainsString('retention-count is unsupported. Use retention-days instead.', $settings->refresh()->last_sync_error);
+    }
+
+    public function test_legacy_count_defaults_are_ignored_and_reconciliation_clears_stored_counts(): void
+    {
+        $destination = $this->destination();
+        $settings = $this->settings($destination);
+        $settings->update(['defaults' => [...$settings->resolvedDefaults(), 'retention_count' => 7]]);
+        $this->assertArrayNotHasKey('retention_count', $settings->resolvedDefaults());
+        DockerVolume::create(['name' => 'project_database', 'exists' => true]);
+        $job = $this->managedJob($destination);
+        BackupJob::query()->whereKey($job->id)->update(['retention_count' => 7]);
+
+        $this->reconcile([$this->labeledContainer(['retention-count' => ''])]);
+
+        $this->assertNull($job->refresh()->retention_count);
+        $this->assertNull($job->label_reconciliation_error);
+    }
+
+    public function test_settings_reject_nonempty_counts_and_drop_legacy_defaults_on_update(): void
+    {
+        $destination = $this->destination();
+        $settings = $this->settings($destination);
+        $settings->update(['defaults' => [...$settings->resolvedDefaults(), 'retention_count' => 7]]);
+        $admin = User::factory()->admin()->create();
+        $payload = [
+            ...DockerLabelBackupSetting::defaultValues(),
+            'enabled' => true,
+            'backup_destination_id' => $destination->id,
+        ];
+
+        $this->actingAs($admin);
+        foreach ([7, 0, false, 'unsupported', [1]] as $count) {
+            $this->putJson(route('settings.docker-label-backups.update'), [...$payload, 'retention_count' => $count])
+                ->assertUnprocessable()
+                ->assertJsonPath('errors.retention_count.0', 'Count-based retention is unsupported. Use retention_days instead.');
+            $this->assertSame(7, $settings->refresh()->defaults['retention_count']);
+        }
+
+        foreach ([[], ['retention_count' => null]] as $input) {
+            $this->put(route('settings.docker-label-backups.update'), [...$payload, ...$input])
+                ->assertSessionHasNoErrors();
+            $this->assertArrayNotHasKey('retention_count', $settings->refresh()->defaults);
+        }
+    }
+
     public function test_single_backup_shortcuts_select_a_volume_or_mount(): void
     {
         $destination = $this->destination();
@@ -248,8 +312,8 @@ class DockerLabelBackupTest extends TestCase
         $this->settings($destination);
         DockerVolume::create(['name' => 'project_database', 'exists' => true]);
         $job = $this->managedJob($destination);
-        $complete = $this->labeledContainer(['retention-count' => '7']);
-        $incomplete = $this->labeledContainer(['retention-count' => '3']);
+        $complete = $this->labeledContainer(['retention-days' => '7']);
+        $incomplete = $this->labeledContainer(['retention-days' => '3']);
         $incomplete['id'] = 'incomplete';
         unset($incomplete['labels']['com.docker.compose.service']);
 
@@ -258,7 +322,7 @@ class DockerLabelBackupTest extends TestCase
         $this->assertSame(0, $result['created']);
         $this->assertSame(1, $result['conflicts']);
         $this->assertSame(1, BackupJob::count());
-        $this->assertSame(7, $job->refresh()->retention_count);
+        $this->assertSame(7, $job->refresh()->retention_days);
         $this->assertSame(BackupJob::STATUS_ACTIVE, $job->status);
         $this->assertNull($job->label_reconciliation_error);
     }
@@ -289,7 +353,7 @@ class DockerLabelBackupTest extends TestCase
         $job = $this->managedJob($destination, [
             'configuration_key' => hash('sha256', 'docker-label:project-db-1:database'),
         ]);
-        $container = $this->labeledContainer(['retention-count' => '6']);
+        $container = $this->labeledContainer(['retention-days' => '6']);
         $container['running'] = false;
         unset(
             $container['labels']['com.docker.compose.project'],
@@ -299,7 +363,7 @@ class DockerLabelBackupTest extends TestCase
         $result = $this->reconcile([$container]);
 
         $this->assertSame(0, $result['created']);
-        $this->assertSame(6, $job->refresh()->retention_count);
+        $this->assertSame(6, $job->refresh()->retention_days);
         $this->assertSame(BackupJob::STATUS_ACTIVE, $job->status);
         $this->assertNull($job->label_reconciliation_error);
     }
@@ -337,13 +401,13 @@ class DockerLabelBackupTest extends TestCase
         DockerVolume::create(['name' => 'project_database', 'exists' => true]);
         $job = $this->managedJob($destination);
 
-        $old = $this->labeledContainer(['retention-count' => '3']);
+        $old = $this->labeledContainer(['retention-days' => '3']);
         $old['id'] = 'old';
         $old['running'] = false;
         $old['created'] = '2026-08-01T00:00:00Z';
         $old['labels']['com.docker.compose.container-number'] = '1';
         $old['labels']['com.docker.compose.config-hash'] = 'old-hash';
-        $current = $this->labeledContainer(['retention-count' => '7']);
+        $current = $this->labeledContainer(['retention-days' => '7']);
         $current['id'] = 'current';
         $current['running'] = false;
         $current['created'] = '2026-08-13T00:00:00Z';
@@ -353,7 +417,7 @@ class DockerLabelBackupTest extends TestCase
         $result = $this->reconcile([$old, $current]);
 
         $this->assertSame(0, $result['conflicts']);
-        $this->assertSame(7, $job->refresh()->retention_count);
+        $this->assertSame(7, $job->refresh()->retention_days);
     }
 
     public function test_newest_slot_wins_with_partial_compose_generation_metadata(): void
@@ -363,17 +427,17 @@ class DockerLabelBackupTest extends TestCase
         DockerVolume::create(['name' => 'project_database', 'exists' => true]);
         $job = $this->managedJob($destination);
 
-        $old = $this->labeledContainer(['retention-count' => '3']);
+        $old = $this->labeledContainer(['retention-days' => '3']);
         $old = [...$old, 'id' => 'old', 'running' => false, 'created' => '2026-08-01T00:00:00Z'];
         $old['labels']['com.docker.compose.container-number'] = '1';
         $old['labels']['com.docker.compose.config-hash'] = 'old-hash';
-        $current = $this->labeledContainer(['retention-count' => '9']);
+        $current = $this->labeledContainer(['retention-days' => '9']);
         $current = [...$current, 'id' => 'current', 'running' => false, 'created' => '2026-08-13T00:00:00Z'];
         $current['labels']['com.docker.compose.container-number'] = '1';
 
         $this->reconcile([$old, $current]);
 
-        $this->assertSame(9, $job->refresh()->retention_count);
+        $this->assertSame(9, $job->refresh()->retention_days);
     }
 
     public function test_newest_running_container_wins_during_same_slot_deployment_overlap(): void
@@ -383,11 +447,11 @@ class DockerLabelBackupTest extends TestCase
         DockerVolume::create(['name' => 'project_database', 'exists' => true]);
         $job = $this->managedJob($destination);
 
-        $old = $this->labeledContainer(['retention-count' => '3']);
+        $old = $this->labeledContainer(['retention-days' => '3']);
         $old = [...$old, 'id' => 'old', 'running' => true, 'created' => '2026-08-01T00:00:00Z'];
         $old['labels']['com.docker.compose.container-number'] = '1';
         $old['labels']['com.docker.compose.config-hash'] = 'old-hash';
-        $current = $this->labeledContainer(['retention-count' => '11']);
+        $current = $this->labeledContainer(['retention-days' => '11']);
         $current = [...$current, 'id' => 'current', 'running' => true, 'created' => '2026-08-13T00:00:00Z'];
         $current['labels']['com.docker.compose.container-number'] = '1';
         $current['labels']['com.docker.compose.config-hash'] = 'new-hash';
@@ -395,7 +459,7 @@ class DockerLabelBackupTest extends TestCase
         $result = $this->reconcile([$old, $current]);
 
         $this->assertSame(0, $result['conflicts']);
-        $this->assertSame(11, $job->refresh()->retention_count);
+        $this->assertSame(11, $job->refresh()->retention_days);
     }
 
     public function test_a_malformed_compose_replica_disables_the_shared_job(): void
@@ -487,10 +551,10 @@ class DockerLabelBackupTest extends TestCase
             'com.docker.compose.service' => 'db',
             'dev.darkdragon14.volumevault.enable' => 'true',
             'dev.darkdragon14.volumevault.backup.database.volume' => 'project_database',
-            'dev.darkdragon14.volumevault.backup.database.retention-count' => '5',
+            'dev.darkdragon14.volumevault.backup.database.retention-days' => '5',
         ]]]);
 
-        $this->assertSame(5, $job->refresh()->retention_count);
+        $this->assertSame(5, $job->refresh()->retention_days);
         $this->assertTrue($nextRunAt->equalTo($job->next_run_at));
     }
 
@@ -513,12 +577,12 @@ class DockerLabelBackupTest extends TestCase
             'dev.darkdragon14.volumevault.enable' => 'true',
             'dev.darkdragon14.volumevault.backup.database.volume' => 'project_database',
             'dev.darkdragon14.volumevault.backup.database.destination' => $otherDestination->name,
-            'dev.darkdragon14.volumevault.backup.database.retention-count' => '9',
+            'dev.darkdragon14.volumevault.backup.database.retention-days' => '9',
         ]]]);
 
         $this->assertSame(BackupRun::STATUS_CANCELLED, $run->refresh()->status);
         $this->assertSame($otherDestination->id, $job->refresh()->backup_destination_id);
-        $this->assertSame(9, $job->retention_count);
+        $this->assertSame(9, $job->retention_days);
         $this->assertNull($job->pending_label_reconciliation);
     }
 
@@ -540,13 +604,13 @@ class DockerLabelBackupTest extends TestCase
         $this->assertTrue($job->refresh()->next_run_at->equalTo(Carbon::parse('2026-09-08 02:00:00')));
 
         $this->reconcile([$this->labeledContainer([
-            'retention-count' => '9',
+            'retention-days' => '9',
             'notification-channels' => $channel->name,
         ])]);
 
         $this->assertSame(BackupRun::STATUS_CANCELLED, BackupRun::sole()->status);
         $this->assertTrue($job->refresh()->next_run_at->equalTo(Carbon::parse('2026-09-07 02:00:00')));
-        $this->assertSame(9, $job->retention_count);
+        $this->assertSame(9, $job->retention_days);
         $this->assertSame([$channel->id], $job->notificationChannels()->pluck('notification_channels.id')->all());
 
         app()->call([app(DispatchDueBackupJobsJob::class), 'handle']);
@@ -630,7 +694,7 @@ class DockerLabelBackupTest extends TestCase
 
         $this->reconcile([$this->labeledContainer([
             'destination' => $otherDestination->name,
-            'retention-count' => '8',
+            'retention-days' => '8',
             'notification-channels' => $channelB->name,
         ])]);
         $this->assertSame($otherDestination->id, $job->refresh()->pending_label_reconciliation['payload']['backup_destination_id']);
@@ -642,14 +706,14 @@ class DockerLabelBackupTest extends TestCase
         $pending = $job->refresh()->pending_label_reconciliation;
         $this->assertSame($destination->id, $pending['payload']['backup_destination_id']);
         $this->assertSame([$channelA->id], $pending['notification_channel_ids']);
-        $this->assertNull($pending['payload']['retention_count']);
+        $this->assertNull($pending['payload']['retention_days']);
 
         $run->update(['status' => BackupRun::STATUS_SUCCESS, 'finished_at' => now()]);
         $job->update(['status' => BackupJob::STATUS_ACTIVE]);
         app(ApplyPendingDockerLabelReconciliation::class)->handle($job);
 
         $this->assertSame($destination->id, $job->refresh()->backup_destination_id);
-        $this->assertNull($job->retention_count);
+        $this->assertNull($job->retention_days);
         $this->assertSame([$channelA->id], $job->notificationChannels()->pluck('notification_channels.id')->all());
     }
 
@@ -749,7 +813,7 @@ class DockerLabelBackupTest extends TestCase
         $payload['alert_notifications_enabled'] = true;
         $payload['use_custom_alert_settings'] = false;
         $payload['stop_containers_before_backup'] = false;
-        $payload['retention_count'] = 6;
+        $payload['retention_days'] = 6;
         $job->update(['pending_label_reconciliation' => [
             'action' => 'apply',
             'payload' => $payload,
@@ -763,7 +827,7 @@ class DockerLabelBackupTest extends TestCase
 
         $this->assertTrue(app(ApplyPendingDockerLabelReconciliation::class)->handle($job));
         $this->assertSame(BackupJob::STATUS_ACTIVE, $job->refresh()->status);
-        $this->assertSame(6, $job->retention_count);
+        $this->assertSame(6, $job->retention_days);
         $this->assertSame(0, $job->notificationChannels()->count());
         $this->assertNull($job->pending_label_reconciliation);
     }
@@ -1119,7 +1183,7 @@ class DockerLabelBackupTest extends TestCase
                 if (! $this->changed) {
                     $this->changed = true;
                     $this->settings->update([
-                        'defaults' => [...$this->settings->resolvedDefaults(), 'retention_count' => 9],
+                        'defaults' => [...$this->settings->resolvedDefaults(), 'retention_days' => 9],
                     ]);
                 }
 
@@ -1137,7 +1201,7 @@ class DockerLabelBackupTest extends TestCase
         ))->handle();
 
         $this->assertSame(1, $result['created']);
-        $this->assertSame(9, BackupJob::firstOrFail()->retention_count);
+        $this->assertSame(9, BackupJob::firstOrFail()->retention_days);
     }
 
     public function test_reconciliation_applies_pending_changes_without_reentering_the_lock_protocol(): void
@@ -1145,7 +1209,7 @@ class DockerLabelBackupTest extends TestCase
         $destination = $this->destination();
         $this->settings($destination);
         DockerVolume::create(['name' => 'project_database', 'exists' => true]);
-        $job = $this->managedJob($destination, ['retention_count' => 9]);
+        $job = $this->managedJob($destination, ['retention_days' => 9]);
         $list = Mockery::mock(ListDockerLabelBackupContainers::class);
         $list->shouldReceive('handle')->once()->andReturn([$this->labeledContainer()]);
         $pendingAction = new class(app(WithDockerLabelMutationLocks::class)) extends ApplyPendingDockerLabelReconciliation
@@ -1180,7 +1244,7 @@ class DockerLabelBackupTest extends TestCase
 
         $this->assertSame(0, $pendingAction->standaloneCalls);
         $this->assertSame(1, $pendingAction->lockedCalls);
-        $this->assertNull($job->refresh()->retention_count);
+        $this->assertNull($job->refresh()->retention_days);
     }
 
     public function test_reconciliation_handles_a_channel_deleted_before_the_transaction(): void

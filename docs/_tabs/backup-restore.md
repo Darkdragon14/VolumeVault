@@ -36,7 +36,7 @@ To create a backup job:
 2. Create and test at least one active destination.
 3. Open `Backup jobs` and create a job for a Docker volume or an absolute host path.
 4. Choose a schedule: hourly, daily, weekly, or cron.
-5. Optionally set retention days, retention count, archive name template, file filtering (include or exclude), and container stop behavior.
+5. Optionally set retention days, archive name template, file filtering (include or exclude), and container stop behavior.
 6. Save the job and run it manually once to validate the destination and logs.
 
 Backup times are interpreted in `APP_TIMEZONE`. For example, set `APP_TIMEZONE=Europe/Paris` if a daily schedule at `02:00` should run at 02:00 Paris time instead of 02:00 UTC.
@@ -48,7 +48,19 @@ Backup jobs can optionally filter which files end up in the archive. Two modes a
 
 In the web form, creating a job defaults to the simple include mode, while existing jobs keep their stored mode. Through the API the behavior differs for backward compatibility: `backup_filter_mode` is optional and defaults to `exclude` when omitted, so an API client that wants include mode must set `backup_filter_mode` to `include` explicitly. The related API fields are `backup_include_paths` (used in include mode) and `backup_exclude_regexp` (used in exclude mode).
 
-Backup jobs can also define an archive name template without the extension. Supported tokens are `{name}`, `{source}`, `{id}`, `{run}`, `{year}`, `{month}`, `{day}`, `{time}`, `{hour}`, `{minute}`, and `{second}`. `{name}` is the job name sanitized for filenames, `{source}` is the Docker volume or host path source, and `{id}` / `{run}` is the backup run ID. VolumeVault appends `.tar.gz` automatically. Include a uniqueness token such as `{id}` or `{time}` to avoid overwriting earlier archives with the same generated name.
+Backup jobs can also define an archive name template without the extension. Supported tokens are `{name}`, `{source}`, `{id}`, `{run}`, `{year}`, `{month}`, `{day}`, `{time}`, `{hour}`, `{minute}`, and `{second}`. `{name}` is the job name sanitized for filenames, `{source}` is the Docker volume or host path source, and `{id}` / `{run}` is the backup run ID. VolumeVault automatically prepends `volumevault-job-<persistent job UUID>-` independently of the template, then appends `.tar.gz`. The template controls only the suffix after this job prefix. Include a uniqueness token such as `{id}` or `{time}` to avoid overwriting earlier archives with the same generated name.
+
+### Retention and upgrading existing backups
+
+Retention is supported in **days only**. Count-based retention was previously advertised but is unsupported. Nonempty `retention_count` values are rejected by web and API job/settings submissions, and nonempty `retention-count` Docker-label overrides are rejected. Remove those values and choose `retention_days` (or `retention-days` for labels) explicitly; existing counts are not automatically converted to days. We are sorry for the misleading retention setting and the manual cleanup this correction requires.
+
+For new scheduled and manual archives, VolumeVault sets Offen's `BACKUP_PRUNING_PREFIX` to `volumevault-job-<persistent job UUID>-`. Day-based pruning therefore only considers that job's new archives, even when several jobs share a destination or use custom filename templates. The persistent UUID belongs to the job, not an individual run.
+
+**Old archives remain present and outside automatic pruning to avoid mass deletion.** Review and manually clean up old archives when they are no longer needed. Old queued runs whose snapshots lack a pruning prefix do not prune, even if they contain retention days. Pre-restore safety backups use a separate `volumevault-safety-` prefix and are never automatically pruned; clean those up manually too.
+
+Offen's `BACKUP_PRUNING_LEEWAY` keeps its upstream default of `1m`; VolumeVault does not expose a UI setting for it.
+
+**Upgrade the remote orchestrator and all executing agents together.** Backup operation run snapshots now accept the optional `backup_pruning_prefix` field. Older agents strictly reject this new field; VolumeVault does not remove it or retry with unsafe unscoped pruning as a fallback.
 
 ## Docker Label Backups
 
@@ -70,7 +82,7 @@ services:
       dev.darkdragon14.volumevault.backup.database.time: "03:30"
 ```
 
-Supported override fields are `destination`, `schedule`, `time`, `day`, `every-hours`, `cron`, `timezone`, `retention-days`, `retention-count`, `filter-mode`, `include-paths`, `exclude-regexp`, `filename-template`, `notifications`, `notification-channels`, `alert-notifications`, and `stop-containers`. Destination and notification channel values are existing names; they must each match unambiguously. Credentials, secrets, host paths, and backup groups cannot be configured through labels.
+Supported override fields are `destination`, `schedule`, `time`, `day`, `every-hours`, `cron`, `timezone`, `retention-days`, `filter-mode`, `include-paths`, `exclude-regexp`, `filename-template`, `notifications`, `notification-channels`, `alert-notifications`, and `stop-containers`. Destination and notification channel values are existing names; they must each match unambiguously. Credentials, secrets, host paths, and backup groups cannot be configured through labels. A nonempty `retention-count` override is unsupported and rejected; use `retention-days` instead, with no automatic conversion.
 
 Label-managed jobs are standalone and read-only in VolumeVault, but can still be run, paused, resumed, and restored. A manual job for the same volume always wins while the declaration is active. Conflicting replica declarations or a removed declaration disable the generated job without deleting its run history; once the declaration disappears, its retained history does not prevent creating a manual job for that volume. Adding a label creates the schedule only; it does not run an immediate backup.
 
@@ -171,10 +183,10 @@ The environment variable mapping for `offen/docker-volume-backup` is centralized
 By default, generated archive names follow this pattern:
 
 ```text
-volumevault-<safe-source-name>-run-<backup-run-id>.tar.gz
+volumevault-job-<persistent job UUID>-volumevault-<safe-source-name>-run-<backup-run-id>.tar.gz
 ```
 
-Existing jobs with no archive name template keep that legacy pattern.
+Jobs without an archive name template keep the legacy suffix shown above, but all new scheduled and manual archives receive the persistent job prefix. Custom templates cannot remove or replace that prefix. Existing archives are not renamed.
 
 ## Restore Behavior
 
@@ -192,7 +204,7 @@ Available restore modes:
 
 In-place modes are destructive. They are restricted to Docker volume backup jobs, ignore custom target volume names, and require typed confirmation of the source volume name before the restore can be queued.
 
-For both in-place modes, you can optionally back up the current contents of the source volume before it is overwritten. This pre-restore safety backup uses the backup job's configured destination, is linked from the restore details, and aborts the restore before any wipe if it fails.
+For both in-place modes, you can optionally back up the current contents of the source volume before it is overwritten. This pre-restore safety backup uses the backup job's configured destination, is linked from the restore details, and aborts the restore before any wipe if it fails. Its archive uses the separate `volumevault-safety-` prefix and is never automatically pruned, regardless of the job's retention days.
 
 If the job's current destination is Dropbox, requesting this safety backup is rejected before a restore is created or queued: newly uploaded Dropbox backups cannot provide a verified archive identity for this safety check. This restriction uses the current job destination, not the historical archive destination. Choose another job destination or explicitly disable the optional safety backup. Restoring an exact, verified Dropbox file ID without a safety backup remains supported; safe in-place mode still stops and restarts affected containers.
 

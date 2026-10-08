@@ -26,7 +26,6 @@ interface DockerLabelBackupSettings {
     schedule_config: ScheduleConfig;
     timezone: string | null;
     retention_days: number | null;
-    retention_count: number | null;
     backup_filter_mode: BackupFilterMode;
     backup_include_paths: string | null;
     backup_exclude_regexp: string | null;
@@ -47,7 +46,6 @@ interface DockerLabelBackupForm {
     schedule_config: ScheduleConfig;
     timezone: string | null;
     retention_days: number | null;
-    retention_count: number | null;
     backup_filter_mode: BackupFilterMode;
     backup_include_paths: string | null;
     backup_exclude_regexp: string | null;
@@ -103,7 +101,6 @@ const formData = (): DockerLabelBackupForm => ({
     schedule_config: scheduleConfigFor(props.settings.schedule_type, props.settings.schedule_config),
     timezone: props.settings.timezone,
     retention_days: props.settings.retention_days,
-    retention_count: props.settings.retention_count,
     backup_filter_mode: props.settings.backup_filter_mode,
     backup_include_paths: props.settings.backup_include_paths,
     backup_exclude_regexp: props.settings.backup_exclude_regexp,
@@ -162,7 +159,6 @@ const knownErrorFields = [
     'schedule_config',
     'timezone',
     'retention_days',
-    'retention_count',
     'backup_filter_mode',
     'backup_include_paths',
     'backup_exclude_regexp',
@@ -264,7 +260,6 @@ const unexpectedErrors = computed(() => [...new Set(
                 <h2 class="text-lg font-semibold">{{ t('Default backup options') }}</h2>
                 <div class="grid gap-4 md:grid-cols-2">
                     <label class="space-y-2"><span class="label">{{ t('Retention days') }}</span><input v-model.number="form.retention_days" class="input" type="number" min="1"><span v-for="error in errorsFor('retention_days')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
-                    <label class="space-y-2"><span class="label">{{ t('Retention count') }}</span><input v-model.number="form.retention_count" class="input" type="number" min="1"><span v-for="error in errorsFor('retention_count')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
                     <label class="space-y-2"><span class="label">{{ t('Filter mode') }}</span><select v-model="form.backup_filter_mode" class="input"><option value="exclude">{{ t('Exclude matching files') }}</option><option value="include">{{ t('Include only') }}</option></select><span v-for="error in errorsFor('backup_filter_mode')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
                     <label class="space-y-2"><span class="label">{{ t('Backup filename template') }}</span><input v-model="form.backup_filename_template" class="input"><span v-for="error in errorsFor('backup_filename_template')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
                     <label v-if="form.backup_filter_mode === 'include'" class="space-y-2 md:col-span-2"><span class="label">{{ t('Included paths') }}</span><textarea v-model="form.backup_include_paths" class="input min-h-24"></textarea></label>

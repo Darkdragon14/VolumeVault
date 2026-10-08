@@ -146,10 +146,11 @@ class ReconcileDockerLabelBackupJobs
                 $containerDefinitions = $this->definitionParser->handle($container);
             } catch (InvalidArgumentException $exception) {
                 $errors[] = ($container['name'] ?: $container['id']).': '.$exception->getMessage();
-                $invalidKeys = [
-                    ...$invalidKeys,
-                    ...$this->definitionParser->inferNames($container)->map(fn (string $name): string => $this->definitionParser->key($container, $name))->all(),
-                ];
+                foreach ($this->definitionParser->inferNames($container) as $name) {
+                    $key = $this->definitionParser->key($container, $name);
+                    $invalidKeys[] = $key;
+                    $invalidMessages[$key] = $exception->getMessage();
+                }
 
                 continue;
             }
@@ -435,7 +436,7 @@ class ReconcileDockerLabelBackupJobs
             'cron_expression' => $this->scheduleCalculator->cronExpression($scheduleType, $scheduleConfig),
             'timezone' => $timezone,
             'retention_days' => $this->nullablePositiveInteger($fields['retention-days'] ?? $defaults['retention_days'], 'retention-days'),
-            'retention_count' => $this->nullablePositiveInteger($fields['retention-count'] ?? $defaults['retention_count'], 'retention-count'),
+            'retention_count' => null,
             'backup_filter_mode' => $filterMode,
             'backup_include_paths' => $includePaths,
             'backup_exclude_regexp' => $this->boundedNullableString($fields['exclude-regexp'] ?? $defaults['backup_exclude_regexp'], 1000, 'exclude-regexp'),

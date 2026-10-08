@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'job_scoped_day_retention' => [
+        'title' => 'Sicherere, auftragsbezogene Aufbewahrung in Tagen',
+        'description' => 'Entschuldigung: Die Aufbewahrung nach Anzahl wurde angeboten, wird aber nicht unterstützt. Nicht leere retention_count-Angaben und retention-count-Labels werden jetzt abgelehnt; wählen Sie Tage ausdrücklich, ohne automatische Umrechnung. Neue Archive beginnen immer mit volumevault-job-<dauerhafte Auftrags-UUID>-, auch bei eigenen Vorlagen; BACKUP_PRUNING_PREFIX begrenzt die zeitbasierte Bereinigung auf neue Archive dieses Auftrags. Alte Archive bleiben außerhalb der automatischen Bereinigung, um eine Massenlöschung zu verhindern: Entfernen Sie sie manuell. Sicherheitsbackups verwenden volumevault-safety- und werden nie automatisch bereinigt. Alte wartende Läufe ohne Präfix bereinigen nichts. Aktualisieren Sie Orchestrator und Agenten gemeinsam: Ältere Agenten lehnen das neue optionale Feld backup_pruning_prefix ab; es gibt keinen unsicheren Rückfall.',
+    ],
     'public_api_health' => [
         'title' => 'Öffentliche API-Verfügbarkeitsprüfung',
         'description' => 'Überwachen Sie die HTTP-Verfügbarkeit der Anwendung über den öffentlichen, in OpenAPI dokumentierten Endpunkt /api/v1/health. Docker, Worker und Backup-Ziele werden nicht geprüft; /up bleibt verfügbar.',
