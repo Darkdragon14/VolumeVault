@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_transport_isolation' => [
+        'title' => 'Elkülönített TLS-kapcsolat az ügynököknek',
+        'description' => 'Engedélyezett ügynökök esetén a 8080-as port a webes felületet és a nyilvános API-t szolgálja ki, de elutasítja az /agent/v1 útvonalat és annak alútvonalait. A 8443-as TLS-port csak az /agent/v1/* útvonalakat szolgálja ki; minden más útvonal, beleértve az állapotellenőrzéseket és a statikus fájlokat, 404-et ad vissza. A gazdagép portjainak átirányítása továbbra is támogatott. Használjon közvetlen TLS-t vagy TCP passthrough-t, és további védelemként korlátozza az ügynökport elérését a Docker-gazdagépek IP-címeire vagy hálózataira.',
+    ],
     'public_api_health' => [
         'title' => 'Nyilvános API-elérhetőségi ellenőrzés',
         'description' => 'Az alkalmazás HTTP-elérhetősége az OpenAPI-ban dokumentált nyilvános /api/v1/health végponton figyelhető. Nem ellenőrzi a Dockert, a feldolgozókat vagy a mentési célhelyeket; a /up továbbra is elérhető.',

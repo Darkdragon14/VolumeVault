@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_transport_isolation' => [
+        'title' => 'Isolated agent TLS transport',
+        'description' => 'With agents enabled, port 8080 serves the web interface and public API but rejects /agent/v1 and its descendants. The TLS listener on port 8443 serves only /agent/v1/*; all other paths, including health checks and static assets, return 404. Host port remapping remains supported. Use direct TLS or TCP passthrough and restrict agent port access to Docker host IPs or networks as defense in depth.',
+    ],
     'public_api_health' => [
         'title' => 'Public API health check',
         'description' => 'Monitor HTTP application availability through the public /api/v1/health endpoint, documented in OpenAPI. It does not check Docker, workers or backup destinations; /up remains available.',
