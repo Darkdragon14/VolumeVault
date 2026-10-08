@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Recover work interrupted by unavailable agents',
+        'description' => 'Stalled remote operations now fail after a configurable deadline or agent revocation/re-enrollment, freeing unused relay capacity without replaying work. Remote cleanup remains protected. A configurable offline-agent alert is enabled by default.',
+    ],
     'public_api_health' => [
         'title' => 'Public API health check',
         'description' => 'Monitor HTTP application availability through the public /api/v1/health endpoint, documented in OpenAPI. It does not check Docker, workers or backup destinations; /up remains available.',

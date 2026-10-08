@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Helyreállítás az ügynök kiesése után',
+        'description' => 'Az elakadt távoli műveletek beállítható határidő vagy az ügynök visszavonása/újraregisztrálása után hibával lezárulnak, felszabadítva a nem használt átviteli kapacitást a munka ismétlése nélkül. A távoli takarítás védelme megmarad. A beállítható offlineügynök-riasztás alapértelmezetten engedélyezett.',
+    ],
     'public_api_health' => [
         'title' => 'Nyilvános API-elérhetőségi ellenőrzés',
         'description' => 'Az alkalmazás HTTP-elérhetősége az OpenAPI-ban dokumentált nyilvános /api/v1/health végponton figyelhető. Nem ellenőrzi a Dockert, a feldolgozókat vagy a mentési célhelyeket; a /up továbbra is elérhető.',

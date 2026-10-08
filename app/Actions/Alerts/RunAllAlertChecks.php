@@ -23,6 +23,7 @@ class RunAllAlertChecks
         private readonly JobInErrorTooLongCheck $jobInErrorTooLongCheck,
         private readonly BackupSizeOutOfRangeCheck $backupSizeOutOfRangeCheck,
         private readonly DestinationStorageLimitCheck $destinationStorageLimitCheck,
+        private readonly AgentOfflineCheck $agentOfflineCheck,
         private readonly SendShoutrrrNotification $sendShoutrrrNotification,
         private readonly ResolveEffectiveAlertConfig $resolveEffectiveAlertConfig,
     ) {}
@@ -56,6 +57,7 @@ class RunAllAlertChecks
             AlertType::JobInErrorTooLong => $this->jobInErrorTooLongCheck,
             AlertType::BackupSizeOutOfRange => $this->backupSizeOutOfRangeCheck,
             AlertType::DestinationStorageLimit => $this->destinationStorageLimitCheck,
+            AlertType::AgentOffline => $this->agentOfflineCheck,
         };
     }
 

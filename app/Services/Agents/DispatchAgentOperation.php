@@ -18,6 +18,7 @@ class DispatchAgentOperation
     public function handle(BackupRun|RestoreRun $run): bool
     {
         return DB::transaction(function () use ($run): bool {
+            DockerHost::query()->lockForUpdate()->findOrFail($run instanceof BackupRun ? $run->docker_host_id : $run->target_docker_host_id);
             $run = $run->fresh(['job']);
             if ($run instanceof RestoreRun && ($relay = $run->archiveRelay) !== null && $relay->status !== 'ready') {
                 return false;

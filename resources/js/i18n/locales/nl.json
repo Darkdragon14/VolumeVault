@@ -1,4 +1,10 @@
 {
+  "agent_offline": "agent offline",
+  "Agent offline": "Agent offline",
+  "Minutes offline": "Minuten offline",
+  "Agent alert channels": "Meldingskanalen voor agents",
+  "Alert when an enrolled agent stops sending heartbeats. Agents in maintenance are excluded.": "Waarschuw wanneer een geregistreerde agent geen heartbeats meer verstuurt. Agents in onderhoud worden uitgesloten.",
+  "Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.": "Kies welke kanalen meldingen ontvangen wanneer agents offline gaan of herstellen. Zonder selectie blijven waarschuwingen alleen zichtbaar in VolumeVault.",
   "remoteAudit.savedUnavailable": "{host} — opgeslagen uitvoerder niet beschikbaar",
   "remoteAudit.measureUnavailableHelp": "De opgeslagen host-ID blijft behouden. Als opslaan wordt geweigerd, kies dan een compatibele host of het centrale netwerk, of herstel de registratie van deze agent en werk hem bij voor ondersteuning van destination-v1.",
   "remoteAudit.pathRuntime": "De map moet op de geselecteerde host bestaan en tijdens de uitvoering voldoen aan de gezaghebbende lijst met toegestane paden van die host.",

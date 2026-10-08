@@ -21,7 +21,7 @@ class AgentOperationBroker
 {
     public function __construct(private readonly AgentRegistry $registry, private readonly DispatchAgentOperation $dispatch) {}
 
-    /** One non-expiring assignment per host: a lost connection never authorizes replay elsewhere. */
+    /** A lost connection never authorizes replay; cancelled assignments retain a cleanup fence. */
     public function pull(DockerHost $host): ?array
     {
         return DB::transaction(function () use ($host): ?array {
@@ -31,7 +31,8 @@ class AgentOperationBroker
             if ($active) {
                 return $active->owner_instance_id === $locked->agent_instance_id ? $this->envelope($active) : null;
             }
-            if ($locked->maintenance_requested_at !== null || ($locked->agent_active_operations ?? 0) > 0
+            if (app(ReconcileAgentOperations::class)->cleanupPending($locked)
+                || $locked->maintenance_requested_at !== null || ($locked->agent_active_operations ?? 0) > 0
                 || app(AgentCompatibility::class)->status($locked) !== 'compatible') {
                 return null;
             }
@@ -50,8 +51,7 @@ class AgentOperationBroker
                     default => $operation->kind === 'archive_export' ? 'archive-relay-v1' : 'destination-v1',
                 };
                 if (! app(AgentExecution::class)->supportsHost($locked, $capability)) {
-                    $operation->update(['status' => 'cancelled', 'completed_at' => now(), 'payload' => null,
-                        'result' => ['status' => 'failed', 'error_message' => 'Agent does not support '.$capability.'.']]);
+                    app(ReconcileAgentOperations::class)->cancel($operation, 'Agent does not support '.$capability.'.');
 
                     return null;
                 }
@@ -141,7 +141,7 @@ class AgentOperationBroker
         unset($result['_verified_relay']);
         $export = DB::transaction(function () use ($host, $id, $token, $result): ?AgentOperation {
             $operation = $this->lockedOperation($host, $id, $token);
-            if ($operation->kind !== 'archive_export' || $operation->status === 'completed') {
+            if ($operation->kind !== 'archive_export' || in_array($operation->status, ['completed', 'cancelled'], true)) {
                 return null;
             }
             abort_unless($operation->status === 'running' && $result['cleanup_complete'] === true, 409, 'Operation is not ready to finish.');
@@ -153,6 +153,12 @@ class AgentOperationBroker
         }
         $finalizations = DB::transaction(function () use ($host, $id, $token, $result): array {
             $operation = $this->lockedOperation($host, $id, $token);
+            if ($operation->status === 'cancelled') {
+                abort_unless($result['cleanup_complete'] === true, 409, 'Remote cleanup is required.');
+                app(ReconcileAgentOperations::class)->acknowledgeCleanup($operation);
+
+                return [];
+            }
             if ($operation->status === 'completed') {
                 return [];
             }
@@ -256,10 +262,9 @@ class AgentOperationBroker
         $this->registry->assertCredential($locked, $host->agent_token_hash, $host->agent_instance_id);
         $operation = AgentOperation::where('docker_host_id', $locked->id)->whereKey($id)->lockForUpdate()->first();
         abort_unless($operation && is_string($operation->delivery_token) && hash_equals($operation->delivery_token, $token), 404);
-        if ($operation->kind === 'archive_export' || isset($operation->context['archive_relay_id'])
-            || ($operation->kind === 'restore' && $operation->restoreRun?->archiveRelay !== null)) {
-            abort_unless($operation->owner_instance_id === $locked->agent_instance_id, 404);
-        }
+        abort_unless($operation->owner_instance_id === $locked->agent_instance_id
+            || $operation->status === 'completed'
+            || ($operation->status === 'cancelled' && ($operation->context['cleanup_required'] ?? true) === false), 404);
 
         return $operation;
     }

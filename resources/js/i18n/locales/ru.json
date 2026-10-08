@@ -1,4 +1,10 @@
 {
+  "agent_offline": "агент не в сети",
+  "Agent offline": "Агент не в сети",
+  "Minutes offline": "Минуты вне сети",
+  "Agent alert channels": "Каналы оповещений об агентах",
+  "Alert when an enrolled agent stops sending heartbeats. Agents in maintenance are excluded.": "Оповещать, если зарегистрированный агент перестал отправлять сигналы активности. Агенты на обслуживании исключаются.",
+  "Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.": "Выберите каналы для уведомлений об отключении и восстановлении агентов. Без выбора оповещения отображаются только в VolumeVault.",
   "remoteAudit.savedUnavailable": "{host} — сохранённый исполнитель недоступен",
   "remoteAudit.measureUnavailableHelp": "ID сохранённого хоста сохраняется. Если сохранение отклонено, выберите совместимый хост или центральную сеть либо восстановите регистрацию агента и обновите его для поддержки destination-v1.",
   "remoteAudit.pathRuntime": "Каталог должен существовать на выбранном хосте и соответствовать его действующему списку разрешённых путей во время выполнения.",

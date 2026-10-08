@@ -6,7 +6,7 @@ return [
         // Central chunks are APP_KEY-encrypted; losing APP_KEY makes them unreadable.
         // Byte limits: reserve 3 * max_bytes per relay for encryption and local staging.
         // Source staging requires 2 * max_bytes free; agent staging is private plaintext.
-        // Expiry stops new uploads/assignments, never discards an assigned agent's cleanup.
+        // Expiry stops new uploads/assignments; remote recovery preserves cleanup fences.
         'directory' => storage_path('app/private/archive-relays'),
         'max_bytes' => (int) env('VOLUMEVAULT_ARCHIVE_RELAY_MAX_BYTES', 10737418240),
         'max_disk_bytes' => (int) env('VOLUMEVAULT_ARCHIVE_RELAY_MAX_DISK_BYTES', 53687091200),
@@ -14,6 +14,7 @@ return [
     ],
     'agents' => [
         'enabled' => (bool) env('VOLUMEVAULT_AGENTS_ENABLED', false),
+        'recovery_minutes' => (int) env('VOLUMEVAULT_AGENT_RECOVERY_MINUTES', 15),
         'url' => rtrim((string) env('VOLUMEVAULT_AGENT_URL', ''), '/'),
         'tls_directory' => storage_path('app/private/agent-tls'),
         'image' => trim((string) env('VOLUMEVAULT_AGENT_IMAGE', '')) ?: 'ghcr.io/darkdragon14/volumevault-agent:'.(env('APP_VERSION', 'main') === 'main' ? 'latest' : env('APP_VERSION')),
@@ -73,6 +74,8 @@ return [
     'alerts' => [
         'enabled' => (bool) env('VOLUMEVAULT_ALERTS_ENABLED', true),
         'defaults' => [
+            'agent_offline_minutes' => (int) env('VOLUMEVAULT_AGENT_OFFLINE_MINUTES', 15),
+            'agent_offline_check_interval_minutes' => 5,
             'check_interval_minutes' => 60,
             'cooldown_minutes' => 1440,
             'reminder_enabled' => false,

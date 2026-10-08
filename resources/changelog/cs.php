@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Obnova po výpadku agenta',
+        'description' => 'Zablokované vzdálené operace selžou po nastavitelné lhůtě nebo odvolání/opětovné registraci agenta a uvolní nepoužívané přenosy bez opakování práce. Vzdálené čištění zůstává chráněné. Nastavitelné upozornění na agenta offline je ve výchozím stavu zapnuté.',
+    ],
     'public_api_health' => [
         'title' => 'Veřejná kontrola dostupnosti API',
         'description' => 'Sledujte dostupnost aplikace přes HTTP pomocí veřejného endpointu /api/v1/health, zdokumentovaného v OpenAPI. Nekontroluje Docker, workery ani cíle záloh; /up zůstává dostupný.',

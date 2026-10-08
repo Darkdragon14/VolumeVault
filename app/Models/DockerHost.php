@@ -42,6 +42,7 @@ class DockerHost extends Model
             'agent_registered_at' => 'datetime',
             'agent_revoked_at' => 'datetime',
             'last_seen_at' => 'datetime',
+            'agent_docker_unavailable_at' => 'datetime',
             'last_inventory_at' => 'datetime',
             'agent_inventory_sequence' => 'integer',
             'agent_containers' => 'array',

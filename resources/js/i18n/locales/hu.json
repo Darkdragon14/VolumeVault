@@ -1,4 +1,10 @@
 {
+  "agent_offline": "ügynök offline",
+  "Agent offline": "Ügynök offline",
+  "Minutes offline": "Offline percek",
+  "Agent alert channels": "Ügynökriasztási csatornák",
+  "Alert when an enrolled agent stops sending heartbeats. Agents in maintenance are excluded.": "Riasztás, ha egy regisztrált ügynök nem küld több életjelet. A karbantartás alatt álló ügynökök kivételt képeznek.",
+  "Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.": "Válaszd ki az ügynökök leállásáról és helyreállásáról értesített csatornákat. Kijelölés nélkül a riasztások csak a VolumeVaultban láthatók.",
   "remoteAudit.savedUnavailable": "{host} — a mentett végrehajtó nem érhető el",
   "remoteAudit.measureUnavailableHelp": "A mentett gazdaazonosító megmarad. Ha a mentés elutasításra kerül, válasszon kompatibilis gazdát vagy központi hálózatot, illetve állítsa helyre az ügynök regisztrációját, és frissítse a destination-v1 támogatásához.",
   "remoteAudit.pathRuntime": "A könyvtárnak léteznie kell a kiválasztott gazdán, és végrehajtáskor meg kell felelnie a gazda tényleges útvonal-engedélylistájának.",

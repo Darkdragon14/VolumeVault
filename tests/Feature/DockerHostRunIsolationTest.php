@@ -152,7 +152,7 @@ class DockerHostRunIsolationTest extends TestCase
         (new RunBackupJob($run->id))->handle($action);
     }
 
-    public function test_local_reconciliation_leaves_every_remote_recovery_candidate_untouched(): void
+    public function test_reconciliation_fails_unavailable_remote_queued_work_without_touching_remote_docker(): void
     {
         $remote = DockerHost::factory()->create();
         $job = $this->backupJob();
@@ -186,7 +186,17 @@ class DockerHostRunIsolationTest extends TestCase
         $this->artisan('volumevault:reconcile-stale-runs')->assertSuccessful();
 
         $this->assertSame(BackupRun::STATUS_FAILED, $local->fresh()->status);
-        $this->assertSame($before, array_map(fn ($run): array => $run->fresh()->getAttributes(), $runs));
+        foreach ($runs as $index => $run) {
+            $run->refresh();
+            if ($before[$index]['status'] === 'queued') {
+                $this->assertSame('failed', $run->status);
+                $this->assertStringContainsString('agent unavailable', $run->error_message);
+                $this->assertSame('remote-helper', $run->docker_container_id);
+                $this->assertSame(['remote-application'], $run->stopped_container_ids);
+            } else {
+                $this->assertSame($before[$index], $run->getAttributes());
+            }
+        }
     }
 
     public function test_remote_group_is_rejected_before_claim_or_notifications_and_not_reconciled_locally(): void
@@ -288,7 +298,9 @@ class DockerHostRunIsolationTest extends TestCase
         $this->assertSame(RestoreRun::STATUS_FAILED, $local->refresh()->status);
         $this->assertNotNull($local->finished_at);
         $this->assertStringContainsString('queue publication attempts', $local->error_message);
-        $this->assertSame($remoteBefore, $remoteTarget->refresh()->getAttributes());
+        $this->assertSame(RestoreRun::STATUS_FAILED, $remoteTarget->refresh()->status);
+        $this->assertStringContainsString('agent unavailable', $remoteTarget->error_message);
+        $this->assertSame($remoteBefore['target_docker_host_id'], $remoteTarget->target_docker_host_id);
     }
 
     public static function terminalRestoreStatuses(): array

@@ -1,4 +1,10 @@
 {
+  "agent_offline": "agente sin conexión",
+  "Agent offline": "Agente sin conexión",
+  "Minutes offline": "Minutos sin conexión",
+  "Agent alert channels": "Canales de alerta de agentes",
+  "Alert when an enrolled agent stops sending heartbeats. Agents in maintenance are excluded.": "Alertar cuando un agente registrado deja de enviar señales de actividad. Se excluyen los agentes en mantenimiento.",
+  "Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.": "Elige los canales que reciben notificaciones de desconexión y recuperación de agentes. Sin selección, las alertas solo se muestran en VolumeVault.",
   "remoteAudit.savedUnavailable": "{host} — ejecutor guardado no disponible",
   "remoteAudit.measureUnavailableHelp": "Se conserva el ID del host guardado. Si se rechaza el guardado, elige un host compatible o la red central, o restablece el registro de este agente y actualízalo para admitir destination-v1.",
   "remoteAudit.pathRuntime": "El directorio debe existir en el host seleccionado y cumplir su lista autorizada de rutas durante la ejecución.",

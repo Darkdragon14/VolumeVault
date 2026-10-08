@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Recuperación tras la indisponibilidad de un agente',
+        'description' => 'Las operaciones remotas bloqueadas fallan tras un plazo configurable o al revocar/registrar de nuevo el agente, liberando relés sin repetir tareas. La limpieza remota sigue protegida. La alerta configurable de agente desconectado está activada por defecto.',
+    ],
     'public_api_health' => [
         'title' => 'Comprobación pública de disponibilidad de la API',
         'description' => 'Supervise la disponibilidad HTTP de la aplicación mediante /api/v1/health, un endpoint público documentado en OpenAPI. No comprueba Docker, los workers ni los destinos de copia de seguridad; /up sigue disponible.',

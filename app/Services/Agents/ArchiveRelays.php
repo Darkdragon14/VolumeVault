@@ -149,9 +149,9 @@ class ArchiveRelays
     public function completeExport(AgentOperation $operation, array $result): void
     {
         $relay = ArchiveRelay::where('source_agent_operation_id', $operation->id)->lockForUpdate()->firstOrFail();
-        if ($relay->expires_at->isPast()) {
+        if ($relay->expires_at->isPast() || $relay->status === 'failed' || in_array($relay->restoreRun->status, ['success', 'failed', 'cancelled'], true)) {
             $result['status'] = 'failed';
-            $result['error_message'] = 'Archive relay expired; source archive retained.';
+            $result['error_message'] = 'Archive relay expired or cancelled; source archive retained.';
         }
         if ($result['status'] === 'success') {
             abort_unless(($result['_verified_relay'] ?? null) === ['id' => $relay->id, 'size' => $relay->size_bytes, 'sha256' => $relay->sha256]
@@ -275,9 +275,28 @@ class ArchiveRelays
             if (is_link($directory)) {
                 continue;
             }
+            $verification = null;
+            if (is_dir($directory)) {
+                if (is_link($directory.'/verify.lock')) {
+                    continue;
+                }
+                $verification = fopen($directory.'/verify.lock', 'c');
+                chmod($directory.'/verify.lock', 0600);
+                if (! flock($verification, LOCK_EX | LOCK_NB)) {
+                    fclose($verification);
+
+                    continue;
+                }
+            }
             $relay->update(['status' => $run->status === 'success' ? 'cleanup' : 'failed']);
-            if (! is_dir($directory) || File::deleteDirectory($directory)) {
-                $relay->update(['cleaned_at' => now(), 'status' => $run->status === 'success' ? 'completed' : 'failed']);
+            try {
+                if (! is_dir($directory) || File::deleteDirectory($directory)) {
+                    $relay->update(['cleaned_at' => now(), 'status' => $run->status === 'success' ? 'completed' : 'failed', 'destination_snapshot' => []]);
+                }
+            } finally {
+                if ($verification !== null) {
+                    fclose($verification);
+                }
             }
         }
         $protected = AgentOperation::whereIn('status', ['pending', 'running'])->whereIn('kind', ['archive_export', 'restore'])

@@ -23,6 +23,7 @@ class AgentRegistry
         DB::transaction(function () use ($host, $secret, $expiresAt): void {
             $locked = DockerHost::query()->lockForUpdate()->findOrFail($host->id);
             abort_unless($locked->driver === DockerHost::DRIVER_AGENT, 422);
+            app(ReconcileAgentOperations::class)->invalidate($locked, 'Remote operation failed: agent enrollment was replaced. Verify remote cleanup before resuming work.');
             $locked->forceFill([
                 'agent_enrollment_hash' => hash('sha256', $secret),
                 'agent_enrollment_expires_at' => $expiresAt,
@@ -32,6 +33,7 @@ class AgentRegistry
                 'agent_revoked_at' => null,
                 'last_seen_at' => null,
                 'docker_status' => null,
+                'agent_docker_unavailable_at' => null,
                 'agent_inventory_sequence' => 0,
                 'agent_protocol_version' => null,
                 'agent_capabilities' => null,
@@ -118,6 +120,7 @@ class AgentRegistry
             $this->assertCredential($locked, $host->agent_token_hash, $data['instance_id']);
             $locked->forceFill([
                 'last_seen_at' => now(), 'agent_version' => $data['version'], 'docker_status' => $data['docker_status'],
+                'agent_docker_unavailable_at' => $data['docker_status'] === 'unavailable' ? ($locked->agent_docker_unavailable_at ?? now()) : null,
                 'agent_protocol_version' => $data['protocol_version'],
                 'agent_capabilities' => $data['capabilities'],
                 'agent_maintenance_token' => $data['maintenance_token'] ?? null,
@@ -147,6 +150,7 @@ class AgentRegistry
         abort_if($host->isLocal(), 422, 'The local host does not use an agent.');
         DB::transaction(function () use ($host): void {
             $locked = DockerHost::query()->lockForUpdate()->findOrFail($host->id);
+            app(ReconcileAgentOperations::class)->invalidate($locked, 'Remote operation failed: agent access was revoked. Verify remote cleanup before resuming work.');
             $locked->forceFill([
                 'agent_token_hash' => null, 'agent_enrollment_hash' => null,
                 'agent_enrollment_expires_at' => null, 'agent_revoked_at' => now(),

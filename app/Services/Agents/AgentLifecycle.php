@@ -40,7 +40,9 @@ class AgentLifecycle
                 ->where('docker_container_cleanup_pending', false)
                 ->where(fn ($query) => $query->whereNull('stopped_container_ids')->orWhereJsonLength('stopped_container_ids', 0)))->count() : 0;
 
-        return max($backups + $restores + $groups + $destinations + $relayCleanup, (int) ($host->agent_active_operations ?? 0));
+        $unconfirmedCleanup = app(ReconcileAgentOperations::class)->cleanupPending($host) ? 1 : 0;
+
+        return max($backups + $restores + $groups + $destinations + $relayCleanup + $unconfirmedCleanup, (int) ($host->agent_active_operations ?? 0));
     }
 
     /** @return array{maintenance_requested: bool, maintenance_ready: bool, active_operations: int} */

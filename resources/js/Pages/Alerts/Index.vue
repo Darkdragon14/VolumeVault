@@ -29,7 +29,7 @@ const filtersVisible = ref(false);
 
 readFiltersFromUrl({ search, type: typeFilter, status: statusFilter, severity: severityFilter });
 
-const types = ['backup_too_old', 'job_never_succeeded', 'job_in_error_too_long', 'backup_size_out_of_range', 'destination_storage_limit'];
+const types = ['backup_too_old', 'job_never_succeeded', 'job_in_error_too_long', 'backup_size_out_of_range', 'destination_storage_limit', 'agent_offline'];
 const statuses = ['active', 'resolved'];
 const severities = ['warning', 'critical'];
 

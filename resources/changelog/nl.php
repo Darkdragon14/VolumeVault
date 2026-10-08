@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Herstel na uitval van agents',
+        'description' => 'Vastgelopen externe bewerkingen mislukken na een instelbare termijn of intrekking/herinschrijving van de agent en geven ongebruikte relaycapaciteit vrij zonder werk opnieuw uit te voeren. Externe opruiming blijft beschermd. Een instelbare melding voor offline agents is standaard ingeschakeld.',
+    ],
     'public_api_health' => [
         'title' => 'Openbare API-beschikbaarheidscontrole',
         'description' => 'Controleer de HTTP-beschikbaarheid van de applicatie via het openbare endpoint /api/v1/health, gedocumenteerd in OpenAPI. Docker, workers en back-upbestemmingen worden niet gecontroleerd; /up blijft beschikbaar.',

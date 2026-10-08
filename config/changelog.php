@@ -1,7 +1,9 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        ['type' => 'change', 'key' => 'agent_outage_recovery'],
+    ],
     'releases' => [
         'v2.0.2' => [
             'date' => '2026-09-30',

@@ -54,6 +54,7 @@ class ReconcileStaleRuns extends Command
 
     public function handle(RunBackup $runBackup, RunRestore $runRestore, RunBackupGroup $runBackupGroup): int
     {
+        app(\App\Services\Agents\ReconcileAgentOperations::class)->handle();
         if (DeploymentMode::isOrchestrator()) {
             return self::SUCCESS;
         }

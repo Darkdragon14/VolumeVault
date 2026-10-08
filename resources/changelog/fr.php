@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Récupération des tâches interrompues par un agent indisponible',
+        'description' => 'Les opérations distantes bloquées échouent après un délai configurable ou la révocation/réinscription de l’agent, libérant les relais inutilisés sans rejouer les tâches. Le nettoyage distant reste protégé. Une alerte configurable d’agent hors ligne est activée par défaut.',
+    ],
     'public_api_health' => [
         'title' => 'Contrôle public de disponibilité de l’API',
         'description' => 'Surveillez la disponibilité HTTP de l’application avec la route publique /api/v1/health, documentée dans OpenAPI. Elle ne vérifie pas Docker, les workers ni les destinations de sauvegarde ; /up reste disponible.',

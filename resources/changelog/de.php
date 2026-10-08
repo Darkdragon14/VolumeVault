@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_outage_recovery' => [
+        'title' => 'Wiederherstellung nach Agent-Ausfällen',
+        'description' => 'Blockierte Remote-Vorgänge schlagen nach einer konfigurierbaren Frist oder dem Widerruf/der Neuregistrierung des Agenten fehl und geben ungenutzte Relay-Kapazität frei, ohne Arbeit erneut auszuführen. Die Remote-Bereinigung bleibt geschützt. Eine konfigurierbare Offline-Agent-Warnung ist standardmäßig aktiviert.',
+    ],
     'public_api_health' => [
         'title' => 'Öffentliche API-Verfügbarkeitsprüfung',
         'description' => 'Überwachen Sie die HTTP-Verfügbarkeit der Anwendung über den öffentlichen, in OpenAPI dokumentierten Endpunkt /api/v1/health. Docker, Worker und Backup-Ziele werden nicht geprüft; /up bleibt verfügbar.',

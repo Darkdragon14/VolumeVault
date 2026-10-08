@@ -192,8 +192,7 @@ class OrchestratorModeTest extends TestCase
         $events = collect(app(Schedule::class)->events());
         foreach ($events as $event) {
             $name = ($event->command ?? '').' '.($event->description ?? '');
-            $local = str_contains($name, 'SyncDockerVolumes')
-                || str_contains($name, 'reconcile-stale-runs');
+            $local = str_contains($name, 'SyncDockerVolumes');
 
             $this->assertSame(! $local, $event->filtersPass($this->app), $name);
         }
