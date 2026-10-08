@@ -1,18 +1,26 @@
 <?php
 
 return [
-    'unreleased' => [
-        ['type' => 'change', 'key' => 'agent_outage_recovery'],
-        [
-            'type' => 'change',
-            'key' => 'count_based_backup_retention',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'agent_transport_isolation',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.3' => [
+            'date' => '2026-10-08',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.3',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'agent_outage_recovery',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'count_based_backup_retention',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'agent_transport_isolation',
+                ],
+            ],
+        ],
         'v2.0.2' => [
             'date' => '2026-09-30',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.2',
