@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\Backup\RunBackup;
 use App\Actions\Docker\CleanupDestinationOperationHelper;
+use App\Actions\Docker\CleanupBackupRetentionHelper;
 use App\Actions\Docker\ClearDockerVolume;
 use App\Actions\Docker\ContainerIsAlive;
 use App\Actions\Docker\CreateDockerVolume;
@@ -39,6 +40,7 @@ use Mockery;
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
+use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
 class AgentOperationRuntimeTest extends TestCase
@@ -117,7 +119,7 @@ class AgentOperationRuntimeTest extends TestCase
             'destination' => ['name' => 'Archive', 'provider' => 'local', 'settings' => ['archive_path' => $directory], 'secrets' => []],
             'archive' => ['filename' => 'frozen.tar.gz', 'key' => null, 'size' => null]];
         $execute = function (string $id): void {
-            $process = new \Symfony\Component\Process\Process([PHP_BINARY, base_path('artisan'), 'volumevault:agent-execute', $id], base_path(), [
+            $process = new Process([PHP_BINARY, base_path('artisan'), 'volumevault:agent-execute', $id], base_path(), [
                 'VOLUMEVAULT_AGENT_STATE_DIRECTORY' => $this->root,
                 'VOLUMEVAULT_HOST_PATH_ALLOWLIST' => $this->root,
                 'APP_ENV' => 'testing',
@@ -141,6 +143,98 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertSame($result, $store->read($second['id'])['result']);
         $database = new \PDO('sqlite:'.$store->directory($second['id']).'/runtime.sqlite');
         $this->assertSame(0, (int) $database->query('select count(*) from backup_runs')->fetchColumn());
+    }
+
+    #[DataProvider('retentionResults')]
+    public function test_agent_runtime_prunes_using_coordinator_namespace_and_preserves_success_when_cleanup_fails(string $cleanup): void
+    {
+        $operation = self::operation();
+        $namespace = (string) Str::uuid();
+        $prefix = 'volumevault-'.$namespace.'-';
+        $filename = $prefix.'run-42-custom.tar.gz';
+        $old = ['key' => 'backups/'.$prefix.'run-41-custom.tar.gz', 'display_name' => $prefix.'run-41-custom.tar.gz', 'last_modified' => '2026-01-01T00:00:00Z'];
+        $current = ['key' => 'backups/'.$filename, 'display_name' => $filename, 'last_modified' => '2020-01-01T00:00:00Z'];
+        $operation['spec']['job']['archive_namespace'] = $namespace;
+        $operation['spec']['job']['retention_count'] = 1;
+        $operation['spec']['run']['backup_filename'] = $filename;
+        app(AgentOperationStore::class)->accept($operation);
+        $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->once()->andReturn([]);
+        $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()->andReturnUsing(function (BackupRun $run) use ($namespace): DockerProcessResult {
+            $this->assertSame($namespace, $run->execution_options_snapshot['archive_namespace']);
+
+            return new DockerProcessResult([], 0, 'uploaded', '');
+        });
+        $this->mock(ListBackupObjects::class)->shouldReceive('findByFilename')->once()->andReturn([...$current, 'size' => 123]);
+        $storage = $this->mock(DestinationStorage::class);
+        $storage->shouldReceive('useOperationProgress')->twice();
+        $storage->shouldReceive('listBackupObjectsPage')->once()->andReturn(['objects' => $cleanup === 'missing' ? [$old] : [$old, $current], 'next_cursor' => null]);
+        if ($cleanup === 'missing') {
+            $storage->shouldNotReceive('deleteBackupObjects');
+        } elseif ($cleanup === 'failure') {
+            $storage->shouldReceive('deleteBackupObjects')->once()->andThrow(new RuntimeException('test-secret'));
+        } else {
+            $storage->shouldReceive('deleteBackupObjects')->once()->withArgs(fn ($destination, array $keys): bool => $keys === [$old['key']]);
+        }
+        $runtime = app(AgentOperationRuntime::class);
+        $this->assertTrue($runtime->handle($operation['id']));
+        $result = app(AgentOperationSupervisor::class)->pendingResult()['result'];
+        $this->assertSame('success', $result['status']);
+        $this->assertSame($current['key'], $result['backup_key']);
+        $this->assertNull($result['error_message']);
+        $this->assertStringNotContainsString('test-secret', $result['logs']);
+        $this->assertStringContainsString($cleanup === 'success' ? 'removed 1' : 'uploaded backup remains successful', $result['logs']);
+        $this->assertTrue($runtime->handle($operation['id']));
+    }
+
+    public static function retentionResults(): array
+    {
+        return ['successful cleanup' => ['success'], 'deletion failure' => ['failure'], 'upload not listed' => ['missing']];
+    }
+
+    public function test_retention_helper_recovery_blocks_agent_result_until_removal_is_verified_without_reupload(): void
+    {
+        $operation = self::operation();
+        $namespace = (string) Str::uuid();
+        $filename = 'volumevault-'.$namespace.'-run-42-backup.tar.gz';
+        $operation['spec']['job']['archive_namespace'] = $namespace;
+        $operation['spec']['job']['retention_count'] = 1;
+        $operation['spec']['run']['backup_filename'] = $filename;
+        $operation['spec']['destination'] = ['name' => 'Archives', 'provider' => 'docker_volume', 'bucket' => '', 'access_key_id' => '', 'secret_access_key' => '', 'settings' => ['volume_name' => 'archives'], 'secrets' => []];
+        $store = app(AgentOperationStore::class);
+        $store->accept($operation);
+        $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->once()->andReturn([]);
+        $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()->andReturn(new DockerProcessResult([], 0, 'uploaded', ''));
+        $storage = $this->mock(DestinationStorage::class);
+        $storage->shouldReceive('useOperationProgress')->twice();
+        $name = 'volumevault-retention-'.$namespace.'-run-1';
+        $storage->shouldReceive('useOperationHelper')->once()->with($name);
+        $storage->shouldReceive('useOperationHelper')->once()->with(null);
+        $storage->shouldReceive('listBackupObjectsPage')->once()->andReturnUsing(function () use ($name): array {
+            $run = BackupRun::first();
+            $this->assertSame($name, $run->docker_container_id);
+            $this->assertTrue($run->docker_container_cleanup_pending);
+            throw new RuntimeException('worker interrupted');
+        });
+        $this->mock(RemoveDockerContainer::class)->shouldReceive('handle')->times(3)->with($name);
+        $docker = $this->mock(DockerProcess::class);
+        $docker->shouldReceive('whileMonitoring')->once()->andReturnUsing(function (callable $heartbeat, callable $operation): bool {
+            $heartbeat();
+
+            return $operation();
+        });
+        $docker->shouldReceive('run')->twice()->with(['docker', 'container', 'inspect', $name], 30)->andReturn(new DockerProcessResult([], 0, 'still exists', ''));
+        $runtime = app(AgentOperationRuntime::class);
+        $this->assertFalse($runtime->handle($operation['id']));
+        $this->assertNull($store->read($operation['id'])['result'] ?? null);
+        $this->assertTrue(BackupRun::first()->docker_container_cleanup_pending);
+        $this->assertSame('success', BackupRun::first()->status);
+        $docker->shouldReceive('run')->once()->with(['docker', 'container', 'inspect', $name], 30)->andReturn(new DockerProcessResult([], 1, '', 'Error: No such container: '.$name));
+        $this->mock(ListBackupObjects::class)->shouldReceive('findByFilename')->once()->andReturn(['key' => $filename, 'size' => 123]);
+        $this->assertTrue($runtime->handle($operation['id']));
+        $result = $store->read($operation['id'])['result'];
+        $this->assertSame('success', $result['status']);
+        $this->assertTrue($result['cleanup_complete']);
+        $this->assertSame(1, BackupRun::count());
     }
 
     public function test_export_runtime_uploads_with_real_client_from_child_state_while_parent_loop_is_open(): void

@@ -201,7 +201,7 @@ class DestinationOperationTest extends TestCase
         $destination = $this->destination();
         $operation = app(DestinationOperations::class)->create($destination, 'list', $this->host()->id, limit: 1);
         $client = Mockery::mock(S3Client::class);
-        $client->shouldReceive('listObjectsV2')->once()->with(['Bucket' => 'archives', 'Prefix' => '', 'MaxKeys' => 1])->andReturn(new Result([
+        $client->shouldReceive('listObjectsV2')->once()->with(['Bucket' => 'archives', 'Prefix' => '', 'MaxKeys' => 1, '@http' => ['connect_timeout' => 15, 'timeout' => 60]])->andReturn(new Result([
             'Contents' => [['Key' => 'archive.tar.gz', 'Size' => 5]], 'IsTruncated' => true, 'NextContinuationToken' => 'provider-page-2',
         ]));
         $this->mock(S3ClientFactory::class)->shouldReceive('make')->once()->andReturn($client);

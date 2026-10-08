@@ -46,6 +46,9 @@ class DispatchAgentOperation
         $job = $run instanceof BackupRun ? $run->executionJob() : $run->job;
         $destination = $run instanceof BackupRun ? $run->destinationForRun() : $run->destination;
         $hostId = $run instanceof BackupRun ? $run->docker_host_id : $run->target_docker_host_id;
+        if ($run instanceof BackupRun && ($job->retention_count || $job->retention_days)) {
+            app(AgentExecution::class)->validateHost($hostId, 'retention-v1');
+        }
         $relay = $run instanceof RestoreRun ? $run->archiveRelay : null;
         if ($relay !== null) {
             app(AgentExecution::class)->validateHost($hostId, 'archive-relay-v1');
@@ -70,10 +73,15 @@ class DispatchAgentOperation
             ]),
         ];
         $spec['job']['source_type'] = $job->sourceType();
+        if ($run instanceof BackupRun && app(AgentExecution::class)->supportsHost($run->dockerHost, 'retention-v1')) {
+            $spec['job']['archive_namespace'] = $run->execution_options_snapshot['archive_namespace'] ?? null;
+        }
         if ($relay !== null) {
             $spec['relay'] = ['id' => $relay->id, 'size_bytes' => (int) $relay->size_bytes, 'sha256' => $relay->sha256];
         }
         if ($run instanceof RestoreRun) {
+            $spec['job']['retention_days'] = null;
+            $spec['job']['retention_count'] = null;
             // A restore acts on its admitted target, not the job's current source.
             // The archive's historical source remains in run.source_volume_name.
             $spec['job']['source_type'] = BackupJob::SOURCE_TYPE_DOCKER_VOLUME;

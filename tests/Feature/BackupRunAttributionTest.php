@@ -68,7 +68,7 @@ class BackupRunAttributionTest extends TestCase
         $this->assertSame($job->backup_destination_id, $run->backup_destination_id_snapshot);
         $this->assertSame('Local', $run->backup_destination_name);
         $this->assertSame($job->destination->locatorFingerprint(), $run->backup_destination_locator_fingerprint);
-        $this->assertSame('volumevault-app_data-run-'.$run->id.'.tar.gz', $run->backup_filename);
+        $this->assertSame('volumevault-'.$run->execution_options_snapshot['archive_namespace'].'-run-'.$run->id.'-volumevault-app_data-run-'.$run->id.'.tar.gz', $run->backup_filename);
         // Scheduled runs have no logged-in user; the initiator stays null and the
         // UI shows it as "—", mirroring automated restores.
         $this->assertNull($run->initiated_by_user_id);
@@ -108,7 +108,7 @@ class BackupRunAttributionTest extends TestCase
         $this->assertSame($user->id, $backup->initiated_by_user_id);
         $this->assertSame('app_data', $backup->source_volume_name);
         $this->assertSame($job->backup_destination_id, $backup->backup_destination_id_snapshot);
-        $this->assertSame('volumevault-app_data-run-'.$backup->id.'.tar.gz', $backup->backup_filename);
+        $this->assertSame('volumevault-safety-'.$backup->execution_options_snapshot['archive_namespace'].'-run-'.$backup->id.'-volumevault-app_data-run-'.$backup->id.'.tar.gz', $backup->backup_filename);
     }
 
     private function backupJob(): BackupJob

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'count_based_backup_retention' => [
+        'title' => 'Működő darabszám alapú biztonsági mentés megőrzés',
+        'description' => 'Sikeres mentés után a VolumeVault törli a feladat megőrzési korlátját meghaladó legrégebbi archívumokat. Az új archívumok feladatonként azonosíthatók a megosztott célok védelméhez; a régebbi, azonosító nélküli archívumok megmaradnak. A hitelesítő adatoknak engedélyezniük kell a listázást és a törlést. A funkcióhoz frissítse a távoli ügynököket.',
+    ],
     'agent_transport_isolation' => [
         'title' => 'Elkülönített TLS-kapcsolat az ügynököknek',
         'description' => 'Engedélyezett ügynökök esetén a 8080-as port a webes felületet és a nyilvános API-t szolgálja ki, de elutasítja az /agent/v1 útvonalat és annak alútvonalait. A 8443-as TLS-port csak az /agent/v1/* útvonalakat szolgálja ki; minden más útvonal, beleértve az állapotellenőrzéseket és a statikus fájlokat, 404-et ad vissza. A gazdagép portjainak átirányítása továbbra is támogatott. Használjon közvetlen TLS-t vagy TCP passthrough-t, és további védelemként korlátozza az ügynökport elérését a Docker-gazdagépek IP-címeire vagy hálózataira.',

@@ -239,6 +239,8 @@ class RunBackup
 
             $this->applyPendingLabelReconciliationIfReady($run);
         }
+
+        app(PruneBackupArchives::class)->handle($run, fn () => $this->heartbeat($run));
     }
 
     /**

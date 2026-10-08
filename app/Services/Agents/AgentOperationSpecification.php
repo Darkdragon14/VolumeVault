@@ -2,8 +2,10 @@
 
 namespace App\Services\Agents;
 
+use App\Actions\Backup\RenderBackupFilename;
 use App\Http\Requests\Concerns\ValidatesBackupDestination;
 use App\Models\BackupDestination;
+use App\Services\BackupDestinations\SftpEndpointHost;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerVolumeName;
 use App\Services\Security\OutboundHostGuard;
@@ -34,7 +36,7 @@ class AgentOperationSpecification
                     'spec.limit' => ['required', 'integer:strict', 'in:1'],
                     'spec.destination' => ['required', 'array:provider,host,port'],
                     'spec.destination.provider' => ['required', 'in:ssh'],
-                    'spec.destination.host' => ['required', new \App\Services\BackupDestinations\SftpEndpointHost],
+                    'spec.destination.host' => ['required', new SftpEndpointHost],
                     'spec.destination.port' => ['required', 'integer:strict', 'min:1', 'max:65535'],
                 ])->validate();
                 if (array_diff(array_keys($operation), ['id', 'token', 'kind', 'spec']) !== []) {
@@ -53,7 +55,8 @@ class AgentOperationSpecification
                 'spec.relay.size_bytes' => ['required_with:spec.relay', 'integer:strict', 'min:1'],
                 'spec.relay.sha256' => ['required_with:spec.relay', 'regex:/\A[0-9a-f]{64}\z/'],
                 'spec.version' => ['required', 'integer', 'in:1'],
-                'spec.job' => ['required', 'array:name,source_type,volume_name,host_path,retention_days,retention_count,backup_filter_mode,backup_exclude_regexp,backup_include_paths,stop_containers_before_backup,stop_container_names,timezone'],
+                'spec.job' => ['required', 'array:name,source_type,volume_name,host_path,retention_days,retention_count,archive_namespace,backup_filter_mode,backup_exclude_regexp,backup_include_paths,stop_containers_before_backup,stop_container_names,timezone'],
+                'spec.job.archive_namespace' => ['sometimes', 'nullable', 'uuid'],
                 'spec.job.name' => ['required', 'string', 'max:255'],
                 'spec.job.source_type' => ['required', 'in:docker_volume,host_path'],
                 'spec.job.volume_name' => ['nullable', 'string', 'max:255'],
@@ -231,6 +234,11 @@ class AgentOperationSpecification
         if ($operation['kind'] === 'backup') {
             if (empty($run['backup_filename'])) {
                 throw new RuntimeException;
+            }
+            if (($job['retention_count'] ?? 0) > 0 || ($job['retention_days'] ?? 0) > 0) {
+                if (empty($job['archive_namespace']) || ! str_starts_with($run['backup_filename'], RenderBackupFilename::archivePrefix($job['archive_namespace']))) {
+                    throw new RuntimeException;
+                }
             }
 
             return;
