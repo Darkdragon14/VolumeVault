@@ -1,12 +1,7 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'container_image_publication_recovery',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
         'v2.0.3' => [
             'date' => '2026-10-08',
@@ -23,6 +18,10 @@ return [
                 [
                     'type' => 'change',
                     'key' => 'agent_transport_isolation',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'container_image_publication_recovery',
                 ],
             ],
         ],
