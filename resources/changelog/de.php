@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Native Tailwind-4-Stile',
+        'description' => 'Die Oberfläche verwendet jetzt native Tailwind-4-Utilities und explizite helle/dunkle Farben statt Tailwind-3-Kompatibilitätsregeln, mit angepassten Formularabständen und zugänglichen Fokuszuständen.',
+    ],
     'consistent_page_background' => [
         'title' => 'Einheitliche Seitenhintergründe',
         'description' => 'Der gemeinsame Hintergrund bleibt jetzt unabhängig von der Inhaltshöhe beim Seitenwechsel und Scrollen im hellen und dunklen Design einheitlich.',

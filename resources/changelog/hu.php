@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Natív Tailwind 4 stílusok',
+        'description' => 'A felület most natív Tailwind 4 segédosztályokat és explicit világos/sötét színeket használ a Tailwind 3 kompatibilitási felülírások helyett, frissített űrlaptérközökkel és akadálymentes fókuszállapotokkal.',
+    ],
     'consistent_page_background' => [
         'title' => 'Egységes oldalháttér',
         'description' => 'A közös háttér most az oldalak között és görgetéskor is egységes marad, a tartalom magasságától függetlenül, világos és sötét témában egyaránt.',

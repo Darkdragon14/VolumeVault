@@ -124,11 +124,11 @@ const submit = () => {
         :subtitle="t('Configure one alert channel and its delivery behavior.')"
     >
         <form
-            class="card max-w-4xl space-y-6 p-4 sm:p-6"
+            class="card max-w-4xl flex flex-col gap-6 p-4 sm:p-6"
             @submit.prevent="submit"
         >
             <div class="grid gap-4 sm:grid-cols-2">
-                <label class="space-y-2">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t("Channel name") }}</span>
                     <input
                         v-model="form.name"
@@ -138,12 +138,12 @@ const submit = () => {
                     />
                     <span
                         v-if="form.errors.name"
-                        class="text-sm text-rose-300"
+                        class="text-sm text-rose-700 dark:text-rose-300"
                         >{{ form.errors.name }}</span
                     >
                 </label>
 
-                <label class="space-y-2">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t("Notification service") }}</span>
                     <select v-model="form.service" class="input">
                         <option
@@ -158,14 +158,14 @@ const submit = () => {
             </div>
 
             <section
-                class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5"
+                class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4 sm:p-5"
             >
                 <div class="mb-4">
                     <h2 class="text-lg font-semibold">
                         {{ t("Guided setup") }}
                     </h2>
-                    <p class="mt-1 text-sm text-slate-400">{{ serviceHelp }}</p>
-                    <p v-if="editing" class="mt-2 text-xs text-slate-400">
+                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ serviceHelp }}</p>
+                    <p v-if="editing" class="mt-2 text-xs text-slate-500 dark:text-slate-400">
                         {{
                             t(
                                 "Leave setup fields empty to keep the saved encrypted Shoutrrr URL.",
@@ -178,7 +178,7 @@ const submit = () => {
                     v-if="form.service === 'discord'"
                     class="grid gap-4 sm:grid-cols-2"
                 >
-                    <label class="space-y-2 sm:col-span-2">
+                    <label class="flex flex-col gap-2 sm:col-span-2">
                         <span class="label">{{
                             t("Discord webhook URL")
                         }}</span>
@@ -189,7 +189,7 @@ const submit = () => {
                             placeholder="https://discord.com/api/webhooks/..."
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Bot username") }}</span>
                         <input
                             v-model="form.config.username"
@@ -203,7 +203,7 @@ const submit = () => {
                     v-else-if="form.service === 'telegram'"
                     class="grid gap-4 sm:grid-cols-2"
                 >
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Bot token") }}</span>
                         <input
                             v-model="form.config.token"
@@ -213,7 +213,7 @@ const submit = () => {
                             placeholder="123456:ABC..."
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Chats or channels") }}</span>
                         <input
                             v-model="form.config.chats"
@@ -228,7 +228,7 @@ const submit = () => {
                     v-else-if="form.service === 'ntfy'"
                     class="grid gap-4 sm:grid-cols-2"
                 >
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Ntfy host") }}</span>
                         <input
                             v-model="form.config.host"
@@ -236,7 +236,7 @@ const submit = () => {
                             placeholder="ntfy.sh"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Topic") }}</span>
                         <input
                             v-model="form.config.topic"
@@ -245,7 +245,7 @@ const submit = () => {
                             placeholder="volumevault-private-topic"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">Username</span>
                         <input
                             v-model="form.config.username"
@@ -254,7 +254,7 @@ const submit = () => {
                             placeholder="Optional"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">Password</span>
                         <PasswordInput
                             v-model="form.config.password"
@@ -268,7 +268,7 @@ const submit = () => {
                     v-else-if="form.service === 'gotify'"
                     class="grid gap-4 sm:grid-cols-2"
                 >
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Gotify host") }}</span>
                         <input
                             v-model="form.config.host"
@@ -277,7 +277,7 @@ const submit = () => {
                             placeholder="gotify.example.com:443"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Application token") }}</span>
                         <input
                             v-model="form.config.token"
@@ -292,7 +292,7 @@ const submit = () => {
                     v-else-if="form.service === 'smtp'"
                     class="grid gap-4 sm:grid-cols-2"
                 >
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("SMTP host") }}</span>
                         <input
                             v-model="form.config.host"
@@ -301,7 +301,7 @@ const submit = () => {
                             placeholder="smtp.example.com"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Port") }}</span>
                         <input
                             v-model="form.config.port"
@@ -310,7 +310,7 @@ const submit = () => {
                             placeholder="587"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">Username</span>
                         <input
                             v-model="form.config.username"
@@ -318,14 +318,14 @@ const submit = () => {
                             autocomplete="off"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">Password</span>
                         <PasswordInput
                             v-model="form.config.password"
                             autocomplete="new-password"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("From address") }}</span>
                         <input
                             v-model="form.config.from"
@@ -334,7 +334,7 @@ const submit = () => {
                             placeholder="volumevault@example.com"
                         />
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">To address</span>
                         <input
                             v-model="form.config.to"
@@ -343,7 +343,7 @@ const submit = () => {
                             placeholder="you@example.com"
                         />
                     </label>
-                    <div class="space-y-2 sm:col-span-2">
+                    <div class="flex flex-col gap-2 sm:col-span-2">
                         <label
                             class="flex cursor-pointer items-center gap-3 text-sm"
                         >
@@ -358,7 +358,7 @@ const submit = () => {
                         </label>
                         <p
                             v-if="form.config.unencrypted"
-                            class="rounded-xl border border-amber-300/20 bg-amber-400/10 p-3 text-sm text-amber-100"
+                            class="rounded-xl border border-amber-300/20 bg-amber-400/10 p-3 text-sm text-amber-800 dark:text-amber-100"
                         >
                             ⚠️
                             {{
@@ -374,7 +374,7 @@ const submit = () => {
                     v-else-if="form.service === 'webhook'"
                     class="grid gap-4 sm:grid-cols-2"
                 >
-                    <label class="space-y-2 sm:col-span-2">
+                    <label class="flex flex-col gap-2 sm:col-span-2">
                         <span class="label">{{ t("Success URL") }}</span>
                         <input
                             v-model="form.config.success_url"
@@ -384,11 +384,11 @@ const submit = () => {
                         />
                         <span
                             v-if="form.errors['config.success_url']"
-                            class="block text-sm text-rose-300"
+                            class="block text-sm text-rose-700 dark:text-rose-300"
                             >{{ form.errors["config.success_url"] }}</span
                         >
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Start URL") }}</span>
                         <input
                             v-model="form.config.start_url"
@@ -398,11 +398,11 @@ const submit = () => {
                         />
                         <span
                             v-if="form.errors['config.start_url']"
-                            class="block text-sm text-rose-300"
+                            class="block text-sm text-rose-700 dark:text-rose-300"
                             >{{ form.errors["config.start_url"] }}</span
                         >
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t("Failure URL") }}</span>
                         <input
                             v-model="form.config.fail_url"
@@ -412,11 +412,11 @@ const submit = () => {
                         />
                         <span
                             v-if="form.errors['config.fail_url']"
-                            class="block text-sm text-rose-300"
+                            class="block text-sm text-rose-700 dark:text-rose-300"
                             >{{ form.errors["config.fail_url"] }}</span
                         >
                     </label>
-                    <p class="text-xs text-slate-400 sm:col-span-2">
+                    <p class="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
                         {{
                             t(
                                 "Fill any subset. Each URL is called on its action, for both backups and restores. Set the level below to “Every backup and restore run” to also send the start and success URLs.",
@@ -425,7 +425,7 @@ const submit = () => {
                     </p>
                 </div>
 
-                <label v-else class="block space-y-2">
+                <label v-else class="flex flex-col gap-2">
                     <span class="label">{{ t("Shoutrrr URL") }}</span>
                     <input
                         v-model="form.config.url"
@@ -437,20 +437,20 @@ const submit = () => {
 
                 <span
                     v-if="form.errors.config"
-                    class="mt-3 block text-sm text-rose-300"
+                    class="mt-3 block text-sm text-rose-700 dark:text-rose-300"
                     >{{ form.errors.config }}</span
                 >
             </section>
 
             <section
-                class="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5"
+                class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4 sm:p-5"
             >
                 <h2 class="mb-4 text-lg font-semibold">
                     {{ t("When to notify") }}
                 </h2>
                 <div class="grid gap-3 sm:grid-cols-2">
                     <label
-                        class="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm"
+                        class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 p-4 text-sm"
                     >
                         <input
                             v-model="form.notification_level"
@@ -461,7 +461,7 @@ const submit = () => {
                         {{ t("Errors only") }}
                     </label>
                     <label
-                        class="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm"
+                        class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 p-4 text-sm"
                     >
                         <input
                             v-model="form.notification_level"
@@ -475,13 +475,13 @@ const submit = () => {
             </section>
 
             <section
-                class="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5"
+                class="flex flex-col gap-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4 sm:p-5"
             >
                 <div>
                     <h2 class="text-lg font-semibold">
                         {{ t("Message format") }}
                     </h2>
-                    <p class="mt-1 text-sm text-slate-400">
+                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
                         {{
                             t(
                                 "Keep the default message, or override the title and body sent after backup and restore runs.",
@@ -491,18 +491,18 @@ const submit = () => {
                 </div>
 
                 <div
-                    class="rounded-xl border border-white/10 bg-slate-950/40 p-4"
+                    class="rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/40 p-4"
                 >
                     <div
                         class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                     >
-                        <h3 class="font-medium text-white">
+                        <h3 class="font-medium text-slate-900 dark:text-white">
                             {{ t("Backup messages") }}
                         </h3>
                         <button
                             type="button"
                             role="switch"
-                            class="inline-flex shrink-0 items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
+                            class="inline-flex shrink-0 items-center gap-3 rounded-full border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
                             :aria-checked="useCustomMessage"
                             :aria-label="t('Use custom message')"
                             @click="toggleCustomMessage"
@@ -516,7 +516,7 @@ const submit = () => {
                                 "
                             >
                                 <span
-                                    class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
+                                    class="h-5 w-5 rounded-full bg-white shadow-xs transition-transform"
                                     :class="
                                         useCustomMessage
                                             ? 'translate-x-5'
@@ -531,7 +531,7 @@ const submit = () => {
                     </div>
 
                     <div v-if="useCustomMessage" class="mt-4 grid gap-4">
-                        <label class="space-y-2">
+                        <label class="flex flex-col gap-2">
                             <span class="label">{{ t("Title template") }}</span>
                             <input
                                 v-model="form.title_template"
@@ -541,12 +541,12 @@ const submit = () => {
                             />
                             <span
                                 v-if="form.errors.title_template"
-                                class="text-sm text-rose-300"
+                                class="text-sm text-rose-700 dark:text-rose-300"
                                 >{{ form.errors.title_template }}</span
                             >
                         </label>
 
-                        <label class="space-y-2">
+                        <label class="flex flex-col gap-2">
                             <span class="label">{{ t("Body template") }}</span>
                             <textarea
                                 v-model="form.body_template"
@@ -556,13 +556,13 @@ const submit = () => {
                             ></textarea>
                             <span
                                 v-if="form.errors.body_template"
-                                class="text-sm text-rose-300"
+                                class="text-sm text-rose-700 dark:text-rose-300"
                                 >{{ form.errors.body_template }}</span
                             >
                         </label>
 
                         <p
-                            class="rounded-xl border border-sky-300/20 bg-sky-400/10 p-3 text-sm text-sky-100"
+                            class="rounded-xl border border-sky-300/20 bg-sky-400/10 p-3 text-sm text-sky-700 dark:text-sky-100"
                         >
                             {{
                                 t("Available tokens: {tokens}", {
@@ -574,18 +574,18 @@ const submit = () => {
                 </div>
 
                 <div
-                    class="rounded-xl border border-white/10 bg-slate-950/40 p-4"
+                    class="rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/40 p-4"
                 >
                     <div
                         class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                     >
-                        <h3 class="font-medium text-white">
+                        <h3 class="font-medium text-slate-900 dark:text-white">
                             {{ t("Restore messages") }}
                         </h3>
                         <button
                             type="button"
                             role="switch"
-                            class="inline-flex shrink-0 items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
+                            class="inline-flex shrink-0 items-center gap-3 rounded-full border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
                             :aria-checked="useCustomRestoreMessage"
                             :aria-label="t('Use custom restore message')"
                             @click="toggleCustomRestoreMessage"
@@ -599,7 +599,7 @@ const submit = () => {
                                 "
                             >
                                 <span
-                                    class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
+                                    class="h-5 w-5 rounded-full bg-white shadow-xs transition-transform"
                                     :class="
                                         useCustomRestoreMessage
                                             ? 'translate-x-5'
@@ -614,7 +614,7 @@ const submit = () => {
                     </div>
 
                     <div v-if="useCustomRestoreMessage" class="mt-4 grid gap-4">
-                        <label class="space-y-2">
+                        <label class="flex flex-col gap-2">
                             <span class="label">{{ t("Title template") }}</span>
                             <input
                                 v-model="form.restore_title_template"
@@ -624,12 +624,12 @@ const submit = () => {
                             />
                             <span
                                 v-if="form.errors.restore_title_template"
-                                class="text-sm text-rose-300"
+                                class="text-sm text-rose-700 dark:text-rose-300"
                                 >{{ form.errors.restore_title_template }}</span
                             >
                         </label>
 
-                        <label class="space-y-2">
+                        <label class="flex flex-col gap-2">
                             <span class="label">{{ t("Body template") }}</span>
                             <textarea
                                 v-model="form.restore_body_template"
@@ -639,13 +639,13 @@ const submit = () => {
                             ></textarea>
                             <span
                                 v-if="form.errors.restore_body_template"
-                                class="text-sm text-rose-300"
+                                class="text-sm text-rose-700 dark:text-rose-300"
                                 >{{ form.errors.restore_body_template }}</span
                             >
                         </label>
 
                         <p
-                            class="rounded-xl border border-sky-300/20 bg-sky-400/10 p-3 text-sm text-sky-100"
+                            class="rounded-xl border border-sky-300/20 bg-sky-400/10 p-3 text-sm text-sky-700 dark:text-sky-100"
                         >
                             {{
                                 t("Available tokens: {tokens}", {
@@ -659,20 +659,20 @@ const submit = () => {
 
             <section class="grid gap-3 sm:grid-cols-2">
                 <div
-                    class="flex items-start justify-between gap-4 rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
+                    class="flex items-start justify-between gap-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4 text-sm"
                 >
                     <div>
-                        <p class="font-medium text-white">
+                        <p class="font-medium text-slate-900 dark:text-white">
                             {{ t("Channel active") }}
                         </p>
-                        <p class="mt-1 text-slate-400">
+                        <p class="mt-1 text-slate-500 dark:text-slate-400">
                             {{ form.is_active ? t("Enabled") : t("Disabled") }}
                         </p>
                     </div>
                     <button
                         type="button"
                         role="switch"
-                        class="relative mt-1 inline-flex h-7 w-12 shrink-0 items-center rounded-full border p-1 transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
+                        class="relative mt-1 inline-flex h-7 w-12 shrink-0 items-center rounded-full border p-1 transition focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
                         :class="
                             form.is_active
                                 ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50'
@@ -687,7 +687,7 @@ const submit = () => {
                         @click="toggleChannelActive"
                     >
                         <span
-                            class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
+                            class="h-5 w-5 rounded-full bg-white shadow-xs transition-transform"
                             :class="
                                 form.is_active
                                     ? 'translate-x-5'
@@ -698,13 +698,13 @@ const submit = () => {
                 </div>
 
                 <div
-                    class="flex items-start justify-between gap-4 rounded-xl border border-white/10 bg-white/5 p-4 text-sm"
+                    class="flex items-start justify-between gap-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4 text-sm"
                 >
                     <div>
-                        <p class="font-medium text-white">
+                        <p class="font-medium text-slate-900 dark:text-white">
                             {{ t("Default channel for new backup jobs") }}
                         </p>
-                        <p class="mt-1 text-slate-400">
+                        <p class="mt-1 text-slate-500 dark:text-slate-400">
                             {{
                                 t(
                                     "Preselect this channel when creating backup jobs. It does not limit which channels a job can use.",
@@ -715,7 +715,7 @@ const submit = () => {
                     <button
                         type="button"
                         role="switch"
-                        class="relative mt-1 inline-flex h-7 w-12 shrink-0 items-center rounded-full border p-1 transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
+                        class="relative mt-1 inline-flex h-7 w-12 shrink-0 items-center rounded-full border p-1 transition focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
                         :class="
                             form.is_default
                                 ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50'
@@ -726,7 +726,7 @@ const submit = () => {
                         @click="toggleDefaultChannel"
                     >
                         <span
-                            class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
+                            class="h-5 w-5 rounded-full bg-white shadow-xs transition-transform"
                             :class="
                                 form.is_default
                                     ? 'translate-x-5'

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import postcss, { type Root, type Rule } from 'postcss';
 import tailwindcss from '@tailwindcss/postcss';
@@ -13,9 +13,7 @@ let stylesheet: Root;
 function rules(selector: string): Rule[] {
     const matches: Rule[] = [];
     stylesheet.walkRules((rule) => {
-        if (postcss.list.comma(rule.selector).includes(selector)) {
-            matches.push(rule);
-        }
+        if (postcss.list.comma(rule.selector).includes(selector)) matches.push(rule);
     });
     return matches;
 }
@@ -26,131 +24,81 @@ function values(selector: string, property: string): string[] {
     )));
 }
 
-function themeValue(property: string): string | undefined {
-    let value: string | undefined;
-    stylesheet.walkDecls(property, (declaration) => {
-        if (declaration.parent?.type === 'rule' && declaration.parent.selector.includes(':root')) {
-            value = declaration.value;
-        }
-    });
-    return value;
-}
-
-function layerName(rule: Rule): string | undefined {
-    let parent = rule.parent;
-    while (parent) {
-        if (parent.type === 'atrule' && parent.name === 'layer') {
-            return parent.params;
-        }
-        parent = parent.parent;
+async function vueSources(directory: URL): Promise<string[]> {
+    const sources: string[] = [];
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const url = new URL(entry.name + (entry.isDirectory() ? '/' : ''), directory);
+        if (entry.isDirectory()) sources.push(...await vueSources(url));
+        else if (entry.name.endsWith('.vue')) sources.push(await readFile(url, 'utf8'));
     }
+    return sources;
 }
 
-// Evaluate the background cascade for this single-class utility fixture on a
-// hover-capable screen. :where() adds no specificity; :hover adds one class unit.
-function actionIconBackground(dark: boolean, hovered: boolean): string | undefined {
-    const document = new JSDOM(`<html class="${dark ? 'dark' : ''}"><body><button class="bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10" ${hovered ? 'data-hover' : ''}></button></body></html>`).window.document;
-    const button = document.querySelector('button')!;
-    const layerOrder = ['theme', 'base', 'components', 'utilities'];
-    let winner: { layer: number; specificity: number; value: string } | undefined;
-
-    stylesheet.walkRules((rule) => {
-        for (const selector of postcss.list.comma(rule.selector)) {
-            if (!selector.includes('bg-white\\/5') && !selector.includes('hover\\:bg-slate-100') && !selector.includes('hover\\:bg-white\\/10')) {
-                continue;
-            }
-            if (!button.matches(selector.replace(/(?<!\\):hover/g, '[data-hover]'))) {
-                continue;
-            }
-            const unescaped = selector.replace(/:where\([^)]*\)/g, '').replace(/\\./g, '');
-            const specificity = (unescaped.match(/\.[\w-]+|:[\w-]+/g) ?? []).length;
-            const layer = layerOrder.indexOf(layerName(rule) ?? '') === -1 ? layerOrder.length : layerOrder.indexOf(layerName(rule)!);
-            rule.walkDecls('background-color', (declaration) => {
-                if (!winner || layer > winner.layer || (layer === winner.layer && specificity >= winner.specificity)) {
-                    winner = { layer, specificity, value: declaration.value };
-                }
-            });
-        }
-    });
-    return winner?.value;
-}
-
-describe('application Tailwind 4 stylesheet', () => {
+describe('native Tailwind 4 application stylesheet', () => {
     beforeAll(async () => {
         source = await readFile(stylesheetPath, 'utf8');
-        // Compile the real stylesheet and its real Blade, Vue and TypeScript sources.
-        // Extra candidates only exercise compatibility aliases not used on every page.
         const result = await postcss([tailwindcss({ optimize: { minify: false } })]).process(
-            `${source}\n@source inline("shadow shadow-sm rounded rounded-sm blur blur-sm backdrop-blur backdrop-blur-sm drop-shadow drop-shadow-sm ring outline");`,
+            `${source}\n@source inline("shadow-xs shadow-sm rounded-xs rounded-sm blur-xs blur-sm backdrop-blur-xs backdrop-blur-sm drop-shadow-xs drop-shadow-sm ring outline-hidden text-white bg-slate-950 bg-white/80 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 gap-2 gap-3 gap-4");`,
             { from: stylesheetPath },
         );
         stylesheet = result.root;
     }, 30000);
 
-    it('uses explicit application sources, including TypeScript, without scanning dependencies or tests', async () => {
+    it('scans tracked application sources and excludes tests', async () => {
         expect(source).toContain('@import "tailwindcss" source(none)');
         expect(source).toContain('@source "../js/**/*.{js,ts,vue}"');
         expect(source).toContain('@source not "../js/**/*.test.ts"');
         expect(source).not.toContain('node_modules');
-        expect(rules('.fixed').length).toBeGreaterThan(0);
-        // Assert a candidate in a tracked Vue source, not in stale compiled Blade views.
-        const backupGroupPage = await readFile(new URL('./Pages/BackupGroups/Form.vue', import.meta.url), 'utf8');
-        expect(backupGroupPage).toContain('grid-cols-2');
+        expect(await readFile(new URL('./Pages/BackupGroups/Form.vue', import.meta.url), 'utf8')).toContain('grid-cols-2');
         expect(rules('.grid-cols-2').length).toBeGreaterThan(0);
-        // This candidate exists only in an excluded test file, never in application sources.
         expect(rules('.p-\\[9876px\\]').length).toBe(0); // p-[9876px]
         expect(stylesheet.toString()).not.toMatch(/@apply\b|@source\b|@theme\b/);
     });
 
-    it('anchors the shared light and dark background to the viewport instead of page height', async () => {
-        expect(values('.app-shell', 'isolation')).toContain('isolate');
-        expect(values('.app-shell', 'position')).toContain('relative');
-        expect(values('.app-shell', 'background-image')).toEqual([]);
-        expect(values('.app-shell:before', 'position')).toContain('fixed');
-        expect(values('.app-shell:before', 'inset')).toContain('0');
-        expect(values('.app-shell:before', 'z-index')).toContain('calc(10 * -1)');
-        expect(values('.app-shell:before', 'pointer-events')).toContain('none');
-        expect(values('.app-shell:before', 'background-image').join(' ')).toContain('radial-gradient');
-        expect(values('.app-shell:where(.dark, .dark *):before', 'background-image').join(' ')).toContain('radial-gradient');
-        for (const page of ['Dashboard.vue', 'Volumes/Index.vue', 'Stacks/Index.vue', 'Changelog/Index.vue']) {
-            expect(await readFile(new URL(`./Pages/${page}`, import.meta.url), 'utf8')).toContain('<AppLayout');
+    it('defines only the application font without overriding native theme scales', () => {
+        const theme = postcss.parse(source).nodes.find((node) => node.type === 'atrule' && node.name === 'theme');
+        expect(theme?.type).toBe('atrule');
+        if (theme?.type === 'atrule') {
+            expect(theme.nodes?.filter((node) => node.type === 'decl').map((node) => node.prop)).toEqual(['--font-sans']);
         }
+        expect(source).toContain('--font-sans: Figtree');
+        expect(source).not.toMatch(/legacy-|--default-ring-|@utility space-|@layer utilities/);
     });
 
-    it('retains Figtree and the v3 shadow, radius and blur scales', () => {
-        expect(themeValue('--font-sans')).toMatch(/^Figtree,/);
-        expect(values('.shadow', '--tw-shadow').join(' ')).toContain('0 1px 3px 0');
-        expect(values('.shadow-sm', '--tw-shadow').join(' ')).toContain('0 1px 2px 0');
-        expect(themeValue('--radius')).toBe('.25rem');
-        expect(themeValue('--radius-sm')).toBe('.125rem');
-        expect(values('.rounded', 'border-radius')).toContain('var(--radius)');
+    it('uses the native shadow, radius and filter utility scales', () => {
+        expect(values('.shadow-xs', '--tw-shadow').join(' ')).toContain('0 1px 2px 0');
+        expect(values('.shadow-sm', '--tw-shadow').join(' ')).toContain('0 1px 3px 0');
+        expect(values('.rounded-xs', 'border-radius')).toContain('var(--radius-xs)');
         expect(values('.rounded-sm', 'border-radius')).toContain('var(--radius-sm)');
-        expect(themeValue('--blur')).toBe('8px');
-        expect(themeValue('--blur-sm')).toBe('4px');
-        expect(values('.blur', '--tw-blur')).toContain('blur(var(--blur))');
+        expect(values('.blur-xs', '--tw-blur')).toContain('blur(var(--blur-xs))');
         expect(values('.blur-sm', '--tw-blur')).toContain('blur(var(--blur-sm))');
+        expect(values('.backdrop-blur-xs', '--tw-backdrop-blur')).toContain('blur(var(--blur-xs))');
         expect(values('.backdrop-blur-sm', '--tw-backdrop-blur')).toContain('blur(var(--blur-sm))');
-        expect(values('.drop-shadow-sm', '--tw-drop-shadow-size').join(' ')).toContain('0 1px 1px');
-        expect(values('.drop-shadow', '--tw-drop-shadow-size').join(' ')).toContain('0 1px 2px');
+        expect(values('.drop-shadow-xs', '--tw-drop-shadow-size').join(' ')).toContain('0 1px 1px');
+        expect(values('.drop-shadow-sm', '--tw-drop-shadow-size').join(' ')).toContain('0 1px 2px');
     });
 
-    it('keeps the v3 default ring and accessible transparent outlines', () => {
-        expect(values('.ring', '--tw-ring-shadow').join(' ')).toContain('3px');
-        expect(values('.ring', '--tw-ring-shadow').join(' ')).toContain('#3b82f680');
-        expect(values('.outline', 'outline-width').at(-1)).toBe('2px');
-        const outlineRules: Rule[] = [];
-        stylesheet.walkRules((rule) => {
-            if (rule.selector.includes('.outline-none') || rule.selector.includes('.focus\\:outline-none:focus')) {
-                outlineRules.push(rule);
-            }
-        });
-        expect(outlineRules.at(-1)?.toString()).toContain('outline: 2px solid #0000');
-        expect(outlineRules.at(-1)?.toString()).toContain('outline-offset: 2px');
-        expect(values('.input', 'outline')).toContain('2px solid #0000');
-        expect(values('.btn-primary:focus', 'outline')).toContain('2px solid #0000');
+    it('leaves standard color utilities with their native meaning', () => {
+        expect(values('.text-white', 'color')).toEqual(['var(--color-white)']);
+        expect(values('.bg-slate-950', 'background-color')).toEqual(['var(--color-slate-950)']);
+        expect(source).not.toMatch(/\.text-white\b|\.bg-slate-950\b|:where\(\.dark\)\s/);
+        expect(source).not.toContain('border-color: var(--color-gray-200');
+        expect(source).not.toContain('input::placeholder');
+        expect(source).not.toContain('button:not(:disabled)');
+        expect(source).not.toContain('dialog {');
     });
 
-    it('expands the shared button utility for each component and its disabled state', () => {
+    it('uses accessible native outlines and explicit focus ring widths', () => {
+        const hidden = rules('.outline-hidden');
+        expect(hidden.length).toBeGreaterThan(0);
+        expect(stylesheet.toString()).toContain('forced-colors: active');
+        expect(values('.input', 'outline-style')).toContain('none');
+        expect(values('.input:focus', '--tw-ring-shadow').join(' ')).toContain('2px');
+        expect(values('.btn-primary:focus', '--tw-ring-shadow').join(' ')).toContain('2px');
+        expect(values('.ring', '--tw-ring-shadow').join(' ')).toContain('1px');
+    });
+
+    it('keeps shared button sizing and disabled behavior', () => {
         for (const selector of ['.btn-primary', '.btn-secondary', '.btn-danger']) {
             expect(values(selector, 'display')).toContain('inline-flex');
             expect(values(selector, 'border-radius')).toContain('var(--radius-xl)');
@@ -159,84 +107,78 @@ describe('application Tailwind 4 stylesheet', () => {
             expect(values(`${selector}:disabled`, 'opacity')).toContain('.5');
         }
         expect(values('.btn-secondary', '--tw-shadow').join(' ')).toContain('0 1px 2px 0');
-        expect(values('.card', '--tw-backdrop-blur')).toContain('blur(var(--blur))');
-        expect(values('.input:focus', '--tw-ring-shadow').join(' ')).toContain('2px');
+        expect(values('.card', '--tw-backdrop-blur')).toContain('blur(var(--blur-sm))');
     });
 
-    it('preserves the applied button text palette in light and dark themes', () => {
-        expect(values('.btn-primary', 'color').at(-1)).toBe('#0369a1');
-        expect(values('.btn-primary:where(.dark, .dark *)', 'color').at(-1)).toBe('#e0f2fe');
-        expect(values('.btn-danger', 'color').at(-1)).toBe('#0f172a');
-        expect(values('.btn-danger:where(.dark, .dark *)', 'color').at(-1)).toBe('#fff');
+    it('declares readable button palettes and hover colors in both themes', () => {
+        expect(values('.btn-primary', 'color')).toContain('var(--color-sky-700)');
+        expect(values('.btn-primary:hover', 'color')).toContain('var(--color-sky-800)');
+        expect(values('.btn-primary:where(.dark, .dark *)', 'color')).toContain('var(--color-sky-100)');
+        expect(values('.btn-primary:where(.dark, .dark *):hover', 'color')).toContain('var(--color-sky-50)');
+        expect(values('.btn-danger', 'color')).toContain('var(--color-white)');
+        expect(values('.btn-danger', 'background-color')).toContain('var(--color-rose-600)');
     });
 
-    it('uses class-based dark components rather than system color-scheme media queries', () => {
+    it('keeps class-based dark components and the viewport-fixed shared background', async () => {
         expect(values('.input:where(.dark, .dark *)', 'color')).toContain('var(--color-slate-100)');
-        expect(values('.label:where(.dark, .dark *)', 'color')).toContain('var(--color-slate-200)');
+        expect(values('.app-shell', 'isolation')).toContain('isolate');
+        expect(values('.app-shell', 'background-image')).toEqual([]);
+        expect(values('.app-shell:before', 'position')).toContain('fixed');
+        expect(values('.app-shell:before', 'inset')).toContain('0');
+        expect(values('.app-shell:before', 'pointer-events')).toContain('none');
+        expect(values('.app-shell:before', 'z-index')).toContain('calc(10 * -1)');
         expect(values('.app-shell:where(.dark, .dark *):before', 'background-image').join(' ')).toContain('#020617');
-        expect(values('.btn-secondary:where(.dark, .dark *)', '--tw-shadow')).toContain('0 0 #0000');
         expect(stylesheet.toString()).not.toContain('prefers-color-scheme');
+        for (const page of ['Dashboard.vue', 'Volumes/Index.vue', 'Stacks/Index.vue', 'Changelog/Index.vue']) {
+            expect(await readFile(new URL(`./Pages/${page}`, import.meta.url), 'utf8')).toContain('<AppLayout');
+        }
     });
 
-    it('preserves the v3 preflight border, placeholder and button defaults', () => {
-        expect(values('::file-selector-button', 'border-color')).toContain('var(--color-gray-200, currentColor)');
-        expect(values('input::placeholder', 'color')).toContain('var(--color-gray-400)');
-        expect(values('button:not(:disabled)', 'cursor')).toContain('pointer');
-        expect(values('dialog', 'margin')).toContain('auto');
-        expect(values('html', 'color-scheme')).toContain('light');
-        expect(values('html.dark', 'color-scheme')).toContain('dark');
+    it('uses native theme variants and hover-capable media queries', () => {
+        expect(values('.bg-white\\/80', 'background-color').join(' ')).toContain('color-mix');
+        expect(values('.dark\\:bg-white\\/5:where(.dark, .dark *)', 'background-color').join(' ')).toContain('5%');
+        const hover = rules('.hover\\:bg-slate-100:hover')[0];
+        expect(hover).toBeDefined();
+        expect(hover.parent?.type).toBe('atrule');
+        if (hover.parent?.type === 'atrule') expect(hover.parent.params).toContain('hover: hover');
     });
 
-    it('keeps light/dark palette overrides in the utility layer and colors the new divide selector', () => {
-        expect(values('.text-white', 'color').at(-1)).toBe('#0f172a');
-        expect(values(':where(.dark) .text-white', 'color')).toContain('#fff');
-        expect(values('.bg-slate-950', 'background-color').at(-1)).toBe('#ffffffeb');
-        expect(values(':where(.dark) .bg-slate-950', 'background-color')).toContain('#020617');
-        const lightDivider = '.divide-white\\/10 > :not(:last-child)';
-        expect(values(lightDivider, 'border-color')).toContain('#e2e8f0');
-        expect(values(`:where(.dark) ${lightDivider}`, 'border-color')).toContain('#ffffff1a');
-        expect(layerName(rules(':where(.dark) .text-white')[0])).toBe('utilities');
-        expect(stylesheet.toString()).not.toContain('var(--tw-shadow-colored)');
-        expect(values(':where(.dark) .shadow-black\\/20', '--tw-shadow-color')).toContain('#0003');
-    });
-
-    it('allows action icon and dashboard link hover backgrounds to win in both themes', () => {
-        expect(actionIconBackground(false, false)).toBe('#ffffffd1');
-        expect(actionIconBackground(false, true)).toBe('var(--color-slate-100)');
-        expect(actionIconBackground(true, false)).toBe('#ffffff0d');
-        expect(actionIconBackground(true, true)).toBe('color-mix(in oklab, var(--color-white) 10%, transparent)');
-    });
-
-    it('compiles existing responsive layouts at the unchanged breakpoints', () => {
+    it('retains responsive breakpoints', () => {
         for (const [selector, breakpoint] of [['.sm\\:items-center', '40rem'], ['.md\\:hidden', '48rem'], ['.lg\\:hidden', '64rem']]) {
             const rule = rules(selector)[0];
             expect(rule).toBeDefined();
             expect(rule.parent?.type).toBe('atrule');
-            if (rule.parent?.type === 'atrule') {
-                expect(rule.parent.params).toContain(breakpoint);
-            }
+            if (rule.parent?.type === 'atrule') expect(rule.parent.params).toContain(breakpoint);
         }
     });
 
-    it('places form spacing on the control after inline label text, not on the span', () => {
-        const selector = '.space-y-2 > :not([hidden]) ~ :not([hidden])';
-        const document = new JSDOM('<label class="space-y-2"><span>Name</span><input class="input"></label>').window.document;
-
-        expect([...document.querySelectorAll(selector)].map((element) => element.tagName)).toEqual(['INPUT']);
-        expect(values(selector, 'margin-block-start')).toContain('calc(var(--spacing) * 2)');
-        expect(values(selector, 'margin-block-end')).toContain('0');
-        expect(values('.space-y-2 > :not(:last-child)', 'margin-block')).toContain('0');
+    it('compiles native gaps independently for nested form layouts', () => {
+        for (const size of [2, 3, 4]) {
+            expect(values(`.gap-${size}`, 'gap')).toContain(`calc(var(--spacing) * ${size})`);
+        }
+        expect(source).not.toContain('@utility space-y-');
     });
 
-    it('keeps outer spacing independent of a child’s own spacing utility', () => {
-        const document = new JSDOM('<section class="space-y-3"><article>First</article><article class="space-y-4"><span>Volume</span><input></article></section>').window.document;
-        const outerSelector = '.space-y-3 > :not([hidden]) ~ :not([hidden])';
-        const innerSelector = '.space-y-4 > :not([hidden]) ~ :not([hidden])';
+    it('lays out real user form labels with native gaps, including conditional errors', async () => {
+        const page = await readFile(new URL('./Pages/Users/Form.vue', import.meta.url), 'utf8');
+        const template = page.slice(page.indexOf('<template>') + '<template>'.length, page.lastIndexOf('</template>'));
+        const document = new JSDOM(template).window.document;
+        const labels = [...document.querySelectorAll('label')];
+        expect(labels.length).toBe(6);
+        for (const label of labels) {
+            expect(label.classList.contains('flex')).toBe(true);
+            expect(label.classList.contains('flex-col')).toBe(true);
+            expect(label.classList.contains('gap-2')).toBe(true);
+            expect(label.className).not.toContain('space-y-');
+        }
+        expect(document.querySelector('span[v-if="form.errors.name"]')).not.toBeNull();
+    });
 
-        expect(document.querySelector(outerSelector)?.className).toBe('space-y-4');
-        expect(document.querySelector(innerSelector)?.tagName).toBe('INPUT');
-        expect(values(outerSelector, 'margin-block-start')).toContain('calc(var(--spacing) * 3)');
-        expect(values(innerSelector, 'margin-block-start')).toContain('calc(var(--spacing) * 4)');
-        expect(stylesheet.toString()).not.toContain('--legacy-space-y');
+    it('does not use compatibility aliases or deprecated important prefixes in Vue sources', async () => {
+        const sources = await vueSources(new URL('./', import.meta.url));
+        for (const vue of sources) {
+            expect(vue).not.toContain('legacy-outline-none');
+            expect(vue).not.toMatch(/(?:class="|\s|:)![a-z]+-/);
+        }
     });
 });

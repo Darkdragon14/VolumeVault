@@ -8,78 +8,15 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Keep the v3 visual scale while existing templates retain their class names. */
 @theme {
     --font-sans: Figtree, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --drop-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 1px 1px rgb(0 0 0 / 0.06);
-    --drop-shadow-sm: 0 1px 1px rgb(0 0 0 / 0.05);
-    --blur: 8px;
-    --blur-sm: 4px;
-    --radius: 0.25rem;
-    --radius-sm: 0.125rem;
-    --default-ring-width: 3px;
-    --default-ring-color: rgb(59 130 246 / 0.5);
-}
-
-@utility legacy-outline-none {
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-}
-
-/* Inline label text cannot carry the bottom margins used by v4 spacing. */
-@utility space-y-* {
-    > :not(:last-child) {
-        margin-block-start: 0;
-        margin-block-end: 0;
-    }
-
-    > :not([hidden]) ~ :not([hidden]) {
-        margin-block-start: --spacing(--value(number));
-        margin-block-end: 0;
-    }
 }
 
 @utility btn {
-    @apply inline-flex max-w-full items-center justify-center whitespace-normal rounded-xl px-4 py-2 text-center text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
-}
-
-@layer utilities {
-    .outline {
-        outline-width: 2px;
-    }
-
-    .outline-none,
-    .focus\:outline-none:focus,
-    .focus-visible\:outline-none:focus-visible {
-        @apply legacy-outline-none;
-    }
+    @apply inline-flex max-w-full cursor-pointer items-center justify-center whitespace-normal rounded-xl px-4 py-2 text-center text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 @layer base {
-    *,
-    ::after,
-    ::before,
-    ::backdrop,
-    ::file-selector-button {
-        border-color: var(--color-gray-200, currentColor);
-    }
-
-    input::placeholder,
-    textarea::placeholder {
-        color: var(--color-gray-400);
-    }
-
-    button:not(:disabled),
-    [role="button"]:not(:disabled) {
-        cursor: pointer;
-    }
-
-    dialog {
-        margin: auto;
-    }
-
     html {
         color-scheme: light;
     }
@@ -113,11 +50,11 @@
     }
 
     .card {
-        @apply rounded-2xl border border-slate-200 bg-white/90 shadow-xl shadow-slate-200/70 backdrop-blur dark:border-white/10 dark:bg-white/[0.04] dark:shadow-2xl dark:shadow-black/20;
+        @apply rounded-2xl border border-slate-200 bg-white/90 shadow-xl shadow-slate-200/70 backdrop-blur-sm dark:border-white/10 dark:bg-white/[0.04] dark:shadow-2xl dark:shadow-black/20;
     }
 
     .input {
-        @apply w-full rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-sm text-slate-950 legacy-outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-400/20 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-400;
+        @apply w-full rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-sm text-slate-950 outline-hidden transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-400/20 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-400;
     }
 
     .label {
@@ -125,291 +62,14 @@
     }
 
     .btn-primary {
-        @apply btn border border-sky-300/30 bg-sky-400/10 text-sky-100 hover:bg-sky-400/15 hover:text-sky-50 focus:legacy-outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30;
-        color: rgb(3 105 161);
-
-        @variant dark {
-            color: rgb(224 242 254);
-        }
+        @apply btn border border-sky-300/30 bg-sky-400/10 text-sky-700 hover:bg-sky-400/15 hover:text-sky-800 focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:text-sky-100 dark:hover:text-sky-50 dark:focus:ring-sky-400/30;
     }
 
     .btn-secondary {
-        @apply btn border border-slate-200 bg-white/80 text-slate-700 shadow-sm shadow-slate-200/60 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:shadow-none dark:hover:bg-white/10;
+        @apply btn border border-slate-200 bg-white/80 text-slate-700 shadow-xs shadow-slate-200/60 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:shadow-none dark:hover:bg-white/10;
     }
 
     .btn-danger {
-        @apply btn bg-rose-500 text-white hover:bg-rose-400;
-        color: rgb(15 23 42);
-
-        @variant dark {
-            color: rgb(255 255 255);
-        }
+        @apply btn bg-rose-600 text-white hover:bg-rose-700 focus:outline-hidden focus:ring-2 focus:ring-rose-500/40 dark:bg-rose-500 dark:hover:bg-rose-600;
     }
-}
-
-/* Share the utility layer so hover/focus variants can outrank base colors. */
-@layer utilities {
-.text-white {
-    color: rgb(15 23 42);
-}
-
-.text-slate-100,
-.text-slate-200 {
-    color: rgb(30 41 59);
-}
-
-.text-slate-300 {
-    color: rgb(71 85 105);
-}
-
-.text-slate-400 {
-    color: rgb(100 116 139);
-}
-
-.text-slate-500 {
-    color: rgb(100 116 139);
-}
-
-.text-sky-100,
-.text-sky-200,
-.text-sky-300 {
-    color: rgb(3 105 161);
-}
-
-.hover\:text-white:hover {
-    color: rgb(15 23 42);
-}
-
-.hover\:text-sky-200:hover,
-.hover\:text-sky-300:hover,
-.focus-visible\:text-sky-300:focus-visible {
-    color: rgb(2 132 199);
-}
-
-.text-emerald-100,
-.text-emerald-200 {
-    color: rgb(4 120 87);
-}
-
-.text-amber-100,
-.text-amber-200 {
-    color: rgb(146 64 14);
-}
-
-.text-violet-200 {
-    color: rgb(109 40 217);
-}
-
-.text-rose-100,
-.text-rose-200,
-.text-rose-300 {
-    color: rgb(190 18 60);
-}
-
-.text-rose-200\/80 {
-    color: rgb(190 18 60 / 0.9);
-}
-
-.hover\:text-rose-100:hover {
-    color: rgb(159 18 57);
-}
-
-.border-white\/10,
-.border-white\/20,
-.border-slate-600,
-.border-slate-700 {
-    border-color: rgb(226 232 240);
-}
-
-.divide-white\/10 > :not(:last-child) {
-    border-color: rgb(226 232 240);
-}
-
-.bg-white\/5,
-.bg-white\/\[0\.03\],
-.bg-white\/\[0\.04\] {
-    background-color: rgb(255 255 255 / 0.82);
-}
-
-.bg-white\/10,
-.hover\:bg-white\/10:hover,
-.hover\:bg-white\/\[0\.03\]:hover {
-    background-color: rgb(241 245 249 / 0.9);
-}
-
-.bg-slate-950,
-.bg-slate-950\/60,
-.bg-slate-950\/70,
-.bg-slate-950\/80 {
-    background-color: rgb(255 255 255 / 0.92);
-}
-
-.bg-slate-950\/30 {
-    background-color: rgb(255 255 255 / 0.62);
-}
-
-.shadow-black\/20,
-.shadow-black\/30,
-.shadow-black\/40 {
-    --tw-shadow-color: rgb(148 163 184 / 0.18);
-}
-
-:where(.dark) .text-white {
-    color: rgb(255 255 255);
-}
-
-:where(.dark) .text-slate-100 {
-    color: rgb(241 245 249);
-}
-
-:where(.dark) .text-slate-200 {
-    color: rgb(226 232 240);
-}
-
-:where(.dark) .text-slate-300 {
-    color: rgb(203 213 225);
-}
-
-:where(.dark) .text-slate-400 {
-    color: rgb(148 163 184);
-}
-
-:where(.dark) .text-slate-500 {
-    color: rgb(100 116 139);
-}
-
-:where(.dark) .text-sky-100 {
-    color: rgb(224 242 254);
-}
-
-:where(.dark) .text-sky-200 {
-    color: rgb(186 230 253);
-}
-
-:where(.dark) .text-sky-300 {
-    color: rgb(125 211 252);
-}
-
-:where(.dark) .hover\:text-white:hover {
-    color: rgb(255 255 255);
-}
-
-:where(.dark) .hover\:text-sky-200:hover {
-    color: rgb(186 230 253);
-}
-
-:where(.dark) .hover\:text-sky-300:hover,
-:where(.dark) .focus-visible\:text-sky-300:focus-visible {
-    color: rgb(125 211 252);
-}
-
-:where(.dark) .text-emerald-100 {
-    color: rgb(209 250 229);
-}
-
-:where(.dark) .text-emerald-200 {
-    color: rgb(167 243 208);
-}
-
-:where(.dark) .text-amber-100 {
-    color: rgb(254 243 199);
-}
-
-:where(.dark) .text-amber-200 {
-    color: rgb(253 230 138);
-}
-
-:where(.dark) .text-violet-200 {
-    color: rgb(221 214 254);
-}
-
-:where(.dark) .text-rose-100 {
-    color: rgb(255 228 230);
-}
-
-:where(.dark) .text-rose-200 {
-    color: rgb(254 205 211);
-}
-
-:where(.dark) .text-rose-200\/80 {
-    color: rgb(254 205 211 / 0.8);
-}
-
-:where(.dark) .text-rose-300 {
-    color: rgb(253 164 175);
-}
-
-:where(.dark) .hover\:text-rose-100:hover {
-    color: rgb(255 228 230);
-}
-
-:where(.dark) .border-white\/10 {
-    border-color: rgb(255 255 255 / 0.1);
-}
-
-:where(.dark) .border-white\/20 {
-    border-color: rgb(255 255 255 / 0.2);
-}
-
-:where(.dark) .border-slate-600 {
-    border-color: rgb(71 85 105);
-}
-
-:where(.dark) .border-slate-700 {
-    border-color: rgb(51 65 85);
-}
-
-:where(.dark) .divide-white\/10 > :not(:last-child) {
-    border-color: rgb(255 255 255 / 0.1);
-}
-
-:where(.dark) .bg-white\/5 {
-    background-color: rgb(255 255 255 / 0.05);
-}
-
-:where(.dark) .bg-white\/10,
-:where(.dark) .hover\:bg-white\/10:hover {
-    background-color: rgb(255 255 255 / 0.1);
-}
-
-:where(.dark) .bg-white\/\[0\.03\],
-:where(.dark) .hover\:bg-white\/\[0\.03\]:hover {
-    background-color: rgb(255 255 255 / 0.03);
-}
-
-:where(.dark) .bg-white\/\[0\.04\] {
-    background-color: rgb(255 255 255 / 0.04);
-}
-
-:where(.dark) .bg-slate-950 {
-    background-color: rgb(2 6 23);
-}
-
-:where(.dark) .bg-slate-950\/30 {
-    background-color: rgb(2 6 23 / 0.3);
-}
-
-:where(.dark) .bg-slate-950\/60 {
-    background-color: rgb(2 6 23 / 0.6);
-}
-
-:where(.dark) .bg-slate-950\/70 {
-    background-color: rgb(2 6 23 / 0.7);
-}
-
-:where(.dark) .bg-slate-950\/80 {
-    background-color: rgb(2 6 23 / 0.8);
-}
-
-:where(.dark) .shadow-black\/20 {
-    --tw-shadow-color: rgb(0 0 0 / 0.2);
-}
-
-:where(.dark) .shadow-black\/30 {
-    --tw-shadow-color: rgb(0 0 0 / 0.3);
-}
-
-:where(.dark) .shadow-black\/40 {
-    --tw-shadow-color: rgb(0 0 0 / 0.4);
-}
 }

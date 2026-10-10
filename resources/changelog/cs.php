@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Nativní styly Tailwind 4',
+        'description' => 'Rozhraní nyní používá nativní utility Tailwind 4 a explicitní světlé/tmavé barvy místo přepisů pro kompatibilitu s Tailwind 3, s upravenými rozestupy formulářů a přístupným zvýrazněním fokusu.',
+    ],
     'consistent_page_background' => [
         'title' => 'Jednotné pozadí stránek',
         'description' => 'Společné pozadí nyní zůstává stejné mezi stránkami i při posouvání bez ohledu na výšku obsahu, ve světlém i tmavém motivu.',

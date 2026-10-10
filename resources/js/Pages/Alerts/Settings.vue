@@ -69,86 +69,86 @@ const submit = () => form.put('/alerts/settings');
             <Link href="/alerts" class="btn-secondary">{{ t('Back to alerts') }}</Link>
         </template>
 
-        <form class="space-y-6" @submit.prevent="submit">
-            <section v-for="(rule, index) in form.rules" :key="rule.id" class="card space-y-5 p-5">
+        <form class="flex flex-col gap-6" @submit.prevent="submit">
+            <section v-for="(rule, index) in form.rules" :key="rule.id" class="card flex flex-col gap-5 p-5">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <h2 class="text-lg font-semibold">{{ t(alertRuleLabel(rule.type)) }}</h2>
-                        <p class="mt-1 text-sm text-slate-400">{{ t(alertRuleDescription(rule.type)) }}</p>
+                        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t(alertRuleDescription(rule.type)) }}</p>
                     </div>
                     <button
                         type="button"
                         role="switch"
-                        class="inline-flex shrink-0 items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
+                        class="inline-flex shrink-0 items-center gap-3 rounded-full border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 px-3 py-2 text-sm transition focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
                         :aria-checked="rule.enabled"
                         :aria-label="t('Enable alert rule')"
                         @click="rule.enabled = !rule.enabled"
                     >
                         <span class="relative inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition" :class="rule.enabled ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50' : 'border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-slate-800'">
-                            <span class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" :class="rule.enabled ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
+                            <span class="h-5 w-5 rounded-full bg-white shadow-xs transition-transform" :class="rule.enabled ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
                         </span>
                         <span class="font-medium">{{ rule.enabled ? t('Enabled') : t('Disabled') }}</span>
                     </button>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-3">
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t('Check interval') }}</span>
                         <input v-model.number="rule.config.check_interval_minutes" class="input" type="number" min="1">
                         <p class="text-xs text-slate-500">{{ t('Minutes between checks for this alert type.') }}</p>
-                        <span v-if="ruleConfigError(index, 'check_interval_minutes')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'check_interval_minutes') }}</span>
+                        <span v-if="ruleConfigError(index, 'check_interval_minutes')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'check_interval_minutes') }}</span>
                     </label>
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t('Cooldown') }}</span>
                         <input v-model.number="rule.config.cooldown_minutes" class="input" type="number" min="0">
                         <p class="text-xs text-slate-500">{{ t('Minutes between reminders.') }}</p>
-                        <span v-if="ruleConfigError(index, 'cooldown_minutes')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'cooldown_minutes') }}</span>
+                        <span v-if="ruleConfigError(index, 'cooldown_minutes')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'cooldown_minutes') }}</span>
                     </label>
                     <button
                         type="button"
                         role="switch"
-                        class="inline-flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-left text-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:hover:bg-white/[0.03] dark:focus:ring-sky-400/30"
+                        class="inline-flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 p-3 text-left text-sm transition hover:bg-slate-100 focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:hover:bg-white/[0.03] dark:focus:ring-sky-400/30"
                         :aria-checked="rule.config.reminder_enabled"
                         :aria-label="t('Reminder notifications')"
                         @click="rule.config.reminder_enabled = !rule.config.reminder_enabled"
                     >
                         <span class="inline-flex items-center gap-2">
-                            <span class="font-medium text-white">{{ t('Reminder notifications') }}</span>
+                            <span class="font-medium text-slate-900 dark:text-white">{{ t('Reminder notifications') }}</span>
                             <InfoTooltip :text="t('Send repeated notifications while the alert stays active.')" />
                         </span>
                         <span class="inline-flex shrink-0 items-center gap-3">
                             <span class="relative inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition" :class="rule.config.reminder_enabled ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50' : 'border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-slate-800'">
-                                <span class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" :class="rule.config.reminder_enabled ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
+                                <span class="h-5 w-5 rounded-full bg-white shadow-xs transition-transform" :class="rule.config.reminder_enabled ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
                             </span>
-                            <span class="font-medium text-white">{{ rule.config.reminder_enabled ? t('Enabled') : t('Disabled') }}</span>
+                            <span class="font-medium text-slate-900 dark:text-white">{{ rule.config.reminder_enabled ? t('Enabled') : t('Disabled') }}</span>
                         </span>
-                        <span v-if="ruleConfigError(index, 'reminder_enabled')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'reminder_enabled') }}</span>
+                        <span v-if="ruleConfigError(index, 'reminder_enabled')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'reminder_enabled') }}</span>
                     </button>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
-                    <label v-if="rule.type === 'agent_offline'" class="space-y-2">
+                    <label v-if="rule.type === 'agent_offline'" class="flex flex-col gap-2">
                         <span class="label">{{ t('Minutes offline') }}</span>
                         <input v-model.number="rule.config.agent_offline_minutes" class="input" type="number" min="1">
-                        <span v-if="ruleConfigError(index, 'agent_offline_minutes')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'agent_offline_minutes') }}</span>
+                        <span v-if="ruleConfigError(index, 'agent_offline_minutes')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'agent_offline_minutes') }}</span>
                     </label>
-                    <label v-if="rule.type === 'backup_too_old'" class="space-y-2">
+                    <label v-if="rule.type === 'backup_too_old'" class="flex flex-col gap-2">
                         <span class="label">{{ t('Days without success') }}</span>
                         <input v-model.number="rule.config.backup_too_old_days" class="input" type="number" min="1">
-                        <span v-if="ruleConfigError(index, 'backup_too_old_days')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'backup_too_old_days') }}</span>
+                        <span v-if="ruleConfigError(index, 'backup_too_old_days')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'backup_too_old_days') }}</span>
                     </label>
-                    <label v-if="rule.type === 'job_never_succeeded'" class="space-y-2">
+                    <label v-if="rule.type === 'job_never_succeeded'" class="flex flex-col gap-2">
                         <span class="label">{{ t('Minimum finished runs') }}</span>
                         <input v-model.number="rule.config.job_never_succeeded_min_runs" class="input" type="number" min="1">
-                        <span v-if="ruleConfigError(index, 'job_never_succeeded_min_runs')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'job_never_succeeded_min_runs') }}</span>
+                        <span v-if="ruleConfigError(index, 'job_never_succeeded_min_runs')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'job_never_succeeded_min_runs') }}</span>
                     </label>
-                    <label v-if="rule.type === 'job_in_error_too_long'" class="space-y-2">
+                    <label v-if="rule.type === 'job_in_error_too_long'" class="flex flex-col gap-2">
                         <span class="label">{{ t('Days in error') }}</span>
                         <input v-model.number="rule.config.job_in_error_days" class="input" type="number" min="1">
-                        <span v-if="ruleConfigError(index, 'job_in_error_days')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'job_in_error_days') }}</span>
+                        <span v-if="ruleConfigError(index, 'job_in_error_days')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'job_in_error_days') }}</span>
                     </label>
                     <template v-if="rule.type === 'backup_size_out_of_range'">
-                        <label class="space-y-2">
+                        <label class="flex flex-col gap-2">
                             <span class="label">{{ t('Minimum backup size') }}</span>
                             <span class="flex gap-2">
                                 <input
@@ -163,9 +163,9 @@ const submit = () => form.put('/alerts/settings');
                                     <option v-for="unit in sizeUnits" :key="unit.label" :value="unit.label">{{ unit.label }}</option>
                                 </select>
                             </span>
-                            <span v-if="ruleConfigError(index, 'backup_size_out_of_range_min_bytes')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'backup_size_out_of_range_min_bytes') }}</span>
+                            <span v-if="ruleConfigError(index, 'backup_size_out_of_range_min_bytes')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'backup_size_out_of_range_min_bytes') }}</span>
                         </label>
-                        <label class="space-y-2">
+                        <label class="flex flex-col gap-2">
                             <span class="label">{{ t('Maximum backup size') }}</span>
                             <span class="flex gap-2">
                                 <input
@@ -180,31 +180,31 @@ const submit = () => form.put('/alerts/settings');
                                     <option v-for="unit in sizeUnits" :key="unit.label" :value="unit.label">{{ unit.label }}</option>
                                 </select>
                             </span>
-                            <span v-if="ruleConfigError(index, 'backup_size_out_of_range_max_bytes')" class="text-sm text-rose-300">{{ ruleConfigError(index, 'backup_size_out_of_range_max_bytes') }}</span>
+                            <span v-if="ruleConfigError(index, 'backup_size_out_of_range_max_bytes')" class="text-sm text-rose-700 dark:text-rose-300">{{ ruleConfigError(index, 'backup_size_out_of_range_max_bytes') }}</span>
                         </label>
                     </template>
                 </div>
 
-                <section v-if="['destination_storage_limit', 'agent_offline'].includes(rule.type)" class="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <section v-if="['destination_storage_limit', 'agent_offline'].includes(rule.type)" class="rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 p-4">
                     <div class="flex flex-col gap-1">
-                        <h3 class="font-semibold text-white">{{ t(rule.type === 'agent_offline' ? 'Agent alert channels' : 'Destination alert channels') }}</h3>
-                        <p class="text-sm text-slate-400">{{ t(rule.type === 'agent_offline' ? 'Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.' : 'Choose which channels receive destination storage limit notifications. If none are selected, alerts stay visible only in VolumeVault.') }}</p>
+                        <h3 class="font-semibold text-slate-900 dark:text-white">{{ t(rule.type === 'agent_offline' ? 'Agent alert channels' : 'Destination alert channels') }}</h3>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">{{ t(rule.type === 'agent_offline' ? 'Choose which channels receive agent offline and recovery notifications. If none are selected, alerts stay visible only in VolumeVault.' : 'Choose which channels receive destination storage limit notifications. If none are selected, alerts stay visible only in VolumeVault.') }}</p>
                     </div>
                     <div v-if="notificationChannels.length" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <button
                             v-for="channel in notificationChannels"
                             :key="channel.id"
                             type="button"
-                            class="rounded-xl border p-3 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
-                            :class="rule.notification_channel_ids.includes(channel.id) ? 'border-sky-300/60 bg-sky-400/10 text-sky-50' : 'border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]'"
+                            class="rounded-xl border p-3 text-left text-sm transition focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:focus:ring-sky-400/30"
+                            :class="rule.notification_channel_ids.includes(channel.id) ? 'border-sky-300/60 bg-sky-400/10 text-sky-700 dark:text-sky-50' : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.03] text-slate-600 dark:text-slate-300 hover:bg-white/[0.06]'"
                             :aria-pressed="rule.notification_channel_ids.includes(channel.id)"
                             @click="toggleRuleNotificationChannel(rule, channel.id)"
                         >
-                            <span class="block font-medium text-white">{{ channel.name }}</span>
-                            <span class="mt-1 block text-xs text-slate-400">{{ channel.service }} - {{ channel.is_active ? t('Enabled') : t('Disabled') }}</span>
+                            <span class="block font-medium text-slate-900 dark:text-white">{{ channel.name }}</span>
+                            <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">{{ channel.service }} - {{ channel.is_active ? t('Enabled') : t('Disabled') }}</span>
                         </button>
                     </div>
-                    <p v-else class="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('Create a notification channel before enabling external notifications for this alert.') }}</p>
+                    <p v-else class="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-800 dark:text-amber-100">{{ t('Create a notification channel before enabling external notifications for this alert.') }}</p>
                 </section>
             </section>
 

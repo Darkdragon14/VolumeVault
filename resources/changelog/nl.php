@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Native Tailwind 4-stijlen',
+        'description' => 'De interface gebruikt nu native Tailwind 4-utilities en expliciete lichte/donkere kleuren in plaats van Tailwind 3-compatibiliteitsregels, met bijgewerkte formulierafstanden en toegankelijke focusstijlen.',
+    ],
     'consistent_page_background' => [
         'title' => 'Gelijke achtergronden op alle pagina’s',
         'description' => 'De gedeelde achtergrond blijft nu gelijk bij het wisselen van pagina en tijdens het scrollen, ongeacht de inhoudshoogte, in zowel het lichte als het donkere thema.',

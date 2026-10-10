@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Native Tailwind 4 styling',
+        'description' => 'The interface now uses native Tailwind 4 utilities and explicit light/dark colors instead of Tailwind 3 compatibility overrides, with updated form spacing and accessible focus states.',
+    ],
     'consistent_page_background' => [
         'title' => 'Consistent page backgrounds',
         'description' => 'The shared background now stays consistent across pages and while scrolling, regardless of content height, in both light and dark themes.',

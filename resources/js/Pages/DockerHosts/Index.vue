@@ -275,11 +275,11 @@ const copyCommand = async () => {
 };
 
 const statusClass = (status: DockerHost['status']) => ({
-    local: 'border-sky-300/30 bg-sky-400/10 text-sky-100',
-    pending: 'border-amber-300/40 bg-amber-300/10 text-amber-100',
-    online: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
-    offline: 'border-rose-400/30 bg-rose-400/10 text-rose-100',
-    revoked: 'border-white/10 bg-white/5 text-slate-400',
+    local: 'border-sky-300/30 bg-sky-400/10 text-sky-700 dark:text-sky-100',
+    pending: 'border-amber-300/40 bg-amber-300/10 text-amber-800 dark:text-amber-100',
+    online: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-700 dark:text-emerald-100',
+    offline: 'border-rose-400/30 bg-rose-400/10 text-rose-700 dark:text-rose-100',
+    revoked: 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 text-slate-500 dark:text-slate-400',
 }[status]);
 </script>
 
@@ -287,55 +287,55 @@ const statusClass = (status: DockerHost['status']) => ({
     <AppLayout :title="t('dockerHosts.nav')" :subtitle="t('dockerHosts.subtitle')">
         <Head :title="t('dockerHosts.nav')" />
         <div class="flex flex-col gap-6">
-            <p class="rounded-2xl border border-sky-300/30 bg-sky-400/10 p-4 text-sm text-sky-100">{{ t(hosts.some((host) => host.driver === 'agent' && host.capabilities?.some((capability) => ['backup-v1', 'restore-v1'].includes(capability))) ? 'hostWorkflow.agentExecution' : 'hostWorkflow.agentUpgrade') }}</p>
-            <p class="text-sm text-slate-400">{{ t(`dockerHosts.role.${deploymentMode ?? sharedMode}`) }} · {{ t('dockerHosts.orchestratorVersion') }}: {{ displayVersion(orchestratorVersion) }}<br>{{ t('dockerHosts.agentImage') }}: <span class="break-all font-mono">{{ targetAgentImage || '—' }}</span></p>
+            <p class="rounded-2xl border border-sky-300/30 bg-sky-400/10 p-4 text-sm text-sky-700 dark:text-sky-100">{{ t(hosts.some((host) => host.driver === 'agent' && host.capabilities?.some((capability) => ['backup-v1', 'restore-v1'].includes(capability))) ? 'hostWorkflow.agentExecution' : 'hostWorkflow.agentUpgrade') }}</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400">{{ t(`dockerHosts.role.${deploymentMode ?? sharedMode}`) }} · {{ t('dockerHosts.orchestratorVersion') }}: {{ displayVersion(orchestratorVersion) }}<br>{{ t('dockerHosts.agentImage') }}: <span class="break-all font-mono">{{ targetAgentImage || '—' }}</span></p>
 
             <section v-if="!agentsEnabled" class="card flex flex-col gap-3 p-4 sm:p-6">
-                <h2 class="text-lg font-semibold text-white">{{ t('dockerHosts.disabled') }}</h2>
-                <p class="text-sm text-slate-400">{{ t('dockerHosts.enableHelp') }}</p>
-                <code class="break-all rounded-xl bg-slate-950/80 p-3 text-sm text-slate-200">VOLUMEVAULT_AGENTS_ENABLED=true<br>VOLUMEVAULT_AGENT_URL=https://host:8443</code>
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{{ t('dockerHosts.disabled') }}</h2>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('dockerHosts.enableHelp') }}</p>
+                <code class="break-all rounded-xl bg-white/90 dark:bg-slate-950/80 p-3 text-sm text-slate-800 dark:text-slate-200">VOLUMEVAULT_AGENTS_ENABLED=true<br>VOLUMEVAULT_AGENT_URL=https://host:8443</code>
             </section>
 
             <form v-else class="card flex flex-col gap-4 p-4 sm:p-6" @submit.prevent="submit">
-                <h2 class="text-lg font-semibold text-white">{{ t('dockerHosts.add') }}</h2>
-                <p class="break-all text-sm text-slate-400">{{ t('dockerHosts.endpoint') }}: {{ agentUrl }}</p>
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{{ t('dockerHosts.add') }}</h2>
+                <p class="break-all text-sm text-slate-500 dark:text-slate-400">{{ t('dockerHosts.endpoint') }}: {{ agentUrl }}</p>
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
                     <label class="flex min-w-0 flex-1 flex-col gap-2" for="host-name">
                         <span class="label">{{ t('Name') }}</span>
                         <input id="host-name" v-model="create.name" class="input" required maxlength="100" :disabled="busy" :aria-invalid="Boolean(create.errors.name)" aria-describedby="host-name-error">
-                        <span v-if="create.errors.name" id="host-name-error" class="text-sm text-rose-300">{{ create.errors.name }}</span>
+                        <span v-if="create.errors.name" id="host-name-error" class="text-sm text-rose-700 dark:text-rose-300">{{ create.errors.name }}</span>
                     </label>
                     <button class="btn-primary" :disabled="busy || !create.name.trim()">{{ t('dockerHosts.add') }}</button>
                 </div>
             </form>
 
-            <p v-if="error" role="alert" class="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">{{ error }}</p>
+            <p v-if="error" role="alert" class="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-700 dark:text-rose-100">{{ error }}</p>
 
             <section v-if="installation" class="flex flex-col gap-3 rounded-2xl border border-amber-300/40 bg-amber-300/10 p-4 sm:p-6">
-                <h2 class="break-words text-lg font-semibold text-white">{{ t('dockerHosts.install', { name: installation.host.name }) }}</h2>
-                <p class="text-sm text-amber-100">{{ t('dockerHosts.oneTime') }}</p>
+                <h2 class="wrap-break-word text-lg font-semibold text-slate-900 dark:text-white">{{ t('dockerHosts.install', { name: installation.host.name }) }}</h2>
+                <p class="text-sm text-amber-800 dark:text-amber-100">{{ t('dockerHosts.oneTime') }}</p>
                 <label for="installation-command" class="label">{{ t('dockerHosts.command') }}</label>
                 <textarea id="installation-command" ref="commandField" :value="installation.installation.command" readonly spellcheck="false" autocomplete="off" rows="5" class="input font-mono text-xs" />
-                <p class="text-sm text-amber-100">{{ t('Expires') }}: {{ formatDate(installation.installation.expires_at) }}</p>
-                <p v-if="expired" role="status" class="text-sm text-amber-100">{{ t('dockerHosts.expired') }}</p>
+                <p class="text-sm text-amber-800 dark:text-amber-100">{{ t('Expires') }}: {{ formatDate(installation.installation.expires_at) }}</p>
+                <p v-if="expired" role="status" class="text-sm text-amber-800 dark:text-amber-100">{{ t('dockerHosts.expired') }}</p>
                 <div class="flex flex-wrap gap-3">
                     <button type="button" class="btn-secondary" :disabled="expired" @click="copyCommand">{{ t('dockerHosts.copy') }}</button>
                     <button type="button" class="btn-secondary" @click="dismiss">{{ t('Close') }}</button>
                 </div>
-                <p v-if="copyStatus" role="status" class="text-sm text-amber-100">{{ copyStatus }}</p>
+                <p v-if="copyStatus" role="status" class="text-sm text-amber-800 dark:text-amber-100">{{ copyStatus }}</p>
             </section>
 
             <section v-if="guideHost" class="card flex flex-col gap-4 p-4 sm:p-6" data-update-guide>
-                <h2 class="text-lg font-semibold text-white">{{ t('dockerHosts.updateGuide') }} — {{ guideHost.name }}</h2>
-                <p class="text-sm text-slate-300">{{ t('dockerHosts.guideSteps') }}</p>
-                <p class="text-sm text-amber-200">{{ t('dockerHosts.preserveDeployment') }}</p>
-                <p v-if="guideError" role="alert" class="text-sm text-rose-300">{{ guideError }}</p>
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{{ t('dockerHosts.updateGuide') }} — {{ guideHost.name }}</h2>
+                <p class="text-sm text-slate-600 dark:text-slate-300">{{ t('dockerHosts.guideSteps') }}</p>
+                <p class="text-sm text-amber-800 dark:text-amber-200">{{ t('dockerHosts.preserveDeployment') }}</p>
+                <p v-if="guideError" role="alert" class="text-sm text-rose-700 dark:text-rose-300">{{ guideError }}</p>
                 <template v-if="guide">
                     <dl class="grid gap-3 text-sm sm:grid-cols-2">
-                        <div><dt class="text-slate-400">{{ t('dockerHosts.agentImage') }}</dt><dd class="break-all text-slate-200">{{ guide.image }}</dd></div>
-                        <div><dt class="text-slate-400">{{ t('dockerHosts.targetVersion') }}</dt><dd class="text-slate-200">{{ guide.version }}</dd></div>
-                        <div><dt class="text-slate-400">{{ t('dockerHosts.containerName') }}</dt><dd class="break-all text-slate-200">{{ guide.container_name }}</dd></div>
-                        <div><dt class="text-slate-400">{{ t('dockerHosts.identityVolume') }}</dt><dd class="break-all text-slate-200">{{ guide.volume_name }}</dd></div>
+                        <div><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.agentImage') }}</dt><dd class="break-all text-slate-800 dark:text-slate-200">{{ guide.image }}</dd></div>
+                        <div><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.targetVersion') }}</dt><dd class="text-slate-800 dark:text-slate-200">{{ guide.version }}</dd></div>
+                        <div><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.containerName') }}</dt><dd class="break-all text-slate-800 dark:text-slate-200">{{ guide.container_name }}</dd></div>
+                        <div><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.identityVolume') }}</dt><dd class="break-all text-slate-800 dark:text-slate-200">{{ guide.volume_name }}</dd></div>
                     </dl>
                     <label for="update-command" class="label">{{ t('dockerHosts.updateCommand') }}</label>
                     <textarea id="update-command" ref="guideField" :value="guide.command" readonly spellcheck="false" autocomplete="off" rows="6" class="input font-mono text-xs" />
@@ -345,55 +345,55 @@ const statusClass = (status: DockerHost['status']) => ({
                     <button type="button" class="btn-secondary" :disabled="busy" @click="loadGuide(guideHost)">{{ t('dockerHosts.reloadGuide') }}</button>
                     <button type="button" class="btn-secondary" @click="closeGuide">{{ t('Close') }}</button>
                 </div>
-                <p v-if="guideCopyStatus" role="status" class="text-sm text-slate-300">{{ guideCopyStatus }}</p>
+                <p v-if="guideCopyStatus" role="status" class="text-sm text-slate-600 dark:text-slate-300">{{ guideCopyStatus }}</p>
             </section>
 
             <div class="grid gap-6 md:grid-cols-2">
                 <article v-for="host in hosts" :key="host.uuid" :data-host-id="host.id" class="card flex min-w-0 flex-col gap-4 p-4 sm:p-6">
                     <div class="flex items-start justify-between gap-3">
-                        <h2 class="min-w-0 break-words text-lg font-semibold text-white">{{ host.name }}</h2>
+                        <h2 class="min-w-0 wrap-break-word text-lg font-semibold text-slate-900 dark:text-white">{{ host.name }}</h2>
                         <span class="shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold" :class="statusClass(host.status)">{{ t(`dockerHosts.status.${host.status}`) }}</span>
                     </div>
                     <div class="flex flex-wrap gap-2 text-xs">
-                        <span class="rounded-full border border-white/10 px-2.5 py-1">{{ t(`dockerHosts.role.${hostRole(host)}`) }}</span>
-                        <span v-if="host.driver === 'agent'" class="rounded-full border px-2.5 py-1" :class="host.compatibility === 'incompatible' ? 'border-rose-400/30 text-rose-300' : 'border-white/10 text-slate-300'">{{ t(`dockerHosts.compatibility.${host.compatibility ?? 'unknown'}`) }}</span>
-                        <span v-if="host.driver === 'agent'" class="rounded-full border border-white/10 px-2.5 py-1 text-slate-300">{{ t(`dockerHosts.update.${host.update_status ?? 'unknown'}`) }}</span>
+                        <span class="rounded-full border border-slate-200 dark:border-white/10 px-2.5 py-1">{{ t(`dockerHosts.role.${hostRole(host)}`) }}</span>
+                        <span v-if="host.driver === 'agent'" class="rounded-full border px-2.5 py-1" :class="host.compatibility === 'incompatible' ? 'border-rose-400/30 text-rose-700 dark:text-rose-300' : 'border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300'">{{ t(`dockerHosts.compatibility.${host.compatibility ?? 'unknown'}`) }}</span>
+                        <span v-if="host.driver === 'agent'" class="rounded-full border border-slate-200 dark:border-white/10 px-2.5 py-1 text-slate-600 dark:text-slate-300">{{ t(`dockerHosts.update.${host.update_status ?? 'unknown'}`) }}</span>
                     </div>
-                    <p v-if="host.status === 'pending'" class="text-sm text-slate-400">{{ t('dockerHosts.pendingHelp') }}</p>
+                    <p v-if="host.status === 'pending'" class="text-sm text-slate-500 dark:text-slate-400">{{ t('dockerHosts.pendingHelp') }}</p>
                     <dl class="grid grid-cols-2 gap-4 text-sm">
                         <template v-if="hasDocker(host)">
-                            <div><dt class="text-slate-400">{{ t('Volumes') }}</dt><dd class="text-slate-200">{{ host.volume_count }}</dd></div>
-                            <div><dt class="text-slate-400">{{ t('Containers') }}</dt><dd class="text-slate-200">{{ host.container_count ?? '—' }}</dd></div>
+                            <div><dt class="text-slate-500 dark:text-slate-400">{{ t('Volumes') }}</dt><dd class="text-slate-800 dark:text-slate-200">{{ host.volume_count }}</dd></div>
+                            <div><dt class="text-slate-500 dark:text-slate-400">{{ t('Containers') }}</dt><dd class="text-slate-800 dark:text-slate-200">{{ host.container_count ?? '—' }}</dd></div>
                         </template>
-                        <div v-if="host.driver === 'agent'"><dt class="text-slate-400">{{ t('dockerHosts.lastContact') }}</dt><dd class="break-words text-slate-200">{{ host.last_seen_at ? formatDate(host.last_seen_at) : '—' }}</dd></div>
+                        <div v-if="host.driver === 'agent'"><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.lastContact') }}</dt><dd class="wrap-break-word text-slate-800 dark:text-slate-200">{{ host.last_seen_at ? formatDate(host.last_seen_at) : '—' }}</dd></div>
                         <div v-if="hasDocker(host)" class="col-span-2">
-                            <dt class="text-slate-400">{{ t(host.driver === 'local' ? 'dockerHosts.lastVolumeSync' : 'dockerHosts.lastInventory') }}</dt>
-                            <dd class="break-words text-slate-200">{{ host.last_inventory_at ? formatDate(host.last_inventory_at) : '—' }}</dd>
-                            <dd class="mt-1 text-xs text-slate-400">{{ t(host.driver === 'local' ? 'dockerHosts.lastVolumeSyncHelp' : 'dockerHosts.lastInventoryHelp') }}</dd>
+                            <dt class="text-slate-500 dark:text-slate-400">{{ t(host.driver === 'local' ? 'dockerHosts.lastVolumeSync' : 'dockerHosts.lastInventory') }}</dt>
+                            <dd class="wrap-break-word text-slate-800 dark:text-slate-200">{{ host.last_inventory_at ? formatDate(host.last_inventory_at) : '—' }}</dd>
+                            <dd class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ t(host.driver === 'local' ? 'dockerHosts.lastVolumeSyncHelp' : 'dockerHosts.lastInventoryHelp') }}</dd>
                         </div>
-                        <div><dt class="text-slate-400">{{ t(host.driver === 'local' ? 'dockerHosts.orchestratorVersion' : 'dockerHosts.version') }}</dt><dd class="break-words text-slate-200">{{ displayVersion(host.agent_version) }}</dd></div>
+                        <div><dt class="text-slate-500 dark:text-slate-400">{{ t(host.driver === 'local' ? 'dockerHosts.orchestratorVersion' : 'dockerHosts.version') }}</dt><dd class="wrap-break-word text-slate-800 dark:text-slate-200">{{ displayVersion(host.agent_version) }}</dd></div>
                         <template v-if="hasDocker(host)">
-                            <div><dt class="text-slate-400">{{ t('dockerHosts.dockerAvailability') }}</dt><dd class="text-slate-200">{{ host.docker_status ? t(`dockerHosts.docker.${host.docker_status}`) : '—' }}</dd></div>
-                            <div><dt class="text-slate-400">{{ t('dockerHosts.dockerVersion') }}</dt><dd class="break-words text-slate-200">{{ host.docker_version || '—' }}</dd></div>
+                            <div><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.dockerAvailability') }}</dt><dd class="text-slate-800 dark:text-slate-200">{{ host.docker_status ? t(`dockerHosts.docker.${host.docker_status}`) : '—' }}</dd></div>
+                            <div><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.dockerVersion') }}</dt><dd class="wrap-break-word text-slate-800 dark:text-slate-200">{{ host.docker_version || '—' }}</dd></div>
                         </template>
                         <template v-if="host.driver === 'agent'">
-                            <div><dt class="text-slate-400">{{ t('dockerHosts.targetVersion') }}</dt><dd class="text-slate-200">{{ host.target_version || '—' }}</dd></div>
-                            <div><dt class="text-slate-400">{{ t('dockerHosts.protocol') }}</dt><dd class="text-slate-200">{{ host.protocol_version ?? '—' }}</dd></div>
+                            <div><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.targetVersion') }}</dt><dd class="text-slate-800 dark:text-slate-200">{{ host.target_version || '—' }}</dd></div>
+                            <div><dt class="text-slate-500 dark:text-slate-400">{{ t('dockerHosts.protocol') }}</dt><dd class="text-slate-800 dark:text-slate-200">{{ host.protocol_version ?? '—' }}</dd></div>
                         </template>
                     </dl>
-                    <p v-if="host.capabilities?.length" class="break-words text-xs text-slate-400">{{ t('dockerHosts.capabilities') }}: {{ host.capabilities.join(', ') }}</p>
-                    <p v-if="host.driver === 'agent'" class="text-xs text-slate-400">{{ t(host.capabilities?.includes('backup-v1') ? 'hostWorkflow.backupAvailable' : 'hostWorkflow.backupUnavailable') }} · {{ t(host.capabilities?.includes('restore-v1') ? 'hostWorkflow.restoreAvailable' : 'hostWorkflow.restoreUnavailable') }}</p>
-                    <p v-if="isMaintaining(host)" role="status" class="rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">{{ t(isReady(host) ? 'dockerHosts.maintenanceReady' : host.driver === 'local' ? 'dockerHosts.localMaintenancePending' : 'dockerHosts.maintenancePending') }} · {{ t('dockerHosts.activeOperations', { count: hostState(host).active_operations ?? 0 }) }}</p>
-                    <p v-else-if="hostState(host).active_operations != null" class="text-sm text-slate-400">{{ t('dockerHosts.activeOperations', { count: hostState(host).active_operations }) }}</p>
-                    <p v-if="host.driver === 'local'" class="text-sm text-slate-400">{{ t('dockerHosts.localUpdate') }}</p>
-                    <div v-if="canMaintain(host)" class="flex flex-col gap-3 border-t border-white/10 pt-4">
-                        <p class="text-sm text-slate-400">{{ t(host.driver === 'local' ? 'dockerHosts.localMaintenanceHelp' : 'dockerHosts.maintenanceHelp') }}</p>
+                    <p v-if="host.capabilities?.length" class="wrap-break-word text-xs text-slate-500 dark:text-slate-400">{{ t('dockerHosts.capabilities') }}: {{ host.capabilities.join(', ') }}</p>
+                    <p v-if="host.driver === 'agent'" class="text-xs text-slate-500 dark:text-slate-400">{{ t(host.capabilities?.includes('backup-v1') ? 'hostWorkflow.backupAvailable' : 'hostWorkflow.backupUnavailable') }} · {{ t(host.capabilities?.includes('restore-v1') ? 'hostWorkflow.restoreAvailable' : 'hostWorkflow.restoreUnavailable') }}</p>
+                    <p v-if="isMaintaining(host)" role="status" class="rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-800 dark:text-amber-100">{{ t(isReady(host) ? 'dockerHosts.maintenanceReady' : host.driver === 'local' ? 'dockerHosts.localMaintenancePending' : 'dockerHosts.maintenancePending') }} · {{ t('dockerHosts.activeOperations', { count: hostState(host).active_operations ?? 0 }) }}</p>
+                    <p v-else-if="hostState(host).active_operations != null" class="text-sm text-slate-500 dark:text-slate-400">{{ t('dockerHosts.activeOperations', { count: hostState(host).active_operations }) }}</p>
+                    <p v-if="host.driver === 'local'" class="text-sm text-slate-500 dark:text-slate-400">{{ t('dockerHosts.localUpdate') }}</p>
+                    <div v-if="canMaintain(host)" class="flex flex-col gap-3 border-t border-slate-200 dark:border-white/10 pt-4">
+                        <p class="text-sm text-slate-500 dark:text-slate-400">{{ t(host.driver === 'local' ? 'dockerHosts.localMaintenanceHelp' : 'dockerHosts.maintenanceHelp') }}</p>
                         <div class="flex flex-wrap gap-3">
                             <button type="button" class="btn-secondary" :disabled="busy" @click="toggleMaintenance(host)">{{ t(isMaintaining(host) ? 'dockerHosts.resume' : 'dockerHosts.enterMaintenance') }}</button>
                             <button v-if="host.driver === 'agent'" type="button" class="btn-secondary" :disabled="busy" @click="loadGuide(host)">{{ t('dockerHosts.updateGuide') }}</button>
                         </div>
                     </div>
-                    <div v-if="host.driver === 'agent'" class="flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                    <div v-if="host.driver === 'agent'" class="flex flex-wrap gap-3 border-t border-slate-200 dark:border-white/10 pt-4">
                         <button type="button" class="btn-secondary" :disabled="!agentsEnabled || busy" @click="renew(host)">{{ t('dockerHosts.renew') }}</button>
                         <button v-if="host.status !== 'revoked'" type="button" class="btn-danger" :disabled="busy" @click="revoke(host)">{{ t('Revoke') }}</button>
                     </div>

@@ -303,76 +303,76 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
             <Link :href="`/backup-jobs/${job.id}`" class="btn-secondary">{{ t('Back to job') }}</Link>
         </template>
 
-        <p v-if="!workflowVisible" role="status" class="card p-4 text-sm text-slate-400">{{ t(localExecutionEnabled ? 'hostWorkflow.unavailable' : 'dockerHosts.localDisabled') }}</p>
+        <p v-if="!workflowVisible" role="status" class="card p-4 text-sm text-slate-500 dark:text-slate-400">{{ t(localExecutionEnabled ? 'hostWorkflow.unavailable' : 'dockerHosts.localDisabled') }}</p>
         <div v-if="workflowVisible" class="mb-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-            <div v-for="number in [1, 2, 3, 4]" :key="number" class="rounded-xl border px-4 py-3 text-sm" :class="step >= number ? 'border-sky-300/40 bg-sky-300/10 text-sky-100' : 'border-white/10 bg-white/5 text-slate-400'">
+            <div v-for="number in [1, 2, 3, 4]" :key="number" class="rounded-xl border px-4 py-3 text-sm" :class="step >= number ? 'border-sky-300/40 bg-sky-300/10 text-sky-700 dark:text-sky-100' : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 text-slate-500 dark:text-slate-400'">
                 {{ t('Step {number}', { number }) }}
             </div>
         </div>
 
         <section v-if="workflowVisible && step === 1" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Select backup') }}</h2>
-            <p v-if="!destinationOperations" class="mt-1 text-sm text-slate-400">{{ t('Backups are listed newest first from {name}.', { name: restoreDestination?.name }) }}</p>
-            <p v-else class="mt-1 text-sm text-slate-400">{{ restoreDestination?.name }}</p>
-            <p v-if="isHostLocalDestination(restoreDestination)" class="mt-1 text-sm text-slate-400">{{ t('Source') }}: {{ hosts.find((host) => Number(host.id) === listingHostId)?.name ?? listingHostId }} (#{{ listingHostId }})</p>
-            <p v-if="listError && listingOperation?.result?.status !== 'success'" class="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ listError }}</p>
-            <p v-if="backupRunUnverifiable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('This historical Dropbox backup has no stable file ID. Its identity cannot be verified, so restoring this run is unavailable.') }}</p>
-            <p v-if="form.errors.selected_backup_key" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.selected_backup_key }}</p>
-            <p v-if="form.errors.backup_run_id" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.backup_run_id }}</p>
-            <p v-if="form.errors.destination" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.destination }}</p>
-            <p v-if="form.errors.destination_operation_id" role="alert" class="mt-4 text-sm text-rose-300">{{ form.errors.destination_operation_id }}</p>
-            <div v-if="destinationOperations" class="mt-4 space-y-3">
-                <label class="block space-y-2">
+            <p v-if="!destinationOperations" class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('Backups are listed newest first from {name}.', { name: restoreDestination?.name }) }}</p>
+            <p v-else class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ restoreDestination?.name }}</p>
+            <p v-if="isHostLocalDestination(restoreDestination)" class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('Source') }}: {{ hosts.find((host) => Number(host.id) === listingHostId)?.name ?? listingHostId }} (#{{ listingHostId }})</p>
+            <p v-if="listError && listingOperation?.result?.status !== 'success'" class="mt-4 rounded-xl bg-rose-400/10 p-3 text-sm text-rose-700 dark:text-rose-100">{{ listError }}</p>
+            <p v-if="backupRunUnverifiable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-800 dark:text-amber-100">{{ t('This historical Dropbox backup has no stable file ID. Its identity cannot be verified, so restoring this run is unavailable.') }}</p>
+            <p v-if="form.errors.selected_backup_key" role="alert" class="mt-4 text-sm text-rose-700 dark:text-rose-300">{{ form.errors.selected_backup_key }}</p>
+            <p v-if="form.errors.backup_run_id" role="alert" class="mt-4 text-sm text-rose-700 dark:text-rose-300">{{ form.errors.backup_run_id }}</p>
+            <p v-if="form.errors.destination" role="alert" class="mt-4 text-sm text-rose-700 dark:text-rose-300">{{ form.errors.destination }}</p>
+            <p v-if="form.errors.destination_operation_id" role="alert" class="mt-4 text-sm text-rose-700 dark:text-rose-300">{{ form.errors.destination_operation_id }}</p>
+            <div v-if="destinationOperations" class="mt-4 flex flex-col gap-3">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t('hostWorkflow.targetHost') }}</span>
                     <select v-model="form.target_docker_host_id" class="input" data-listing-host>
                         <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!targetAvailable(host)">{{ host.name }}</option>
                     </select>
                 </label>
                 <p v-if="!listingAvailable" role="status" class="text-sm text-amber-600 dark:text-amber-200">{{ t('destinationOperations.history') }}</p>
-                <button v-if="listingAvailable" type="button" class="btn-secondary" :disabled="listingPending || backupRunUnverifiable" @click="refreshListing">{{ t('destinationOperations.browse') }}</button>
+                <button v-if="listingAvailable" type="button" class="btn-secondary self-start" :disabled="listingPending || backupRunUnverifiable" @click="refreshListing">{{ t('destinationOperations.browse') }}</button>
                 <p v-if="listingPending" role="status">{{ t(listingOperation?.status === 'running' ? 'destinationOperations.running' : 'destinationOperations.pending') }}</p>
                 <p v-if="listingError" role="alert" class="text-sm text-rose-600 dark:text-rose-300">{{ t(listingError) }}</p>
-                <p v-if="listingOperation?.result?.status === 'success'" class="text-sm text-slate-400">{{ listingFresh ? t('destinationOperations.fresh', { date: formatDate(listingOperation.fresh_until) }) : t('destinationOperations.stale') }}</p>
+                <p v-if="listingOperation?.result?.status === 'success'" class="text-sm text-slate-500 dark:text-slate-400">{{ listingFresh ? t('destinationOperations.fresh', { date: formatDate(listingOperation.fresh_until) }) : t('destinationOperations.stale') }}</p>
                 <p v-if="!receiptValid" role="alert" class="text-sm text-amber-600 dark:text-amber-200">{{ t('destinationOperations.stale') }}</p>
             </div>
 
             <div v-if="backups.length && !backupRunUnverifiable" class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
-                <label class="block flex-1 space-y-1">
+                <label class="flex-1 flex flex-col gap-1">
                     <span class="label">{{ t('Filter by name') }}</span>
                     <input v-model="search" type="search" class="input" :placeholder="t('Search backups')">
                 </label>
-                <label class="block space-y-1">
+                <label class="flex flex-col gap-1">
                     <span class="label">{{ t('Filter by date') }}</span>
                     <input v-model="dateFilter" type="date" class="input">
                 </label>
                 <button v-if="dateFilter || search" type="button" class="btn-secondary" @click="search = ''; dateFilter = ''">{{ t('Clear filters') }}</button>
             </div>
 
-            <label v-if="hasOtherBackups && !backupRunId" class="mt-4 flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+            <label v-if="hasOtherBackups && !backupRunId" class="mt-4 flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                 <input v-model="showAll" type="checkbox" class="text-sky-400">
                 <span>{{ t('Show all backups in this destination') }}</span>
             </label>
 
-            <div v-if="visibleBackups.length" class="mt-5 space-y-3">
+            <div v-if="visibleBackups.length" class="mt-5 flex flex-col gap-3">
                 <label
                     v-for="backup in visibleBackups"
                     :key="backup.key"
                     class="flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition"
-                    :class="form.selected_backup_key === backup.key ? 'border-sky-300/60 bg-sky-300/10' : 'border-white/10 bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10'"
+                    :class="form.selected_backup_key === backup.key ? 'border-sky-300/60 bg-sky-300/10' : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10'"
                 >
                     <input v-model="form.selected_backup_key" type="radio" :value="backup.key" class="mt-1 text-sky-400">
                     <span class="min-w-0 flex-1">
                         <span class="flex flex-wrap items-center gap-2">
-                            <span class="block break-all font-medium text-white">{{ backup.display_name || backup.key }}</span>
-                            <span v-if="!backup.receipt && backup.key === latestKey" class="rounded-full bg-emerald-300/15 px-2 py-0.5 text-xs font-medium text-emerald-200">{{ t('latest') }}</span>
+                            <span class="block break-all font-medium text-slate-900 dark:text-white">{{ backup.display_name || backup.key }}</span>
+                            <span v-if="!backup.receipt && backup.key === latestKey" class="rounded-full bg-emerald-300/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-200">{{ t('latest') }}</span>
                         </span>
-                        <code v-if="backup.receipt" class="mt-1 block break-all text-xs text-slate-400">{{ backup.key }}</code>
-                        <span class="mt-1 block text-xs text-slate-400">{{ formatDate(backup.last_modified) }} / {{ formatBytes(backup.size) }}</span>
+                        <code v-if="backup.receipt" class="mt-1 block break-all text-xs text-slate-500 dark:text-slate-400">{{ backup.key }}</code>
+                        <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">{{ formatDate(backup.last_modified) }} / {{ formatBytes(backup.size) }}</span>
                     </span>
                 </label>
             </div>
-            <p v-else-if="backups.length && !backupRunUnverifiable" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backups match the current filters.') }}</p>
-            <p v-else-if="!backupRunUnverifiable && !listingPending" class="mt-5 rounded-xl border border-dashed border-white/10 p-5 text-sm text-slate-400">{{ t('No backup objects found. Run a backup first or check the destination path.') }}</p>
+            <p v-else-if="backups.length && !backupRunUnverifiable" class="mt-5 rounded-xl border border-dashed border-slate-200 dark:border-white/10 p-5 text-sm text-slate-500 dark:text-slate-400">{{ t('No backups match the current filters.') }}</p>
+            <p v-else-if="!backupRunUnverifiable && !listingPending" class="mt-5 rounded-xl border border-dashed border-slate-200 dark:border-white/10 p-5 text-sm text-slate-500 dark:text-slate-400">{{ t('No backup objects found. Run a backup first or check the destination path.') }}</p>
 
             <button v-if="nextCursor" type="button" class="btn-secondary mt-5" :disabled="listingPending" @click="listing.run('list', true)">{{ t('destinationOperations.more') }}</button>
             <button class="btn-primary mt-5" :disabled="loadingContext || !receiptValid || backupRunUnverifiable || !form.selected_backup_key" @click="continueSelection">{{ t('Continue') }}</button>
@@ -380,53 +380,53 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
 
         <section v-if="workflowVisible && step === 2" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Select restore mode') }}</h2>
-            <label class="mt-4 block space-y-2">
+            <label class="mt-4 flex flex-col gap-2">
                 <span class="label">{{ t('hostWorkflow.targetHost') }}</span>
                 <select v-model="form.target_docker_host_id" class="input" data-target-host>
                     <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!targetAvailable(host)">{{ host.name }}{{ targetAvailable(host) ? '' : ` — ${t('hostWorkflow.unavailable')}` }}</option>
                 </select>
-                <span v-if="form.errors.target_docker_host_id" class="text-sm text-rose-300">{{ form.errors.target_docker_host_id }}</span>
+                <span v-if="form.errors.target_docker_host_id" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.target_docker_host_id }}</span>
             </label>
             <p v-if="!targetHost || !targetAvailable(targetHost)" role="status" class="mt-3 text-sm text-amber-600 dark:text-amber-200">{{ t('hostWorkflow.unavailable') }}</p>
-            <p v-if="relayRequired" class="mt-3 text-sm text-slate-400">{{ t(transferTarget?.supported ? 'archiveRelay.description' : 'archiveRelay.missingCapability') }}</p>
-            <p v-else-if="!isHostLocalDestination(restoreDestination)" class="mt-3 text-sm text-slate-400">{{ t('hostWorkflow.sharedRestore') }}</p>
+            <p v-if="relayRequired" class="mt-3 text-sm text-slate-500 dark:text-slate-400">{{ t(transferTarget?.supported ? 'archiveRelay.description' : 'archiveRelay.missingCapability') }}</p>
+            <p v-else-if="!isHostLocalDestination(restoreDestination)" class="mt-3 text-sm text-slate-500 dark:text-slate-400">{{ t('hostWorkflow.sharedRestore') }}</p>
             <div class="mt-5 grid gap-4 lg:grid-cols-3">
                 <label
                     v-for="mode in modes"
                     :key="mode.value"
                     class="cursor-pointer rounded-2xl border p-5"
-                    :class="form.mode === mode.value ? 'border-sky-300/40 bg-sky-300/10' : 'border-white/10 bg-white/5'"
+                    :class="form.mode === mode.value ? 'border-sky-300/40 bg-sky-300/10' : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5'"
                 >
                     <input v-model="form.mode" type="radio" :value="mode.value" class="text-sky-400">
                     <span class="mt-3 block text-lg font-semibold">{{ mode.label }}</span>
-                    <span class="mt-2 block text-sm" :class="form.mode === mode.value ? 'text-slate-300' : 'text-slate-400'">{{ mode.description }}</span>
+                    <span class="mt-2 block text-sm" :class="form.mode === mode.value ? 'text-slate-600 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400'">{{ mode.description }}</span>
                 </label>
             </div>
 
-            <p v-if="!isDockerVolumeSource" class="mt-4 text-sm text-slate-400">{{ t('In-place restore is only available for Docker volume sources.') }}</p>
+            <p v-if="!isDockerVolumeSource" class="mt-4 text-sm text-slate-500 dark:text-slate-400">{{ t('In-place restore is only available for Docker volume sources.') }}</p>
 
-            <label v-if="!isInPlace" class="mt-5 block space-y-2">
+            <label v-if="!isInPlace" class="mt-5 flex flex-col gap-2">
                 <span class="label">{{ t('Target volume name') }}</span>
                 <input v-model="form.target_volume_name" class="input">
-                <span v-if="targetExists" class="text-sm text-rose-300">{{ t('hostWorkflow.targetExists') }}</span>
-                <span v-if="form.errors.target_volume_name" class="text-sm text-rose-300">{{ form.errors.target_volume_name }}</span>
+                <span v-if="targetExists" class="text-sm text-rose-700 dark:text-rose-300">{{ t('hostWorkflow.targetExists') }}</span>
+                <span v-if="form.errors.target_volume_name" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.target_volume_name }}</span>
             </label>
-            <div v-else class="mt-5 space-y-2">
+            <div v-else class="mt-5 flex flex-col gap-2">
                 <span class="label">{{ t('Target volume') }}</span>
-                <p class="break-all rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white">{{ sourceVolumeName }}</p>
-                <span class="text-xs text-amber-200">{{ t('The source volume is overwritten in place.') }}</span>
+                <p class="break-all rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3 text-sm text-slate-900 dark:text-white">{{ sourceVolumeName }}</p>
+                <span class="text-xs text-amber-800 dark:text-amber-200">{{ t('The source volume is overwritten in place.') }}</span>
             </div>
 
-            <label v-if="isInPlace" class="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
+            <label v-if="isInPlace" class="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4">
                 <input v-model="form.backup_before_overwrite" type="checkbox" class="mt-1 text-sky-400">
                 <span class="min-w-0 flex-1">
-                    <span class="block text-sm font-medium text-white">{{ t('Back up the current volume before overwriting it') }}</span>
-                    <span class="mt-1 block text-xs text-slate-400">{{ t('Creates a full backup to {name} before the restore. The restore is aborted if this backup fails.', { name: job.destination?.name }) }}</span>
+                    <span class="block text-sm font-medium text-slate-900 dark:text-white">{{ t('Back up the current volume before overwriting it') }}</span>
+                    <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">{{ t('Creates a full backup to {name} before the restore. The restore is aborted if this backup fails.', { name: job.destination?.name }) }}</span>
                 </span>
             </label>
 
-            <p v-if="dropboxSafetyBackupUnavailable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-100">{{ t('Safety backup before overwrite is unavailable because the job’s current destination is Dropbox. A newly uploaded Dropbox backup cannot be verified for restore. Choose a different job destination or explicitly turn off the safety backup.') }}</p>
-            <p v-if="form.errors.backup_before_overwrite" role="alert" class="mt-4 text-sm text-rose-300">{{ t(form.errors.backup_before_overwrite) }}</p>
+            <p v-if="dropboxSafetyBackupUnavailable" role="alert" class="mt-4 rounded-xl bg-amber-300/10 p-3 text-sm text-amber-800 dark:text-amber-100">{{ t('Safety backup before overwrite is unavailable because the job’s current destination is Dropbox. A newly uploaded Dropbox backup cannot be verified for restore. Choose a different job destination or explicitly turn off the safety backup.') }}</p>
+            <p v-if="form.errors.backup_before_overwrite" role="alert" class="mt-4 text-sm text-rose-700 dark:text-rose-300">{{ t(form.errors.backup_before_overwrite) }}</p>
 
             <div class="mt-5 flex flex-wrap gap-3">
                 <button class="btn-secondary" @click="step = 1">{{ t('Back') }}</button>
@@ -438,23 +438,23 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
             <h2 class="text-xl font-semibold">{{ t('Confirm restore') }}</h2>
             <div
                 class="mt-5 rounded-xl border p-4 text-sm"
-                :class="selectedMode?.destructive ? 'border-rose-400/40 bg-rose-400/10 text-rose-100' : 'border-amber-300/30 bg-amber-300/10 text-amber-100'"
+                :class="selectedMode?.destructive ? 'border-rose-400/40 bg-rose-400/10 text-rose-700 dark:text-rose-100' : 'border-amber-300/30 bg-amber-300/10 text-amber-800 dark:text-amber-100'"
             >
                 {{ confirmWarning }}
             </div>
             <dl class="mt-5 grid gap-4 sm:grid-cols-2">
-                <div><dt class="text-xs uppercase text-slate-400">{{ t('hostWorkflow.targetHost') }}</dt><dd class="mt-1 break-words text-white">{{ targetHost?.name }}</dd></div>
-                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ sourceLabel }}</dd></div>
-                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Target volume') }}</dt><dd class="mt-1 break-all text-white">{{ form.target_volume_name }}</dd></div>
-                <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 break-words text-white">{{ restoreDestination?.name }}</dd></div>
-                <div><dt class="text-xs uppercase text-slate-400">{{ t('Selected backup') }}</dt><dd class="mt-1 break-all text-white">{{ selectedBackup?.display_name || selectedBackup?.key }}</dd></div>
-                <div v-if="isInPlace"><dt class="text-xs uppercase text-slate-400">{{ t('Safety backup') }}</dt><dd class="mt-1 text-white">{{ form.backup_before_overwrite ? t('Yes, backed up before overwrite') : t('No') }}</dd></div>
+                <div><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('hostWorkflow.targetHost') }}</dt><dd class="mt-1 wrap-break-word text-slate-900 dark:text-white">{{ targetHost?.name }}</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-slate-900 dark:text-white">{{ sourceLabel }}</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Target volume') }}</dt><dd class="mt-1 break-all text-slate-900 dark:text-white">{{ form.target_volume_name }}</dd></div>
+                <div class="min-w-0"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 wrap-break-word text-slate-900 dark:text-white">{{ restoreDestination?.name }}</dd></div>
+                <div><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Selected backup') }}</dt><dd class="mt-1 break-all text-slate-900 dark:text-white">{{ selectedBackup?.display_name || selectedBackup?.key }}</dd></div>
+                <div v-if="isInPlace"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Safety backup') }}</dt><dd class="mt-1 text-slate-900 dark:text-white">{{ form.backup_before_overwrite ? t('Yes, backed up before overwrite') : t('No') }}</dd></div>
             </dl>
 
-            <label v-if="requiresConfirmation" class="mt-5 block space-y-2">
+            <label v-if="requiresConfirmation" class="mt-5 flex flex-col gap-2">
                 <span class="label">{{ t('Type "{name}" to confirm', { name: sourceVolumeName }) }}</span>
                 <input v-model="form.confirmation_text" class="input" autocomplete="off" :placeholder="sourceVolumeName">
-                <span v-if="form.errors.confirmation_text" class="text-sm text-rose-300">{{ form.errors.confirmation_text }}</span>
+                <span v-if="form.errors.confirmation_text" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.confirmation_text }}</span>
             </label>
 
             <div class="mt-5 flex flex-wrap gap-3">
@@ -465,7 +465,7 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
 
         <section v-if="workflowVisible && step === 4" class="card p-4 sm:p-6">
             <h2 class="text-xl font-semibold">{{ t('Result') }}</h2>
-            <p class="mt-2 text-sm text-slate-400">{{ t('The restore run will appear in the restore run detail after submission.') }}</p>
+            <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">{{ t('The restore run will appear in the restore run detail after submission.') }}</p>
         </section>
     </AppLayout>
 </template>

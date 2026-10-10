@@ -4,6 +4,10 @@ return [
     'unreleased' => [
         [
             'type' => 'change',
+            'key' => 'native_tailwind_styles',
+        ],
+        [
+            'type' => 'change',
             'key' => 'consistent_page_background',
         ],
         [

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Estilos nativos de Tailwind 4',
+        'description' => 'La interfaz ahora usa utilidades nativas de Tailwind 4 y colores claros/oscuros explícitos en lugar de reglas de compatibilidad con Tailwind 3, con espaciado de formularios actualizado y estados de foco accesibles.',
+    ],
     'consistent_page_background' => [
         'title' => 'Fondos uniformes entre páginas',
         'description' => 'El fondo común ahora permanece uniforme entre páginas y al desplazarse, independientemente de la altura del contenido, tanto en el tema claro como en el oscuro.',

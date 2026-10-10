@@ -51,13 +51,13 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
             </Link>
         </template>
 
-        <p class="mb-3 text-sm text-slate-400">{{ t('Times are shown in {timezone}.', { timezone }) }}</p>
+        <p class="mb-3 text-sm text-slate-500 dark:text-slate-400">{{ t('Times are shown in {timezone}.', { timezone }) }}</p>
 
         <div class="card overflow-hidden">
             <div v-if="groups.data.length">
                 <div class="hidden overflow-x-auto md:block">
-                    <table class="min-w-full divide-y divide-white/10 text-sm">
-                        <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <table class="min-w-full divide-y divide-slate-200 dark:divide-white/10 text-sm">
+                        <thead class="bg-white/80 dark:bg-white/5 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             <tr>
                                 <th class="px-4 py-3">{{ t('Name') }}</th>
                                 <th class="px-4 py-3">{{ t('Volumes') }}</th>
@@ -68,11 +68,11 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
                                 <th class="px-4 py-3">{{ t('Actions') }}</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-white/10">
+                        <tbody class="divide-y divide-slate-200 dark:divide-white/10">
                             <tr v-for="group in groups.data" :key="group.id" class="cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewGroup(group.id)" @keydown="onGroupKeydown($event, group.id)">
-                                <td class="px-4 py-3 font-medium text-white">{{ group.name }}<p v-if="can.runDockerActions && group.can_run_reason" class="mt-1 text-sm font-normal text-slate-400">{{ t(group.can_run_reason) }}</p></td>
-                                <td class="px-4 py-3 text-slate-300">{{ group.members_count }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ group.schedule_summary }}</td>
+                                <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">{{ group.name }}<p v-if="can.runDockerActions && group.can_run_reason" class="mt-1 text-sm font-normal text-slate-500 dark:text-slate-400">{{ t(group.can_run_reason) }}</p></td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ group.members_count }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ group.schedule_summary }}</td>
                                 <td class="px-4 py-3" @click.stop @keydown.stop>
                                     <button
                                         type="button"
@@ -84,11 +84,11 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
                                         :disabled="!can.runDockerActions"
                                         @click="toggleNotifications(group)"
                                     >
-                                        <span class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform" :class="group.notifications_enabled ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
+                                        <span class="h-5 w-5 rounded-full bg-white shadow-xs transition-transform" :class="group.notifications_enabled ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
                                     </button>
                                 </td>
                                 <td class="px-4 py-3"><StatusBadge :status="group.status" /></td>
-                                <td class="px-4 py-3 text-slate-300">{{ formatDate(group.next_run_at) }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ formatDate(group.next_run_at) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex md:min-w-52 flex-wrap gap-2" @click.stop @keydown.stop>
                                         <ActionIcon v-if="can.runDockerActions" :label="t('Run now')" icon="play" :disabled="!group.can_run" @click="runNow(group.id)" />
@@ -103,13 +103,13 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
                     </table>
                 </div>
 
-                <div class="divide-y divide-white/10 md:hidden">
-                    <article v-for="group in groups.data" :key="group.id" class="space-y-4 p-4 cursor-pointer transition hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewGroup(group.id)" @keydown="onGroupKeydown($event, group.id)">
+                <div class="divide-y divide-slate-200 dark:divide-white/10 md:hidden">
+                    <article v-for="group in groups.data" :key="group.id" class="flex flex-col gap-4 p-4 cursor-pointer transition hover:bg-slate-100 dark:hover:bg-white/[0.03]" role="link" tabindex="0" @click="viewGroup(group.id)" @keydown="onGroupKeydown($event, group.id)">
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
-                                <h2 class="break-words font-semibold text-white">{{ group.name }}</h2>
-                                <p v-if="can.runDockerActions && group.can_run_reason" class="mt-1 text-sm text-slate-400">{{ t(group.can_run_reason) }}</p>
-                                <p class="mt-1 text-sm text-slate-400">{{ t('{count} volume(s)', { count: group.members_count }) }} · {{ group.schedule_summary }}</p>
+                                <h2 class="wrap-break-word font-semibold text-slate-900 dark:text-white">{{ group.name }}</h2>
+                                <p v-if="can.runDockerActions && group.can_run_reason" class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t(group.can_run_reason) }}</p>
+                                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('{count} volume(s)', { count: group.members_count }) }} · {{ group.schedule_summary }}</p>
                             </div>
                             <StatusBadge :status="group.status" />
                         </div>
@@ -127,7 +127,7 @@ const onGroupKeydown = (event: KeyboardEvent, id: number) => {
             </div>
             <div v-else class="p-10 text-center">
                 <p class="text-lg font-semibold">{{ t('No backup groups yet.') }}</p>
-                <p class="mt-2 text-sm text-slate-400">{{ t('Create a group, then attach jobs to it from the backup job form to back up several volumes as one operation.') }}</p>
+                <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">{{ t('Create a group, then attach jobs to it from the backup job form to back up several volumes as one operation.') }}</p>
                 <Link v-if="can.runDockerActions" href="/backup-groups/create" class="btn-primary mt-5">{{ t('Create backup group') }}</Link>
             </div>
         </div>

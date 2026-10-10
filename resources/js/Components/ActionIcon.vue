@@ -17,10 +17,10 @@ defineEmits<{
     click: [];
 }>();
 
-const baseClass = 'group relative inline-flex h-9 w-9 items-center justify-center rounded-xl border text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-400/40 disabled:cursor-not-allowed disabled:opacity-50';
+const baseClass = 'group relative inline-flex h-9 w-9 items-center justify-center rounded-xl border text-sm transition focus:outline-hidden focus:ring-2 focus:ring-sky-400/40 disabled:cursor-not-allowed disabled:opacity-50';
 const variantClass = props.variant === 'danger'
-    ? 'border-rose-300/20 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20'
-    : 'border-white/10 bg-white/5 text-slate-100 hover:bg-slate-100 dark:hover:bg-white/10';
+    ? 'border-rose-300/20 bg-rose-500/10 text-rose-700 dark:text-rose-100 hover:bg-rose-500/20'
+    : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/10';
 </script>
 
 <template>
@@ -58,7 +58,7 @@ const variantClass = props.variant === 'danger'
             <path v-if="icon === 'token'" d="M15 7a4 4 0 1 1-2.8 6.8L9 17H6v3H3v-3.2l5.2-5.2A4 4 0 0 1 15 7Z" />
             <path v-if="icon === 'token'" d="M17 9h.01" />
         </svg>
-        <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden max-w-[calc(100vw-2rem)] -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-xs font-medium text-slate-100 opacity-0 shadow-xl shadow-black/30 transition group-hover:opacity-100 group-focus-visible:opacity-100 sm:block">
+        <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden max-w-[calc(100vw-2rem)] -translate-x-1/2 whitespace-nowrap rounded-lg border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950 px-2 py-1 text-xs font-medium text-slate-800 dark:text-slate-100 opacity-0 shadow-xl shadow-slate-300/20 dark:shadow-black/30 transition group-hover:opacity-100 group-focus-visible:opacity-100 sm:block">
             {{ label }}
         </span>
     </Link>
@@ -99,7 +99,7 @@ const variantClass = props.variant === 'danger'
             <path v-if="icon === 'token'" d="M15 7a4 4 0 1 1-2.8 6.8L9 17H6v3H3v-3.2l5.2-5.2A4 4 0 0 1 15 7Z" />
             <path v-if="icon === 'token'" d="M17 9h.01" />
         </svg>
-        <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden max-w-[calc(100vw-2rem)] -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-slate-950 px-2 py-1 text-xs font-medium text-slate-100 opacity-0 shadow-xl shadow-black/30 transition group-hover:opacity-100 group-focus-visible:opacity-100 sm:block">
+        <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden max-w-[calc(100vw-2rem)] -translate-x-1/2 whitespace-nowrap rounded-lg border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950 px-2 py-1 text-xs font-medium text-slate-800 dark:text-slate-100 opacity-0 shadow-xl shadow-slate-300/20 dark:shadow-black/30 transition group-hover:opacity-100 group-focus-visible:opacity-100 sm:block">
             {{ label }}
         </span>
     </button>

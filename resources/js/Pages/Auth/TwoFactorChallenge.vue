@@ -26,47 +26,47 @@ const toggleRecovery = () => {
 <template>
     <Head :title="t('Two-factor authentication')" />
     <main class="auth-shell">
-        <form class="card w-full max-w-md space-y-5 p-4 sm:p-6" @submit.prevent="submit">
+        <form class="card w-full max-w-md flex flex-col gap-5 p-4 sm:p-6" @submit.prevent="submit">
             <div>
                 <img :src="'/logo.png'" alt="VolumeVault" class="mb-4 h-16 w-auto object-contain">
-                <h1 class="text-2xl font-bold text-white">{{ t('Two-factor authentication') }}</h1>
-                <p class="mt-1 text-sm text-slate-400">
+                <h1 class="text-2xl font-bold text-slate-900 dark:text-white">{{ t('Two-factor authentication') }}</h1>
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {{ useRecovery
                         ? t('Enter one of your recovery codes to continue.')
                         : t('Enter the code from your authenticator app to continue.') }}
                 </p>
             </div>
 
-            <label v-if="!useRecovery" class="space-y-2">
+            <label v-if="!useRecovery" class="flex flex-col gap-2">
                 <span class="label">{{ t('Authentication code') }}</span>
                 <input id="totp" v-model="form.code" name="totp" class="input" type="text" inputmode="numeric"
                     autocomplete="one-time-code" aria-label="Two-factor verification code" autofocus required
                     maxlength="6" placeholder="000000">
-                <span v-if="form.errors.code" class="text-sm text-rose-300">{{ form.errors.code }}</span>
+                <span v-if="form.errors.code" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.code }}</span>
             </label>
 
-            <label v-else class="space-y-2">
+            <label v-else class="flex flex-col gap-2">
                 <span class="label">{{ t('Recovery code') }}</span>
                 <input id="recovery-code" v-model="form.recovery_code" name="recovery_code" class="input" type="text"
                     autocomplete="off" autofocus required>
-                <span v-if="form.errors.code" class="text-sm text-rose-300">{{ form.errors.code }}</span>
+                <span v-if="form.errors.code" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.code }}</span>
             </label>
 
-            <label class="flex items-center gap-3 text-sm text-slate-300">
-                <input v-model="form.trust_device" type="checkbox" class="rounded border-slate-600 bg-slate-950 text-sky-400">
+            <label class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                <input v-model="form.trust_device" type="checkbox" class="rounded-sm border-slate-200 dark:border-slate-600 bg-white/90 dark:bg-slate-950 text-sky-400">
                 {{ t('Trust this device for 30 days') }}
             </label>
 
             <button class="btn-primary w-full" :disabled="form.processing">{{ t('Verify') }}</button>
 
             <div class="text-center text-sm">
-                <button type="button" class="font-medium text-sky-300 transition hover:text-sky-200" @click="toggleRecovery">
+                <button type="button" class="font-medium text-sky-700 dark:text-sky-300 transition hover:text-sky-600 dark:hover:text-sky-200" @click="toggleRecovery">
                     {{ useRecovery ? t('Use an authenticator code') : t('Use a recovery code') }}
                 </button>
             </div>
 
-            <footer class="border-t border-white/10 pt-4 text-center text-xs text-slate-500">
-                <Link href="/login" method="get" class="font-medium text-slate-400 transition hover:text-sky-300">{{ t('Back to sign in') }}</Link>
+            <footer class="border-t border-slate-200 dark:border-white/10 pt-4 text-center text-xs text-slate-500">
+                <Link href="/login" method="get" class="font-medium text-slate-500 dark:text-slate-400 transition hover:text-sky-600 dark:hover:text-sky-300">{{ t('Back to sign in') }}</Link>
             </footer>
         </form>
     </main>
