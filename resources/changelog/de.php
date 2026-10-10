@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'consistent_page_background' => [
+        'title' => 'Einheitliche Seitenhintergründe',
+        'description' => 'Der gemeinsame Hintergrund bleibt jetzt unabhängig von der Inhaltshöhe beim Seitenwechsel und Scrollen im hellen und dunklen Design einheitlich.',
+    ],
     'dependency_security_updates' => [
         'title' => 'Sicherheitsupdates für Abhängigkeiten',
         'description' => 'PHP- und JavaScript-Abhängigkeiten wurden aktualisiert, um bekannte Sicherheitslücken zu beheben. Nach dem Upgrade auf Tailwind CSS 4 benötigt die Oberfläche Safari 16.4+, Chrome 111+ oder Firefox 128+.',

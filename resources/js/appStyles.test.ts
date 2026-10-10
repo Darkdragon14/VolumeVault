@@ -102,6 +102,21 @@ describe('application Tailwind 4 stylesheet', () => {
         expect(stylesheet.toString()).not.toMatch(/@apply\b|@source\b|@theme\b/);
     });
 
+    it('anchors the shared light and dark background to the viewport instead of page height', async () => {
+        expect(values('.app-shell', 'isolation')).toContain('isolate');
+        expect(values('.app-shell', 'position')).toContain('relative');
+        expect(values('.app-shell', 'background-image')).toEqual([]);
+        expect(values('.app-shell:before', 'position')).toContain('fixed');
+        expect(values('.app-shell:before', 'inset')).toContain('0');
+        expect(values('.app-shell:before', 'z-index')).toContain('calc(10 * -1)');
+        expect(values('.app-shell:before', 'pointer-events')).toContain('none');
+        expect(values('.app-shell:before', 'background-image').join(' ')).toContain('radial-gradient');
+        expect(values('.app-shell:where(.dark, .dark *):before', 'background-image').join(' ')).toContain('radial-gradient');
+        for (const page of ['Dashboard.vue', 'Volumes/Index.vue', 'Stacks/Index.vue', 'Changelog/Index.vue']) {
+            expect(await readFile(new URL(`./Pages/${page}`, import.meta.url), 'utf8')).toContain('<AppLayout');
+        }
+    });
+
     it('retains Figtree and the v3 shadow, radius and blur scales', () => {
         expect(themeValue('--font-sans')).toMatch(/^Figtree,/);
         expect(values('.shadow', '--tw-shadow').join(' ')).toContain('0 1px 3px 0');
@@ -158,7 +173,7 @@ describe('application Tailwind 4 stylesheet', () => {
     it('uses class-based dark components rather than system color-scheme media queries', () => {
         expect(values('.input:where(.dark, .dark *)', 'color')).toContain('var(--color-slate-100)');
         expect(values('.label:where(.dark, .dark *)', 'color')).toContain('var(--color-slate-200)');
-        expect(values('.app-shell:where(.dark, .dark *)', 'background-image').join(' ')).toContain('#020617');
+        expect(values('.app-shell:where(.dark, .dark *):before', 'background-image').join(' ')).toContain('#020617');
         expect(values('.btn-secondary:where(.dark, .dark *)', '--tw-shadow')).toContain('0 0 #0000');
         expect(stylesheet.toString()).not.toContain('prefers-color-scheme');
     });

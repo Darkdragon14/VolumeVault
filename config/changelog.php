@@ -4,6 +4,10 @@ return [
     'unreleased' => [
         [
             'type' => 'change',
+            'key' => 'consistent_page_background',
+        ],
+        [
+            'type' => 'change',
             'key' => 'dependency_security_updates',
         ],
     ],

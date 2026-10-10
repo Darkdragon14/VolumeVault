@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'consistent_page_background' => [
+        'title' => 'Sfondo uniforme tra le pagine',
+        'description' => 'Lo sfondo comune ora rimane uniforme tra le pagine e durante lo scorrimento, indipendentemente dall’altezza del contenuto, sia nel tema chiaro che in quello scuro.',
+    ],
     'dependency_security_updates' => [
         'title' => 'Aggiornamenti di sicurezza delle dipendenze',
         'description' => 'Le dipendenze PHP e JavaScript sono state aggiornate per correggere vulnerabilità note. Dopo il passaggio a Tailwind CSS 4, l’interfaccia richiede Safari 16.4+, Chrome 111+ o Firefox 128+.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'consistent_page_background' => [
+        'title' => 'Gelijke achtergronden op alle pagina’s',
+        'description' => 'De gedeelde achtergrond blijft nu gelijk bij het wisselen van pagina en tijdens het scrollen, ongeacht de inhoudshoogte, in zowel het lichte als het donkere thema.',
+    ],
     'dependency_security_updates' => [
         'title' => 'Beveiligingsupdates voor afhankelijkheden',
         'description' => 'PHP- en JavaScript-afhankelijkheden zijn bijgewerkt om bekende kwetsbaarheden te verhelpen. Na de upgrade naar Tailwind CSS 4 vereist de interface Safari 16.4+, Chrome 111+ of Firefox 128+.',

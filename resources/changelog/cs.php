@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'consistent_page_background' => [
+        'title' => 'Jednotné pozadí stránek',
+        'description' => 'Společné pozadí nyní zůstává stejné mezi stránkami i při posouvání bez ohledu na výšku obsahu, ve světlém i tmavém motivu.',
+    ],
     'dependency_security_updates' => [
         'title' => 'Bezpečnostní aktualizace závislostí',
         'description' => 'Závislosti PHP a JavaScript byly aktualizovány kvůli známým zranitelnostem. Po přechodu na Tailwind CSS 4 rozhraní vyžaduje Safari 16.4+, Chrome 111+ nebo Firefox 128+.',

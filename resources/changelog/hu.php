@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'consistent_page_background' => [
+        'title' => 'Egységes oldalháttér',
+        'description' => 'A közös háttér most az oldalak között és görgetéskor is egységes marad, a tartalom magasságától függetlenül, világos és sötét témában egyaránt.',
+    ],
     'dependency_security_updates' => [
         'title' => 'Függőségek biztonsági frissítése',
         'description' => 'A PHP- és JavaScript-függőségek frissültek az ismert sérülékenységek javításához. A Tailwind CSS 4 frissítése után a felület Safari 16.4+, Chrome 111+ vagy Firefox 128+ böngészőt igényel.',

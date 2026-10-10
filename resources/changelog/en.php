@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'consistent_page_background' => [
+        'title' => 'Consistent page backgrounds',
+        'description' => 'The shared background now stays consistent across pages and while scrolling, regardless of content height, in both light and dark themes.',
+    ],
     'dependency_security_updates' => [
         'title' => 'Dependency security updates',
         'description' => 'Updated PHP and JavaScript dependencies to address known security advisories. The interface now requires Safari 16.4+, Chrome 111+ or Firefox 128+ following the Tailwind CSS 4 upgrade.',

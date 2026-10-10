@@ -96,7 +96,16 @@
 
 @layer components {
     .app-shell {
-        @apply flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.16),_transparent_34%),linear-gradient(135deg,_#f8fafc,_#e0f2fe_45%,_#eef2ff)] text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_35%),linear-gradient(135deg,_#020617,_#0f172a_45%,_#111827)] dark:text-slate-100;
+        @apply relative isolate flex min-h-screen flex-col text-slate-950 dark:text-slate-100;
+    }
+
+    .app-shell::before {
+        content: "";
+        @apply pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.16),_transparent_34%),linear-gradient(135deg,_#f8fafc,_#e0f2fe_45%,_#eef2ff)];
+    }
+
+    .app-shell:where(.dark, .dark *)::before {
+        @apply bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.18),_transparent_35%),linear-gradient(135deg,_#020617,_#0f172a_45%,_#111827)];
     }
 
     .auth-shell {
