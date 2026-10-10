@@ -87,13 +87,16 @@ describe('application Tailwind 4 stylesheet', () => {
         stylesheet = result.root;
     }, 30000);
 
-    it('uses explicit application sources, including TypeScript, without scanning dependencies or tests', () => {
+    it('uses explicit application sources, including TypeScript, without scanning dependencies or tests', async () => {
         expect(source).toContain('@import "tailwindcss" source(none)');
         expect(source).toContain('@source "../js/**/*.{js,ts,vue}"');
         expect(source).toContain('@source not "../js/**/*.test.ts"');
         expect(source).not.toContain('node_modules');
         expect(rules('.fixed').length).toBeGreaterThan(0);
-        expect(rules('.grid-cols-1').length).toBeGreaterThan(0);
+        // Assert a candidate in a tracked Vue source, not in stale compiled Blade views.
+        const backupGroupPage = await readFile(new URL('./Pages/BackupGroups/Form.vue', import.meta.url), 'utf8');
+        expect(backupGroupPage).toContain('grid-cols-2');
+        expect(rules('.grid-cols-2').length).toBeGreaterThan(0);
         // This candidate exists only in an excluded test file, never in application sources.
         expect(rules('.p-\\[9876px\\]').length).toBe(0); // p-[9876px]
         expect(stylesheet.toString()).not.toMatch(/@apply\b|@source\b|@theme\b/);
