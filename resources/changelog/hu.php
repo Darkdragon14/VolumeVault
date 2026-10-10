@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_updates' => [
+        'title' => 'Függőségek biztonsági frissítése',
+        'description' => 'A PHP- és JavaScript-függőségek frissültek az ismert sérülékenységek javításához. A Tailwind CSS 4 frissítése után a felület Safari 16.4+, Chrome 111+ vagy Firefox 128+ böngészőt igényel.',
+    ],
     'container_image_publication_recovery' => [
         'title' => 'A konténerképek közzététele helyreállítva',
         'description' => 'Javítottuk a szolgáltatások regisztrációját a frissített S6-alapképhez, hogy a konténerképek felépíthetők legyenek, és a feldolgozók, az ütemező és az ügynökök TLS-szolgáltatása megfelelően elinduljon.',

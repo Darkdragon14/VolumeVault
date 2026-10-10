@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_updates' => [
+        'title' => 'Beveiligingsupdates voor afhankelijkheden',
+        'description' => 'PHP- en JavaScript-afhankelijkheden zijn bijgewerkt om bekende kwetsbaarheden te verhelpen. Na de upgrade naar Tailwind CSS 4 vereist de interface Safari 16.4+, Chrome 111+ of Firefox 128+.',
+    ],
     'container_image_publication_recovery' => [
         'title' => 'Publicatie van containerimages hersteld',
         'description' => 'De serviceregistratie voor het bijgewerkte S6-basisimage is gecorrigeerd, zodat containerimages kunnen worden gebouwd en wachtrijworkers, de planner en de TLS-service voor agents correct starten.',

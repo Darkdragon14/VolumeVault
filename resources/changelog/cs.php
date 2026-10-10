@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_updates' => [
+        'title' => 'Bezpečnostní aktualizace závislostí',
+        'description' => 'Závislosti PHP a JavaScript byly aktualizovány kvůli známým zranitelnostem. Po přechodu na Tailwind CSS 4 rozhraní vyžaduje Safari 16.4+, Chrome 111+ nebo Firefox 128+.',
+    ],
     'container_image_publication_recovery' => [
         'title' => 'Obnoveno publikování obrazů kontejnerů',
         'description' => 'Opravena registrace služeb pro aktualizovaný základní obraz S6, aby bylo možné sestavit obrazy kontejnerů a správně spustit pracovníky front, plánovač a službu TLS agentů.',

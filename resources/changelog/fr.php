@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_updates' => [
+        'title' => 'Mises à jour de sécurité des dépendances',
+        'description' => 'Les dépendances PHP et JavaScript ont été mises à jour pour corriger les vulnérabilités connues. Après la migration vers Tailwind CSS 4, l’interface nécessite Safari 16.4+, Chrome 111+ ou Firefox 128+.',
+    ],
     'container_image_publication_recovery' => [
         'title' => 'Publication des images de conteneur rétablie',
         'description' => 'Correction de l’enregistrement des services pour la nouvelle image de base S6 afin que les images puissent être construites et démarrer correctement les workers de file d’attente, le planificateur et le service TLS des agents.',

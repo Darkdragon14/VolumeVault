@@ -32,6 +32,12 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Audit Composer dependencies
+        run: composer audit --locked
+
+      - name: Audit Node dependencies
+        run: npm audit
+
       - name: Build secure local archive reader
         run: sudo cc -O2 -Wall -Wextra -Werror docker/local-archive-reader.c -o /usr/local/bin/volumevault-local-archive-reader
 
