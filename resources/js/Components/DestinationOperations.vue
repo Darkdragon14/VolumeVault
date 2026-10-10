@@ -15,10 +15,10 @@ const available = computed(() => operationHostAvailable(props.hosts.find((host) 
 </script>
 
 <template>
-    <section class="card my-4 space-y-4 p-4" :aria-label="t('destinationOperations.title')">
+    <section class="card my-4 flex flex-col items-start gap-4 p-4" :aria-label="t('destinationOperations.title')">
         <h2 class="font-semibold">{{ destination.name }} — {{ t('destinationOperations.title') }}</h2>
-        <p class="text-sm text-slate-400">{{ t('destinationOperations.saved') }}</p>
-        <label class="block space-y-2">
+        <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('destinationOperations.saved') }}</p>
+        <label class="flex w-full flex-col gap-2">
             <span class="label">{{ t('destinationOperations.host') }}</span>
             <select v-model="selectedHost" class="input" :disabled="isHostLocalDestination(destination)" data-operation-host>
                 <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="!operationHostAvailable(host, destination)">{{ host.name }}{{ operationHostAvailable(host, destination) ? '' : ` — ${t('destinationOperations.unsupported')}` }}</option>
@@ -35,9 +35,9 @@ const available = computed(() => operationHostAvailable(props.hosts.find((host) 
         <template v-if="operation?.result?.status === 'success'">
             <p v-if="operation.action === 'test'" role="status">{{ t('destinationOperations.connected') }}</p>
             <p v-if="operation.action === 'stats'">{{ t('destinationOperations.usage', { bytes: formatBytes(operation.result.data.used_bytes), count: operation.result.data.object_count }) }}</p>
-            <p class="text-sm text-slate-400">{{ fresh ? t('destinationOperations.fresh', { date: formatDate(operation.fresh_until) }) : t('destinationOperations.stale') }}</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400">{{ fresh ? t('destinationOperations.fresh', { date: formatDate(operation.fresh_until) }) : t('destinationOperations.stale') }}</p>
         </template>
-        <ul v-if="objects.length" class="space-y-2">
+        <ul v-if="objects.length" class="flex w-full flex-col gap-2">
             <li v-for="object in objects" :key="object.key" class="break-all text-sm">
                 <strong>{{ object.display_name }}</strong><code class="block">{{ object.key }}</code>
                 {{ formatBytes(object.size) }} · {{ formatDate(object.last_modified) }}

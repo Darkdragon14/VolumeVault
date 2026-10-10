@@ -163,36 +163,36 @@ const save = () => {
 
         <!-- Edit mode -->
         <template v-else>
-            <p class="mb-4 text-sm text-slate-400">{{ t('Drag widgets to reorder, toggle the eye to show or hide. Click Done to save.') }}</p>
+            <p class="mb-4 text-sm text-slate-500 dark:text-slate-400">{{ t('Drag widgets to reorder, toggle the eye to show or hide. Click Done to save.') }}</p>
 
-            <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">{{ t('Statistics') }}</h2>
+            <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ t('Statistics') }}</h2>
             <draggable v-model="editStats" item-key="key" handle=".drag-handle" :animation="150" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <template #item="{ element }">
                     <div class="card relative h-full p-5 transition-opacity" :class="{ 'opacity-40': !element.visible }">
                         <div class="absolute right-2 top-2 flex items-center gap-1">
-                            <button type="button" class="drag-handle cursor-move rounded p-1 text-slate-400 hover:bg-white/10" :title="t('Drag to reorder')">⠿</button>
-                            <button type="button" class="rounded p-1 transition hover:bg-white/10" :class="element.visible ? 'text-sky-300' : 'text-slate-500'" :title="element.visible ? t('Hide') : t('Show')" @click="element.visible = !element.visible">
+                            <button type="button" class="drag-handle cursor-move rounded-sm p-1 text-slate-500 dark:text-slate-400 hover:bg-slate-100/90 dark:hover:bg-white/10" :title="t('Drag to reorder')">⠿</button>
+                            <button type="button" class="rounded-sm p-1 transition hover:bg-slate-100/90 dark:hover:bg-white/10" :class="element.visible ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500'" :title="element.visible ? t('Hide') : t('Show')" @click="element.visible = !element.visible">
                                 <VisibilityToggleIcon :open="element.visible" />
                             </button>
                         </div>
-                        <p class="pr-14 text-xs font-semibold uppercase tracking-wide text-slate-400">{{ statLabel(element.key) }}</p>
-                        <p class="mt-3 break-words text-2xl font-bold text-white">{{ statValueFor(element.key) }}</p>
+                        <p class="pr-14 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ statLabel(element.key) }}</p>
+                        <p class="mt-3 wrap-break-word text-2xl font-bold text-slate-900 dark:text-white">{{ statValueFor(element.key) }}</p>
                     </div>
                 </template>
             </draggable>
 
-            <h2 class="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-slate-400">{{ t('Sections') }}</h2>
+            <h2 class="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ t('Sections') }}</h2>
             <draggable v-model="editSections" item-key="key" handle=".drag-handle" :animation="150" class="grid gap-4 sm:grid-cols-2">
                 <template #item="{ element }">
                     <div class="card relative h-full p-5 transition-opacity" :class="{ 'opacity-40': !element.visible }">
                         <div class="absolute right-2 top-2 flex items-center gap-1">
-                            <button type="button" class="drag-handle cursor-move rounded p-1 text-slate-400 hover:bg-white/10" :title="t('Drag to reorder')">⠿</button>
-                            <button type="button" class="rounded p-1 transition hover:bg-white/10" :class="element.visible ? 'text-sky-300' : 'text-slate-500'" :title="element.visible ? t('Hide') : t('Show')" @click="element.visible = !element.visible">
+                            <button type="button" class="drag-handle cursor-move rounded-sm p-1 text-slate-500 dark:text-slate-400 hover:bg-slate-100/90 dark:hover:bg-white/10" :title="t('Drag to reorder')">⠿</button>
+                            <button type="button" class="rounded-sm p-1 transition hover:bg-slate-100/90 dark:hover:bg-white/10" :class="element.visible ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500'" :title="element.visible ? t('Hide') : t('Show')" @click="element.visible = !element.visible">
                                 <VisibilityToggleIcon :open="element.visible" />
                             </button>
                         </div>
                         <p class="pr-14 text-lg font-semibold">{{ sectionLabel(element.key) }}</p>
-                        <p class="mt-1 text-xs text-slate-400">{{ t('Section') }}</p>
+                        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ t('Section') }}</p>
                     </div>
                 </template>
             </draggable>

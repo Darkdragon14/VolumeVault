@@ -1,7 +1,20 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'native_tailwind_styles',
+        ],
+        [
+            'type' => 'change',
+            'key' => 'consistent_page_background',
+        ],
+        [
+            'type' => 'change',
+            'key' => 'dependency_security_updates',
+        ],
+    ],
     'releases' => [
         'v2.0.3' => [
             'date' => '2026-10-08',

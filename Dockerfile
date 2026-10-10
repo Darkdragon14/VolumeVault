@@ -1,6 +1,6 @@
 FROM node:24-alpine AS assets
 WORKDIR /app
-COPY package*.json vite.config.js tailwind.config.js postcss.config.js tsconfig.json ./
+COPY package*.json vite.config.js postcss.config.js tsconfig.json ./
 COPY resources ./resources
 RUN npm ci && npm run build
 

@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Styles natifs Tailwind 4',
+        'description' => 'L’interface utilise désormais les utilitaires natifs Tailwind 4 et des couleurs clair/sombre explicites, sans surcharges de compatibilité Tailwind 3, avec des espacements de formulaires adaptés et un focus accessible.',
+    ],
+    'consistent_page_background' => [
+        'title' => 'Fond uniforme entre les pages',
+        'description' => 'Le fond commun reste désormais uniforme entre les pages et pendant le défilement, quelle que soit la hauteur du contenu, en thème clair comme sombre.',
+    ],
+    'dependency_security_updates' => [
+        'title' => 'Mises à jour de sécurité des dépendances',
+        'description' => 'Les dépendances PHP et JavaScript ont été mises à jour pour corriger les vulnérabilités connues. Après la migration vers Tailwind CSS 4, l’interface nécessite Safari 16.4+, Chrome 111+ ou Firefox 128+.',
+    ],
     'container_image_publication_recovery' => [
         'title' => 'Publication des images de conteneur rétablie',
         'description' => 'Correction de l’enregistrement des services pour la nouvelle image de base S6 afin que les images puissent être construites et démarrer correctement les workers de file d’attente, le planificateur et le service TLS des agents.',

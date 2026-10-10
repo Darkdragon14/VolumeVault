@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Native Tailwind 4 styling',
+        'description' => 'The interface now uses native Tailwind 4 utilities and explicit light/dark colors instead of Tailwind 3 compatibility overrides, with updated form spacing and accessible focus states.',
+    ],
+    'consistent_page_background' => [
+        'title' => 'Consistent page backgrounds',
+        'description' => 'The shared background now stays consistent across pages and while scrolling, regardless of content height, in both light and dark themes.',
+    ],
+    'dependency_security_updates' => [
+        'title' => 'Dependency security updates',
+        'description' => 'Updated PHP and JavaScript dependencies to address known security advisories. The interface now requires Safari 16.4+, Chrome 111+ or Firefox 128+ following the Tailwind CSS 4 upgrade.',
+    ],
     'container_image_publication_recovery' => [
         'title' => 'Restored container image publication',
         'description' => 'Fixed service registration for the updated S6 base image so container images can build and start the queue workers, scheduler and agent TLS service correctly.',

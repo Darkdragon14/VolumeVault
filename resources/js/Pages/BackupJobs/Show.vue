@@ -58,36 +58,36 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
             <section class="card p-4 sm:p-5 lg:col-span-2">
                 <h2 class="mb-4 text-lg font-semibold">{{ t('Job info') }}</h2>
                 <dl class="grid gap-4 sm:grid-cols-2">
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('hostWorkflow.sourceHost') }}</dt><dd class="mt-1 break-words text-white"><HostIdentity :host="jobHost" :reason="jobHost?.backup_unavailable_reason" /></dd></div>
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="job.status" /></dd></div>
-                    <div v-if="job.configuration_source === 'docker_label'"><dt class="text-xs uppercase text-slate-400">{{ t('Configuration') }}</dt><dd class="mt-1 text-sky-200">{{ t('Managed by Docker labels') }}</dd></div>
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Source type') }}</dt><dd class="mt-1 text-white">{{ sourceTypeLabel(job) }}</dd></div>
-                    <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-white">{{ sourceLabel(job) }}</dd></div>
-                    <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 break-words text-white">{{ job.destination?.name }}</dd></div>
-                    <div class="min-w-0"><dt class="text-xs uppercase text-slate-400">{{ t('Schedule') }}</dt><dd class="mt-1 break-words text-white">{{ job.schedule_summary }}</dd></div>
-                    <div v-if="job.backup_filter_mode === 'include'"><dt class="text-xs uppercase text-slate-400">{{ t('Included paths') }}</dt><dd class="mt-1 break-all font-mono text-sm text-white">{{ job.backup_include_paths || t('Everything') }}</dd></div>
-                    <div v-else><dt class="text-xs uppercase text-slate-400">{{ t('Excluded files') }}</dt><dd class="mt-1 break-all font-mono text-sm text-white">{{ job.backup_exclude_regexp || t('None') }}</dd></div>
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Last run') }}</dt><dd class="mt-1 text-white">{{ formatDate(job.last_run_at) }}</dd></div>
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Next run') }}</dt><dd class="mt-1 text-white">{{ job.backup_job_group_id ? t('Managed by group') : formatDate(job.next_run_at) }}</dd></div>
-                    <div><dt class="text-xs uppercase text-slate-400">{{ t('Last backup size') }}</dt><dd class="mt-1 text-white">{{ formatBytes(lastSuccessfulBackup?.backup_size_bytes, t('Unknown')) }}</dd></div>
+                    <div><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('hostWorkflow.sourceHost') }}</dt><dd class="mt-1 wrap-break-word text-slate-900 dark:text-white"><HostIdentity :host="jobHost" :reason="jobHost?.backup_unavailable_reason" /></dd></div>
+                    <div><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Status') }}</dt><dd class="mt-1"><StatusBadge :status="job.status" /></dd></div>
+                    <div v-if="job.configuration_source === 'docker_label'"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Configuration') }}</dt><dd class="mt-1 text-sky-700 dark:text-sky-200">{{ t('Managed by Docker labels') }}</dd></div>
+                    <div><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Source type') }}</dt><dd class="mt-1 text-slate-900 dark:text-white">{{ sourceTypeLabel(job) }}</dd></div>
+                    <div class="min-w-0"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Source') }}</dt><dd class="mt-1 break-all text-slate-900 dark:text-white">{{ sourceLabel(job) }}</dd></div>
+                    <div class="min-w-0"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Destination') }}</dt><dd class="mt-1 wrap-break-word text-slate-900 dark:text-white">{{ job.destination?.name }}</dd></div>
+                    <div class="min-w-0"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Schedule') }}</dt><dd class="mt-1 wrap-break-word text-slate-900 dark:text-white">{{ job.schedule_summary }}</dd></div>
+                    <div v-if="job.backup_filter_mode === 'include'"><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Included paths') }}</dt><dd class="mt-1 break-all font-mono text-sm text-slate-900 dark:text-white">{{ job.backup_include_paths || t('Everything') }}</dd></div>
+                    <div v-else><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Excluded files') }}</dt><dd class="mt-1 break-all font-mono text-sm text-slate-900 dark:text-white">{{ job.backup_exclude_regexp || t('None') }}</dd></div>
+                    <div><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Last run') }}</dt><dd class="mt-1 text-slate-900 dark:text-white">{{ formatDate(job.last_run_at) }}</dd></div>
+                    <div><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Next run') }}</dt><dd class="mt-1 text-slate-900 dark:text-white">{{ job.backup_job_group_id ? t('Managed by group') : formatDate(job.next_run_at) }}</dd></div>
+                    <div><dt class="text-xs uppercase text-slate-500 dark:text-slate-400">{{ t('Last backup size') }}</dt><dd class="mt-1 text-slate-900 dark:text-white">{{ formatBytes(lastSuccessfulBackup?.backup_size_bytes, t('Unknown')) }}</dd></div>
                 </dl>
             </section>
             <section class="card p-4 sm:p-5">
                 <h2 class="mb-3 text-lg font-semibold">{{ t('Last error') }}</h2>
-                <p v-if="job.label_reconciliation_error || job.last_error" class="break-words rounded-xl bg-rose-400/10 p-3 text-sm text-rose-100">{{ job.label_reconciliation_error || job.last_error }}</p>
-                <p v-else class="text-sm text-slate-400">{{ t('No current error.') }}</p>
+                <p v-if="job.label_reconciliation_error || job.last_error" class="wrap-break-word rounded-xl bg-rose-400/10 p-3 text-sm text-rose-700 dark:text-rose-100">{{ job.label_reconciliation_error || job.last_error }}</p>
+                <p v-else class="text-sm text-slate-500 dark:text-slate-400">{{ t('No current error.') }}</p>
             </section>
         </div>
 
         <HostScope :hosts="hosts" :filters="filters" preserve-state />
         <section class="card mt-6 overflow-hidden">
-            <div class="flex gap-1 border-b border-white/10 p-2" role="tablist">
+            <div class="flex gap-1 border-b border-slate-200 dark:border-white/10 p-2" role="tablist">
                 <button
                     type="button"
                     role="tab"
                     :aria-selected="activeTab === 'runs'"
                     class="rounded-lg px-4 py-2 text-sm font-medium transition"
-                    :class="activeTab === 'runs' ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'"
+                    :class="activeTab === 'runs' ? 'bg-slate-100/90 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/90 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'"
                     @click="activeTab = 'runs'"
                 >
                     {{ t('Run history') }}
@@ -97,7 +97,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
                     role="tab"
                     :aria-selected="activeTab === 'restores'"
                     class="rounded-lg px-4 py-2 text-sm font-medium transition"
-                    :class="activeTab === 'restores' ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'"
+                    :class="activeTab === 'restores' ? 'bg-slate-100/90 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/90 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'"
                     @click="activeTab = 'restores'"
                 >
                     {{ t('Restore history') }}
@@ -106,88 +106,88 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
 
             <div v-show="activeTab === 'runs'" role="tabpanel">
                 <div v-if="runs.data.length">
-                    <div class="divide-y divide-white/10 md:hidden">
-                        <article v-for="run in runs.data" :key="run.id" class="space-y-3 p-4">
+                    <div class="divide-y divide-slate-200 dark:divide-white/10 md:hidden">
+                        <article v-for="run in runs.data" :key="run.id" class="flex flex-col gap-3 p-4">
                             <HostIdentity :host="run.docker_host" />
-                            <p class="break-all text-sm text-slate-400">{{ run.source_name }}</p>
+                            <p class="break-all text-sm text-slate-500 dark:text-slate-400">{{ run.source_name }}</p>
                             <div class="flex items-center justify-between gap-3">
                                 <StatusBadge :status="run.status" />
-                                <Link :href="`/backup-runs/${run.id}`" class="text-sm text-sky-300 hover:text-sky-200">{{ t('View logs') }}</Link>
+                                <Link :href="`/backup-runs/${run.id}`" class="text-sm text-sky-700 dark:text-sky-300 hover:text-sky-600 dark:hover:text-sky-200">{{ t('View logs') }}</Link>
                             </div>
                             <dl class="grid grid-cols-2 gap-3 text-sm">
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Trigger') }}</dt><dd class="mt-1 text-slate-200">{{ t(run.trigger) }}</dd></div>
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Duration') }}</dt><dd class="mt-1 text-slate-200">{{ run.duration_seconds ?? '-' }}s</dd></div>
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Size') }}</dt><dd class="mt-1 text-slate-200">{{ formatBytes(run.backup_size_bytes, t('Unknown')) }}</dd></div>
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Initiated by') }}</dt><dd class="mt-1 text-slate-200">{{ run.initiated_by?.name ?? '—' }}</dd></div>
-                                <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Started') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(run.started_at) }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Trigger') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ t(run.trigger) }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Duration') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ run.duration_seconds ?? '-' }}s</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Size') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatBytes(run.backup_size_bytes, t('Unknown')) }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Initiated by') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ run.initiated_by?.name ?? '—' }}</dd></div>
+                                <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Started') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatDate(run.started_at) }}</dd></div>
                             </dl>
                         </article>
                     </div>
                     <div class="hidden overflow-x-auto md:block">
-                    <table class="min-w-full divide-y divide-white/10 text-sm">
-                        <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <table class="min-w-full divide-y divide-slate-200 dark:divide-white/10 text-sm">
+                        <thead class="bg-white/80 dark:bg-white/5 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             <tr><th class="px-4 py-3">{{ t('Status') }}</th><th class="px-4 py-3">{{ t('Trigger') }}</th><th class="px-4 py-3">{{ t('Initiated by') }}</th><th class="px-4 py-3">{{ t('Started') }}</th><th class="px-4 py-3">{{ t('Duration') }}</th><th class="px-4 py-3">{{ t('Size') }}</th><th class="px-4 py-3">{{ t('Logs') }}</th></tr>
                         </thead>
-                        <tbody class="divide-y divide-white/10">
+                        <tbody class="divide-y divide-slate-200 dark:divide-white/10">
                             <tr v-for="run in runs.data" :key="run.id">
-                                <td class="px-4 py-3"><StatusBadge :status="run.status" /><HostIdentity :host="run.docker_host" /><p class="break-all text-xs text-slate-400">{{ run.source_name }}</p></td>
-                                <td class="px-4 py-3 text-slate-300">{{ t(run.trigger) }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ run.initiated_by?.name ?? '—' }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ formatDate(run.started_at) }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ run.duration_seconds ?? '-' }}s</td>
-                                <td class="px-4 py-3 text-slate-300">{{ formatBytes(run.backup_size_bytes, t('Unknown')) }}</td>
-                                <td class="px-4 py-3"><Link :href="`/backup-runs/${run.id}`" class="text-sky-300 hover:text-sky-200">{{ t('View logs') }}</Link></td>
+                                <td class="px-4 py-3"><StatusBadge :status="run.status" /><HostIdentity :host="run.docker_host" /><p class="break-all text-xs text-slate-500 dark:text-slate-400">{{ run.source_name }}</p></td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ t(run.trigger) }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ run.initiated_by?.name ?? '—' }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ formatDate(run.started_at) }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ run.duration_seconds ?? '-' }}s</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ formatBytes(run.backup_size_bytes, t('Unknown')) }}</td>
+                                <td class="px-4 py-3"><Link :href="`/backup-runs/${run.id}`" class="text-sky-700 dark:text-sky-300 hover:text-sky-600 dark:hover:text-sky-200">{{ t('View logs') }}</Link></td>
                             </tr>
                         </tbody>
                     </table>
                     </div>
                     <Pagination :data="runs" :base-url="`/backup-jobs/${job.id}`" page-param="runs_page" :extra-params="{ docker_host_id: filters?.docker_host_id ?? undefined }" />
                 </div>
-                <p v-else class="p-5 text-sm text-slate-400">{{ t('No runs yet.') }}</p>
+                <p v-else class="p-5 text-sm text-slate-500 dark:text-slate-400">{{ t('No runs yet.') }}</p>
             </div>
 
             <div v-show="activeTab === 'restores'" role="tabpanel">
                 <div v-if="restoreRuns.data.length">
-                    <div class="divide-y divide-white/10 md:hidden">
-                        <article v-for="run in restoreRuns.data" :key="run.id" class="space-y-3 p-4">
-                            <p class="text-xs text-slate-400">{{ t('hostWorkflow.sourceHost') }}</p><HostIdentity :host="run.source_docker_host" />
-                            <p class="text-xs text-slate-400">{{ t('hostWorkflow.targetHost') }}</p><HostIdentity :host="run.target_docker_host" />
+                    <div class="divide-y divide-slate-200 dark:divide-white/10 md:hidden">
+                        <article v-for="run in restoreRuns.data" :key="run.id" class="flex flex-col gap-3 p-4">
+                            <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('hostWorkflow.sourceHost') }}</p><HostIdentity :host="run.source_docker_host" />
+                            <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('hostWorkflow.targetHost') }}</p><HostIdentity :host="run.target_docker_host" />
                             <div class="flex items-center justify-between gap-3">
                                 <StatusBadge :status="run.status" />
-                                <Link :href="`/restore-runs/${run.id}`" class="text-sm text-sky-300 hover:text-sky-200">{{ t('View details') }}</Link>
+                                <Link :href="`/restore-runs/${run.id}`" class="text-sm text-sky-700 dark:text-sky-300 hover:text-sky-600 dark:hover:text-sky-200">{{ t('View details') }}</Link>
                             </div>
                             <dl class="grid grid-cols-2 gap-3 text-sm">
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Mode') }}</dt><dd class="mt-1 text-slate-200">{{ t(run.mode) }}</dd></div>
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Duration') }}</dt><dd class="mt-1 text-slate-200">{{ run.duration_seconds ?? '-' }}s</dd></div>
-                                <div class="min-w-0"><dt class="text-xs uppercase text-slate-500">{{ t('Source') }}</dt><dd class="mt-1 break-all text-slate-200">{{ run.source_volume_name }}</dd></div>
-                                <div class="min-w-0"><dt class="text-xs uppercase text-slate-500">{{ t('Target') }}</dt><dd class="mt-1 break-all text-slate-200">{{ run.target_volume_name }}</dd></div>
-                                <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Initiated by') }}</dt><dd class="mt-1 text-slate-200">{{ run.initiated_by?.name ?? '—' }}</dd></div>
-                                <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Started') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(run.started_at) }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Mode') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ t(run.mode) }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Duration') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ run.duration_seconds ?? '-' }}s</dd></div>
+                                <div class="min-w-0"><dt class="text-xs uppercase text-slate-500">{{ t('Source') }}</dt><dd class="mt-1 break-all text-slate-800 dark:text-slate-200">{{ run.source_volume_name }}</dd></div>
+                                <div class="min-w-0"><dt class="text-xs uppercase text-slate-500">{{ t('Target') }}</dt><dd class="mt-1 break-all text-slate-800 dark:text-slate-200">{{ run.target_volume_name }}</dd></div>
+                                <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Initiated by') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ run.initiated_by?.name ?? '—' }}</dd></div>
+                                <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Started') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatDate(run.started_at) }}</dd></div>
                             </dl>
                         </article>
                     </div>
                     <div class="hidden overflow-x-auto md:block">
-                    <table class="min-w-full divide-y divide-white/10 text-sm">
-                        <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <table class="min-w-full divide-y divide-slate-200 dark:divide-white/10 text-sm">
+                        <thead class="bg-white/80 dark:bg-white/5 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             <tr><th class="px-4 py-3">{{ t('Status') }}</th><th class="px-4 py-3">{{ t('Mode') }}</th><th class="px-4 py-3">{{ t('Source') }}</th><th class="px-4 py-3">{{ t('Target') }}</th><th class="px-4 py-3">{{ t('Initiated by') }}</th><th class="px-4 py-3">{{ t('Started') }}</th><th class="px-4 py-3">{{ t('Duration') }}</th><th class="px-4 py-3">{{ t('Details') }}</th></tr>
                         </thead>
-                        <tbody class="divide-y divide-white/10">
+                        <tbody class="divide-y divide-slate-200 dark:divide-white/10">
                             <tr v-for="run in restoreRuns.data" :key="run.id">
                                 <td class="px-4 py-3"><StatusBadge :status="run.status" /></td>
-                                <td class="px-4 py-3 text-slate-300">{{ t(run.mode) }}</td>
-                                <td class="px-4 py-3 break-all text-slate-300">{{ run.source_volume_name }}<HostIdentity :host="run.source_docker_host" /></td>
-                                <td class="px-4 py-3 break-all text-slate-300">{{ run.target_volume_name }}<HostIdentity :host="run.target_docker_host" /></td>
-                                <td class="px-4 py-3 text-slate-300">{{ run.initiated_by?.name ?? '—' }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ formatDate(run.started_at) }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ run.duration_seconds ?? '-' }}s</td>
-                                <td class="px-4 py-3"><Link :href="`/restore-runs/${run.id}`" class="text-sky-300 hover:text-sky-200">{{ t('View details') }}</Link></td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ t(run.mode) }}</td>
+                                <td class="px-4 py-3 break-all text-slate-600 dark:text-slate-300">{{ run.source_volume_name }}<HostIdentity :host="run.source_docker_host" /></td>
+                                <td class="px-4 py-3 break-all text-slate-600 dark:text-slate-300">{{ run.target_volume_name }}<HostIdentity :host="run.target_docker_host" /></td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ run.initiated_by?.name ?? '—' }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ formatDate(run.started_at) }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ run.duration_seconds ?? '-' }}s</td>
+                                <td class="px-4 py-3"><Link :href="`/restore-runs/${run.id}`" class="text-sky-700 dark:text-sky-300 hover:text-sky-600 dark:hover:text-sky-200">{{ t('View details') }}</Link></td>
                             </tr>
                         </tbody>
                     </table>
                     </div>
                     <Pagination :data="restoreRuns" :base-url="`/backup-jobs/${job.id}`" page-param="restores_page" :extra-params="{ docker_host_id: filters?.docker_host_id ?? undefined }" />
                 </div>
-                <p v-else class="p-5 text-sm text-slate-400">{{ t('No restores yet.') }}</p>
+                <p v-else class="p-5 text-sm text-slate-500 dark:text-slate-400">{{ t('No restores yet.') }}</p>
             </div>
         </section>
     </AppLayout>

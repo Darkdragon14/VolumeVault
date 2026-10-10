@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'native_tailwind_styles' => [
+        'title' => 'Natív Tailwind 4 stílusok',
+        'description' => 'A felület most natív Tailwind 4 segédosztályokat és explicit világos/sötét színeket használ a Tailwind 3 kompatibilitási felülírások helyett, frissített űrlaptérközökkel és akadálymentes fókuszállapotokkal.',
+    ],
+    'consistent_page_background' => [
+        'title' => 'Egységes oldalháttér',
+        'description' => 'A közös háttér most az oldalak között és görgetéskor is egységes marad, a tartalom magasságától függetlenül, világos és sötét témában egyaránt.',
+    ],
+    'dependency_security_updates' => [
+        'title' => 'Függőségek biztonsági frissítése',
+        'description' => 'A PHP- és JavaScript-függőségek frissültek az ismert sérülékenységek javításához. A Tailwind CSS 4 frissítése után a felület Safari 16.4+, Chrome 111+ vagy Firefox 128+ böngészőt igényel.',
+    ],
     'container_image_publication_recovery' => [
         'title' => 'A konténerképek közzététele helyreállítva',
         'description' => 'Javítottuk a szolgáltatások regisztrációját a frissített S6-alapképhez, hogy a konténerképek felépíthetők legyenek, és a feldolgozók, az ütemező és az ügynökök TLS-szolgáltatása megfelelően elinduljon.',
