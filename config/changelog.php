@@ -1,21 +1,26 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'native_tailwind_styles',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'consistent_page_background',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'dependency_security_updates',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.4' => [
+            'date' => '2026-10-12',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.4',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'native_tailwind_styles',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'consistent_page_background',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'dependency_security_updates',
+                ],
+            ],
+        ],
         'v2.0.3' => [
             'date' => '2026-10-08',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.3',
