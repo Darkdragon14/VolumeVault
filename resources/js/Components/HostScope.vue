@@ -44,9 +44,9 @@ const refresh = () => { if (!pending.value) router.reload(); };
 </script>
 
 <template>
-    <section class="card mb-4 space-y-3 p-4">
+    <section class="card mb-4 flex flex-col gap-3 p-4">
         <div class="flex flex-wrap items-end gap-3">
-            <label class="block min-w-48 space-y-1">
+            <label class="flex min-w-48 flex-col gap-1">
                 <span class="label">{{ t('hostScope.scope') }}</span>
                 <select ref="hostSelect" class="input" :disabled="pending" :value="filters?.docker_host_id ?? ''" @change="selectHost">
                     <option value="">{{ t('hostScope.all') }}</option>
@@ -55,7 +55,7 @@ const refresh = () => { if (!pending.value) router.reload(); };
             </label>
             <button class="btn-secondary" type="button" :disabled="pending" @click="refresh">{{ t('hostScope.refresh') }}</button>
         </div>
-        <p class="text-sm text-slate-400">{{ t('hostScope.snapshot') }}</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('hostScope.snapshot') }}</p>
         <div class="flex flex-wrap gap-4">
             <HostIdentity v-for="host in selectedHosts" :key="host.id" :host="host" inventory />
         </div>

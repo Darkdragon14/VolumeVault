@@ -100,8 +100,8 @@ const visiblePages = computed(() => {
 </script>
 
 <template>
-    <div v-if="total > 0" class="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 px-4 py-3">
-        <div class="flex items-center gap-2 text-sm text-slate-400">
+    <div v-if="total > 0" class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 dark:border-white/10 px-4 py-3">
+        <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>{{ t('{count} results', { count: total }) }}</span>
             <span class="text-slate-600">·</span>
             <label class="flex items-center gap-1.5">
@@ -109,7 +109,7 @@ const visiblePages = computed(() => {
                 <select
                     :disabled="disabled"
                     :value="currentPerPage"
-                    class="input !w-[5rem] !rounded-lg !px-2 !py-1 !text-xs dark:[color-scheme:dark]"
+                    class="input w-[5rem]! rounded-lg! px-2! py-1! text-xs! dark:[color-scheme:dark]"
                     @change="changePerPage"
                 >
                     <option v-for="option in pageOptions" :key="option" :value="option" class="bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-100">{{ perPageLabel(option) }}</option>
@@ -120,7 +120,7 @@ const visiblePages = computed(() => {
         <nav v-if="totalPages > 1" class="flex items-center gap-1" :aria-label="t('Pagination')">
             <button
                 type="button"
-                class="rounded px-2.5 py-1.5 text-sm text-slate-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                class="rounded-sm px-2.5 py-1.5 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                 :disabled="disabled || currentPage === 1"
                 @click="goToPage(currentPage - 1)"
             >
@@ -133,8 +133,8 @@ const visiblePages = computed(() => {
                     v-else
                     :disabled="disabled"
                     type="button"
-                    class="min-w-[2rem] rounded px-2.5 py-1.5 text-sm font-medium"
-                    :class="page === currentPage ? 'bg-sky-500/20 text-sky-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'"
+                    class="min-w-[2rem] rounded-sm px-2.5 py-1.5 text-sm font-medium"
+                    :class="page === currentPage ? 'bg-sky-500/20 text-sky-700 dark:text-sky-200' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'"
                     @click="goToPage(page)"
                 >
                     {{ page }}
@@ -143,7 +143,7 @@ const visiblePages = computed(() => {
 
             <button
                 type="button"
-                class="rounded px-2.5 py-1.5 text-sm text-slate-400 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                class="rounded-sm px-2.5 py-1.5 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                 :disabled="disabled || currentPage === totalPages"
                 @click="goToPage(currentPage + 1)"
             >

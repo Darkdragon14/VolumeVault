@@ -100,10 +100,10 @@ const backupStateLabel = (state: string) => ({
 }[state] || t('Unknown'));
 
 const backupStateClass = (state: string) => ({
-    backed_up: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-100',
-    configured: 'border-amber-300/30 bg-amber-300/10 text-amber-100',
-    unprotected: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
-}[state] || 'border-slate-300/20 bg-slate-300/10 text-slate-200');
+    backed_up: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-700 dark:text-emerald-100',
+    configured: 'border-amber-300/30 bg-amber-300/10 text-amber-800 dark:text-amber-100',
+    unprotected: 'border-rose-300/30 bg-rose-300/10 text-rose-700 dark:text-rose-100',
+}[state] || 'border-slate-300/20 bg-slate-300/10 text-slate-800 dark:text-slate-200');
 
 const stackConfigurationLabel = (state: string) => ({
     configured: t('Stack configured'),
@@ -112,10 +112,10 @@ const stackConfigurationLabel = (state: string) => ({
 }[state] || t('Unknown'));
 
 const stackConfigurationClass = (state: string) => ({
-    configured: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-100',
-    partially_configured: 'border-amber-300/30 bg-amber-300/10 text-amber-100',
-    not_configured: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
-}[state] || 'border-slate-300/20 bg-slate-300/10 text-slate-200');
+    configured: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-700 dark:text-emerald-100',
+    partially_configured: 'border-amber-300/30 bg-amber-300/10 text-amber-800 dark:text-amber-100',
+    not_configured: 'border-rose-300/30 bg-rose-300/10 text-rose-700 dark:text-rose-100',
+}[state] || 'border-slate-300/20 bg-slate-300/10 text-slate-800 dark:text-slate-200');
 
 const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volume.name)}&docker_host_id=${volume.docker_host_id}`;
 </script>
@@ -128,10 +128,10 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
                 <div v-if="stacks.length" class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                     <input v-model="search" class="input sm:w-72" data-list-search :aria-label="t('Search')" :placeholder="t('Search stacks and volumes')">
                     <div class="flex items-center gap-3">
-                        <p class="whitespace-nowrap text-sm text-slate-400">{{ t('{count} results', { count: filteredStacks.length }) }}</p>
+                        <p class="whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{{ t('{count} results', { count: filteredStacks.length }) }}</p>
                         <button type="button" class="btn-secondary gap-2" :aria-expanded="filtersVisible" :aria-label="filtersVisible ? t('Hide filters') : t('Show filters')" @click="filtersVisible = !filtersVisible">
                             <span>{{ t('Filters') }}</span>
-                            <span v-if="activeAdvancedFilterCount" class="rounded-full bg-sky-400/20 px-2 py-0.5 text-xs text-sky-100">{{ activeAdvancedFilterCount }}</span>
+                            <span v-if="activeAdvancedFilterCount" class="rounded-full bg-sky-400/20 px-2 py-0.5 text-xs text-sky-700 dark:text-sky-100">{{ activeAdvancedFilterCount }}</span>
                             <span class="h-2 w-2 border-b-2 border-r-2 border-current transition" :class="filtersVisible ? 'rotate-[225deg]' : 'rotate-45'" aria-hidden="true"></span>
                         </button>
                     </div>
@@ -142,7 +142,7 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
 
         <HostScope :hosts="hosts" :filters="filters" :query="{ search, backup_status: backupFilter }" />
         <div v-if="stacks.length && filtersVisible" class="card mb-4 p-4">
-            <label class="block max-w-sm space-y-1">
+            <label class="max-w-sm flex flex-col gap-1">
                 <span class="label">{{ t('Backup status') }}</span>
                 <select v-model="backupFilter" class="input">
                     <option value="">{{ t('Any backup status') }}</option>
@@ -154,49 +154,49 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
             <button type="button" class="btn-secondary mt-3" :disabled="!hasActiveFilters" @click="resetFilters">{{ t('Reset filters') }}</button>
         </div>
 
-        <div v-if="filteredStacks.length" class="space-y-6">
+        <div v-if="filteredStacks.length" class="flex flex-col gap-6">
             <section v-for="stack in filteredStacks" :key="stack.identity" class="card overflow-hidden">
-                <div class="border-b border-white/10 p-5">
+                <div class="border-b border-slate-200 dark:border-white/10 p-5">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-3">
-                                <h2 class="break-words text-xl font-semibold text-white">{{ stack.name || t('No stack') }}</h2>
+                                <h2 class="wrap-break-word text-xl font-semibold text-slate-900 dark:text-white">{{ stack.name || t('No stack') }}</h2>
                                 <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold" :class="stackConfigurationClass(stack.configuration_state)">{{ stackConfigurationLabel(stack.configuration_state) }}</span>
                             </div>
                             <HostIdentity :host="stack.docker_host" :reason="stack.backup_unavailable_reason" />
-                            <p class="mt-1 text-sm text-slate-400">{{ t('hostScope.volumeLabels') }} · {{ t('hostScope.containers') }}: {{ stack.container_count ?? t('Unknown') }}</p>
-                            <p class="mt-1 text-sm text-slate-400">{{ t('{count} volumes', { count: stack.total_volumes }) }}</p>
+                            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('hostScope.volumeLabels') }} · {{ t('hostScope.containers') }}: {{ stack.container_count ?? t('Unknown') }}</p>
+                            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('{count} volumes', { count: stack.total_volumes }) }}</p>
                             <div v-if="stack.canBackup && stack.existing_volumes > 0" class="mt-3">
                                 <button v-if="isFullyConfigured(stack)" type="button" class="btn-secondary gap-2" :disabled="processing" @click="runAll(stack)">{{ t('Run all jobs') }}</button>
                                 <button v-else type="button" class="btn-secondary gap-2" :disabled="processing || !destinationsForStack(stack).length" @click="openBackup(stack)">{{ t('Back up stack') }}</button>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:min-w-[30rem]">
-                            <div class="rounded-xl bg-white/5 p-3"><p class="text-xs uppercase text-slate-500">{{ t('Backed up') }}</p><p class="mt-1 text-lg font-semibold text-emerald-100">{{ stack.backed_up_volumes }}</p></div>
-                            <div class="rounded-xl bg-white/5 p-3"><p class="text-xs uppercase text-slate-500">{{ t('Pending backup') }}</p><p class="mt-1 text-lg font-semibold text-amber-100">{{ stack.configured_volumes }}</p></div>
-                            <div class="rounded-xl bg-white/5 p-3"><p class="text-xs uppercase text-slate-500">{{ t('Unprotected') }}</p><p class="mt-1 text-lg font-semibold text-rose-100">{{ stack.unprotected_volumes }}</p></div>
+                            <div class="rounded-xl bg-white/80 dark:bg-white/5 p-3"><p class="text-xs uppercase text-slate-500">{{ t('Backed up') }}</p><p class="mt-1 text-lg font-semibold text-emerald-700 dark:text-emerald-100">{{ stack.backed_up_volumes }}</p></div>
+                            <div class="rounded-xl bg-white/80 dark:bg-white/5 p-3"><p class="text-xs uppercase text-slate-500">{{ t('Pending backup') }}</p><p class="mt-1 text-lg font-semibold text-amber-800 dark:text-amber-100">{{ stack.configured_volumes }}</p></div>
+                            <div class="rounded-xl bg-white/80 dark:bg-white/5 p-3"><p class="text-xs uppercase text-slate-500">{{ t('Unprotected') }}</p><p class="mt-1 text-lg font-semibold text-rose-700 dark:text-rose-100">{{ stack.unprotected_volumes }}</p></div>
                         </div>
                     </div>
                     <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Configured jobs') }}</dt><dd class="mt-1 text-slate-200">{{ stack.configured_job_volumes }} / {{ stack.existing_volumes }}</dd></div>
-                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Missing volumes') }}</dt><dd class="mt-1 text-slate-200">{{ stack.missing_volumes }}</dd></div>
-                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Last backup') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(stack.last_backup_at) }}</dd></div>
-                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Backup size') }}</dt><dd class="mt-1 text-slate-200">{{ formatBytes(stack.last_backup_size_bytes, t('Unknown')) }}</dd></div>
+                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Configured jobs') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ stack.configured_job_volumes }} / {{ stack.existing_volumes }}</dd></div>
+                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Missing volumes') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ stack.missing_volumes }}</dd></div>
+                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Last backup') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatDate(stack.last_backup_at) }}</dd></div>
+                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Backup size') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatBytes(stack.last_backup_size_bytes, t('Unknown')) }}</dd></div>
                     </dl>
                 </div>
 
-                <div class="space-y-3 p-3 md:hidden">
-                    <article v-for="volume in stack.volumes" :key="volume.id" class="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div class="flex flex-col gap-3 p-3 md:hidden">
+                    <article v-for="volume in stack.volumes" :key="volume.id" class="flex flex-col gap-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4">
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
-                                <h3 class="break-all font-semibold text-white">{{ volume.name }}</h3>
-                                <p class="mt-1 text-sm text-slate-400">{{ volume.driver || t('Unknown') }}</p>
+                                <h3 class="break-all font-semibold text-slate-900 dark:text-white">{{ volume.name }}</h3>
+                                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ volume.driver || t('Unknown') }}</p>
                             </div>
                             <StatusBadge :status="volume.exists ? 'active' : 'error'" />
                         </div>
                         <dl class="grid gap-3 text-sm">
                             <div><dt class="text-xs uppercase text-slate-500">{{ t('Backup status') }}</dt><dd class="mt-1"><span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold" :class="backupStateClass(volume.backup_state)">{{ backupStateLabel(volume.backup_state) }}</span></dd></div>
-                            <div v-if="volume.last_backup_at"><dt class="text-xs uppercase text-slate-500">{{ t('Last backup') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(volume.last_backup_at) }} / {{ formatBytes(volume.last_backup_size_bytes, t('Unknown')) }}</dd></div>
+                            <div v-if="volume.last_backup_at"><dt class="text-xs uppercase text-slate-500">{{ t('Last backup') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatDate(volume.last_backup_at) }} / {{ formatBytes(volume.last_backup_size_bytes, t('Unknown')) }}</dd></div>
                         </dl>
                         <div class="flex flex-wrap gap-2">
                             <ActionIcon v-if="volume.canBackup" :label="t('Create backup job')" icon="archive" :href="volume.create_job_url" />
@@ -206,8 +206,8 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
                 </div>
 
                 <div class="hidden overflow-x-auto md:block">
-                    <table class="min-w-full divide-y divide-white/10 text-sm">
-                        <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <table class="min-w-full divide-y divide-slate-200 dark:divide-white/10 text-sm">
+                        <thead class="bg-white/80 dark:bg-white/5 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             <tr>
                                 <th class="px-4 py-3">{{ t('Name') }}</th>
                                 <th class="px-4 py-3">{{ t('Driver') }}</th>
@@ -216,15 +216,15 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
                                 <th class="px-4 py-3">{{ t('Actions') }}</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-white/10">
+                        <tbody class="divide-y divide-slate-200 dark:divide-white/10">
                             <tr v-for="volume in stack.volumes" :key="volume.id" class="hover:bg-slate-100 dark:hover:bg-white/[0.03]">
-                                <td class="px-4 py-3 font-medium text-white">{{ volume.name }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ volume.driver || t('Unknown') }}</td>
+                                <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">{{ volume.name }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ volume.driver || t('Unknown') }}</td>
                                 <td class="px-4 py-3"><StatusBadge :status="volume.exists ? 'active' : 'error'" /></td>
                                 <td class="px-4 py-3">
                                     <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold" :class="backupStateClass(volume.backup_state)">{{ backupStateLabel(volume.backup_state) }}</span>
-                                    <p v-if="volume.last_backup_at" class="mt-1 whitespace-nowrap text-xs text-slate-400">{{ formatDate(volume.last_backup_at) }} / {{ formatBytes(volume.last_backup_size_bytes, t('Unknown')) }}</p>
-                                    <p v-else class="mt-1 whitespace-nowrap text-xs text-slate-400">{{ t('Backup jobs: {count}', { count: volume.related_jobs_count }) }}</p>
+                                    <p v-if="volume.last_backup_at" class="mt-1 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{{ formatDate(volume.last_backup_at) }} / {{ formatBytes(volume.last_backup_size_bytes, t('Unknown')) }}</p>
+                                    <p v-else class="mt-1 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{{ t('Backup jobs: {count}', { count: volume.related_jobs_count }) }}</p>
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-2">
@@ -245,13 +245,13 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
 
         <div v-if="backupTarget?.canBackup" class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4" @click.self="closeBackup">
             <div role="dialog" aria-modal="true" aria-labelledby="stack-backup-title" class="card w-full max-w-lg p-5">
-                <h2 id="stack-backup-title" class="text-lg font-semibold text-white">{{ t('Back up stack') }}</h2>
-                <p class="mt-1 break-words text-sm text-slate-400">{{ backupTarget.name || t('No stack') }}</p>
+                <h2 id="stack-backup-title" class="text-lg font-semibold text-slate-900 dark:text-white">{{ t('Back up stack') }}</h2>
+                <p class="mt-1 wrap-break-word text-sm text-slate-500 dark:text-slate-400">{{ backupTarget.name || t('No stack') }}</p>
                 <HostIdentity :host="backupTarget.docker_host" />
-                <p class="mt-3 text-sm text-slate-300">{{ t('stackBackup.details') }}</p>
+                <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ t('stackBackup.details') }}</p>
 
-                <div class="mt-4 space-y-4">
-                    <label class="block space-y-1">
+                <div class="mt-4 flex flex-col gap-4">
+                    <label class="flex flex-col gap-1">
                         <span class="label">{{ t('Destination') }}</span>
                         <select v-model="backupForm.backup_destination_id" class="input">
                             <option v-for="destination in eligibleDestinations" :key="destination.id" :value="destination.id">{{ destination.name }} / {{ destination.target_label || destination.bucket }}</option>
@@ -261,7 +261,7 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
                     <div>
                         <span class="label">{{ t('Schedule') }}</span>
                         <div class="mt-1 grid gap-2 sm:grid-cols-4">
-                            <label v-for="type in scheduleTypes" :key="type" class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-2 text-sm capitalize">
+                            <label v-for="type in scheduleTypes" :key="type" class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 p-2 text-sm capitalize">
                                 <input v-model="backupForm.schedule_type" type="radio" :value="type" class="text-sky-400">
                                 {{ t(type) }}
                             </label>
@@ -269,25 +269,25 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
                     </div>
 
                     <div class="grid gap-3 sm:grid-cols-2">
-                        <label v-if="backupForm.schedule_type === 'hourly'" class="space-y-1">
+                        <label v-if="backupForm.schedule_type === 'hourly'" class="flex flex-col gap-1">
                             <span class="label">{{ t('Every X hours') }}</span>
                             <input v-model="backupForm.schedule_config.everyHours" class="input" type="number" min="1" max="24">
                         </label>
-                        <label v-if="backupForm.schedule_type === 'daily' || backupForm.schedule_type === 'weekly'" class="space-y-1">
+                        <label v-if="backupForm.schedule_type === 'daily' || backupForm.schedule_type === 'weekly'" class="flex flex-col gap-1">
                             <span class="label">{{ t('Time') }}</span>
                             <input v-model="backupForm.schedule_config.time" class="input" type="time">
                         </label>
-                        <label v-if="backupForm.schedule_type === 'weekly'" class="space-y-1">
+                        <label v-if="backupForm.schedule_type === 'weekly'" class="flex flex-col gap-1">
                             <span class="label">{{ t('Day of week') }}</span>
                             <select v-model="backupForm.schedule_config.dayOfWeek" class="input">
                                 <option v-for="day in days" :key="day" :value="day">{{ t(day) }}</option>
                             </select>
                         </label>
-                        <label v-if="backupForm.schedule_type === 'cron'" class="space-y-1 sm:col-span-2">
+                        <label v-if="backupForm.schedule_type === 'cron'" class="flex flex-col gap-1 sm:col-span-2">
                             <span class="label">{{ t('Cron expression') }}</span>
                             <input v-model="backupForm.schedule_config.expression" class="input" placeholder="0 2 * * *">
                         </label>
-                        <label class="space-y-1 sm:col-span-2">
+                        <label class="flex flex-col gap-1 sm:col-span-2">
                             <span class="label">{{ t('Timezone') }}</span>
                             <select v-model="backupForm.timezone" class="input">
                                 <option value="">{{ t('Application default ({timezone})', { timezone: appTimezone }) }}</option>

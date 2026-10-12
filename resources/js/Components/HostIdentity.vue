@@ -14,7 +14,7 @@ const reasons: Record<string, string> = {
 </script>
 
 <template>
-    <div class="break-words text-xs font-normal text-slate-400">
+    <div class="wrap-break-word text-xs font-normal text-slate-500 dark:text-slate-400">
         <span>{{ host?.name ?? t('Unknown') }}<template v-if="host?.id"> · #{{ host.id }}</template></span>
         <template v-if="inventory">
             <span> · {{ host?.status ? t(`dockerHosts.status.${host.status}`) : t('Unknown') }}</span>

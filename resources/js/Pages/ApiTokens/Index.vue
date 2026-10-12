@@ -33,19 +33,19 @@ const revoke = (id: number) => confirm(t('Revoke this API token?')) && router.de
 <template>
     <Head :title="t('API tokens')" />
     <AppLayout :title="t('API tokens')" :subtitle="t('Issue scoped Bearer tokens for external automation.')">
-        <div v-if="flash.api_token" class="mb-6 rounded-2xl border border-amber-300/40 bg-amber-300/10 p-4 text-sm text-amber-50">
+        <div v-if="flash.api_token" class="mb-6 rounded-2xl border border-amber-300/40 bg-amber-300/10 p-4 text-sm text-amber-800 dark:text-amber-50">
             <p class="font-semibold">{{ t('Copy this token now. It will not be shown again.') }}</p>
-            <code class="mt-3 block overflow-x-auto rounded-xl bg-slate-950/80 p-3 text-xs text-amber-100">{{ flash.api_token }}</code>
+            <code class="mt-3 block overflow-x-auto rounded-xl bg-white/90 dark:bg-slate-950/80 p-3 text-xs text-amber-800 dark:text-amber-100">{{ flash.api_token }}</code>
         </div>
 
         <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-            <form class="card space-y-5 p-4 sm:p-6" @submit.prevent="submit">
+            <form class="card flex flex-col gap-5 p-4 sm:p-6" @submit.prevent="submit">
                 <div>
-                    <h2 class="text-lg font-semibold text-white">{{ t('Create token') }}</h2>
-                    <p class="mt-1 text-sm text-slate-400">{{ t('Use Bearer tokens for external API calls. Prefer read-only tokens unless writes are required.') }}</p>
+                    <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{{ t('Create token') }}</h2>
+                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('Use Bearer tokens for external API calls. Prefer read-only tokens unless writes are required.') }}</p>
                 </div>
 
-                <label class="space-y-2">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t('Users') }}</span>
                     <select v-model="form.user_id" class="input" required>
                         <option value="" disabled>{{ t('Select a user') }}</option>
@@ -53,67 +53,67 @@ const revoke = (id: number) => confirm(t('Revoke this API token?')) && router.de
                             {{ user.name }} ({{ user.email }})
                         </option>
                     </select>
-                    <span v-if="form.errors.user_id" class="text-sm text-rose-300">{{ form.errors.user_id }}</span>
+                    <span v-if="form.errors.user_id" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.user_id }}</span>
                 </label>
 
-                <label class="space-y-2">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t('Name') }}</span>
                     <input v-model="form.name" class="input" placeholder="openclaw-prod" required>
-                    <span v-if="form.errors.name" class="text-sm text-rose-300">{{ form.errors.name }}</span>
+                    <span v-if="form.errors.name" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.name }}</span>
                 </label>
 
-                <div class="space-y-2">
+                <div class="flex flex-col gap-2">
                     <span class="label">{{ t('Abilities') }}</span>
-                    <label class="flex items-center gap-3 text-sm text-slate-300">
-                        <input v-model="form.abilities" type="checkbox" value="read" class="rounded border-white/20 bg-slate-950">
+                    <label class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                        <input v-model="form.abilities" type="checkbox" value="read" class="rounded-sm border-slate-200 dark:border-white/20 bg-white/90 dark:bg-slate-950">
                         read
                     </label>
-                    <label class="flex items-center gap-3 text-sm text-slate-300">
-                        <input v-model="form.abilities" type="checkbox" value="write" class="rounded border-white/20 bg-slate-950">
+                    <label class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                        <input v-model="form.abilities" type="checkbox" value="write" class="rounded-sm border-slate-200 dark:border-white/20 bg-white/90 dark:bg-slate-950">
                         write
                     </label>
-                    <span v-if="form.errors.abilities" class="text-sm text-rose-300">{{ form.errors.abilities }}</span>
+                    <span v-if="form.errors.abilities" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.abilities }}</span>
                 </div>
 
-                <label class="space-y-2">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t('Expires at') }}</span>
                     <input v-model="form.expires_at" class="input" type="datetime-local">
-                    <span class="text-xs text-slate-400">{{ t('Leave empty for no expiration.') }}</span>
-                    <span v-if="form.errors.expires_at" class="block text-sm text-rose-300">{{ form.errors.expires_at }}</span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">{{ t('Leave empty for no expiration.') }}</span>
+                    <span v-if="form.errors.expires_at" class="block text-sm text-rose-700 dark:text-rose-300">{{ form.errors.expires_at }}</span>
                 </label>
 
-                <button class="btn-primary" :disabled="form.processing">{{ t('Create token') }}</button>
+                <button class="btn-primary self-start" :disabled="form.processing">{{ t('Create token') }}</button>
             </form>
 
             <div class="card overflow-hidden">
-                <div class="border-b border-white/10 p-5">
-                    <h2 class="text-lg font-semibold text-white">{{ t('Existing tokens') }}</h2>
-                    <p class="mt-1 text-sm text-slate-400">{{ t('Secrets are stored hashed and cannot be recovered.') }}</p>
+                <div class="border-b border-slate-200 dark:border-white/10 p-5">
+                    <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{{ t('Existing tokens') }}</h2>
+                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('Secrets are stored hashed and cannot be recovered.') }}</p>
                 </div>
                 <div class="md:hidden">
-                    <div v-if="tokens.data.length" class="divide-y divide-white/10">
-                        <article v-for="token in tokens.data" :key="token.id" class="space-y-4 p-4">
+                    <div v-if="tokens.data.length" class="divide-y divide-slate-200 dark:divide-white/10">
+                        <article v-for="token in tokens.data" :key="token.id" class="flex flex-col gap-4 p-4">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <h3 class="break-words font-semibold text-white">{{ token.name }}</h3>
-                                    <p class="mt-1 break-all text-sm text-slate-400">{{ token.user?.email || t('Deleted user') }}</p>
+                                    <h3 class="wrap-break-word font-semibold text-slate-900 dark:text-white">{{ token.name }}</h3>
+                                    <p class="mt-1 break-all text-sm text-slate-500 dark:text-slate-400">{{ token.user?.email || t('Deleted user') }}</p>
                                 </div>
                                 <ActionIcon :label="t('Revoke')" icon="token" variant="danger" @click="revoke(token.id)" />
                             </div>
                             <dl class="grid gap-3 text-sm">
-                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Abilities') }}</dt><dd class="mt-1 break-words text-slate-200">{{ token.abilities.join(', ') }}</dd></div>
+                                <div><dt class="text-xs uppercase text-slate-500">{{ t('Abilities') }}</dt><dd class="mt-1 wrap-break-word text-slate-800 dark:text-slate-200">{{ token.abilities.join(', ') }}</dd></div>
                                 <div class="grid grid-cols-2 gap-3">
-                                    <div><dt class="text-xs uppercase text-slate-500">{{ t('Last used') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(token.last_used_at) }}</dd></div>
-                                    <div><dt class="text-xs uppercase text-slate-500">{{ t('Expires') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(token.expires_at) }}</dd></div>
+                                    <div><dt class="text-xs uppercase text-slate-500">{{ t('Last used') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatDate(token.last_used_at) }}</dd></div>
+                                    <div><dt class="text-xs uppercase text-slate-500">{{ t('Expires') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatDate(token.expires_at) }}</dd></div>
                                 </div>
                             </dl>
                         </article>
                     </div>
-                    <p v-else class="p-8 text-center text-sm text-slate-400">{{ t('No API tokens yet.') }}</p>
+                    <p v-else class="p-8 text-center text-sm text-slate-500 dark:text-slate-400">{{ t('No API tokens yet.') }}</p>
                 </div>
                 <div class="hidden overflow-x-auto md:block">
-                    <table class="min-w-full divide-y divide-white/10 text-sm">
-                        <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+                    <table class="min-w-full divide-y divide-slate-200 dark:divide-white/10 text-sm">
+                        <thead class="bg-white/80 dark:bg-white/5 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             <tr>
                                 <th class="px-4 py-3">{{ t('Name') }}</th>
                                 <th class="px-4 py-3">{{ t('Users') }}</th>
@@ -123,19 +123,19 @@ const revoke = (id: number) => confirm(t('Revoke this API token?')) && router.de
                                 <th class="px-4 py-3">{{ t('Actions') }}</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-white/10">
+                        <tbody class="divide-y divide-slate-200 dark:divide-white/10">
                             <tr v-for="token in tokens.data" :key="token.id" class="hover:bg-slate-100 dark:hover:bg-white/[0.03]">
-                                <td class="px-4 py-3 font-medium text-white">{{ token.name }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ token.user?.email || t('Deleted user') }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ token.abilities.join(', ') }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ formatDate(token.last_used_at) }}</td>
-                                <td class="px-4 py-3 text-slate-300">{{ formatDate(token.expires_at) }}</td>
+                                <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">{{ token.name }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ token.user?.email || t('Deleted user') }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ token.abilities.join(', ') }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ formatDate(token.last_used_at) }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ formatDate(token.expires_at) }}</td>
                                 <td class="px-4 py-3">
                                     <ActionIcon :label="t('Revoke')" icon="token" variant="danger" @click="revoke(token.id)" />
                                 </td>
                             </tr>
                             <tr v-if="tokens.data.length === 0">
-                                <td colspan="6" class="px-4 py-8 text-center text-slate-400">{{ t('No API tokens yet.') }}</td>
+                                <td colspan="6" class="px-4 py-8 text-center text-slate-500 dark:text-slate-400">{{ t('No API tokens yet.') }}</td>
                             </tr>
                         </tbody>
                     </table>

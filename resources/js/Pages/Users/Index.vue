@@ -37,11 +37,11 @@ const resetTwoFactor = (id: number) => {
 
         <div class="card overflow-hidden">
             <div class="md:hidden">
-                <article v-for="user in users.data" :key="user.id" class="space-y-4 border-b border-white/10 p-4 last:border-b-0">
+                <article v-for="user in users.data" :key="user.id" class="flex flex-col gap-4 border-b border-slate-200 dark:border-white/10 p-4 last:border-b-0">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
-                            <h2 class="break-words font-semibold text-white">{{ user.name }}</h2>
-                            <p class="mt-1 break-all text-sm text-slate-400">{{ user.email }}</p>
+                            <h2 class="wrap-break-word font-semibold text-slate-900 dark:text-white">{{ user.name }}</h2>
+                            <p class="mt-1 break-all text-sm text-slate-500 dark:text-slate-400">{{ user.email }}</p>
                         </div>
                         <div class="flex shrink-0 flex-wrap gap-2">
                             <ActionIcon :label="t('Edit')" icon="edit" :href="`/users/${user.id}/edit`" />
@@ -50,15 +50,15 @@ const resetTwoFactor = (id: number) => {
                         </div>
                     </div>
                     <dl class="grid grid-cols-2 gap-3 text-sm">
-                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Role') }}</dt><dd class="mt-1 text-slate-200">{{ user.role }}</dd></div>
-                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Language') }}</dt><dd class="mt-1 text-slate-200">{{ languageName(user.locale) }}</dd></div>
-                        <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Created') }}</dt><dd class="mt-1 text-slate-200">{{ formatDate(user.created_at) }}</dd></div>
+                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Role') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ user.role }}</dd></div>
+                        <div><dt class="text-xs uppercase text-slate-500">{{ t('Language') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ languageName(user.locale) }}</dd></div>
+                        <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">{{ t('Created') }}</dt><dd class="mt-1 text-slate-800 dark:text-slate-200">{{ formatDate(user.created_at) }}</dd></div>
                     </dl>
                 </article>
             </div>
             <div class="hidden overflow-x-auto md:block">
-                <table class="min-w-full divide-y divide-white/10 text-sm">
-                    <thead class="bg-white/5 text-left text-xs uppercase tracking-wide text-slate-400">
+                <table class="min-w-full divide-y divide-slate-200 dark:divide-white/10 text-sm">
+                    <thead class="bg-white/80 dark:bg-white/5 text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         <tr>
                             <th class="px-4 py-3">{{ t('Name') }}</th>
                             <th class="px-4 py-3">{{ t('Email') }}</th>
@@ -68,13 +68,13 @@ const resetTwoFactor = (id: number) => {
                             <th class="px-4 py-3">{{ t('Actions') }}</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-white/10">
+                    <tbody class="divide-y divide-slate-200 dark:divide-white/10">
                         <tr v-for="user in users.data" :key="user.id" class="hover:bg-slate-100 dark:hover:bg-white/[0.03]">
-                            <td class="px-4 py-3 font-medium text-white">{{ user.name }}</td>
-                            <td class="px-4 py-3 text-slate-300">{{ user.email }}</td>
-                            <td class="px-4 py-3 text-slate-300">{{ user.role }}</td>
-                            <td class="px-4 py-3 text-slate-300">{{ languageName(user.locale) }}</td>
-                            <td class="px-4 py-3 text-slate-300">{{ formatDate(user.created_at) }}</td>
+                            <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">{{ user.name }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ user.email }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ user.role }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ languageName(user.locale) }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ formatDate(user.created_at) }}</td>
                             <td class="px-4 py-3">
                                 <div class="flex flex-wrap gap-2">
                                     <ActionIcon :label="t('Edit')" icon="edit" :href="`/users/${user.id}/edit`" />

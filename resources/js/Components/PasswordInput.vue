@@ -20,7 +20,7 @@ const visible = ref(false);
         >
         <button
             type="button"
-            class="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-sky-300 focus:outline-none focus-visible:text-sky-300"
+            class="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-500 dark:text-slate-400 transition hover:text-sky-700 dark:hover:text-sky-300 focus:outline-hidden focus-visible:text-sky-700 dark:focus-visible:text-sky-300"
             :aria-label="visible ? t('Hide password') : t('Show password')"
             :aria-pressed="visible"
             @click.prevent="visible = !visible"

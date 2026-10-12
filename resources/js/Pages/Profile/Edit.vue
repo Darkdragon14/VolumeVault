@@ -99,35 +99,35 @@ const revokeAllDevices = () => {
 <template>
     <Head :title="t('Edit profile')" />
     <AppLayout :title="t('Edit profile')" :subtitle="t('Update your account information, preferences, and password.')">
-        <form class="card max-w-2xl space-y-5 p-4 sm:p-6" @submit.prevent="submit">
+        <form class="card max-w-2xl flex flex-col gap-5 p-4 sm:p-6" @submit.prevent="submit">
             <div>
-                <h2 class="text-lg font-semibold text-white">{{ t('Profile details') }}</h2>
-                <p class="mt-1 text-sm text-slate-400">{{ t('Update your account information and display preferences.') }}</p>
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{{ t('Profile details') }}</h2>
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('Update your account information and display preferences.') }}</p>
             </div>
 
-            <label class="space-y-2">
+            <label class="flex flex-col gap-2">
                 <span class="label">{{ t('Name') }}</span>
                 <input v-model="form.name" class="input" required autocomplete="name">
-                <span v-if="form.errors.name" class="text-sm text-rose-300">{{ form.errors.name }}</span>
+                <span v-if="form.errors.name" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.name }}</span>
             </label>
 
-            <label class="space-y-2">
+            <label class="flex flex-col gap-2">
                 <span class="label">{{ t('Email') }}</span>
                 <input v-model="form.email" class="input" type="email" required autocomplete="email">
-                <span v-if="form.errors.email" class="text-sm text-rose-300">{{ form.errors.email }}</span>
+                <span v-if="form.errors.email" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.email }}</span>
             </label>
 
-            <label class="space-y-2">
+            <label class="flex flex-col gap-2">
                 <span class="label">{{ t('Language') }}</span>
                 <select v-model="form.locale" class="input">
                     <option v-for="availableLocale in locales" :key="availableLocale" :value="availableLocale">
                         {{ languageName(availableLocale) }}
                     </option>
                 </select>
-                <span v-if="form.errors.locale" class="text-sm text-rose-300">{{ form.errors.locale }}</span>
+                <span v-if="form.errors.locale" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.locale }}</span>
             </label>
 
-            <label class="space-y-2">
+            <label class="flex flex-col gap-2">
                 <span class="label">{{ t('Date format') }}</span>
                 <select v-model="form.date_locale" class="input">
                     <option value="">{{ t('Use language default') }}</option>
@@ -135,28 +135,28 @@ const revokeAllDevices = () => {
                         {{ dateLocaleName(dateLocale) }}
                     </option>
                 </select>
-                <span class="block text-xs text-slate-400">{{ t('Dates use this regional format without changing the interface language.') }} {{ t('Example: {date}', { date: dateLocaleExample }) }}</span>
-                <span v-if="form.errors.date_locale" class="text-sm text-rose-300">{{ form.errors.date_locale }}</span>
+                <span class="block text-xs text-slate-500 dark:text-slate-400">{{ t('Dates use this regional format without changing the interface language.') }} {{ t('Example: {date}', { date: dateLocaleExample }) }}</span>
+                <span v-if="form.errors.date_locale" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.date_locale }}</span>
             </label>
 
-            <label class="space-y-2">
+            <label class="flex flex-col gap-2">
                 <span class="label">{{ t('Default items per page') }}</span>
                 <select v-model="form.default_per_page" class="input">
                     <option v-for="option in perPageOptions" :key="option" :value="option">
                         {{ perPageLabel(option) }}
                     </option>
                 </select>
-                <span v-if="form.errors.default_per_page" class="text-sm text-rose-300">{{ form.errors.default_per_page }}</span>
+                <span v-if="form.errors.default_per_page" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.default_per_page }}</span>
             </label>
 
             <div class="grid gap-4 sm:grid-cols-2">
-                <label class="space-y-2">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t('New password') }}</span>
                     <PasswordInput v-model="form.password" autocomplete="new-password" />
-                    <span class="text-xs text-slate-400">{{ t('Leave empty to keep the current password.') }}</span>
-                    <span v-if="form.errors.password" class="block text-sm text-rose-300">{{ form.errors.password }}</span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">{{ t('Leave empty to keep the current password.') }}</span>
+                    <span v-if="form.errors.password" class="block text-sm text-rose-700 dark:text-rose-300">{{ form.errors.password }}</span>
                 </label>
-                <label class="space-y-2">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t('Confirm password') }}</span>
                     <PasswordInput v-model="form.password_confirmation" autocomplete="new-password" />
                 </label>
@@ -167,15 +167,15 @@ const revokeAllDevices = () => {
             </div>
         </form>
 
-        <section class="card mt-6 max-w-2xl space-y-5 p-4 sm:p-6">
+        <section class="card mt-6 max-w-2xl flex flex-col gap-5 p-4 sm:p-6">
             <div>
-                <h2 class="text-lg font-semibold text-white">{{ t('Two-factor authentication') }}</h2>
-                <p class="mt-1 text-sm text-slate-400">{{ t('Add an extra layer of security by requiring a one-time code from an authenticator app when signing in.') }}</p>
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{{ t('Two-factor authentication') }}</h2>
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('Add an extra layer of security by requiring a one-time code from an authenticator app when signing in.') }}</p>
             </div>
 
             <!-- Disabled: offer to start enrolment -->
             <div v-if="!twoFactorEnabled && !twoFactorPending">
-                <div class="mb-4 inline-flex items-center gap-2 rounded-full bg-slate-700/40 px-3 py-1 text-xs font-medium text-slate-300">
+                <div class="mb-4 inline-flex items-center gap-2 rounded-full bg-slate-100 dark:bg-slate-700/40 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300">
                     <span class="h-2 w-2 rounded-full bg-slate-400"></span>{{ t('Disabled') }}
                 </div>
                 <div>
@@ -184,31 +184,31 @@ const revokeAllDevices = () => {
             </div>
 
             <!-- Pending: show QR, secret and a code field to confirm -->
-            <div v-else-if="twoFactorPending" class="space-y-4">
-                <p class="text-sm text-slate-300">{{ t('Scan the QR code below with your authenticator app, then enter the generated code to finish enabling two-factor authentication.') }}</p>
+            <div v-else-if="twoFactorPending" class="flex flex-col gap-4">
+                <p class="text-sm text-slate-600 dark:text-slate-300">{{ t('Scan the QR code below with your authenticator app, then enter the generated code to finish enabling two-factor authentication.') }}</p>
 
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start">
                     <div class="inline-block rounded-lg bg-white p-3" v-html="twoFactorQrSvg"></div>
-                    <div class="space-y-2">
+                    <div class="flex flex-col gap-2">
                         <span class="label">{{ t('Or enter this setup key manually') }}</span>
-                        <code class="block break-all rounded-lg bg-slate-950 px-3 py-2 text-sm text-sky-200">{{ twoFactorSecret }}</code>
+                        <code class="block break-all rounded-lg bg-white/90 dark:bg-slate-950 px-3 py-2 text-sm text-sky-700 dark:text-sky-200">{{ twoFactorSecret }}</code>
                     </div>
                 </div>
 
-                <div v-if="twoFactorRecoveryCodes" class="space-y-2">
+                <div v-if="twoFactorRecoveryCodes" class="flex flex-col gap-2">
                     <span class="label">{{ t('Recovery codes') }}</span>
-                    <p class="text-xs text-slate-400">{{ t('Store these codes in a safe place. Each can be used once to sign in if you lose access to your authenticator app.') }}</p>
-                    <ul class="grid grid-cols-2 gap-2 rounded-lg bg-slate-950 p-3 font-mono text-sm text-slate-200">
+                    <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('Store these codes in a safe place. Each can be used once to sign in if you lose access to your authenticator app.') }}</p>
+                    <ul class="grid grid-cols-2 gap-2 rounded-lg bg-white/90 dark:bg-slate-950 p-3 font-mono text-sm text-slate-800 dark:text-slate-200">
                         <li v-for="code in twoFactorRecoveryCodes" :key="code">{{ code }}</li>
                     </ul>
                 </div>
 
-                <form class="space-y-3" @submit.prevent="confirmTwoFactor">
-                    <label class="space-y-2">
+                <form class="flex flex-col gap-3" @submit.prevent="confirmTwoFactor">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t('Authentication code') }}</span>
                         <input v-model="confirmForm.code" class="input" type="text" inputmode="numeric"
                             autocomplete="one-time-code" maxlength="6" placeholder="000000">
-                        <span v-if="confirmForm.errors.code" class="text-sm text-rose-300">{{ confirmForm.errors.code }}</span>
+                        <span v-if="confirmForm.errors.code" class="text-sm text-rose-700 dark:text-rose-300">{{ confirmForm.errors.code }}</span>
                     </label>
                     <div class="flex flex-wrap gap-3">
                         <button class="btn-primary" :disabled="confirmForm.processing">{{ t('Confirm') }}</button>
@@ -218,15 +218,15 @@ const revokeAllDevices = () => {
             </div>
 
             <!-- Enabled: status, regenerate codes, disable -->
-            <div v-else class="space-y-4">
-                <div class="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200">
+            <div v-else class="flex flex-col gap-4">
+                <div class="inline-flex self-start items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-200">
                     <span class="h-2 w-2 rounded-full bg-emerald-400"></span>{{ t('Enabled') }}
                 </div>
 
-                <div v-if="twoFactorRecoveryCodes" class="space-y-2">
+                <div v-if="twoFactorRecoveryCodes" class="flex flex-col gap-2">
                     <span class="label">{{ t('Recovery codes') }}</span>
-                    <p class="text-xs text-slate-400">{{ t('Store these codes in a safe place. Each can be used once to sign in if you lose access to your authenticator app.') }}</p>
-                    <ul class="grid grid-cols-2 gap-2 rounded-lg bg-slate-950 p-3 font-mono text-sm text-slate-200">
+                    <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('Store these codes in a safe place. Each can be used once to sign in if you lose access to your authenticator app.') }}</p>
+                    <ul class="grid grid-cols-2 gap-2 rounded-lg bg-white/90 dark:bg-slate-950 p-3 font-mono text-sm text-slate-800 dark:text-slate-200">
                         <li v-for="code in twoFactorRecoveryCodes" :key="code">{{ code }}</li>
                     </ul>
                 </div>
@@ -235,23 +235,23 @@ const revokeAllDevices = () => {
                     <button class="btn-secondary" :disabled="recoveryForm.processing" @click="regenerateCodes">{{ t('Regenerate recovery codes') }}</button>
                 </div>
 
-                <div class="space-y-3 border-t border-white/10 pt-4">
+                <div class="flex flex-col gap-3 border-t border-slate-200 dark:border-white/10 pt-4">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <h3 class="text-sm font-semibold text-white">{{ t('Trusted devices') }}</h3>
-                            <p class="mt-1 text-xs text-slate-400">{{ t('Browsers you trust to skip the code for 30 days.') }}</p>
+                            <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{{ t('Trusted devices') }}</h3>
+                            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ t('Browsers you trust to skip the code for 30 days.') }}</p>
                         </div>
                         <button v-if="twoFactorDevices && twoFactorDevices.length" type="button" class="btn-secondary" @click="revokeAllDevices">{{ t('Remove all trusted devices') }}</button>
                     </div>
 
-                    <p v-if="!twoFactorDevices || !twoFactorDevices.length" class="text-sm text-slate-400">{{ t('No trusted devices.') }}</p>
+                    <p v-if="!twoFactorDevices || !twoFactorDevices.length" class="text-sm text-slate-500 dark:text-slate-400">{{ t('No trusted devices.') }}</p>
 
-                    <ul v-else class="divide-y divide-white/10 rounded-lg bg-slate-950">
+                    <ul v-else class="divide-y divide-slate-200 dark:divide-white/10 rounded-lg bg-white/90 dark:bg-slate-950">
                         <li v-for="device in twoFactorDevices" :key="device.id" class="flex items-center justify-between gap-3 px-3 py-3">
                             <div class="min-w-0">
-                                <p class="flex items-center gap-2 truncate text-sm text-slate-200">
+                                <p class="flex items-center gap-2 truncate text-sm text-slate-800 dark:text-slate-200">
                                     <span class="truncate">{{ device.user_agent || t('Unknown device') }}</span>
-                                    <span v-if="device.is_current" class="shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-emerald-200">{{ t('This device') }}</span>
+                                    <span v-if="device.is_current" class="shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-200">{{ t('This device') }}</span>
                                 </p>
                                 <p class="mt-1 text-xs text-slate-500">{{ t('Last used') }}: {{ formatDate(device.last_used_at) }} · {{ t('Expires') }}: {{ formatDate(device.expires_at) }}</p>
                             </div>
@@ -260,13 +260,13 @@ const revokeAllDevices = () => {
                     </ul>
                 </div>
 
-                <form class="space-y-3 border-t border-white/10 pt-4" @submit.prevent="disableTwoFactor">
-                    <label class="space-y-2">
+                <form class="flex flex-col gap-3 border-t border-slate-200 dark:border-white/10 pt-4" @submit.prevent="disableTwoFactor">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t('Confirm your password to disable') }}</span>
                         <PasswordInput v-model="disableForm.password" autocomplete="current-password" />
-                        <span v-if="disableForm.errors.password" class="block text-sm text-rose-300">{{ disableForm.errors.password }}</span>
+                        <span v-if="disableForm.errors.password" class="block text-sm text-rose-700 dark:text-rose-300">{{ disableForm.errors.password }}</span>
                     </label>
-                    <button class="btn-danger" :disabled="disableForm.processing">{{ t('Disable two-factor authentication') }}</button>
+                    <button class="btn-danger self-start" :disabled="disableForm.processing">{{ t('Disable two-factor authentication') }}</button>
                 </form>
             </div>
         </section>

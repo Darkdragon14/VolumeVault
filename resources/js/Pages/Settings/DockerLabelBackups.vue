@@ -188,60 +188,60 @@ const unexpectedErrors = computed(() => [...new Set(
 <template>
     <AppLayout :title="t('Docker label backups')" :subtitle="t('Define trusted defaults for backup jobs declared by running containers.')">
         <Head :title="t('Docker label backups')" />
-        <section class="card mb-6 space-y-3 p-5">
-            <label class="block space-y-2">
+        <section class="card mb-6 flex flex-col gap-3 p-5">
+            <label class="flex flex-col gap-2">
                 <span class="label">{{ t('dockerLabels.host') }}</span>
                 <select v-model="selectedHostId" data-host-selector class="input" :disabled="switchingHost || form.processing" @change="changeHost">
                     <option v-for="host in hosts" :key="host.id" :value="host.id" :disabled="host.id === 1 && !localExecutionEnabled">{{ host.name }} (#{{ host.id }})</option>
                 </select>
             </label>
-            <p v-if="switchingHost" role="status" class="animate-pulse text-sm text-slate-400">{{ t('dockerLabels.loading') }}</p>
-            <p v-if="hostLoadFailed" role="alert" class="text-sm text-rose-300">{{ t('dockerLabels.loadFailed') }}</p>
+            <p v-if="switchingHost" role="status" class="animate-pulse text-sm text-slate-500 dark:text-slate-400">{{ t('dockerLabels.loading') }}</p>
+            <p v-if="hostLoadFailed" role="alert" class="text-sm text-rose-700 dark:text-rose-300">{{ t('dockerLabels.loadFailed') }}</p>
             <template v-if="!switchingHost">
-                <p class="text-sm text-slate-400">{{ selectedHost?.name }} (#{{ settings.docker_host_id }}) · {{ t('dockerLabels.lastSync') }}: {{ formatDate(settings.last_synced_at) }}</p>
-                <p v-if="localDisabled" role="status" class="text-sm text-slate-400">{{ t('dockerHosts.localDisabled') }}</p>
-                <p v-else-if="selectedHost && !selectedHost.supports_docker_labels" role="status" class="text-sm text-amber-300">{{ t('dockerLabels.upgradeAgent') }}</p>
-                <p v-else-if="settings.docker_host_id !== 1" class="text-sm text-slate-400">{{ t('dockerLabels.nextInventory') }}</p>
-                <section v-if="settings.last_sync_error" role="alert" class="rounded-xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-100">
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ selectedHost?.name }} (#{{ settings.docker_host_id }}) · {{ t('dockerLabels.lastSync') }}: {{ formatDate(settings.last_synced_at) }}</p>
+                <p v-if="localDisabled" role="status" class="text-sm text-slate-500 dark:text-slate-400">{{ t('dockerHosts.localDisabled') }}</p>
+                <p v-else-if="selectedHost && !selectedHost.supports_docker_labels" role="status" class="text-sm text-amber-800 dark:text-amber-300">{{ t('dockerLabels.upgradeAgent') }}</p>
+                <p v-else-if="settings.docker_host_id !== 1" class="text-sm text-slate-500 dark:text-slate-400">{{ t('dockerLabels.nextInventory') }}</p>
+                <section v-if="settings.last_sync_error" role="alert" class="rounded-xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-700 dark:text-rose-100">
                     <h2 class="font-semibold">{{ t('Last synchronization error') }}</h2>
                     <p class="mt-2 whitespace-pre-line">{{ settings.last_sync_error }}</p>
                 </section>
             </template>
         </section>
-        <form v-if="!switchingHost && !localDisabled" class="space-y-6" @submit.prevent="submit">
-            <fieldset class="space-y-6" :disabled="!canManage || form.processing">
-            <section class="card space-y-5 p-5">
+        <form v-if="!switchingHost && !localDisabled" class="flex flex-col gap-6" @submit.prevent="submit">
+            <fieldset class="flex flex-col gap-6" :disabled="!canManage || form.processing">
+            <section class="card flex flex-col gap-5 p-5">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <h2 class="text-lg font-semibold">{{ t('Container automation') }}</h2>
-                        <p class="mt-1 text-sm text-slate-400">{{ t('Containers must explicitly opt in with the VolumeVault enable label.') }}</p>
+                        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('Containers must explicitly opt in with the VolumeVault enable label.') }}</p>
                     </div>
-                    <button type="button" role="switch" class="inline-flex shrink-0 items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-3 py-2 text-sm" :aria-checked="form.enabled" @click="form.enabled = !form.enabled">
-                        <span class="relative inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition" :class="form.enabled ? 'border-emerald-300/50 bg-emerald-500/50' : 'border-white/10 bg-slate-800'">
+                    <button type="button" role="switch" class="inline-flex shrink-0 items-center gap-3 rounded-full border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 px-3 py-2 text-sm" :aria-checked="form.enabled" @click="form.enabled = !form.enabled">
+                        <span class="relative inline-flex h-6 w-11 items-center rounded-full border p-0.5 transition" :class="form.enabled ? 'border-emerald-700 bg-emerald-600 dark:border-emerald-300/50 dark:bg-emerald-500/50' : 'border-slate-300 bg-slate-200 dark:border-white/10 dark:bg-slate-800'">
                             <span class="h-5 w-5 rounded-full bg-white transition-transform" :class="form.enabled ? 'translate-x-5' : 'translate-x-0 bg-slate-400'"></span>
                         </span>
                         <span>{{ form.enabled ? t('Enabled') : t('Disabled') }}</span>
                     </button>
                 </div>
-                <span v-for="error in errorsFor('enabled')" :key="error" class="block text-sm text-rose-300">{{ error }}</span>
+                <span v-for="error in errorsFor('enabled')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span>
 
-                <label class="block space-y-2">
+                <label class="flex flex-col gap-2">
                     <span class="label">{{ t('Default destination') }}</span>
                     <select v-model="form.backup_destination_id" class="input">
                         <option :value="null">{{ t('Choose a destination') }}</option>
                         <option v-for="destination in destinations" :key="destination.id" :value="destination.id">{{ destination.name }}</option>
                     </select>
-                    <span v-for="error in errorsFor('backup_destination_id')" :key="error" class="block text-sm text-rose-300">{{ error }}</span>
+                    <span v-for="error in errorsFor('backup_destination_id')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span>
                 </label>
             </section>
 
-            <section class="card space-y-5 p-5">
+            <section class="card flex flex-col gap-5 p-5">
                 <div>
                     <h2 class="text-lg font-semibold">{{ t('Default schedule') }}</h2>
-                    <p class="mt-1 text-sm text-slate-400">{{ t('Container labels can override these values for an individual backup.') }}</p>
+                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('Container labels can override these values for an individual backup.') }}</p>
                 </div>
                 <div class="grid gap-4 md:grid-cols-3">
-                    <label class="space-y-2">
+                    <label class="flex flex-col gap-2">
                         <span class="label">{{ t('Schedule') }}</span>
                         <select v-model="form.schedule_type" class="input" @change="changeScheduleType">
                             <option value="hourly">{{ t('Hourly') }}</option>
@@ -249,44 +249,44 @@ const unexpectedErrors = computed(() => [...new Set(
                             <option value="weekly">{{ t('Weekly') }}</option>
                             <option value="cron">{{ t('Cron') }}</option>
                         </select>
-                        <span v-for="error in errorsFor('schedule_type')" :key="error" class="block text-sm text-rose-300">{{ error }}</span>
+                        <span v-for="error in errorsFor('schedule_type')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span>
                     </label>
-                    <label v-if="form.schedule_type === 'hourly'" class="space-y-2"><span class="label">{{ t('Every X hours') }}</span><input v-model.number="form.schedule_config.everyHours" class="input" type="number" min="1" max="24"></label>
-                    <label v-if="form.schedule_type === 'daily' || form.schedule_type === 'weekly'" class="space-y-2"><span class="label">{{ t('Time') }}</span><input v-model="form.schedule_config.time" class="input" type="time"></label>
-                    <label v-if="form.schedule_type === 'weekly'" class="space-y-2"><span class="label">{{ t('Day') }}</span><select v-model="form.schedule_config.dayOfWeek" class="input"><option v-for="day in ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']" :key="day" :value="day">{{ t(day) }}</option></select></label>
-                    <label v-if="form.schedule_type === 'cron'" class="space-y-2"><span class="label">{{ t('Cron expression') }}</span><input v-model="form.schedule_config.expression" class="input font-mono" placeholder="0 2 * * *"></label>
-                    <label class="space-y-2"><span class="label">{{ t('Timezone') }}</span><select v-model="form.timezone" class="input"><option :value="null">{{ t('Application default') }}</option><option v-for="timezone in timezones" :key="timezone" :value="timezone">{{ timezone }}</option></select><span v-for="error in errorsFor('timezone')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
+                    <label v-if="form.schedule_type === 'hourly'" class="flex flex-col gap-2"><span class="label">{{ t('Every X hours') }}</span><input v-model.number="form.schedule_config.everyHours" class="input" type="number" min="1" max="24"></label>
+                    <label v-if="form.schedule_type === 'daily' || form.schedule_type === 'weekly'" class="flex flex-col gap-2"><span class="label">{{ t('Time') }}</span><input v-model="form.schedule_config.time" class="input" type="time"></label>
+                    <label v-if="form.schedule_type === 'weekly'" class="flex flex-col gap-2"><span class="label">{{ t('Day') }}</span><select v-model="form.schedule_config.dayOfWeek" class="input"><option v-for="day in ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']" :key="day" :value="day">{{ t(day) }}</option></select></label>
+                    <label v-if="form.schedule_type === 'cron'" class="flex flex-col gap-2"><span class="label">{{ t('Cron expression') }}</span><input v-model="form.schedule_config.expression" class="input font-mono" placeholder="0 2 * * *"></label>
+                    <label class="flex flex-col gap-2"><span class="label">{{ t('Timezone') }}</span><select v-model="form.timezone" class="input"><option :value="null">{{ t('Application default') }}</option><option v-for="timezone in timezones" :key="timezone" :value="timezone">{{ timezone }}</option></select><span v-for="error in errorsFor('timezone')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span></label>
                 </div>
-                <span v-for="error in errorsFor('schedule_config')" :key="error" class="block text-sm text-rose-300">{{ error }}</span>
+                <span v-for="error in errorsFor('schedule_config')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span>
             </section>
 
-            <section class="card space-y-5 p-5">
+            <section class="card flex flex-col gap-5 p-5">
                 <h2 class="text-lg font-semibold">{{ t('Default backup options') }}</h2>
                 <div class="grid gap-4 md:grid-cols-2">
-                    <label class="space-y-2"><span class="label">{{ t('Retention days') }}</span><input v-model.number="form.retention_days" class="input" type="number" min="1"><span v-for="error in errorsFor('retention_days')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
-                    <label class="space-y-2"><span class="label">{{ t('Retention count') }}</span><input v-model.number="form.retention_count" class="input" type="number" min="1"><span v-for="error in errorsFor('retention_count')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
-                    <label class="space-y-2"><span class="label">{{ t('Filter mode') }}</span><select v-model="form.backup_filter_mode" class="input"><option value="exclude">{{ t('Exclude matching files') }}</option><option value="include">{{ t('Include only') }}</option></select><span v-for="error in errorsFor('backup_filter_mode')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
-                    <label class="space-y-2"><span class="label">{{ t('Backup filename template') }}</span><input v-model="form.backup_filename_template" class="input"><span v-for="error in errorsFor('backup_filename_template')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></label>
-                    <label v-if="form.backup_filter_mode === 'include'" class="space-y-2 md:col-span-2"><span class="label">{{ t('Included paths') }}</span><textarea v-model="form.backup_include_paths" class="input min-h-24"></textarea></label>
-                    <label v-else class="space-y-2 md:col-span-2"><span class="label">{{ t('Exclude regexp') }}</span><textarea v-model="form.backup_exclude_regexp" class="input min-h-24 font-mono"></textarea></label>
+                    <label class="flex flex-col gap-2"><span class="label">{{ t('Retention days') }}</span><input v-model.number="form.retention_days" class="input" type="number" min="1"><span v-for="error in errorsFor('retention_days')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span></label>
+                    <label class="flex flex-col gap-2"><span class="label">{{ t('Retention count') }}</span><input v-model.number="form.retention_count" class="input" type="number" min="1"><span v-for="error in errorsFor('retention_count')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span></label>
+                    <label class="flex flex-col gap-2"><span class="label">{{ t('Filter mode') }}</span><select v-model="form.backup_filter_mode" class="input"><option value="exclude">{{ t('Exclude matching files') }}</option><option value="include">{{ t('Include only') }}</option></select><span v-for="error in errorsFor('backup_filter_mode')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span></label>
+                    <label class="flex flex-col gap-2"><span class="label">{{ t('Backup filename template') }}</span><input v-model="form.backup_filename_template" class="input"><span v-for="error in errorsFor('backup_filename_template')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span></label>
+                    <label v-if="form.backup_filter_mode === 'include'" class="flex flex-col gap-2 md:col-span-2"><span class="label">{{ t('Included paths') }}</span><textarea v-model="form.backup_include_paths" class="input min-h-24"></textarea></label>
+                    <label v-else class="flex flex-col gap-2 md:col-span-2"><span class="label">{{ t('Exclude regexp') }}</span><textarea v-model="form.backup_exclude_regexp" class="input min-h-24 font-mono"></textarea></label>
                 </div>
-                <span v-for="error in errorsFor('backup_include_paths', 'backup_exclude_regexp')" :key="error" class="block text-sm text-rose-300">{{ error }}</span>
+                <span v-for="error in errorsFor('backup_include_paths', 'backup_exclude_regexp')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span>
                 <div class="grid gap-3 md:grid-cols-3">
-                    <div class="space-y-2"><label class="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-3"><input v-model="form.notifications_enabled" type="checkbox"><span>{{ t('Backup notifications') }}</span></label><span v-for="error in errorsFor('notifications_enabled')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></div>
-                    <div class="space-y-2"><label class="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-3"><input v-model="form.alert_notifications_enabled" type="checkbox"><span>{{ t('Alert notifications') }}</span></label><span v-for="error in errorsFor('alert_notifications_enabled')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></div>
-                    <div class="space-y-2"><label class="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-3"><input v-model="form.stop_containers_before_backup" type="checkbox"><span>{{ t('Stop containers before backup') }}</span></label><span v-for="error in errorsFor('stop_containers_before_backup')" :key="error" class="block text-sm text-rose-300">{{ error }}</span></div>
+                    <div class="flex flex-col gap-2"><label class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 p-3"><input v-model="form.notifications_enabled" type="checkbox"><span>{{ t('Backup notifications') }}</span></label><span v-for="error in errorsFor('notifications_enabled')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span></div>
+                    <div class="flex flex-col gap-2"><label class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 p-3"><input v-model="form.alert_notifications_enabled" type="checkbox"><span>{{ t('Alert notifications') }}</span></label><span v-for="error in errorsFor('alert_notifications_enabled')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span></div>
+                    <div class="flex flex-col gap-2"><label class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/60 p-3"><input v-model="form.stop_containers_before_backup" type="checkbox"><span>{{ t('Stop containers before backup') }}</span></label><span v-for="error in errorsFor('stop_containers_before_backup')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span></div>
                 </div>
                 <div v-if="notificationChannels.length" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <button v-for="channel in notificationChannels" :key="channel.id" type="button" class="rounded-xl border p-3 text-left text-sm" :class="form.notification_channel_ids.includes(channel.id) ? 'border-sky-300/60 bg-sky-400/10' : 'border-white/10 bg-white/[0.03]'" @click="toggleChannel(channel.id)">{{ channel.name }}</button>
+                    <button v-for="channel in notificationChannels" :key="channel.id" type="button" class="rounded-xl border p-3 text-left text-sm" :class="form.notification_channel_ids.includes(channel.id) ? 'border-sky-300/60 bg-sky-400/10' : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.03]'" @click="toggleChannel(channel.id)">{{ channel.name }}</button>
                 </div>
-                <span v-for="error in errorsFor('notification_channel_ids')" :key="error" class="block text-sm text-rose-300">{{ error }}</span>
+                <span v-for="error in errorsFor('notification_channel_ids')" :key="error" class="block text-sm text-rose-700 dark:text-rose-300">{{ error }}</span>
             </section>
 
-            <section v-if="unexpectedErrors.length" class="rounded-xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-100">
+            <section v-if="unexpectedErrors.length" class="rounded-xl border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-700 dark:text-rose-100">
                 <p v-for="error in unexpectedErrors" :key="error">{{ error }}</p>
             </section>
 
-            <button v-if="canManage" class="btn-primary" :disabled="form.processing">{{ t('Save settings') }}</button>
+            <button v-if="canManage" class="btn-primary self-start" :disabled="form.processing">{{ t('Save settings') }}</button>
             </fieldset>
         </form>
     </AppLayout>
