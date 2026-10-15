@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'global_environment_navigation',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.5' => [
+            'date' => '2026-10-15',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.5',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'global_environment_navigation',
+                ],
+            ],
+        ],
         'v2.0.4' => [
             'date' => '2026-10-12',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.4',
