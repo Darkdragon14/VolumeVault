@@ -38,6 +38,19 @@ beforeEach(() => {
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.restoreAllMocks(); });
 
 describe('header environment and navigation', () => {
+    it('groups desktop navigation beside the bell while preserving mobile auto spacing', () => {
+        const header = render(AppLayout, { title: 'Test' }).get('header');
+        const navigation = header.get('nav');
+        expect(navigation.classes()).toEqual(expect.arrayContaining(['ml-auto', 'justify-end', 'xl:flex']));
+        expect(navigation.classes()).not.toContain('flex-1');
+        expect(navigation.classes()).not.toContain('justify-center');
+        const tools = header.get('a[href="/alerts"]').element.parentElement!;
+        expect(navigation.element.nextElementSibling).toBe(tools);
+        expect(tools.classList.contains('ml-auto')).toBe(true);
+        expect(tools.classList.contains('xl:ml-4')).toBe(true);
+        expect(navigation.element.parentElement!.classList.contains('gap-2')).toBe(true);
+    });
+
     it('keeps the responsive logo, environment, backups, bell and compact account', async () => {
         const wrapper = render(AppLayout, { title: 'Test' }, { slots: { default: '<form id="business-form"><input></form>' } });
         const header = wrapper.get('header');

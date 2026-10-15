@@ -482,7 +482,7 @@ watch(shouldShowUpdateSummary, (shouldShow) => {
                         </span>
                     </button>
 
-                    <nav class="hidden min-w-0 flex-1 justify-center xl:flex" :aria-label="t('Navigation')">
+                    <nav class="ml-auto hidden min-w-0 justify-end xl:flex" :aria-label="t('Navigation')">
                         <div class="flex items-center gap-1">
                             <Link
                                 v-for="item in primaryNav.slice(0, 3)"
@@ -516,7 +516,7 @@ watch(shouldShowUpdateSummary, (shouldShow) => {
                         </div>
                     </nav>
 
-                    <div v-if="auth.user" class="ml-auto flex shrink-0 items-center gap-1">
+                    <div v-if="auth.user" class="ml-auto flex shrink-0 items-center gap-1 xl:ml-4">
                         <Link href="/alerts" class="relative inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 dark:text-slate-300 dark:hover:bg-white/10" :aria-label="t('environment.alerts', { count: activeAlertCount })" @click="closeMobileNav">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
                             <span v-if="activeAlertCount" class="absolute -right-1 -top-1 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[10px] font-bold leading-4 text-white" aria-hidden="true">{{ activeAlertCount > 99 ? '99+' : activeAlertCount }}</span>
