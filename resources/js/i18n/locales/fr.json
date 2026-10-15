@@ -1,4 +1,9 @@
 {
+    "environment.label": "Environnement",
+    "environment.local": "Hôte local",
+    "environment.backups": "Sauvegardes",
+    "environment.alerts": "Alertes ({count} actives)",
+    "environment.confirmDiscard": "Abandonner les modifications non enregistrées et changer d’environnement ? Vous reviendrez au tableau de bord.",
   "agent_offline": "agent hors ligne",
   "Agent offline": "Agent hors ligne",
   "Minutes offline": "Minutes hors ligne",

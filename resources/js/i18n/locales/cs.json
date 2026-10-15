@@ -1,4 +1,9 @@
 {
+    "environment.label": "Prostředí",
+    "environment.local": "Místní hostitel",
+    "environment.backups": "Zálohy",
+    "environment.alerts": "Upozornění ({count} aktivních)",
+    "environment.confirmDiscard": "Zahodit neuložené změny a přepnout prostředí? Vrátíte se na přehled.",
   "agent_offline": "agent offline",
   "Agent offline": "Agent offline",
   "Minutes offline": "Minuty offline",

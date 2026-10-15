@@ -1,4 +1,9 @@
 {
+    "environment.label": "Environment",
+    "environment.local": "Local host",
+    "environment.backups": "Backups",
+    "environment.alerts": "Alerts ({count} active)",
+    "environment.confirmDiscard": "Discard your unsaved changes and switch environment? You will return to the dashboard.",
   "agent_offline": "agent offline",
   "Agent offline": "Agent offline",
   "Minutes offline": "Minutes offline",

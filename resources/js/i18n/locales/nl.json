@@ -1,4 +1,9 @@
 {
+    "environment.label": "Omgeving",
+    "environment.local": "Lokale host",
+    "environment.backups": "Back-ups",
+    "environment.alerts": "Waarschuwingen ({count} actief)",
+    "environment.confirmDiscard": "Niet-opgeslagen wijzigingen verwerpen en van omgeving wisselen? Je keert terug naar het dashboard.",
   "agent_offline": "agent offline",
   "Agent offline": "Agent offline",
   "Minutes offline": "Minuten offline",

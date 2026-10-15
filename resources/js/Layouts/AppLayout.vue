@@ -3,6 +3,8 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from '@/i18n';
 import { useTheme } from '@/theme';
+import EnvironmentPicker from '@/Components/EnvironmentPicker.vue';
+import HeaderDropdown from '@/Components/HeaderDropdown.vue';
 
 type ChangelogItem = {
     type: string;
@@ -72,7 +74,6 @@ const githubRepoUrl = 'https://github.com/Darkdragon14/VolumeVault';
 const githubIssuesUrl = 'https://github.com/Darkdragon14/VolumeVault/issues';
 const snoozedUpdateSummaryStorageKey = 'volumevault.snoozed_update_summary_id';
 
-const openMenu = ref<'settings' | 'user' | null>(null);
 const isMobileNavOpen = ref(false);
 const showUpdateSummary = ref(false);
 const isQuickNavOpen = ref(false);
@@ -157,17 +158,10 @@ const filteredQuickNavItems = computed(() => {
 const quickNavShortcutMap = computed(() => new Map(quickNavItems.value.map((item) => [item.shortcutKey, item])));
 
 const hasActiveItem = (items: { href: string }[]) => items.some((item) => page.url.startsWith(item.href));
-const toggleMenu = (menu: 'settings' | 'user') => {
-    isMobileNavOpen.value = false;
-    openMenu.value = openMenu.value === menu ? null : menu;
-};
-const closeMenu = () => openMenu.value = null;
 const closeMobileNav = () => {
     isMobileNavOpen.value = false;
-    closeMenu();
 };
 const toggleMobileNav = () => {
-    closeMenu();
     isMobileNavOpen.value = !isMobileNavOpen.value;
 };
 const openQuickNav = () => {
@@ -300,7 +294,7 @@ const onGlobalKeydown = (event: KeyboardEvent) => {
             return;
         }
 
-        if (isMobileNavOpen.value || openMenu.value) {
+        if (isMobileNavOpen.value) {
             event.preventDefault();
             closeMobileNav();
 
@@ -463,18 +457,18 @@ watch(shouldShowUpdateSummary, (shouldShow) => {
 <template>
     <div class="app-shell">
         <header ref="headerRef" class="relative z-50 border-b border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/70 backdrop-blur-sm">
-            <div class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between gap-3">
-                    <Link href="/dashboard" class="flex min-w-0 items-center gap-3" @click="closeMobileNav">
-                        <img :src="'/logo.png'" alt="" class="h-10 w-auto shrink-0 object-contain">
-                        <div class="min-w-0">
-                            <p class="truncate text-lg font-bold tracking-tight">VolumeVault</p>
-                            <p class="hidden text-xs text-slate-500 dark:text-slate-400 sm:block">{{ t('Back up and restore Docker volumes') }}</p>
-                        </div>
-                    </Link>
+            <div class="mx-auto max-w-7xl px-3 py-3 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex min-w-0 items-center gap-1 sm:gap-3">
+                        <Link href="/dashboard" class="flex shrink-0 items-center gap-2" aria-label="VolumeVault" @click="closeMobileNav">
+                            <img :src="'/logo.png'" alt="" class="h-8 w-auto shrink-0 object-contain">
+                            <span class="hidden text-lg font-bold tracking-tight md:block">VolumeVault</span>
+                        </Link>
+                        <EnvironmentPicker v-if="auth.user" />
+                    </div>
 
                     <button
-                        class="group inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 text-slate-800 dark:text-slate-200 transition hover:bg-slate-100 hover:text-slate-950 focus:outline-hidden focus:ring-2 focus:ring-sky-400/30 dark:hover:bg-white/10 dark:hover:text-white lg:hidden"
+                        class="group order-last inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 text-slate-800 dark:text-slate-200 transition hover:bg-slate-100 hover:text-slate-950 focus:outline-hidden focus:ring-2 focus:ring-sky-400/30 dark:hover:bg-white/10 dark:hover:text-white xl:hidden"
                         type="button"
                         :aria-label="isMobileNavOpen ? t('Close') : t('Navigation')"
                         aria-controls="mobile-navigation"
@@ -488,34 +482,24 @@ watch(shouldShowUpdateSummary, (shouldShow) => {
                         </span>
                     </button>
 
-                    <nav class="hidden min-w-0 flex-col gap-3 lg:flex lg:flex-row lg:items-center" :aria-label="t('Navigation')">
-                        <div class="flex flex-wrap gap-2">
+                    <nav class="ml-auto hidden min-w-0 justify-end xl:flex" :aria-label="t('Navigation')">
+                        <div class="flex items-center gap-1">
                             <Link
-                                v-for="item in primaryNav"
+                                v-for="item in primaryNav.slice(0, 3)"
                                 :key="item.href"
                                 :href="item.href"
                                 class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-white/10 dark:hover:text-white"
                                 :class="page.url.startsWith(item.href) ? 'bg-slate-100/90 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'"
-                                @click="closeMenu"
+                                @click="closeMobileNav"
                             >
                                 <span>{{ item.label }}</span>
                                 <span v-if="item.badge" class="rounded-full bg-rose-400/20 px-2 py-0.5 text-xs text-rose-700 dark:text-rose-100">{{ item.badge }}</span>
                             </Link>
 
-                            <div v-if="settingsNav.length" class="relative">
-                                <button
-                                    class="group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-white/10 dark:hover:text-white"
-                                    :class="openMenu === 'settings' || hasActiveItem(settingsNav) ? 'bg-slate-100/90 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'"
-                                    type="button"
-                                    aria-haspopup="menu"
-                                    :aria-expanded="openMenu === 'settings'"
-                                    @click.stop="toggleMenu('settings')"
-                                >
-                                    {{ t('Settings') }}
-                                    <span class="h-2 w-2 rotate-45 border-b-2 border-r-2 border-slate-500 transition group-hover:border-slate-600 dark:group-hover:border-slate-300" aria-hidden="true"></span>
-                                </button>
-
-                                <div v-if="openMenu === 'settings'" class="fixed left-4 right-4 z-30 mt-2 overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950 p-2 shadow-2xl shadow-slate-300/20 dark:shadow-black/40 sm:absolute sm:left-auto sm:right-0 sm:w-72" role="menu">
+                            <HeaderDropdown :label="t('environment.backups')" :active="hasActiveItem(primaryNav.slice(3, 5))">
+                                <Link v-for="item in primaryNav.slice(3, 5)" :key="item.href" :href="item.href" role="menuitem" class="block rounded-xl px-3 py-3 text-sm font-semibold hover:bg-slate-100 focus:bg-sky-400/10 focus:outline-none dark:hover:bg-white/10" :class="page.url.startsWith(item.href) ? 'bg-sky-400/10 text-sky-700 dark:text-sky-100' : ''">{{ item.label }}</Link>
+                            </HeaderDropdown>
+                            <HeaderDropdown v-if="settingsNav.length" :label="t('Settings')" :active="hasActiveItem(settingsNav)">
                                     <Link
                                         v-for="item in settingsNav"
                                         :key="item.href"
@@ -523,49 +507,38 @@ watch(shouldShowUpdateSummary, (shouldShow) => {
                                         class="block rounded-xl px-3 py-3 text-sm transition hover:bg-slate-100 dark:hover:bg-white/10"
                                         :class="page.url.startsWith(item.href) ? 'bg-sky-400/10 text-sky-700 dark:text-sky-100' : 'text-slate-800 dark:text-slate-200'"
                                         role="menuitem"
-                                        @click="closeMenu"
+                                        @click="closeMobileNav"
                                     >
                                         <span class="block font-semibold">{{ item.label }}</span>
                                         <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{{ item.description }}</span>
                                     </Link>
-                                </div>
-                            </div>
+                            </HeaderDropdown>
                         </div>
+                    </nav>
 
-                        <div v-if="auth.user" class="relative">
-                            <button
-                                class="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 dark:border-white/10 px-3 py-2 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-white/10 lg:w-auto"
-                                :class="openMenu === 'user' || page.url.startsWith('/profile') || page.url.startsWith('/api-tokens') || page.url.startsWith('/changelog') ? 'bg-slate-100/90 dark:bg-white/10 text-slate-900 dark:text-white' : 'bg-white/80 dark:bg-white/5 text-slate-800 dark:text-slate-200'"
-                                type="button"
-                                aria-haspopup="menu"
-                                :aria-expanded="openMenu === 'user'"
-                                @click.stop="toggleMenu('user')"
-                            >
-                                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-400/15 font-bold uppercase text-sky-700 dark:text-sky-200">
-                                    {{ auth.user.name.slice(0, 1) }}
-                                </span>
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate font-semibold text-slate-900 dark:text-white">{{ auth.user.name }}</span>
-                                    <span class="block truncate text-xs text-slate-500 dark:text-slate-400">{{ auth.user.role }}</span>
-                                </span>
-                                <span class="h-2 w-2 rotate-45 border-b-2 border-r-2 border-slate-500 transition group-hover:border-slate-600 dark:group-hover:border-slate-300" aria-hidden="true"></span>
-                            </button>
-
-                            <div v-if="openMenu === 'user'" class="fixed left-4 right-4 z-30 mt-2 overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950 p-2 shadow-2xl shadow-slate-300/20 dark:shadow-black/40 sm:absolute sm:left-auto sm:right-0 sm:w-80" role="menu">
+                    <div v-if="auth.user" class="ml-auto flex shrink-0 items-center gap-1 xl:ml-4">
+                        <Link href="/alerts" class="relative inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 dark:text-slate-300 dark:hover:bg-white/10" :aria-label="t('environment.alerts', { count: activeAlertCount })" @click="closeMobileNav">
+                            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+                            <span v-if="activeAlertCount" class="absolute -right-1 -top-1 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[10px] font-bold leading-4 text-white" aria-hidden="true">{{ activeAlertCount > 99 ? '99+' : activeAlertCount }}</span>
+                        </Link>
+                        <HeaderDropdown :label="t('Account')" :active="hasActiveItem(accountNav)" class="[&>button]:px-2">
+                            <template #trigger>
+                                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-400/15 font-bold uppercase text-sky-700 dark:text-sky-200">{{ auth.user.name.slice(0, 1) }}</span>
+                            </template>
                                 <div class="border-b border-slate-200 dark:border-white/10 px-3 py-3">
                                     <p class="truncate text-sm font-semibold text-slate-900 dark:text-white">{{ auth.user.name }}</p>
                                     <p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ auth.user.email }}</p>
                                 </div>
 
-                                <Link href="/profile" class="mt-2 block rounded-xl px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem" @click="closeMenu">
+                                <Link href="/profile" class="mt-2 block rounded-xl px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem" @click="closeMobileNav">
                                     {{ t('Edit profile') }}
                                 </Link>
 
-                                <Link v-if="can.manageUsers" href="/api-tokens" class="block rounded-xl px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem" @click="closeMenu">
+                                <Link v-if="can.manageUsers" href="/api-tokens" class="block rounded-xl px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem" @click="closeMobileNav">
                                     {{ t('API tokens') }}
                                 </Link>
 
-                                <Link href="/changelog" class="block rounded-xl px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem" @click="closeMenu">
+                                <Link href="/changelog" class="block rounded-xl px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 transition hover:bg-slate-100 dark:hover:bg-white/10" role="menuitem" @click="closeMobileNav">
                                     {{ t('Changelog') }}
                                 </Link>
 
@@ -616,18 +589,17 @@ watch(shouldShowUpdateSummary, (shouldShow) => {
                                 <Link href="/logout" method="post" as="button" class="mt-2 flex w-full rounded-xl px-3 py-3 text-left text-sm font-semibold text-rose-700 dark:text-rose-200 transition hover:bg-rose-500/10 hover:text-rose-800 dark:hover:text-rose-100" role="menuitem">
                                     {{ t('Logout') }}
                                 </Link>
-                            </div>
-                        </div>
-                    </nav>
+                        </HeaderDropdown>
+                    </div>
                 </div>
 
-                <div v-if="isMobileNavOpen" id="mobile-navigation" class="mt-4 overflow-hidden rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950 p-3 shadow-2xl shadow-slate-300/20 dark:shadow-black/30 lg:hidden">
+                <div v-if="isMobileNavOpen" id="mobile-navigation" class="mt-4 max-h-[70vh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950 p-3 shadow-2xl shadow-slate-300/20 dark:shadow-black/30 xl:hidden">
                     <nav class="flex flex-col gap-4" :aria-label="t('Navigation')">
                         <section>
                             <p class="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('Navigation') }}</p>
                             <div class="mt-2 grid gap-1">
                                 <Link
-                                    v-for="item in primaryNav"
+                                    v-for="item in primaryNav.slice(0, 3)"
                                     :key="item.href"
                                     :href="item.href"
                                     class="flex items-center justify-between gap-3 rounded-2xl px-3 py-3 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-white/10"
@@ -637,6 +609,13 @@ watch(shouldShowUpdateSummary, (shouldShow) => {
                                     <span>{{ item.label }}</span>
                                     <span v-if="item.badge" class="rounded-full bg-rose-400/20 px-2 py-0.5 text-xs text-rose-700 dark:text-rose-100">{{ item.badge }}</span>
                                 </Link>
+                            </div>
+                        </section>
+
+                        <section>
+                            <p class="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ t('environment.backups') }}</p>
+                            <div class="mt-2 grid gap-1">
+                                <Link v-for="item in primaryNav.slice(3, 5)" :key="item.href" :href="item.href" class="rounded-2xl px-3 py-3 text-sm font-semibold transition hover:bg-slate-100 dark:hover:bg-white/10" :class="page.url.startsWith(item.href) ? 'bg-sky-400/10 text-sky-700 dark:text-sky-100' : 'text-slate-800 dark:text-slate-200'" @click="closeMobileNav">{{ item.label }}</Link>
                             </div>
                         </section>
 
@@ -657,80 +636,6 @@ watch(shouldShowUpdateSummary, (shouldShow) => {
                             </div>
                         </section>
 
-                        <section v-if="auth.user" class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.03] p-3">
-                            <div class="flex items-center gap-3">
-                                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-400/15 font-bold uppercase text-sky-700 dark:text-sky-200">
-                                    {{ auth.user.name.slice(0, 1) }}
-                                </span>
-                                <div class="min-w-0">
-                                    <p class="truncate font-semibold text-slate-900 dark:text-white">{{ auth.user.name }}</p>
-                                    <p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ auth.user.email }}</p>
-                                </div>
-                            </div>
-
-                            <div class="mt-3 grid gap-1">
-                                <Link
-                                    v-for="item in accountNav"
-                                    :key="item.href"
-                                    :href="item.href"
-                                    class="rounded-xl px-3 py-3 text-sm font-medium transition hover:bg-slate-100 dark:hover:bg-white/10"
-                                    :class="page.url.startsWith(item.href) ? 'bg-sky-400/10 text-sky-700 dark:text-sky-100' : 'text-slate-800 dark:text-slate-200'"
-                                    @click="closeMobileNav"
-                                >
-                                    {{ item.label }}
-                                </Link>
-                            </div>
-
-                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                                <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.03] p-3">
-                                    <div class="flex items-center justify-between gap-3">
-                                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ t('Theme') }}</span>
-                                        <button
-                                            type="button"
-                                            role="switch"
-                                            class="relative inline-flex h-9 w-20 items-center rounded-full border border-slate-200 dark:border-white/10 bg-slate-100/90 p-1 text-slate-500 transition focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 dark:bg-slate-950/70 dark:text-slate-400 dark:focus:ring-sky-400/30"
-                                            :aria-checked="isDark"
-                                            :aria-label="themeToggleLabel"
-                                            :title="themeName"
-                                            @click="toggleTheme"
-                                        >
-                                            <span class="absolute left-1 top-1 h-7 w-7 rounded-full bg-white shadow-xs shadow-slate-300 transition-transform dark:translate-x-11 dark:bg-slate-800 dark:shadow-black/30" aria-hidden="true"></span>
-                                            <span class="relative z-10 flex h-7 w-7 items-center justify-center text-amber-500 transition dark:text-slate-500" aria-hidden="true">
-                                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <circle cx="12" cy="12" r="4" />
-                                                    <path d="M12 2v2" />
-                                                    <path d="M12 20v2" />
-                                                    <path d="m4.93 4.93 1.41 1.41" />
-                                                    <path d="m17.66 17.66 1.41 1.41" />
-                                                    <path d="M2 12h2" />
-                                                    <path d="M20 12h2" />
-                                                    <path d="m6.34 17.66-1.41 1.41" />
-                                                    <path d="m19.07 4.93-1.41 1.41" />
-                                                </svg>
-                                            </span>
-                                            <span class="relative z-10 ml-auto flex h-7 w-7 items-center justify-center text-slate-500 transition dark:text-sky-200" aria-hidden="true">
-                                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M12 3a6 6 0 0 0 9 7.8A9 9 0 1 1 12 3Z" />
-                                                </svg>
-                                            </span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/[0.03] p-3">
-                                    <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" for="mobile-locale-select">{{ t('Language') }}</label>
-                                    <select id="mobile-locale-select" class="input" :value="locale" @change="updateLocale">
-                                        <option v-for="availableLocale in locales" :key="availableLocale" :value="availableLocale">
-                                            {{ languageNames[availableLocale] }}
-                                        </option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <Link href="/logout" method="post" as="button" class="mt-3 flex w-full rounded-xl px-3 py-3 text-left text-sm font-semibold text-rose-700 dark:text-rose-200 transition hover:bg-rose-500/10 hover:text-rose-800 dark:hover:text-rose-100" @click="closeMobileNav">
-                                {{ t('Logout') }}
-                            </Link>
-                        </section>
                     </nav>
                 </div>
             </div>

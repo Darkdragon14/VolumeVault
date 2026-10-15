@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { useDeployment } from '@/Composables/useDeployment';
 import ActionIcon from '@/Components/ActionIcon.vue';
@@ -63,6 +64,7 @@ const submit = () => {
 
     form.post('/backup-groups');
 };
+useEnvironmentForms(form);
 </script>
 
 <template>

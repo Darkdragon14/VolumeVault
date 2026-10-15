@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import Pagination from '@/Components/Pagination.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -28,6 +29,7 @@ const form = useForm({
 
 const submit = () => form.post('/api-tokens', { preserveScroll: true });
 const revoke = (id: number) => confirm(t('Revoke this API token?')) && router.delete(`/api-tokens/${id}`, { preserveScroll: true });
+useEnvironmentForms(form);
 </script>
 
 <template>

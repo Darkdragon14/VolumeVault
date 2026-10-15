@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'global_environment_navigation' => [
+        'title' => 'Compact navigation with a global environment selector',
+        'description' => 'The responsive single-line header includes a themed environment dropdown beside the logo, a Backups menu for jobs and groups, and an alert bell with a counter beside the compact account avatar. Choosing a host or all environments saves the server-side session preference through a native, CSRF-protected HTTP POST, followed by a 303 redirect and full Dashboard reload. Normal navigation still uses Inertia; Back/Forward and BFCache restoration refresh from the server, not stale SPA state. Unsaved editable forms require confirmation before switching: cancel keeps the draft without a POST; proceed discards it and opens the Dashboard, without transferring the draft. A docker_host_id URL parameter filters only that request and never saves the preference; only the header POST saves it. Execution source/target choices never change implicitly; the API remains stateless. Native Laravel session blocking prevents older session data from overwriting the selection. Use server-side sessions and an atomic-lock cache (database by default, or file/redis); cookie-only sessions are unsupported. The lock lease is 300 seconds, released when the request finishes, with the normal 10-second lock wait.',
+    ],
     'native_tailwind_styles' => [
         'title' => 'Native Tailwind 4 styling',
         'description' => 'The interface now uses native Tailwind 4 utilities and explicit light/dark colors instead of Tailwind 3 compatibility overrides, with updated form spacing and accessible focus states.',

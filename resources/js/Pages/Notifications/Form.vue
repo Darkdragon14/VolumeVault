@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from "@/Layouts/AppLayout.vue";
 import PasswordInput from "@/Components/PasswordInput.vue";
 import { Head, Link, useForm } from "@inertiajs/vue3";
@@ -115,6 +116,13 @@ const submit = () => {
 
     form.post("/notifications");
 };
+useEnvironmentForms(form, {
+    get isDirty() {
+        return useCustomMessage.value !== Boolean(props.channel?.title_template || props.channel?.body_template)
+            || useCustomRestoreMessage.value !== Boolean(props.channel?.restore_title_template || props.channel?.restore_body_template);
+    },
+    processing: false,
+});
 </script>
 
 <template>

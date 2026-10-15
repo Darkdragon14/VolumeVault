@@ -4,11 +4,14 @@ namespace App\Http\Middleware;
 
 use App\Enums\AlertStatus;
 use App\Models\Alert;
+use App\Models\DockerHost;
 use App\Models\User;
+use App\Services\Agents\EnvironmentSelection;
 use App\Services\Changelog\AvailableUpdateChecker;
 use App\Services\Changelog\Changelog;
 use App\Support\DeploymentMode;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -28,6 +31,18 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...parent::share($request),
+            'csrfToken' => Inertia::always(fn () => csrf_token()),
+            'environment' => Inertia::always(fn () => $request->user() ? [
+                'docker_host_id' => $request->attributes->has('environment.scope_host_id')
+                    ? $request->attributes->get('environment.scope_host_id')
+                    : app(EnvironmentSelection::class)->hostId($request),
+                'hosts' => DockerHost::orderBy('name')->get()->map(fn (DockerHost $host): array => [
+                    'id' => $host->id,
+                    'name' => $host->name,
+                    'status' => $host->agentStatus(),
+                    'is_local' => $host->isLocal(),
+                ]),
+            ] : null),
             'deployment' => ['mode' => DeploymentMode::mode(), 'local_execution_enabled' => DeploymentMode::localExecutionEnabled()],
             'auth' => [
                 'user' => fn () => $request->user() ? [

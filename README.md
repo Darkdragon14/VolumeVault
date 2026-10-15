@@ -120,6 +120,14 @@ Agents use the dedicated `volumevault-agent` PHP CLI image. The Docker hosts pag
 
 Compatible agents execute standalone backups and restores. Shared network destinations support restoring an archive from host A into a new volume on host B. Distributed groups, remote Docker-label reconciliation and relay of archives stored only on another host remain under development.
 
+The compact, single-line responsive header includes a themed environment dropdown beside the logo. Choose a Docker host or **All environments** to save the selection in your current authenticated server-side web session. The header submits a native, CSRF-protected HTTP POST followed by a 303 redirect and a full Dashboard reload. Normal navigation continues to use Inertia; browser Back/Forward and BFCache restoration refresh from the server rather than replaying stale SPA state. An explicit `docker_host_id` URL parameter temporarily filters only the current request: it is read-only and never saves the global preference. Only the header POST saves that preference. The API remains stateless: pass `docker_host_id` explicitly when filtering API requests. Backup and restore forms still require their own explicit source/target choices; the navigation selection never implicitly changes execution settings.
+
+The **Backups** menu groups backup jobs and backup groups, while an alert bell with a counter sits beside the compact account menu.
+
+Laravel session blocking serializes requests sharing a web session to prevent older session data from overwriting the selected environment. Keep a server-side session driver (`database`, the default, or `file`/`redis`) and an atomic-lock-capable cache store (`database`, the default, or `file`/`redis`). Cookie-only sessions are not supported for this workflow. The lock lease is 300 seconds, released when the request finishes; the normal lock wait timeout is 10 seconds. This does not serialize API requests or queued backup/restore work.
+
+If an editable form has unsaved changes, switching environments requires confirmation before submitting. Cancel keeps the draft and sends no POST; proceeding discards the draft and loads the Dashboard. Drafts are not automatically transferred to the new environment.
+
 ## Documentation
 
 The full documentation is published with GitHub Pages and built from the [`docs`](docs) directory.

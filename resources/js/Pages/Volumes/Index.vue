@@ -79,7 +79,7 @@ const sync = () => syncHost.value && router.post('/volumes/sync', { async: true,
             </div>
         </template>
 
-        <HostScope :hosts="hosts" :filters="filters" :query="{ search, status: statusFilter, driver: driverFilter, stack: stackFilter, backup_status: backupFilter }" />
+        <HostScope :hosts="hosts" :filters="filters" />
         <div v-if="volumes.length && filtersVisible" class="card mb-4 p-4">
             <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <label class="flex flex-col gap-1">

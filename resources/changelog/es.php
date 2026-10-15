@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'global_environment_navigation' => [
+        'title' => 'Navegación compacta con selector global de entorno',
+        'description' => 'La cabecera adaptable de una sola línea incluye un selector de entorno acorde con el tema junto al logotipo, un menú Copias de seguridad para tareas y grupos y una campana con contador junto al avatar de cuenta compacto. Elegir un host o todos los entornos guarda la preferencia en la sesión del servidor mediante un POST HTTP nativo protegido contra CSRF, seguido de una redirección 303 y una recarga completa del panel. La navegación normal sigue usando Inertia; Atrás/Adelante y las restauraciones de BFCache actualizan desde el servidor, no desde un estado SPA obsoleto. Los formularios con cambios sin guardar requieren confirmación antes del cambio: cancelar conserva el borrador sin POST; continuar lo descarta y abre el panel, sin transferirlo. El parámetro URL docker_host_id solo filtra la solicitud actual y nunca guarda la preferencia; solo el POST de la cabecera la guarda. Las opciones explícitas de origen/destino nunca cambian implícitamente; la API sigue sin estado. El bloqueo nativo de sesiones de Laravel evita que datos antiguos sobrescriban la selección. Usa sesiones del servidor y caché con bloqueos atómicos (database por defecto o file/redis); no se admiten sesiones solo en cookies. El bloqueo dura como máximo 300 segundos y se libera al terminar la solicitud; la espera normal es de 10 segundos.',
+    ],
     'native_tailwind_styles' => [
         'title' => 'Estilos nativos de Tailwind 4',
         'description' => 'La interfaz ahora usa utilidades nativas de Tailwind 4 y colores claros/oscuros explícitos en lugar de reglas de compatibilidad con Tailwind 3, con espaciado de formularios actualizado y estados de foco accesibles.',

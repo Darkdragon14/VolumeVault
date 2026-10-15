@@ -1,4 +1,9 @@
 {
+    "environment.label": "Ambiente",
+    "environment.local": "Host locale",
+    "environment.backups": "Backup",
+    "environment.alerts": "Avvisi ({count} attivi)",
+    "environment.confirmDiscard": "Scartare le modifiche non salvate e cambiare ambiente? Tornerai alla dashboard.",
   "agent_offline": "agente offline",
   "Agent offline": "Agente offline",
   "Minutes offline": "Minuti offline",

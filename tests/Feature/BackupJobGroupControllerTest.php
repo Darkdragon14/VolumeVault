@@ -800,6 +800,7 @@ class BackupJobGroupControllerTest extends TestCase
     public function test_group_list_batches_host_queries_and_does_not_expose_loaded_member_models(): void
     {
         $this->actingAs($this->admin());
+        DockerHost::factory()->create(['name' => 'Host without group members']);
         for ($i = 0; $i < 6; $i++) {
             $this->member($this->group());
         }
@@ -811,9 +812,10 @@ class BackupJobGroupControllerTest extends TestCase
         });
         $this->get(route('backup-groups.index'))->assertOk()->assertInertia(fn (Assert $page) => $page
             ->has('groups.data', 6)
+            ->has('environment.hosts', 2)
             ->where('groups.data.0.can_run', true)
             ->missing('groups.data.0.members'));
-        $this->assertCount(1, $hostQueries);
+        $this->assertCount(2, $hostQueries);
     }
 
     private function admin(): User

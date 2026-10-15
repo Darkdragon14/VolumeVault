@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { destinationMatchesHost, hostId, isHostLocalDestination, useDeployment, type ExecutionHost } from '@/Composables/useDeployment';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
@@ -294,6 +295,7 @@ if (props.preselectedBackupKey && !props.backupRunUnverifiable) {
         }
     }
 }
+useEnvironmentForms(form);
 </script>
 
 <template>

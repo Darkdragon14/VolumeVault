@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { useDeployment } from '@/Composables/useDeployment';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
@@ -183,6 +184,7 @@ const unexpectedErrors = computed(() => [...new Set(
         .filter(([key]) => !knownErrorFields.some((field) => matchesErrorField(key, field)))
         .map(([, message]) => message),
 )]);
+useEnvironmentForms(form);
 </script>
 
 <template>

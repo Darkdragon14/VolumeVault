@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { deploymentFlag, useDeployment } from '@/Composables/useDeployment';
 import { useI18n } from '@/i18n';
@@ -281,6 +282,10 @@ const statusClass = (status: DockerHost['status']) => ({
     offline: 'border-rose-400/30 bg-rose-400/10 text-rose-700 dark:text-rose-100',
     revoked: 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 text-slate-500 dark:text-slate-400',
 }[status]);
+useEnvironmentForms({
+    get isDirty() { return create.name !== ''; },
+    get processing() { return busy.value; },
+});
 </script>
 
 <template>

@@ -1,4 +1,9 @@
 {
+    "environment.label": "Окружение",
+    "environment.local": "Локальный хост",
+    "environment.backups": "Резервные копии",
+    "environment.alerts": "Оповещения (активных: {count})",
+    "environment.confirmDiscard": "Отменить несохранённые изменения и сменить окружение? Вы вернётесь на панель управления.",
   "agent_offline": "агент не в сети",
   "Agent offline": "Агент не в сети",
   "Minutes offline": "Минуты вне сети",

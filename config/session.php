@@ -21,6 +21,14 @@ return [
     'driver' => env('SESSION_DRIVER', 'database'),
 
     /*
+     * Serialize stateful requests so an older request cannot save a stale
+     * session over a newly selected environment. The default database cache
+     * supports the atomic locks used here; API requests remain stateless.
+     */
+    'block' => true,
+    'block_lock_seconds' => 300,
+
+    /*
     |--------------------------------------------------------------------------
     | Session Lifetime
     |--------------------------------------------------------------------------

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'global_environment_navigation' => [
+        'title' => 'Kompakt navigáció globális környezetválasztóval',
+        'description' => 'A reszponzív, egysoros fejléc a témához illő környezetválasztót tartalmaz a logó mellett, Biztonsági mentések menüt a feladatokhoz és csoportokhoz, valamint számlálós értesítési csengőt a kompakt fiókavatár mellett. Egy gazdagép vagy az összes környezet kiválasztása natív, CSRF-védett HTTP POST-tal menti a beállítást a szerveroldali munkamenetbe, majd 303-as átirányítással teljesen újratölti az irányítópultot. A normál navigáció továbbra is Inertia-alapú; a Vissza/Előre és BFCache-visszaállítás a szerverről frissít, nem elavult SPA-állapotból. A nem mentett űrlapmódosítások váltás előtt megerősítést igényelnek: a megszakítás megtartja a piszkozatot POST nélkül; a folytatás elveti azt, és megnyitja az irányítópultot, piszkozatátvitel nélkül. A docker_host_id URL-paraméter csak az aktuális kérést szűri, soha nem menti a beállítást; azt csak a fejléc POST-ja menti. A kifejezett forrás-/célválasztások soha nem változnak implicit módon; az API állapotmentes marad. A Laravel natív munkamenet-zárolása megakadályozza, hogy régebbi munkamenetadatok felülírják a választást. Szerveroldali munkamenet és atomi zárolást támogató gyorsítótár szükséges (alapértelmezésben database, vagy file/redis); a csak sütiben tárolt munkamenet nem támogatott. A zár legfeljebb 300 másodpercig él, a kérés végén felszabadul; a normál várakozási idő 10 másodperc.',
+    ],
     'native_tailwind_styles' => [
         'title' => 'Natív Tailwind 4 stílusok',
         'description' => 'A felület most natív Tailwind 4 segédosztályokat és explicit világos/sötét színeket használ a Tailwind 3 kompatibilitási felülírások helyett, frissített űrlaptérközökkel és akadálymentes fókuszállapotokkal.',

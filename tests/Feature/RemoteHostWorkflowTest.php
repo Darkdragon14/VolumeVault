@@ -20,12 +20,16 @@ use App\Models\DockerVolume;
 use App\Models\RestoreRun;
 use App\Models\User;
 use App\Services\Agents\AgentOperationBroker;
+use App\Services\BackupDestinations\DestinationOperations;
+use App\Services\BackupDestinations\ExecuteDestinationOperation;
 use App\Services\BackupDestinations\ListBackupObjects;
 use App\Services\Docker\DockerProcess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class RemoteHostWorkflowTest extends TestCase
@@ -272,7 +276,7 @@ class RemoteHostWorkflowTest extends TestCase
         $job = $this->job($host, $destination);
         $this->getJson('/api/v1/backup-jobs/'.$job->id.'/backups')->assertAccepted()->assertJsonPath('data.action', 'list')->assertJsonPath('data.docker_host_id', $host->id);
         $this->getJson('/backup-jobs/'.$job->id.'/backups')->assertAccepted()->assertJsonPath('data.action', 'list');
-        $operations = app(\App\Services\BackupDestinations\DestinationOperations::class);
+        $operations = app(DestinationOperations::class);
         $operation = $operations->create($destination, 'list');
         $operations->complete($operation, [
             'status' => 'success', 'data' => ['objects' => [['key' => 'unrecorded.tar.gz', 'display_name' => 'unrecorded.tar.gz', 'size' => 17, 'last_modified' => null]], 'next_cursor' => null],
@@ -329,6 +333,21 @@ class RemoteHostWorkflowTest extends TestCase
         $this->get("/backup-jobs/{$job->id}/restore?backup_run_id={$backup->id}")->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('sourceDockerHostId', $host->id)->where('targetDockerHostId', $host->id)
             ->where('backups.0.verification_deferred', true));
+    }
+
+    public function test_remembered_environment_does_not_change_restore_source_or_default_target(): void
+    {
+        $source = $this->host();
+        $selected = $this->host();
+        $job = $this->job($source, $this->localDestination($source));
+        $backup = $this->successfulBackup($job);
+        $this->withSession(['environment.'.auth()->id() => $selected->id]);
+
+        $this->get("/backup-jobs/{$job->id}/restore?backup_run_id={$backup->id}")->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('environment.docker_host_id', $selected->id)
+                ->where('sourceDockerHostId', $source->id)
+                ->where('targetDockerHostId', $source->id));
     }
 
     public function test_scheduler_and_dispatch_command_include_remote_jobs_in_orchestrator(): void
@@ -425,32 +444,32 @@ class RemoteHostWorkflowTest extends TestCase
         $operation = AgentOperation::findOrFail($id);
         $this->assertSame('id:stable-archive', $operation->payload['selected_backup']['key']);
         $backup->update(['backup_key' => 'id:changed-after-admission']);
-        \Illuminate\Support\Facades\Http::preventStrayRequests();
-        \Illuminate\Support\Facades\Http::fake([
-            'https://api.dropboxapi.com/oauth2/token' => \Illuminate\Support\Facades\Http::response(['access_token' => 'temporary-secret']),
-            'https://api.dropboxapi.com/2/files/get_metadata' => \Illuminate\Support\Facades\Http::response([
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://api.dropboxapi.com/oauth2/token' => Http::response(['access_token' => 'temporary-secret']),
+            'https://api.dropboxapi.com/2/files/get_metadata' => Http::response([
                 '.tag' => 'file', 'id' => 'id:stable-archive', 'name' => 'moved.tar.gz', 'path_display' => '/elsewhere/moved.tar.gz',
                 'path_lower' => '/elsewhere/moved.tar.gz', 'size' => 21, 'server_modified' => '2026-09-22T10:00:00Z',
             ]),
         ]);
-        $result = app(\App\Services\BackupDestinations\ExecuteDestinationOperation::class)->handle($operation->payload, $operation->id);
+        $result = app(ExecuteDestinationOperation::class)->handle($operation->payload, $operation->id);
         $this->assertSame('success', $result['status']);
         $this->assertSame('id:stable-archive', $result['data']['objects'][0]['key']);
         $this->assertSame('moved.tar.gz', $result['data']['objects'][0]['display_name']);
         $this->assertNull($result['data']['next_cursor']);
-        \Illuminate\Support\Facades\Http::assertSentCount(2);
-        \Illuminate\Support\Facades\Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/get_metadata') && $request['path'] === 'id:stable-archive');
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/get_metadata') && $request['path'] === 'id:stable-archive');
         $backup->update(['backup_key' => 'id:stable-archive']);
         $forged = $result;
         $forged['data']['objects'][0]['key'] = 'id:foreign-archive';
         try {
-            app(\App\Services\BackupDestinations\DestinationOperations::class)->complete($operation, $forged);
+            app(DestinationOperations::class)->complete($operation, $forged);
             $this->fail('Foreign historical archive identity accepted');
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+        } catch (HttpException $exception) {
             $this->assertSame(422, $exception->getStatusCode());
             $this->assertSame('pending', $operation->fresh()->status);
         }
-        app(\App\Services\BackupDestinations\DestinationOperations::class)->complete($operation, $result);
+        app(DestinationOperations::class)->complete($operation, $result);
         $this->mock(ListBackupObjects::class)->shouldNotReceive('contains');
         $this->mock(DispatchQueuedRun::class)->shouldReceive('handle')->once()->andReturnFalse();
         $this->postJson('/api/v1/backup-jobs/'.$job->id.'/restore', [
