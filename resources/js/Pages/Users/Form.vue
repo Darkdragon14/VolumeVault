@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PasswordInput from '@/Components/PasswordInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -31,6 +32,7 @@ const submit = () => {
 
     form.post('/users');
 };
+useEnvironmentForms(form);
 </script>
 
 <template>

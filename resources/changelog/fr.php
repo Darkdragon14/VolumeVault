@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'global_environment_navigation' => [
+        'title' => 'Navigation compacte avec sélection globale de l’environnement',
+        'description' => 'L’en-tête adaptatif sur une seule ligne propose un sélecteur d’environnement assorti au thème près du logo, un menu Sauvegardes pour les tâches et groupes, et une cloche avec compteur près de l’avatar de compte compact. Choisir un hôte ou tous les environnements enregistre la préférence dans la session côté serveur par un POST HTTP natif protégé contre les CSRF, suivi d’une redirection 303 et du rechargement complet du tableau de bord. La navigation normale utilise toujours Inertia ; les retours/avances et restaurations BFCache actualisent depuis le serveur, sans état SPA périmé. Les modifications de formulaire non enregistrées exigent une confirmation avant le changement : annuler conserve le brouillon sans POST ; continuer le supprime et ouvre le tableau de bord, sans transfert du brouillon. Le paramètre URL docker_host_id filtre uniquement la requête courante sans enregistrer la préférence ; seul le POST de l’en-tête l’enregistre. Les choix explicites de source/cible ne changent jamais implicitement ; l’API reste sans état. Le blocage natif des sessions Laravel empêche les anciennes données de session d’écraser la sélection. Utilisez des sessions côté serveur et un cache à verrous atomiques (database par défaut, ou file/redis) ; les sessions uniquement en cookies ne sont pas prises en charge. Le verrou expire après 300 secondes au maximum et est libéré à la fin de la requête ; le délai d’attente normal est de 10 secondes.',
+    ],
     'native_tailwind_styles' => [
         'title' => 'Styles natifs Tailwind 4',
         'description' => 'L’interface utilise désormais les utilitaires natifs Tailwind 4 et des couleurs clair/sombre explicites, sans surcharges de compatibilité Tailwind 3, avec des espacements de formulaires adaptés et un focus accessible.',

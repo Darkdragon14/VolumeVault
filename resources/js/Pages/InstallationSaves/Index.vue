@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { useI18n } from '@/i18n';
@@ -13,6 +14,7 @@ const uploadForm = useForm({
 });
 
 const upload = () => uploadForm.post('/installation-save/upload');
+useEnvironmentForms(uploadForm);
 </script>
 
 <template>

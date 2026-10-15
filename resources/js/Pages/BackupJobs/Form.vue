@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { destinationMatchesHost, hostId, useDeployment, type ExecutionHost } from '@/Composables/useDeployment';
 import InfoTooltip from '@/Components/InfoTooltip.vue';
@@ -304,6 +305,10 @@ const submit = () => {
 
     form.transform(submissionPayload).post('/backup-jobs');
 };
+useEnvironmentForms(form, {
+    get isDirty() { return volumeSearch.value !== form.volume_name; },
+    processing: false,
+});
 </script>
 
 <template>

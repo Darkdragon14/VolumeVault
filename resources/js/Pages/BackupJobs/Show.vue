@@ -79,7 +79,7 @@ const destroyJob = (id: number) => confirm(t('Delete this backup job and its run
             </section>
         </div>
 
-        <HostScope :hosts="hosts" :filters="filters" preserve-state />
+        <HostScope :hosts="hosts" :filters="filters" />
         <section class="card mt-6 overflow-hidden">
             <div class="flex gap-1 border-b border-slate-200 dark:border-white/10 p-2" role="tablist">
                 <button

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import InfoTooltip from '@/Components/InfoTooltip.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -60,6 +61,7 @@ const toggleRuleNotificationChannel = (rule: any, id: number) => {
     rule.notification_channel_ids = ids.includes(id) ? ids.filter((channelId) => channelId !== id) : [...ids, id];
 };
 const submit = () => form.put('/alerts/settings');
+useEnvironmentForms(form);
 </script>
 
 <template>

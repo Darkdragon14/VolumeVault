@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'global_environment_navigation',
+        ],
+    ],
     'releases' => [
         'v2.0.4' => [
             'date' => '2026-10-12',

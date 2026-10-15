@@ -1,4 +1,9 @@
 {
+    "environment.label": "Entorno",
+    "environment.local": "Host local",
+    "environment.backups": "Copias de seguridad",
+    "environment.alerts": "Alertas ({count} activas)",
+    "environment.confirmDiscard": "¿Descartar los cambios sin guardar y cambiar de entorno? Volverás al panel de control.",
   "agent_offline": "agente sin conexión",
   "Agent offline": "Agente sin conexión",
   "Minutes offline": "Minutos sin conexión",

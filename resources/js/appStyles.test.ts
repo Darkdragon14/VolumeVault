@@ -144,7 +144,7 @@ describe('native Tailwind 4 application stylesheet', () => {
     });
 
     it('retains responsive breakpoints', () => {
-        for (const [selector, breakpoint] of [['.sm\\:items-center', '40rem'], ['.md\\:hidden', '48rem'], ['.lg\\:hidden', '64rem']]) {
+        for (const [selector, breakpoint] of [['.sm\\:items-center', '40rem'], ['.md\\:hidden', '48rem'], ['.xl\\:hidden', '80rem']]) {
             const rule = rules(selector)[0];
             expect(rule).toBeDefined();
             expect(rule.parent?.type).toBe('atrule');

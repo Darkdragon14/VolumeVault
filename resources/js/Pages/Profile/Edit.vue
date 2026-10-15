@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PasswordInput from '@/Components/PasswordInput.vue';
 import { languageNames, useI18n } from '@/i18n';
@@ -94,6 +95,7 @@ const revokeDevice = (id: number) => {
 const revokeAllDevices = () => {
     if (confirm(t('Remove all trusted devices?'))) router.delete('/profile/two-factor/devices', { preserveScroll: true });
 };
+useEnvironmentForms(form, enableForm, confirmForm, disableForm, recoveryForm);
 </script>
 
 <template>

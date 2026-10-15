@@ -4,8 +4,10 @@ import { initializeTheme } from './theme';
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { createApp, h } from 'vue';
+import { initializeServerFreshHistory } from '@/Composables/serverFreshHistory';
 
 initializeTheme();
+initializeServerFreshHistory();
 
 createInertiaApp({
     title: (title) => (title ? `${title} - VolumeVault` : 'VolumeVault'),

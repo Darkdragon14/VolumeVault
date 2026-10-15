@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import ActionIcon from '@/Components/ActionIcon.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -118,6 +119,15 @@ const stackConfigurationClass = (state: string) => ({
 }[state] || 'border-slate-300/20 bg-slate-300/10 text-slate-800 dark:text-slate-200');
 
 const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volume.name)}&docker_host_id=${volume.docker_host_id}`;
+useEnvironmentForms({
+    get isDirty() {
+        return backupTarget.value !== null && (String(backupForm.backup_destination_id) !== String(eligibleDestinations.value[0]?.id)
+            || backupForm.schedule_type !== 'daily' || backupForm.timezone !== ''
+            || backupForm.schedule_config.time !== '02:00' || Number(backupForm.schedule_config.everyHours) !== 6
+            || backupForm.schedule_config.dayOfWeek !== 'sunday' || backupForm.schedule_config.expression !== '0 2 * * *');
+    },
+    get processing() { return processing.value; },
+});
 </script>
 
 <template>
@@ -140,7 +150,7 @@ const jobsHref = (volume: any) => `/backup-jobs?search=${encodeURIComponent(volu
             </div>
         </template>
 
-        <HostScope :hosts="hosts" :filters="filters" :query="{ search, backup_status: backupFilter }" />
+        <HostScope :hosts="hosts" :filters="filters" />
         <div v-if="stacks.length && filtersVisible" class="card mb-4 p-4">
             <label class="max-w-sm flex flex-col gap-1">
                 <span class="label">{{ t('Backup status') }}</span>

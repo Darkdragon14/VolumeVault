@@ -13,6 +13,7 @@ use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardPreferenceController;
 use App\Http\Controllers\DestinationController;
+use App\Http\Controllers\DestinationOperationController;
 use App\Http\Controllers\DockerHostController;
 use App\Http\Controllers\DockerLabelBackupSettingController;
 use App\Http\Controllers\InstallationSaveController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\StackController;
 use App\Http\Controllers\TwoFactorAuthController;
 use App\Http\Controllers\TwoFactorChallengeController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserEnvironmentController;
 use App\Http\Controllers\UserLocaleController;
 use App\Http\Controllers\UserThemeController;
 use App\Http\Controllers\VolumeController;
@@ -51,6 +53,7 @@ Route::middleware('guest')->group(function () {
 Route::post('/logout', [AuthController::class, 'destroy'])->middleware('auth')->name('logout');
 
 Route::middleware('auth')->group(function () {
+    Route::post('/user/environment', [UserEnvironmentController::class, 'update'])->name('user.environment.update');
     Route::patch('/user/locale', [UserLocaleController::class, 'update'])->name('user.locale.update');
     Route::patch('/user/theme', [UserThemeController::class, 'update'])->name('user.theme.update');
     Route::patch('/user/dashboard-preferences', [DashboardPreferenceController::class, 'update'])->name('user.dashboard-preferences.update');
@@ -105,8 +108,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/destinations/host-key/operations/{operation}', [DestinationController::class, 'hostKeyOperation'])->name('destinations.host-key.operations.show');
         Route::patch('/destinations/{destination}/active', [DestinationController::class, 'updateActive'])->name('destinations.active');
         Route::post('/destinations/{destination}/test', [DestinationController::class, 'test'])->name('destinations.test');
-        Route::post('/destinations/{destination}/operations', [\App\Http\Controllers\DestinationOperationController::class, 'store'])->name('destinations.operations.store');
-        Route::get('/destinations/{destination}/operations/{operation}', [\App\Http\Controllers\DestinationOperationController::class, 'show'])->name('destinations.operations.show');
+        Route::post('/destinations/{destination}/operations', [DestinationOperationController::class, 'store'])->name('destinations.operations.store');
+        Route::get('/destinations/{destination}/operations/{operation}', [DestinationOperationController::class, 'show'])->name('destinations.operations.show');
 
         Route::get('/installation-save', [InstallationSaveController::class, 'index'])->name('installation-save.index');
         Route::get('/installation-save/download', [InstallationSaveController::class, 'download'])->name('installation-save.download');

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import HostScope from '@/Components/HostScope.vue';
 import ActionIcon from '@/Components/ActionIcon.vue';
@@ -120,6 +121,13 @@ const save = () => {
         onFinish: () => { saving.value = false; },
     });
 };
+useEnvironmentForms({
+    get isDirty() {
+        return editing.value && (JSON.stringify(editStats.value) !== JSON.stringify(props.dashboardPreferences.stats)
+            || JSON.stringify(editSections.value) !== JSON.stringify(props.dashboardPreferences.sections));
+    },
+    get processing() { return saving.value; },
+});
 </script>
 
 <template>

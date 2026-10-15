@@ -1,4 +1,9 @@
 {
+    "environment.label": "Környezet",
+    "environment.local": "Helyi gazdagép",
+    "environment.backups": "Biztonsági mentések",
+    "environment.alerts": "Riasztások ({count} aktív)",
+    "environment.confirmDiscard": "Elveti a nem mentett módosításokat és környezetet vált? Visszatér a vezérlőpultra.",
   "agent_offline": "ügynök offline",
   "Agent offline": "Ügynök offline",
   "Minutes offline": "Offline percek",

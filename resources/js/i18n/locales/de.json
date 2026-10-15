@@ -1,4 +1,9 @@
 {
+    "environment.label": "Umgebung",
+    "environment.local": "Lokaler Host",
+    "environment.backups": "Backups",
+    "environment.alerts": "Warnungen ({count} aktiv)",
+    "environment.confirmDiscard": "Ungespeicherte Änderungen verwerfen und die Umgebung wechseln? Sie kehren zum Dashboard zurück.",
   "agent_offline": "agent offline",
   "Agent offline": "Agent offline",
   "Minutes offline": "Minuten offline",

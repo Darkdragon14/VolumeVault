@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useEnvironmentForms } from '@/Composables/useEnvironmentForms';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DestinationOperations from '@/Components/DestinationOperations.vue';
 import type { DestinationOperationHost } from '@/Composables/useDestinationOperations';
@@ -206,6 +207,7 @@ const fetchHostKey = async () => {
     };
     await request();
 };
+useEnvironmentForms(form);
 </script>
 
 <template>

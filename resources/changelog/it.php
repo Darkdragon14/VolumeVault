@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'global_environment_navigation' => [
+        'title' => 'Navigazione compatta con selettore globale dell’ambiente',
+        'description' => 'L’intestazione responsive su una sola riga include un selettore dell’ambiente coerente con il tema accanto al logo, un menu Backup per processi e gruppi e una campanella con contatore accanto all’avatar account compatto. Scegliere un host o tutti gli ambienti salva la preferenza nella sessione sul server tramite un POST HTTP nativo protetto da CSRF, seguito da un reindirizzamento 303 e dal ricaricamento completo della dashboard. La navigazione normale continua a usare Inertia; Indietro/Avanti e i ripristini BFCache aggiornano dal server, non da uno stato SPA obsoleto. I moduli con modifiche non salvate richiedono conferma prima del cambio: annullare conserva la bozza senza POST; procedere la elimina e apre la dashboard, senza trasferirla. Il parametro URL docker_host_id filtra solo la richiesta corrente e non salva mai la preferenza; solo il POST dell’intestazione la salva. Le scelte esplicite di origine/destinazione non cambiano mai implicitamente; l’API resta senza stato. Il blocco nativo delle sessioni Laravel impedisce ai vecchi dati di sessione di sovrascrivere la selezione. Servono sessioni sul server e cache con blocchi atomici (database predefinito o file/redis); le sessioni solo nei cookie non sono supportate. Il blocco dura al massimo 300 secondi ed è rilasciato al termine della richiesta; l’attesa normale è di 10 secondi.',
+    ],
     'native_tailwind_styles' => [
         'title' => 'Stili nativi di Tailwind 4',
         'description' => 'L’interfaccia ora usa utilità native di Tailwind 4 e colori chiari/scuri espliciti al posto delle regole di compatibilità con Tailwind 3, con spaziatura dei moduli aggiornata e stati di focus accessibili.',

@@ -97,8 +97,8 @@ class UnifiedOperationalViewsTest extends TestCase
         $this->actingAs(User::factory()->admin()->create())
             ->get('/stacks?docker_host_id='.$host->id)
             ->assertOk()->assertInertia(fn (Assert $page) => $page
-                ->has('destinations', 4)
-                ->where('destinations', fn ($destinations): bool => collect($destinations)->pluck('id')->sort()->values()->all() === $expectedIds));
+            ->has('destinations', 4)
+            ->where('destinations', fn ($destinations): bool => collect($destinations)->pluck('id')->sort()->values()->all() === $expectedIds));
     }
 
     public function test_run_filters_use_historical_execution_and_restore_target_hosts(): void
@@ -114,6 +114,27 @@ class UnifiedOperationalViewsTest extends TestCase
         $this->withToken($token)->getJson('/api/v1/restore-runs?docker_host_id='.$source->id)->assertOk()->assertJsonCount(0, 'data');
         $this->withToken($token)->getJson('/api/v1/restore-runs?docker_host_id='.$target->id)->assertOk()
             ->assertJsonCount(1, 'data')->assertJsonPath('data.0.source_docker_host.id', $source->id)->assertJsonPath('data.0.target_docker_host.id', $target->id);
+    }
+
+    public function test_partial_restore_polls_do_not_mutate_the_saved_environment_or_require_custom_headers(): void
+    {
+        [$source, $target, $job] = $this->inventory();
+        $run = RestoreRun::create(['backup_job_id' => $job->id, 'source_docker_host_id' => $source->id,
+            'target_docker_host_id' => $target->id, 'mode' => 'new_volume', 'status' => 'running',
+            'selected_backup_key' => 'backup.tar.gz', 'source_volume_name' => 'data', 'target_volume_name' => 'restored']);
+        $user = User::factory()->user()->create();
+        $initial = $this->actingAs($user)->withSession(['environment.'.$user->id => $source->id])
+            ->get('/restore-runs/'.$run->id)->assertOk();
+        $headers = ['X-Inertia' => 'true', 'X-Inertia-Version' => $initial->viewData('page')['version'],
+            'X-Inertia-Partial-Component' => 'RestoreRuns/Show', 'X-Inertia-Partial-Data' => 'run'];
+        $url = '/restore-runs/'.$run->id.'?docker_host_id='.$target->id;
+        $this->get($url, $headers)->assertOk()->assertJsonPath('props.run.id', $run->id)
+            ->assertJsonPath('props.environment.docker_host_id', $target->id)->assertSessionHas('environment.'.$user->id, $source->id);
+        $this->get($url, $headers)->assertOk()->assertJsonPath('props.run.status', 'running')
+            ->assertJsonMissingPath('props.environment.revision');
+        $headers['X-Inertia-Partial-Except'] = 'environment';
+        $this->get($url, $headers)->assertOk()->assertJsonPath('props.environment.docker_host_id', $target->id)
+            ->assertSessionHas('environment.'.$user->id, $source->id);
     }
 
     public function test_invalid_scopes_and_remote_local_actions_are_rejected(): void

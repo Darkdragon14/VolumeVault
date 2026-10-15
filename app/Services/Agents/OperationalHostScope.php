@@ -21,8 +21,12 @@ class OperationalHostScope
 
     public function __construct(private readonly Request $request)
     {
+        $selection = app(EnvironmentSelection::class);
         $validated = $request->validate(['docker_host_id' => ['nullable', 'integer', 'exists:docker_hosts,id']]);
-        $this->hostId = isset($validated['docker_host_id']) ? (int) $validated['docker_host_id'] : null;
+        $this->hostId = $request->exists('docker_host_id')
+            ? (isset($validated['docker_host_id']) ? (int) $validated['docker_host_id'] : null)
+            : $selection->hostId($request);
+        $request->attributes->set('environment.scope_host_id', $this->hostId);
         $this->hosts = DockerHost::withCount(['volumes', 'volumes as existing_volumes_count' => fn (Builder $query) => $query->where('exists', true)])->orderBy('name')->get()->keyBy('id');
     }
 
