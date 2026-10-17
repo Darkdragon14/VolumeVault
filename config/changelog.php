@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'dependency_maintenance_refresh',
+        ],
+    ],
     'releases' => [
         'v2.0.5' => [
             'date' => '2026-10-15',

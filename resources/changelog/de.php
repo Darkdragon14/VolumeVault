@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_maintenance_refresh' => [
+        'title' => 'Wartungsupdates der Abhängigkeiten',
+        'description' => 'Die PHP- und JavaScript-Abhängigkeiten wurden innerhalb der bestehenden Versionsvorgaben aktualisiert. Die Composer- und npm-Prüfungen melden zum Zeitpunkt dieses Updates keine bekannten Sicherheitslücken in den festgeschriebenen Versionen.',
+    ],
     'global_environment_navigation' => [
         'title' => 'Kompakte Navigation mit globaler Umgebungsauswahl',
         'description' => 'Die responsive, einzeilige Kopfzeile bietet eine zum Design passende Umgebungsauswahl neben dem Logo, ein Backups-Menü für Aufträge und Gruppen sowie eine Alarmglocke mit Zähler neben dem kompakten Kontoavatar. Die Wahl eines Hosts oder aller Umgebungen speichert die Einstellung in der serverseitigen Sitzung über einen nativen, CSRF-geschützten HTTP-POST, gefolgt von einer 303-Weiterleitung und vollständigem Neuladen des Dashboards. Normale Navigation nutzt weiterhin Inertia; Zurück/Vorwärts und BFCache-Wiederherstellung aktualisieren vom Server statt aus veraltetem SPA-Zustand. Ungespeicherte Formularänderungen erfordern vor dem Wechsel eine Bestätigung: Abbrechen behält den Entwurf ohne POST; Fortfahren verwirft ihn und öffnet das Dashboard, ohne Entwurfsübertragung. Ein docker_host_id-URL-Parameter filtert nur die aktuelle Anfrage und speichert keine Einstellung; nur der Header-POST speichert sie. Explizite Quell-/Zielwahlen ändern sich nie implizit; die API bleibt zustandslos. Native Laravel-Sitzungssperren verhindern das Überschreiben der Auswahl durch ältere Sitzungsdaten. Erforderlich sind serverseitige Sitzungen und ein Cache mit atomaren Sperren (standardmäßig database, alternativ file/redis); reine Cookie-Sitzungen sind nicht unterstützt. Die Sperre gilt höchstens 300 Sekunden und wird bei Anfrageende freigegeben; die normale Wartezeit beträgt 10 Sekunden.',
