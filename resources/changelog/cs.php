@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_maintenance_refresh' => [
+        'title' => 'Údržbová aktualizace závislostí',
+        'description' => 'Závislosti PHP a JavaScriptu byly aktualizovány v rámci stávajících omezení verzí. Audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti v uzamčených verzích.',
+    ],
     'global_environment_navigation' => [
         'title' => 'Kompaktní navigace s globálním výběrem prostředí',
         'description' => 'Responzivní jednořádkové záhlaví obsahuje výběr prostředí ve stylu motivu vedle loga, nabídku Zálohy pro úlohy a skupiny a zvonek s počítadlem vedle kompaktního avataru účtu. Výběr hostitele nebo všech prostředí uloží předvolbu do serverové relace nativním HTTP POST s ochranou CSRF, následovaným přesměrováním 303 a úplným načtením přehledu. Běžná navigace nadále používá Inertia; Zpět/Vpřed a obnovení z BFCache načítají aktuální stav ze serveru, nikoli zastaralý stav SPA. Neuložené změny formuláře vyžadují před přepnutím potvrzení: zrušení zachová koncept bez POST; pokračování jej zahodí a otevře přehled bez přenosu konceptu. Parametr URL docker_host_id filtruje pouze aktuální požadavek a nikdy neukládá předvolbu; ukládá ji jen POST ze záhlaví. Výslovné volby zdroje/cíle se nikdy nemění implicitně; API zůstává bezstavové. Nativní zamykání relací Laravel brání přepsání výběru staršími daty relace. Používejte serverové relace a mezipaměť s atomickými zámky (výchozí database nebo file/redis); relace pouze v cookies nejsou podporovány. Zámek platí nejvýše 300 sekund a uvolní se po dokončení požadavku; běžné čekání na zámek je 10 sekund.',
