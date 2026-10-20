@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'dependency_maintenance_refresh',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.6' => [
+            'date' => '2026-10-20',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.6',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'dependency_maintenance_refresh',
+                ],
+            ],
+        ],
         'v2.0.5' => [
             'date' => '2026-10-15',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.5',
