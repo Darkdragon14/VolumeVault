@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_maintenance_refresh' => [
+        'title' => 'Onderhoudsupdate van afhankelijkheden',
+        'description' => 'De PHP- en JavaScript-afhankelijkheden zijn bijgewerkt binnen de bestaande versiebeperkingen. De audits van Composer en npm melden op het moment van deze update geen bekende kwetsbaarheden in de vastgelegde versies.',
+    ],
     'global_environment_navigation' => [
         'title' => 'Compacte navigatie met een globale omgevingskiezer',
         'description' => 'De responsieve kop op één regel bevat een omgevingskiezer in themastijl naast het logo, een Back-ups-menu voor taken en groepen en een meldingsbel met teller naast de compacte accountavatar. Een host of alle omgevingen kiezen slaat de voorkeur op in de serversessie via een native HTTP-POST met CSRF-beveiliging, gevolgd door een 303-omleiding en volledig herladen van het dashboard. Normale navigatie blijft Inertia gebruiken; Terug/Vooruit en BFCache-herstel vernieuwen vanaf de server in plaats van verouderde SPA-status te gebruiken. Niet-opgeslagen formulierwijzigingen vereisen bevestiging vóór het wisselen: annuleren behoudt het concept zonder POST; doorgaan verwijdert het en opent het dashboard, zonder conceptoverdracht. De URL-parameter docker_host_id filtert alleen het huidige verzoek en slaat nooit de voorkeur op; alleen de POST vanuit de kop slaat die op. Expliciete bron-/doelkeuzes veranderen nooit impliciet; de API blijft stateloos. Native Laravel-sessievergrendeling voorkomt dat oudere sessiegegevens de keuze overschrijven. Gebruik serversessies en een cache met atomaire vergrendeling (standaard database, of file/redis); sessies alleen in cookies worden niet ondersteund. De vergrendeling geldt maximaal 300 seconden en wordt bij het afronden van het verzoek vrijgegeven; de normale wachttijd is 10 seconden.',

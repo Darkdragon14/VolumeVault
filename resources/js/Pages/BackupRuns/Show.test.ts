@@ -116,22 +116,25 @@ describe('Backup run detail', () => {
 
     it('waits for the active poll request to finish before scheduling another', () => {
         vi.useFakeTimers();
-        const reload = vi.spyOn(router, 'reload').mockImplementation(() => undefined);
+        const visit = vi.spyOn(router, 'visit').mockImplementation((_url, options) => {
+            options?.onCancelToken?.({ cancel: vi.fn() });
+        });
         const polling = router.poll(2000, { only: ['run'] }, { mode: 'rest' });
 
         try {
             vi.advanceTimersByTime(2000);
-            expect(reload).toHaveBeenCalledTimes(1);
+            expect(visit).toHaveBeenCalledTimes(1);
+            expect(visit.mock.calls[0][1]).toMatchObject({ only: ['run'], async: true });
 
             vi.advanceTimersByTime(10000);
-            expect(reload).toHaveBeenCalledTimes(1);
+            expect(visit).toHaveBeenCalledTimes(1);
 
-            reload.mock.calls[0][0].onFinish?.(undefined as never);
+            visit.mock.calls[0][1]?.onFinish?.(undefined as never);
             vi.advanceTimersByTime(2000);
-            expect(reload).toHaveBeenCalledTimes(2);
+            expect(visit).toHaveBeenCalledTimes(2);
         } finally {
             polling.stop();
-            reload.mockRestore();
+            visit.mockRestore();
             vi.useRealTimers();
         }
     });
