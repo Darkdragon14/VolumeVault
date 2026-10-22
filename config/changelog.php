@@ -1,13 +1,18 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'php_security_container_rebuilds',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.7' => [
+            'date' => '2026-10-22',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.7',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'php_security_container_rebuilds',
+                ],
+            ],
+        ],
         'v2.0.6' => [
             'date' => '2026-10-20',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.6',
