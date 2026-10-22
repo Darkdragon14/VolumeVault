@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_security_container_rebuilds' => [
+        'title' => 'Bezpečná verze PHP pro obrazy kontejnerů',
+        'description' => 'Sestavení aplikace a agentů nyní vyžadují PHP 8.5.12 nebo novější. Publikování stahuje aktuální základní obrazy a umožňuje ruční sestavení po jejich bezpečnostních aktualizacích. Znovu vytvořte kontejnery aplikace a agentů s opravenými obrazy VolumeVault; běžící kontejnery se neaktualizují automaticky.',
+    ],
     'dependency_maintenance_refresh' => [
         'title' => 'Údržbová aktualizace závislostí',
         'description' => 'Závislosti PHP a JavaScriptu byly aktualizovány v rámci stávajících omezení verzí. Audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti v uzamčených verzích.',

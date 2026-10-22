@@ -1,6 +1,7 @@
 name: Publish container images
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -99,6 +100,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          pull: true
           target: ${{ matrix.image.target }}
           platforms: linux/${{ matrix.platform.arch }}
           outputs: type=image,name=${{ needs.prepare.outputs.image }}${{ matrix.image.suffix }},push-by-digest=true,name-canonical=true,push=true

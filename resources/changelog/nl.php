@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_security_container_rebuilds' => [
+        'title' => 'Veilige PHP-basis voor containerimages',
+        'description' => 'Builds van de applicatie en agents vereisen nu PHP 8.5.12 of nieuwer. De publicatie haalt actuele basisimages op en ondersteunt handmatige herbouw na beveiligingsupdates van de basisimages. Maak de applicatie- en agentcontainers opnieuw aan met gecorrigeerde VolumeVault-images; draaiende containers worden niet automatisch bijgewerkt.',
+    ],
     'dependency_maintenance_refresh' => [
         'title' => 'Onderhoudsupdate van afhankelijkheden',
         'description' => 'De PHP- en JavaScript-afhankelijkheden zijn bijgewerkt binnen de bestaande versiebeperkingen. De audits van Composer en npm melden op het moment van deze update geen bekende kwetsbaarheden in de vastgelegde versies.',

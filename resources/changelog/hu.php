@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_security_container_rebuilds' => [
+        'title' => 'Biztonságos PHP-verzió a konténerképekhez',
+        'description' => 'Az alkalmazás és az ügynökök összeállításához mostantól PHP 8.5.12 vagy újabb szükséges. A közzététel friss alapképeket tölt le, és lehetővé teszi a kézi újraépítést azok biztonsági frissítései után. Hozza létre újra az alkalmazás és az ügynökök konténereit javított VolumeVault-képekkel; a futó konténerek nem frissülnek automatikusan.',
+    ],
     'dependency_maintenance_refresh' => [
         'title' => 'Függőségek karbantartási frissítése',
         'description' => 'A PHP- és JavaScript-függőségek a meglévő verziókorlátokon belül frissültek. A Composer és az npm ellenőrzése a frissítés időpontjában nem jelez ismert sérülékenységet a rögzített verziókban.',
