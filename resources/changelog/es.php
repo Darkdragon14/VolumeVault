@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_security_container_rebuilds' => [
+        'title' => 'Versión segura de PHP para las imágenes de contenedores',
+        'description' => 'Las compilaciones de la aplicación y los agentes requieren PHP 8.5.12 o posterior. La publicación descarga imágenes base actualizadas y permite reconstrucciones manuales tras actualizaciones de seguridad de estas imágenes. Recrea los contenedores de la aplicación y los agentes con imágenes corregidas de VolumeVault; los contenedores en ejecución no se actualizan automáticamente.',
+    ],
     'dependency_maintenance_refresh' => [
         'title' => 'Actualización de mantenimiento de dependencias',
         'description' => 'Las dependencias PHP y JavaScript se han actualizado dentro de las restricciones de versión existentes. Las auditorías de Composer y npm no detectan vulnerabilidades conocidas en las versiones fijadas en el momento de esta actualización.',

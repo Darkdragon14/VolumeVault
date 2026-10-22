@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_security_container_rebuilds' => [
+        'title' => 'Version PHP sécurisée pour les images de conteneurs',
+        'description' => 'Les builds de l’application et des agents exigent désormais PHP 8.5.12 ou supérieur. La publication récupère les images de base à jour et permet une reconstruction manuelle après les correctifs de sécurité en amont. Recréez les conteneurs de l’application et des agents avec les images VolumeVault corrigées ; les conteneurs en cours ne sont pas mis à jour automatiquement.',
+    ],
     'dependency_maintenance_refresh' => [
         'title' => 'Actualisation des dépendances',
         'description' => 'Les dépendances PHP et JavaScript ont été actualisées dans les contraintes de versions existantes. Les audits Composer et npm ne signalent aucune vulnérabilité connue dans les versions verrouillées au moment de cette mise à jour.',

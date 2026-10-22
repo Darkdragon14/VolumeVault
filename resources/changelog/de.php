@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_security_container_rebuilds' => [
+        'title' => 'PHP-Sicherheitsbasis für Container-Images',
+        'description' => 'Anwendungs- und Agent-Builds erfordern jetzt PHP 8.5.12 oder neuer. Die Veröffentlichung lädt aktuelle Basis-Images und unterstützt manuelle Neubauten nach Sicherheitsupdates der Basis-Images. Erstellen Sie die Anwendungs- und Agent-Container mit korrigierten VolumeVault-Images neu; laufende Container werden nicht automatisch aktualisiert.',
+    ],
     'dependency_maintenance_refresh' => [
         'title' => 'Wartungsupdates der Abhängigkeiten',
         'description' => 'Die PHP- und JavaScript-Abhängigkeiten wurden innerhalb der bestehenden Versionsvorgaben aktualisiert. Die Composer- und npm-Prüfungen melden zum Zeitpunkt dieses Updates keine bekannten Sicherheitslücken in den festgeschriebenen Versionen.',

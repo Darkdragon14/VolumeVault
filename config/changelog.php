@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'php_security_container_rebuilds',
+        ],
+    ],
     'releases' => [
         'v2.0.6' => [
             'date' => '2026-10-20',
