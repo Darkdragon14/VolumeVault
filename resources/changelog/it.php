@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_maintenance_october_2026' => [
+        'title' => 'Dipendenze applicative aggiornate',
+        'description' => 'Le dipendenze PHP e JavaScript sono state aggiornate entro i vincoli delle versioni compatibili. Gli audit Composer e npm non segnalano vulnerabilità note nelle dipendenze bloccate al momento di questo aggiornamento. Questo non verifica le immagini dei container e non aggiorna le installazioni in esecuzione.',
+    ],
     'php_security_container_rebuilds' => [
         'title' => 'Versione PHP sicura per le immagini dei container',
         'description' => 'Le build di applicazione e agent richiedono ora PHP 8.5.12 o successivo. La pubblicazione scarica immagini di base aggiornate e consente ricompilazioni manuali dopo gli aggiornamenti di sicurezza delle immagini di base. Ricrea i container di applicazione e agent con immagini VolumeVault corrette; i container in esecuzione non vengono aggiornati automaticamente.',

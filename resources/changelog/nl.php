@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_maintenance_october_2026' => [
+        'title' => 'Applicatieafhankelijkheden bijgewerkt',
+        'description' => 'PHP- en JavaScript-afhankelijkheden zijn bijgewerkt binnen compatibele versiebeperkingen. Composer- en npm-audits melden op het moment van deze update geen bekende kwetsbaarheden in de vastgelegde afhankelijkheden. Dit controleert geen containerimages en werkt actieve installaties niet bij.',
+    ],
     'php_security_container_rebuilds' => [
         'title' => 'Veilige PHP-basis voor containerimages',
         'description' => 'Builds van de applicatie en agents vereisen nu PHP 8.5.12 of nieuwer. De publicatie haalt actuele basisimages op en ondersteunt handmatige herbouw na beveiligingsupdates van de basisimages. Maak de applicatie- en agentcontainers opnieuw aan met gecorrigeerde VolumeVault-images; draaiende containers worden niet automatisch bijgewerkt.',
