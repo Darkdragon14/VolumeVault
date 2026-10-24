@@ -17,6 +17,26 @@ class ChangelogTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_october_dependency_maintenance_has_a_release_note_in_every_locale(): void
+    {
+        $key = 'dependency_maintenance_october_2026';
+
+        $items = config('changelog.unreleased');
+
+        foreach (config('changelog.releases') as $release) {
+            $items = array_merge($items, $release['items']);
+        }
+
+        $this->assertContains($key, array_column($items, 'key'));
+
+        foreach (User::SUPPORTED_LOCALES as $locale) {
+            $translations = require resource_path('changelog/'.$locale.'.php');
+
+            $this->assertNotEmpty($translations[$key]['title'], $locale);
+            $this->assertNotEmpty($translations[$key]['description'], $locale);
+        }
+    }
+
     public function test_user_without_seen_version_receives_only_current_release_summary(): void
     {
         config([
