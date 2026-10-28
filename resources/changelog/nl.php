@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_http_transport_compatibility' => [
+        'title' => 'Agentverbindingen hersteld na updates van de HTTP-client',
+        'description' => 'HTTP-transportopties hersteld die agentverbindingen na een afhankelijkheidsupdate konden blokkeren. Certificaat- en hostnaamverificatie en minimaal TLS 1.2 blijven verplicht. Werk het agentimage bij met behoud van het bestaande opslagvolume en de configuratie; opnieuw registreren is niet nodig.',
+    ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Applicatieafhankelijkheden bijgewerkt',
         'description' => 'PHP- en JavaScript-afhankelijkheden zijn bijgewerkt binnen compatibele versiebeperkingen. Composer- en npm-audits melden op het moment van deze update geen bekende kwetsbaarheden in de vastgelegde afhankelijkheden. Dit controleert geen containerimages en werkt actieve installaties niet bij.',

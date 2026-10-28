@@ -4,6 +4,10 @@ return [
     'unreleased' => [
         [
             'type' => 'change',
+            'key' => 'agent_http_transport_compatibility',
+        ],
+        [
+            'type' => 'change',
             'key' => 'dependency_maintenance_october_2026',
         ],
     ],

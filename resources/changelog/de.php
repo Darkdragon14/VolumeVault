@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_http_transport_compatibility' => [
+        'title' => 'Agent-Verbindungen nach HTTP-Client-Updates wiederhergestellt',
+        'description' => 'HTTP-Transportoptionen korrigiert, die Agent-Verbindungen nach einer Abhängigkeitsaktualisierung verhindern konnten. Zertifikats- und Hostnamenprüfung sowie mindestens TLS 1.2 bleiben vorgeschrieben. Aktualisieren Sie das Agent-Image unter Beibehaltung des Speichervolumes und der Konfiguration; eine erneute Registrierung ist nicht erforderlich.',
+    ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Anwendungsabhängigkeiten aktualisiert',
         'description' => 'PHP- und JavaScript-Abhängigkeiten wurden innerhalb kompatibler Versionsgrenzen aktualisiert. Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen in den gesperrten Abhängigkeiten. Dies prüft weder Container-Images noch aktualisiert es laufende Installationen.',

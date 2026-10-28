@@ -13,6 +13,8 @@ use App\Services\Agents\AgentState;
 use App\Services\Agents\AgentStateException;
 use App\Services\Agents\AgentTlsIdentity;
 use App\Services\BackupSources\HostPathPolicy;
+use GuzzleHttp\Handler\CurlFactory;
+use GuzzleHttp\Psr7\Request as PsrRequest;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
@@ -156,10 +158,9 @@ class AgentClientTest extends TestCase
             $this->assertSame('', $options['proxy']);
             $this->assertEquals(5, $options['connect_timeout']);
             $this->assertEquals(20, $options['timeout']);
-            $this->assertTrue($options['stream_context']['ssl']['verify_peer']);
-            $this->assertTrue($options['stream_context']['ssl']['verify_peer_name']);
-            $this->assertSame(2, $options['curl'][CURLOPT_SSL_VERIFYHOST]);
-            $this->assertSame(CURL_SSLVERSION_TLSv1_2, $options['curl'][CURLOPT_SSLVERSION]);
+            $this->assertSame(STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT, $options['crypto_method']);
+            $this->assertArrayNotHasKey('stream_context', $options);
+            $this->assertArrayNotHasKey('curl', $options);
             $this->assertTrue($request->hasHeader('Content-Type', 'application/json'));
             $persisted = json_decode(file_get_contents($this->directory.'/state/state.json'), true);
             $this->assertSame($persisted['credential'], $request['credential']);
@@ -168,6 +169,25 @@ class AgentClientTest extends TestCase
             return Http::response($this->enrollment());
         });
         (new AgentClient($state))->enroll();
+    }
+
+    public function test_transport_options_are_accepted_by_the_real_curl_handler(): void
+    {
+        $state = $this->state();
+        $validated = false;
+        Http::fake(function (Request $request, array $options) use (&$validated) {
+            $factory = new CurlFactory(0);
+            $handle = $factory->create(new PsrRequest($request->method(), $request->url(), $request->headers(), $request->body()), $options);
+            $factory->release($handle);
+            $validated = true;
+
+            return Http::response($this->enrollment());
+        });
+
+        (new AgentClient($state))->enroll();
+
+        $this->assertTrue($validated);
+        $this->assertTrue($state->identity()['enrolled']);
     }
 
     public function test_relay_worker_uses_read_only_persisted_identity_while_loop_holds_exclusive_state_lock(): void
@@ -186,7 +206,9 @@ class AgentClientTest extends TestCase
             $this->assertSame($loop->caPath(), $options['verify']);
             $this->assertFalse($options['allow_redirects']);
             $this->assertSame('', $options['proxy']);
-            $this->assertTrue($options['stream_context']['ssl']['verify_peer_name']);
+            $this->assertSame(STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT, $options['crypto_method']);
+            $this->assertArrayNotHasKey('stream_context', $options);
+            $this->assertArrayNotHasKey('curl', $options);
 
             return Http::response(['offset' => 3]);
         });

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_http_transport_compatibility' => [
+        'title' => 'Ripristinate le connessioni degli agenti dopo gli aggiornamenti del client HTTP',
+        'description' => 'Corrette le opzioni di trasporto HTTP che potevano impedire agli agenti di connettersi dopo un aggiornamento delle dipendenze. Restano obbligatori la verifica del certificato e del nome host e almeno TLS 1.2. Aggiorna l’immagine dell’agente mantenendo il volume di archiviazione e la configurazione esistenti; non è necessaria una nuova registrazione.',
+    ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Dipendenze applicative aggiornate',
         'description' => 'Le dipendenze PHP e JavaScript sono state aggiornate entro i vincoli delle versioni compatibili. Gli audit Composer e npm non segnalano vulnerabilità note nelle dipendenze bloccate al momento di questo aggiornamento. Questo non verifica le immagini dei container e non aggiorna le installazioni in esecuzione.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'agent_http_transport_compatibility' => [
+        'title' => 'Restored agent connections after HTTP client updates',
+        'description' => 'Fixed HTTP transport options that could prevent agents from connecting after a dependency update. Certificate and hostname verification and the TLS 1.2 minimum remain enforced. Update the agent image while keeping its existing storage volume and configuration; enrollment again is not required.',
+    ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Updated application dependencies',
         'description' => 'Updated PHP and JavaScript dependencies within compatible version constraints. Composer and npm audits report no known vulnerabilities in the locked dependencies at the time of this update. This does not audit container images or update running installations.',
