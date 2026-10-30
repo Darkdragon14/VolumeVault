@@ -1,17 +1,13 @@
 <?php
 
 return [
-    'mime_header_security_update' => [
-        'title' => 'Actualización de seguridad de cabeceras de correo',
-        'description' => 'symfony/mime se actualizó a 8.1.10 para corregir CVE-2026-45070, una vulnerabilidad de inyección de cabeceras de correo mediante nombres de parámetros MIME. Recrea los contenedores de la aplicación y los agentes con imágenes actualizadas, conservando los volúmenes y la configuración.',
-    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Conexiones de agentes restauradas tras actualizar el cliente HTTP',
         'description' => 'Se corrigieron las opciones de transporte HTTP que podían impedir la conexión de los agentes tras actualizar las dependencias. Se mantienen la verificación del certificado y del nombre de host y el mínimo de TLS 1.2. Actualiza la imagen del agente conservando su volumen de almacenamiento y su configuración; no es necesario registrarlo de nuevo.',
     ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Dependencias de la aplicación actualizadas',
-        'description' => 'Se actualizaron las dependencias PHP y JavaScript dentro de las versiones compatibles. Las auditorías de Composer y npm no detectan vulnerabilidades conocidas en las dependencias bloqueadas en el momento de esta actualización. Esto no audita imágenes de contenedores ni actualiza instalaciones en ejecución.',
+        'description' => 'Se actualizaron las dependencias PHP y JavaScript dentro de las versiones compatibles, incluido symfony/mime 8.1.10 para corregir CVE-2026-45070, una vulnerabilidad de inyección de cabeceras de correo mediante nombres de parámetros MIME. Las auditorías de Composer y npm no detectan vulnerabilidades conocidas en las dependencias bloqueadas en el momento de esta actualización. Esto no audita imágenes de contenedores ni actualiza instalaciones en ejecución. Recrea los contenedores de la aplicación y los agentes con imágenes actualizadas, conservando los volúmenes y la configuración.',
     ],
     'php_security_container_rebuilds' => [
         'title' => 'Versión segura de PHP para las imágenes de contenedores',

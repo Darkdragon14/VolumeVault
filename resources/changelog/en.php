@@ -1,17 +1,13 @@
 <?php
 
 return [
-    'mime_header_security_update' => [
-        'title' => 'Email header security update',
-        'description' => 'Updated symfony/mime to 8.1.10 to fix CVE-2026-45070, an email header injection vulnerability involving MIME parameter names. Recreate the application and agent containers with updated images, preserving storage volumes and configuration.',
-    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Restored agent connections after HTTP client updates',
         'description' => 'Fixed HTTP transport options that could prevent agents from connecting after a dependency update. Certificate and hostname verification and the TLS 1.2 minimum remain enforced. Update the agent image while keeping its existing storage volume and configuration; enrollment again is not required.',
     ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Updated application dependencies',
-        'description' => 'Updated PHP and JavaScript dependencies within compatible version constraints. Composer and npm audits report no known vulnerabilities in the locked dependencies at the time of this update. This does not audit container images or update running installations.',
+        'description' => 'Updated PHP and JavaScript dependencies within compatible version constraints, including symfony/mime 8.1.10 to fix CVE-2026-45070, an email header injection vulnerability involving MIME parameter names. Composer and npm audits report no known vulnerabilities in the locked dependencies at the time of this update. This does not audit container images or update running installations. Recreate the application and agent containers with updated images, preserving storage volumes and configuration.',
     ],
     'php_security_container_rebuilds' => [
         'title' => 'PHP security baseline for container images',

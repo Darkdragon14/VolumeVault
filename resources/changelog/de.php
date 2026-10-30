@@ -1,17 +1,13 @@
 <?php
 
 return [
-    'mime_header_security_update' => [
-        'title' => 'Sicherheitsupdate für E-Mail-Header',
-        'description' => 'symfony/mime wurde auf 8.1.10 aktualisiert, um CVE-2026-45070 zu beheben: eine Header-Injection-Schwachstelle über MIME-Parameternamen. Erstellen Sie Anwendungs- und Agent-Container mit aktuellen Images neu und behalten Sie Speichervolumes und Konfiguration bei.',
-    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Agent-Verbindungen nach HTTP-Client-Updates wiederhergestellt',
         'description' => 'HTTP-Transportoptionen korrigiert, die Agent-Verbindungen nach einer Abhängigkeitsaktualisierung verhindern konnten. Zertifikats- und Hostnamenprüfung sowie mindestens TLS 1.2 bleiben vorgeschrieben. Aktualisieren Sie das Agent-Image unter Beibehaltung des Speichervolumes und der Konfiguration; eine erneute Registrierung ist nicht erforderlich.',
     ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Anwendungsabhängigkeiten aktualisiert',
-        'description' => 'PHP- und JavaScript-Abhängigkeiten wurden innerhalb kompatibler Versionsgrenzen aktualisiert. Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen in den gesperrten Abhängigkeiten. Dies prüft weder Container-Images noch aktualisiert es laufende Installationen.',
+        'description' => 'PHP- und JavaScript-Abhängigkeiten wurden innerhalb kompatibler Versionsgrenzen aktualisiert, einschließlich symfony/mime 8.1.10 zur Behebung von CVE-2026-45070, einer Header-Injection-Schwachstelle über MIME-Parameternamen. Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen in den gesperrten Abhängigkeiten. Dies prüft weder Container-Images noch aktualisiert es laufende Installationen. Erstellen Sie Anwendungs- und Agent-Container mit aktuellen Images neu und behalten Sie Speichervolumes und Konfiguration bei.',
     ],
     'php_security_container_rebuilds' => [
         'title' => 'PHP-Sicherheitsbasis für Container-Images',

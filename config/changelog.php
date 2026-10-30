@@ -9,10 +9,6 @@ return [
             'items' => [
                 [
                     'type' => 'change',
-                    'key' => 'mime_header_security_update',
-                ],
-                [
-                    'type' => 'change',
                     'key' => 'agent_http_transport_compatibility',
                 ],
                 [
