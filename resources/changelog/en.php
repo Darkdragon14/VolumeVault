@@ -7,7 +7,7 @@ return [
     ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Updated application dependencies',
-        'description' => 'Updated PHP and JavaScript dependencies within compatible version constraints. Composer and npm audits report no known vulnerabilities in the locked dependencies at the time of this update. This does not audit container images or update running installations.',
+        'description' => 'Updated PHP and JavaScript dependencies within compatible version constraints, including symfony/mime 8.1.10 to fix CVE-2026-45070, an email header injection vulnerability involving MIME parameter names. Composer and npm audits report no known vulnerabilities in the locked dependencies at the time of this update. This does not audit container images or update running installations. Recreate the application and agent containers with updated images, preserving storage volumes and configuration.',
     ],
     'php_security_container_rebuilds' => [
         'title' => 'PHP security baseline for container images',

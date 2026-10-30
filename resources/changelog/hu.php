@@ -7,7 +7,7 @@ return [
     ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Frissített alkalmazásfüggőségek',
-        'description' => 'A PHP- és JavaScript-függőségek a kompatibilis verziókorlátokon belül frissültek. A Composer és az npm ellenőrzése a frissítés idején nem jelez ismert sérülékenységet a rögzített függőségekben. Ez nem ellenőrzi a konténerképeket, és nem frissíti a futó telepítéseket.',
+        'description' => 'A PHP- és JavaScript-függőségek a kompatibilis verziókorlátokon belül frissültek, köztük a symfony/mime 8.1.10 a CVE-2026-45070 javításához, amely MIME-paraméterneveken keresztüli e-mail-fejléc-befecskendezést tett lehetővé. A Composer és az npm ellenőrzése a frissítés idején nem jelez ismert sérülékenységet a rögzített függőségekben. Ez nem ellenőrzi a konténerképeket, és nem frissíti a futó telepítéseket. Hozza létre újra az alkalmazás és az ügynökök konténereit friss képekkel, a tárolókötetek és a konfiguráció megtartásával.',
     ],
     'php_security_container_rebuilds' => [
         'title' => 'Biztonságos PHP-verzió a konténerképekhez',

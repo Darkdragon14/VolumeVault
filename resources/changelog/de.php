@@ -7,7 +7,7 @@ return [
     ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Anwendungsabhängigkeiten aktualisiert',
-        'description' => 'PHP- und JavaScript-Abhängigkeiten wurden innerhalb kompatibler Versionsgrenzen aktualisiert. Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen in den gesperrten Abhängigkeiten. Dies prüft weder Container-Images noch aktualisiert es laufende Installationen.',
+        'description' => 'PHP- und JavaScript-Abhängigkeiten wurden innerhalb kompatibler Versionsgrenzen aktualisiert, einschließlich symfony/mime 8.1.10 zur Behebung von CVE-2026-45070, einer Header-Injection-Schwachstelle über MIME-Parameternamen. Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen in den gesperrten Abhängigkeiten. Dies prüft weder Container-Images noch aktualisiert es laufende Installationen. Erstellen Sie Anwendungs- und Agent-Container mit aktuellen Images neu und behalten Sie Speichervolumes und Konfiguration bei.',
     ],
     'php_security_container_rebuilds' => [
         'title' => 'PHP-Sicherheitsbasis für Container-Images',

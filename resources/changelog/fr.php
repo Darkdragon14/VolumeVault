@@ -7,7 +7,7 @@ return [
     ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Dépendances applicatives mises à jour',
-        'description' => 'Les dépendances PHP et JavaScript ont été mises à jour dans les limites des versions compatibles. Les audits Composer et npm ne signalent aucune vulnérabilité connue dans les dépendances verrouillées au moment de cette mise à jour. Cela ne constitue pas un audit des images de conteneurs et ne met pas à jour les installations en cours.',
+        'description' => 'Les dépendances PHP et JavaScript ont été mises à jour dans les limites des versions compatibles, dont symfony/mime 8.1.10 pour corriger CVE-2026-45070, une vulnérabilité d’injection d’en-têtes de courriel via les noms de paramètres MIME. Les audits Composer et npm ne signalent aucune vulnérabilité connue dans les dépendances verrouillées au moment de cette mise à jour. Cela ne constitue pas un audit des images de conteneurs et ne met pas à jour les installations en cours. Recréez les conteneurs de l’application et des agents avec les images à jour, en conservant les volumes et la configuration.',
     ],
     'php_security_container_rebuilds' => [
         'title' => 'Version PHP sécurisée pour les images de conteneurs',

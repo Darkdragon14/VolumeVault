@@ -1,17 +1,22 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'agent_http_transport_compatibility',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'dependency_maintenance_october_2026',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.8' => [
+            'date' => '2026-10-30',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.8',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'agent_http_transport_compatibility',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'dependency_maintenance_october_2026',
+                ],
+            ],
+        ],
         'v2.0.7' => [
             'date' => '2026-10-22',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.7',

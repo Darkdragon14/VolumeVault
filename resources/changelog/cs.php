@@ -7,7 +7,7 @@ return [
     ],
     'dependency_maintenance_october_2026' => [
         'title' => 'Aktualizované závislosti aplikace',
-        'description' => 'Závislosti PHP a JavaScriptu byly aktualizovány v rámci kompatibilních verzí. Audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti v uzamčených závislostech. Nejde o audit obrazů kontejnerů ani o aktualizaci běžících instalací.',
+        'description' => 'Závislosti PHP a JavaScriptu byly aktualizovány v rámci kompatibilních verzí, včetně symfony/mime 8.1.10 s opravou CVE-2026-45070, zranitelnosti umožňující vložení e-mailových hlaviček přes názvy parametrů MIME. Audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti v uzamčených závislostech. Nejde o audit obrazů kontejnerů ani o aktualizaci běžících instalací. Znovu vytvořte kontejnery aplikace a agentů s aktuálními obrazy a zachovejte úložné svazky a konfiguraci.',
     ],
     'php_security_container_rebuilds' => [
         'title' => 'Bezpečná verze PHP pro obrazy kontejnerů',

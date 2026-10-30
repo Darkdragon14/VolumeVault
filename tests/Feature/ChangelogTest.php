@@ -28,12 +28,18 @@ class ChangelogTest extends TestCase
         }
 
         $this->assertContains($key, array_column($items, 'key'));
+        $this->assertSame(1, count(array_filter($items, fn (array $item): bool => $item['key'] === $key)));
+        $this->assertNotContains('mime_header_security_update', array_column($items, 'key'));
 
         foreach (User::SUPPORTED_LOCALES as $locale) {
             $translations = require resource_path('changelog/'.$locale.'.php');
 
             $this->assertNotEmpty($translations[$key]['title'], $locale);
             $this->assertNotEmpty($translations[$key]['description'], $locale);
+            $this->assertStringContainsString('symfony/mime', $translations[$key]['description'], $locale);
+            $this->assertStringContainsString('8.1.10', $translations[$key]['description'], $locale);
+            $this->assertStringContainsString('CVE-2026-45070', $translations[$key]['description'], $locale);
+            $this->assertArrayNotHasKey('mime_header_security_update', $translations, $locale);
         }
     }
 
