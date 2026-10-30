@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'agent_http_transport_compatibility' => [
+        'title' => 'Conexiones de agentes restauradas tras actualizar el cliente HTTP',
+        'description' => 'Se corrigieron las opciones de transporte HTTP que podían impedir la conexión de los agentes tras actualizar las dependencias. Se mantienen la verificación del certificado y del nombre de host y el mínimo de TLS 1.2. Actualiza la imagen del agente conservando su volumen de almacenamiento y su configuración; no es necesario registrarlo de nuevo.',
+    ],
+    'dependency_maintenance_october_2026' => [
+        'title' => 'Dependencias de la aplicación actualizadas',
+        'description' => 'Se actualizaron las dependencias PHP y JavaScript dentro de las versiones compatibles. Las auditorías de Composer y npm no detectan vulnerabilidades conocidas en las dependencias bloqueadas en el momento de esta actualización. Esto no audita imágenes de contenedores ni actualiza instalaciones en ejecución.',
+    ],
     'php_security_container_rebuilds' => [
         'title' => 'Versión segura de PHP para las imágenes de contenedores',
         'description' => 'Las compilaciones de la aplicación y los agentes requieren PHP 8.5.12 o posterior. La publicación descarga imágenes base actualizadas y permite reconstrucciones manuales tras actualizaciones de seguridad de estas imágenes. Recrea los contenedores de la aplicación y los agentes con imágenes corregidas de VolumeVault; los contenedores en ejecución no se actualizan automáticamente.',

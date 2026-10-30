@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'agent_http_transport_compatibility' => [
+        'title' => 'Az ügynökök kapcsolata helyreállt a HTTP-kliens frissítése után',
+        'description' => 'Javítottuk a HTTP-átvitel beállításait, amelyek egy függőségfrissítés után megakadályozhatták az ügynökök csatlakozását. A tanúsítvány és a gépnév ellenőrzése, valamint legalább a TLS 1.2 továbbra is kötelező. Frissítse az ügynök lemezképét a meglévő tárolókötet és konfiguráció megtartásával; új regisztráció nem szükséges.',
+    ],
+    'dependency_maintenance_october_2026' => [
+        'title' => 'Frissített alkalmazásfüggőségek',
+        'description' => 'A PHP- és JavaScript-függőségek a kompatibilis verziókorlátokon belül frissültek. A Composer és az npm ellenőrzése a frissítés idején nem jelez ismert sérülékenységet a rögzített függőségekben. Ez nem ellenőrzi a konténerképeket, és nem frissíti a futó telepítéseket.',
+    ],
     'php_security_container_rebuilds' => [
         'title' => 'Biztonságos PHP-verzió a konténerképekhez',
         'description' => 'Az alkalmazás és az ügynökök összeállításához mostantól PHP 8.5.12 vagy újabb szükséges. A közzététel friss alapképeket tölt le, és lehetővé teszi a kézi újraépítést azok biztonsági frissítései után. Hozza létre újra az alkalmazás és az ügynökök konténereit javított VolumeVault-képekkel; a futó konténerek nem frissülnek automatikusan.',

@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'agent_http_transport_compatibility' => [
+        'title' => 'Agentverbindingen hersteld na updates van de HTTP-client',
+        'description' => 'HTTP-transportopties hersteld die agentverbindingen na een afhankelijkheidsupdate konden blokkeren. Certificaat- en hostnaamverificatie en minimaal TLS 1.2 blijven verplicht. Werk het agentimage bij met behoud van het bestaande opslagvolume en de configuratie; opnieuw registreren is niet nodig.',
+    ],
+    'dependency_maintenance_october_2026' => [
+        'title' => 'Applicatieafhankelijkheden bijgewerkt',
+        'description' => 'PHP- en JavaScript-afhankelijkheden zijn bijgewerkt binnen compatibele versiebeperkingen. Composer- en npm-audits melden op het moment van deze update geen bekende kwetsbaarheden in de vastgelegde afhankelijkheden. Dit controleert geen containerimages en werkt actieve installaties niet bij.',
+    ],
     'php_security_container_rebuilds' => [
         'title' => 'Veilige PHP-basis voor containerimages',
         'description' => 'Builds van de applicatie en agents vereisen nu PHP 8.5.12 of nieuwer. De publicatie haalt actuele basisimages op en ondersteunt handmatige herbouw na beveiligingsupdates van de basisimages. Maak de applicatie- en agentcontainers opnieuw aan met gecorrigeerde VolumeVault-images; draaiende containers worden niet automatisch bijgewerkt.',

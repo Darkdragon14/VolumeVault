@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'agent_http_transport_compatibility' => [
+        'title' => 'Obnoveno připojení agentů po aktualizaci HTTP klienta',
+        'description' => 'Opraveny volby HTTP přenosu, které mohly po aktualizaci závislostí bránit připojení agentů. Ověřování certifikátu a názvu hostitele i minimální TLS 1.2 zůstávají povinné. Aktualizujte obraz agenta se zachováním stávajícího úložného svazku a konfigurace; nová registrace není nutná.',
+    ],
+    'dependency_maintenance_october_2026' => [
+        'title' => 'Aktualizované závislosti aplikace',
+        'description' => 'Závislosti PHP a JavaScriptu byly aktualizovány v rámci kompatibilních verzí. Audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti v uzamčených závislostech. Nejde o audit obrazů kontejnerů ani o aktualizaci běžících instalací.',
+    ],
     'php_security_container_rebuilds' => [
         'title' => 'Bezpečná verze PHP pro obrazy kontejnerů',
         'description' => 'Sestavení aplikace a agentů nyní vyžadují PHP 8.5.12 nebo novější. Publikování stahuje aktuální základní obrazy a umožňuje ruční sestavení po jejich bezpečnostních aktualizacích. Znovu vytvořte kontejnery aplikace a agentů s opravenými obrazy VolumeVault; běžící kontejnery se neaktualizují automaticky.',

@@ -1,7 +1,16 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'agent_http_transport_compatibility',
+        ],
+        [
+            'type' => 'change',
+            'key' => 'dependency_maintenance_october_2026',
+        ],
+    ],
     'releases' => [
         'v2.0.7' => [
             'date' => '2026-10-22',

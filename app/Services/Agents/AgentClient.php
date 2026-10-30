@@ -135,11 +135,8 @@ class AgentClient
         $identity ??= $this->state->identity();
         $options = [
             'verify' => $identity['ca_path'] ?? $this->state->caPath(), 'allow_redirects' => false, 'proxy' => '',
-            'stream_context' => ['ssl' => ['verify_peer' => true, 'verify_peer_name' => true, 'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT]],
+            'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT,
         ];
-        if (defined('CURLOPT_SSLVERSION')) {
-            $options['curl'] = [CURLOPT_SSLVERSION => CURL_SSLVERSION_TLSv1_2, CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_PROXY => ''];
-        }
         try {
             $response = Http::asJson()->acceptJson()->withToken($token)->connectTimeout(5)->timeout(20)
                 ->withOptions($options)->post($identity['origin'].'/agent/v1/'.$endpoint, array_merge($body, [
