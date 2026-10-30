@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mime_header_security_update' => [
+        'title' => 'Beveiligingsupdate voor e-mailheaders',
+        'description' => 'symfony/mime is bijgewerkt naar 8.1.10 om CVE-2026-45070 te verhelpen: een kwetsbaarheid voor e-mailheaderinjectie via MIME-parameternamen. Maak de applicatie- en agentcontainers opnieuw aan met bijgewerkte images en behoud de opslagvolumes en configuratie.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Agentverbindingen hersteld na updates van de HTTP-client',
         'description' => 'HTTP-transportopties hersteld die agentverbindingen na een afhankelijkheidsupdate konden blokkeren. Certificaat- en hostnaamverificatie en minimaal TLS 1.2 blijven verplicht. Werk het agentimage bij met behoud van het bestaande opslagvolume en de configuratie; opnieuw registreren is niet nodig.',

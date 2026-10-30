@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mime_header_security_update' => [
+        'title' => 'Bezpečnostní oprava e-mailových hlaviček',
+        'description' => 'symfony/mime byl aktualizován na 8.1.10 s opravou CVE-2026-45070, zranitelnosti umožňující vložení e-mailových hlaviček přes názvy parametrů MIME. Znovu vytvořte kontejnery aplikace a agentů s aktuálními obrazy a zachovejte úložné svazky a konfiguraci.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Obnoveno připojení agentů po aktualizaci HTTP klienta',
         'description' => 'Opraveny volby HTTP přenosu, které mohly po aktualizaci závislostí bránit připojení agentů. Ověřování certifikátu a názvu hostitele i minimální TLS 1.2 zůstávají povinné. Aktualizujte obraz agenta se zachováním stávajícího úložného svazku a konfigurace; nová registrace není nutná.',

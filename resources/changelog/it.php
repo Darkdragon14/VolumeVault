@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'mime_header_security_update' => [
+        'title' => 'Aggiornamento di sicurezza delle intestazioni email',
+        'description' => 'symfony/mime aggiornato a 8.1.10 per correggere CVE-2026-45070, una vulnerabilità di iniezione delle intestazioni email tramite i nomi dei parametri MIME. Ricrea i container di applicazione e agenti con immagini aggiornate, mantenendo i volumi e la configurazione.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Ripristinate le connessioni degli agenti dopo gli aggiornamenti del client HTTP',
         'description' => 'Corrette le opzioni di trasporto HTTP che potevano impedire agli agenti di connettersi dopo un aggiornamento delle dipendenze. Restano obbligatori la verifica del certificato e del nome host e almeno TLS 1.2. Aggiorna l’immagine dell’agente mantenendo il volume di archiviazione e la configurazione esistenti; non è necessaria una nuova registrazione.',
