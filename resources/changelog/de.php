@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_october_31_2026' => [
+        'title' => 'Sicherheitskorrekturen für JavaScript-Abhängigkeiten',
+        'description' => 'follow-redirects sowie glob und minimatch der Vue-Testwerkzeuge wurden aktualisiert, um die Weitergabe von Zugangsdaten und Denial-of-Service-Schwachstellen zu beheben. Vollständige Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen in den gesperrten Abhängigkeiten. Container-Images und laufende Installationen sind nicht von diesen Audits erfasst.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Agent-Verbindungen nach HTTP-Client-Updates wiederhergestellt',
         'description' => 'HTTP-Transportoptionen korrigiert, die Agent-Verbindungen nach einer Abhängigkeitsaktualisierung verhindern konnten. Zertifikats- und Hostnamenprüfung sowie mindestens TLS 1.2 bleiben vorgeschrieben. Aktualisieren Sie das Agent-Image unter Beibehaltung des Speichervolumes und der Konfiguration; eine erneute Registrierung ist nicht erforderlich.',

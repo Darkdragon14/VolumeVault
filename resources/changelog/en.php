@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_october_31_2026' => [
+        'title' => 'JavaScript dependency security fixes',
+        'description' => 'Updated follow-redirects and the Vue test tooling dependencies glob and minimatch to fix credential forwarding and denial-of-service advisories. Full Composer and npm audits report no known vulnerabilities in the locked dependencies at the time of this update. Container images and running installations are not covered by these audits.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Restored agent connections after HTTP client updates',
         'description' => 'Fixed HTTP transport options that could prevent agents from connecting after a dependency update. Certificate and hostname verification and the TLS 1.2 minimum remain enforced. Update the agent image while keeping its existing storage volume and configuration; enrollment again is not required.',

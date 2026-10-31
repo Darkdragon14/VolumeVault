@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_october_31_2026' => [
+        'title' => 'Correzioni di sicurezza delle dipendenze JavaScript',
+        'description' => 'Aggiornati follow-redirects e le dipendenze glob e minimatch degli strumenti di test Vue per correggere avvisi relativi alla trasmissione di credenziali e alla negazione del servizio. Gli audit completi Composer e npm non segnalano vulnerabilità note nelle dipendenze bloccate al momento di questo aggiornamento. Le immagini dei container e le installazioni in esecuzione non sono coperte da questi audit.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Ripristinate le connessioni degli agenti dopo gli aggiornamenti del client HTTP',
         'description' => 'Corrette le opzioni di trasporto HTTP che potevano impedire agli agenti di connettersi dopo un aggiornamento delle dipendenze. Restano obbligatori la verifica del certificato e del nome host e almeno TLS 1.2. Aggiorna l’immagine dell’agente mantenendo il volume di archiviazione e la configurazione esistenti; non è necessaria una nuova registrazione.',
