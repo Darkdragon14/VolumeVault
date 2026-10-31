@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_october_31_2026' => [
+        'title' => 'JavaScript-függőségek biztonsági javításai',
+        'description' => 'Frissült a follow-redirects, valamint a Vue teszteszközök glob és minimatch függősége a hitelesítő adatok továbbításával és a szolgáltatásmegtagadással kapcsolatos hibák javítására. A teljes Composer- és npm-audit a frissítés időpontjában nem jelez ismert sebezhetőséget a zárolt függőségekben. Az auditok nem terjednek ki a konténerképekre és a futó telepítésekre.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Az ügynökök kapcsolata helyreállt a HTTP-kliens frissítése után',
         'description' => 'Javítottuk a HTTP-átvitel beállításait, amelyek egy függőségfrissítés után megakadályozhatták az ügynökök csatlakozását. A tanúsítvány és a gépnév ellenőrzése, valamint legalább a TLS 1.2 továbbra is kötelező. Frissítse az ügynök lemezképét a meglévő tárolókötet és konfiguráció megtartásával; új regisztráció nem szükséges.',
