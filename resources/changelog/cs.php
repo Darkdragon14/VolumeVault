@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_october_31_2026' => [
+        'title' => 'Bezpečnostní opravy závislostí JavaScriptu',
+        'description' => 'Aktualizovány follow-redirects a závislosti testovacích nástrojů Vue glob a minimatch kvůli předávání přihlašovacích údajů a odepření služby. Úplné audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti v uzamčených závislostech. Tyto audity nepokrývají obrazy kontejnerů ani běžící instalace.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Obnoveno připojení agentů po aktualizaci HTTP klienta',
         'description' => 'Opraveny volby HTTP přenosu, které mohly po aktualizaci závislostí bránit připojení agentů. Ověřování certifikátu a názvu hostitele i minimální TLS 1.2 zůstávají povinné. Aktualizujte obraz agenta se zachováním stávajícího úložného svazku a konfigurace; nová registrace není nutná.',

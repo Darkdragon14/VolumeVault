@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_security_october_31_2026' => [
+        'title' => 'Beveiligingsupdates voor JavaScript-afhankelijkheden',
+        'description' => 'follow-redirects en de Vue-testafhankelijkheden glob en minimatch zijn bijgewerkt om waarschuwingen over het doorsturen van inloggegevens en denial-of-service te verhelpen. Volledige Composer- en npm-audits melden op het moment van deze update geen bekende kwetsbaarheden in de vergrendelde afhankelijkheden. Containerimages en actieve installaties vallen niet onder deze audits.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Agentverbindingen hersteld na updates van de HTTP-client',
         'description' => 'HTTP-transportopties hersteld die agentverbindingen na een afhankelijkheidsupdate konden blokkeren. Certificaat- en hostnaamverificatie en minimaal TLS 1.2 blijven verplicht. Werk het agentimage bij met behoud van het bestaande opslagvolume en de configuratie; opnieuw registreren is niet nodig.',
