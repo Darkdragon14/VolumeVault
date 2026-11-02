@@ -9,6 +9,7 @@ use App\Models\BackupRun;
 use App\Services\Backup\BackupContainerEngine;
 use App\Services\Backup\BackupContainerPlan;
 use App\Services\Backup\IncludePathsToExcludeRegexp;
+use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
@@ -47,7 +48,7 @@ class RunBackupContainer
         $this->cleanupBackupRunSecretFiles = $cleanupBackupRunSecretFiles ?? new CleanupBackupRunSecretFiles;
     }
 
-    public function handle(BackupRun $run, ?callable $heartbeat = null): DockerProcessResult
+    public function handle(BackupRun $run, ?callable $heartbeat = null, ?string $sshHostPublicKey = null): DockerProcessResult
     {
         LocalDockerExecution::assertHost((int) $run->docker_host_id);
         $run->loadMissing('job.destination', 'snapshotDestination');
@@ -57,7 +58,7 @@ class RunBackupContainer
         $containerCleaned = true;
 
         try {
-            $runtime = $this->runtime($run);
+            $runtime = $this->runtime($run, $sshHostPublicKey);
             $plan = new BackupContainerPlan(
                 containerName: $containerName,
                 image: self::IMAGE,
@@ -111,7 +112,7 @@ class RunBackupContainer
         }
     }
 
-    private function runtime(BackupRun $run): array
+    private function runtime(BackupRun $run, ?string $sshHostPublicKey): array
     {
         $job = $run->job;
         $destination = $job->destination;
@@ -141,7 +142,7 @@ class RunBackupContainer
             $environment['BACKUP_EXCLUDE_REGEXP'] = (string) $job->backup_exclude_regexp;
         }
 
-        $runtime = $this->destinationRuntime($destination, $run);
+        $runtime = $this->destinationRuntime($destination, $run, $sshHostPublicKey);
 
         return [
             'environment' => array_merge($environment, $runtime['environment']),
@@ -150,7 +151,7 @@ class RunBackupContainer
         ];
     }
 
-    private function destinationRuntime(BackupDestination $destination, BackupRun $run): array
+    private function destinationRuntime(BackupDestination $destination, BackupRun $run, ?string $sshHostPublicKey): array
     {
         $runtime = ['environment' => [], 'mounts' => [], 'copies' => []];
 
@@ -159,7 +160,7 @@ class RunBackupContainer
             BackupDestination::PROVIDER_CLOUDFLARE_R2,
             BackupDestination::PROVIDER_CUSTOM_S3 => $runtime['environment'] = array_merge($this->s3Environment($destination), $this->endpointEnvironment($destination)),
             BackupDestination::PROVIDER_WEBDAV => $runtime['environment'] = $this->webDavEnvironment($destination),
-            BackupDestination::PROVIDER_SSH => $runtime = $this->sshRuntime($destination, $run),
+            BackupDestination::PROVIDER_SSH => $runtime = $this->sshRuntime($destination, $run, $sshHostPublicKey),
             BackupDestination::PROVIDER_AZURE_BLOB => $runtime['environment'] = $this->azureEnvironment($destination),
             BackupDestination::PROVIDER_DROPBOX => $runtime['environment'] = $this->dropboxEnvironment($destination),
             BackupDestination::PROVIDER_GOOGLE_DRIVE => $runtime['environment'] = $this->googleDriveEnvironment($destination),
@@ -193,10 +194,11 @@ class RunBackupContainer
         ], fn (mixed $value) => filled($value));
     }
 
-    private function sshRuntime(BackupDestination $destination, BackupRun $run): array
+    private function sshRuntime(BackupDestination $destination, BackupRun $run, ?string $sshHostPublicKey): array
     {
         $environment = array_filter([
             'SSH_HOST_NAME' => $destination->setting('host'),
+            'SSH_HOST_PUBLIC_KEY' => $sshHostPublicKey ?? app(DestinationStorage::class)->backupSftpHostPublicKey($destination),
             'SSH_PORT' => (string) ($destination->setting('port') ?: 22),
             'SSH_REMOTE_PATH' => $destination->setting('remote_path'),
             'SSH_USER' => $destination->secret('user'),

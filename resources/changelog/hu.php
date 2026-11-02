@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'sftp_host_key_approval' => [
+        'title' => 'A felderített SFTP-kiszolgálókulcsok kifejezett jóváhagyása',
+        'description' => 'A rögzített kulcs nélküli SSH/SFTP-végpontok automatikusan külön kulcsjelöltet és TOFU-ujjlenyomatot jelenítenek meg. A kiválasztott kulcs elfogadásához kifejezett jóváhagyás és mentés szükséges; a meglévő kulcsok soha nem cserélődnek le észrevétlenül, a sikertelen felderítés pedig nem ismétlődik a háttérben. Az ujjlenyomatokat független, megbízható csatornán hasonlítsa össze. A speciális kézi bevitel továbbra is elérhető. A mentett célok új jóváhagyási API-ja ellenőrzi a végpontot és az előző ujjlenyomatot, újabb hálózati kapcsolat nélkül pontosan a beküldött kulcsot menti, és hitelesítő adatok nélkül naplózza az ujjlenyomatokat.',
+    ],
+    'sftp_backup_host_verification' => [
+        'title' => 'Az SFTP-mentésekhez rögzített szerverazonosság szükséges',
+        'description' => 'Az SFTP-céltesztekhez és a mentések feltöltéséhez mostantól érvényes rögzített gazdakulcs szükséges. A VolumeVault átadja a nyilvános kulcsot az Offen 2.50.1 vagy újabb verziójának. Az alkalmazások leállítása előtt a hiányzó vagy érvénytelen kulcsokat elutasítja, a teljes nyilvános kulcsokat offline normalizálja, az SHA256-ujjlenyomatokhoz pedig hitelesítés nélküli próbával, a mentett ujjlenyomathoz hasonlítva keres kulcsot, automatikus bizalom nélkül. Az Offen feltöltés közben minden eltérő szerverazonosságot elutasít. Az OpenSSH-kulcsok és a puszta base64-kulcsadatok támogatottak. A meglévő, rögzített kulcs nélküli céloknál kérje le a szerver kulcsát, hasonlítsa össze az ujjlenyomatát független, megbízható csatornán, mentse és tesztelje. A felderítés önmagában az első kapcsolatba vetett bizalom. A listázásnál és a visszaállítási letöltéseknél a kulcsrögzítés továbbra is választható.',
+    ],
     'dependency_security_october_31_2026' => [
         'title' => 'JavaScript-függőségek biztonsági javításai',
         'description' => 'Frissült a follow-redirects, valamint a Vue teszteszközök glob és minimatch függősége a hitelesítő adatok továbbításával és a szolgáltatásmegtagadással kapcsolatos hibák javítására. A teljes Composer- és npm-audit a frissítés időpontjában nem jelez ismert sebezhetőséget a zárolt függőségekben. Az auditok nem terjednek ki a konténerképekre és a futó telepítésekre.',

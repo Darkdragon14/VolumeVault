@@ -127,6 +127,9 @@ class OpenApiController extends Controller
             ],
             '/destinations/{id}/test' => ['post' => $this->operation('Test a backup destination.', ['write'], null, true, true)],
             '/destinations/host-key' => ['post' => $this->hostKeyDiscoveryOperation()],
+            '/destinations/{destination}/host-key/approve' => ['post' => $this->operation('Approve the exact discovered SSH public key for an existing destination; no network probe is performed, including for agent discoveries. Checks the canonical key against fingerprint and the saved SSH host, port and previous pin under the destination mutation lock. Configuration in use blocks approval. Updates only settings.host_key and audits fingerprints, never credentials. First trust requires previous_fingerprint=null; replacement requires the existing SHA256 fingerprint. TOFU is not independent verification: compare through a trusted channel and never silently rotate a pin.', ['write'], ['$ref' => '#/components/schemas/HostKeyApprovalRequest'], admin: true, queryParameters: [
+                ['name' => 'destination', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']],
+            ])],
             '/destinations/host-key/operations/{operation}' => ['get' => $this->operation('Poll unsaved SSH discovery. Admin/read required. data.result.data contains key and fingerprint on success; data.endpoint contains the immutable host and port. Only host_key operations without a saved destination are accepted.', ['read'], admin: true, queryParameters: [
                 ['name' => 'operation', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']],
             ])],
@@ -598,6 +601,29 @@ class OpenApiController extends Controller
                     'docker_host_id' => ['type' => ['integer', 'null'], 'description' => 'Explicit executor. Null/1 selects central; a remote host must advertise both destination-v1 and sftp-host-key-v1.'],
                 ],
             ],
+            'HostKeyApprovalRequest' => [
+                'type' => 'object',
+                'required' => ['host', 'port', 'key', 'fingerprint', 'previous_fingerprint'],
+                'properties' => [
+                    'host' => ['type' => 'string', 'maxLength' => 255, 'description' => 'Discovered endpoint host; must match the saved SSH destination host.'],
+                    'port' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 65535, 'description' => 'Discovered endpoint port; must match the saved SSH destination port.'],
+                    'key' => ['type' => 'string', 'maxLength' => 4096, 'description' => 'Exact discovered public host key, canonicalized and checked against fingerprint before being saved. Not a private key or a fingerprint-only pin.'],
+                    'fingerprint' => ['type' => 'string', 'maxLength' => 128, 'description' => 'SHA256 fingerprint of the submitted public key.'],
+                    'previous_fingerprint' => ['type' => ['string', 'null'], 'maxLength' => 128, 'description' => 'Must be present. Null for first trust; otherwise the SHA256 fingerprint of the currently saved pin. A changed pin is rejected rather than overwritten.'],
+                ],
+            ],
+            'DestinationHostKeyApproval' => [
+                'type' => ['object', 'null'],
+                'additionalProperties' => false,
+                'description' => 'Optional explicit approval guard on destination create/update. settings.host_key contains the chosen candidate public key; fingerprint must match it. On update, original raw host, effective port (default 22) and raw pin must match the locked saved record. On create, all previous_* fields must be null. Audits fingerprints only, without credentials. Omitting this object preserves ordinary manual-edit behavior.',
+                'required' => ['fingerprint', 'previous_host', 'previous_port', 'previous_host_key'],
+                'properties' => [
+                    'fingerprint' => ['type' => 'string', 'maxLength' => 128, 'description' => 'Expected SHA256 fingerprint of the candidate public key submitted in settings.host_key.'],
+                    'previous_host' => ['type' => ['string', 'null'], 'maxLength' => 255, 'description' => 'Original raw saved SSH host; null for new destinations.'],
+                    'previous_port' => ['type' => ['integer', 'null'], 'minimum' => 1, 'maximum' => 65535, 'description' => 'Original saved SSH port, defaulting to 22 if unset; null for new destinations.'],
+                    'previous_host_key' => ['type' => ['string', 'null'], 'maxLength' => 4096, 'description' => 'Original raw saved pin, not its computed fingerprint; null if absent or for new destinations.'],
+                ],
+            ],
             'NotificationChannelUpdateRequest' => [
                 'type' => 'object',
                 'required' => ['name', 'service', 'notification_level'],
@@ -640,6 +666,7 @@ class OpenApiController extends Controller
             'provider' => ['type' => 'string', 'enum' => BackupDestination::PROVIDERS],
             'docker_host_id' => ['type' => ['integer', 'null'], 'description' => 'Owner of a local filesystem or Docker-volume destination. Network destinations are shared and have no host owner.'],
             'storage_measurement_host_id' => ['type' => ['integer', 'null'], 'description' => 'Automatic storage measurement executor. Null/1 means central for network destinations; agents require destination-v1. Host-bound destinations always use their owner and reject a different executor. Omitted on update preserves the selection; null explicitly resets network destinations to central. Changes invalidate usage and delta baselines. This does not change manual operation defaults.'],
+            'host_key_approval' => ['$ref' => '#/components/schemas/DestinationHostKeyApproval'],
             'endpoint' => ['type' => ['string', 'null'], 'format' => 'uri'],
             'region' => ['type' => ['string', 'null']],
             'bucket' => ['type' => ['string', 'null'], 'description' => 'Legacy S3 bucket field. Use settings for non-S3 providers.'],
@@ -650,7 +677,7 @@ class OpenApiController extends Controller
             'settings' => [
                 'type' => ['object', 'null'],
                 'additionalProperties' => true,
-                'description' => 'Provider-specific non-secret settings. Examples: WebDAV url/path, SSH host/remote_path, Azure container, Dropbox remote_path, Google Drive folder_id, local archive_path, docker_volume volume_name/path_prefix. For local destinations, archive_path and archive_mount_source must match VOLUMEVAULT_HOST_PATH_ALLOWLIST (fail-closed: refused when the allowlist is empty); read GET /host-path-allowlist for the allowed prefixes. For the docker_volume provider, volume_name (required) is the name of an existing Docker volume of any driver (e.g. NFS) that VolumeVault mounts by name into the temporary backup container; it must match ^[A-Za-z0-9][A-Za-z0-9_.-]*$ (no slashes or colons), and the optional path_prefix is a relative sub-directory (no "..", colon, or leading slash). A volume that does not exist is rejected rather than silently created. For SSH, set host_key (an OpenSSH public host key line or a SHA256: fingerprint) to pin the server and block man-in-the-middle attacks; use POST /destinations/host-key to discover it.',
+                'description' => 'Provider-specific non-secret settings. Examples: WebDAV url/path, SSH host/remote_path, Azure container, Dropbox remote_path, Google Drive folder_id, local archive_path, docker_volume volume_name/path_prefix. For local destinations, archive_path and archive_mount_source must match VOLUMEVAULT_HOST_PATH_ALLOWLIST (fail-closed: refused when the allowlist is empty); read GET /host-path-allowlist for the allowed prefixes. For the docker_volume provider, volume_name (required) is the name of an existing Docker volume of any driver (e.g. NFS) that VolumeVault mounts by name into the temporary backup container; it must match ^[A-Za-z0-9][A-Za-z0-9_.-]*$ (no slashes or colons), and the optional path_prefix is a relative sub-directory (no "..", colon, or leading slash). A volume that does not exist is rejected rather than silently created. For SSH, destination tests and backup uploads require host_key (an OpenSSH public host key line, bare base64 key data, or a SHA256: fingerprint). Before applications are stopped, missing or invalid pins are rejected, full public keys are normalized offline, and fingerprint pins are resolved by an unauthenticated probe against the saved fingerprint without automatic trust. The public key is passed to Offen 2.50.1 or newer as SSH_HOST_PUBLIC_KEY; Offen rejects any server identity mismatch during upload. Use POST /destinations/host-key to discover a key and compare its fingerprint through an independent trusted channel before saving. Listing and restore downloads retain optional pinning.',
             ],
             'secrets' => [
                 'type' => ['object', 'null'],

@@ -4,6 +4,14 @@ return [
     'unreleased' => [
         [
             'type' => 'change',
+            'key' => 'sftp_host_key_approval',
+        ],
+        [
+            'type' => 'change',
+            'key' => 'sftp_backup_host_verification',
+        ],
+        [
+            'type' => 'change',
             'key' => 'dependency_security_october_31_2026',
         ],
     ],

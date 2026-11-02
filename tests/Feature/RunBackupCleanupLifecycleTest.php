@@ -28,7 +28,7 @@ class RunBackupCleanupLifecycleTest extends TestCase
             'bucket' => 'unused',
             'access_key_id' => '',
             'secret_access_key' => '',
-            'settings' => ['host' => 'ssh.example.com', 'port' => 22, 'remote_path' => '/backups'],
+            'settings' => ['host' => 'ssh.example.com', 'port' => 22, 'remote_path' => '/backups', 'host_key' => 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP7m24OrCqk9z3+lIB2Pa3L7Z5FkAOsXr7iKWvMkElYr'],
             'secrets' => ['user' => 'backup', 'private_key' => "-----BEGIN KEY-----\nabc\n-----END KEY-----"],
         ]);
         $job = BackupJob::create([

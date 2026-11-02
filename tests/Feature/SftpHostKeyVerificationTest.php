@@ -6,9 +6,12 @@ use App\Models\BackupDestination;
 use App\Models\User;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\S3\S3ClientFactory;
+use App\Support\SshHostKey;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use phpseclib3\Crypt\EC;
 use phpseclib3\Net\SFTP;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -61,6 +64,107 @@ class SftpHostKeyVerificationTest extends TestCase
     {
         $this->assertFalse(DestinationStorage::hostKeyMatches(self::PUBKEY, self::OTHER_PUBKEY));
         $this->assertFalse(DestinationStorage::hostKeyMatches(self::FINGERPRINT, self::OTHER_PUBKEY));
+    }
+
+    public function test_public_key_canonicalizes_full_keys_comments_and_base64_offline(): void
+    {
+        $storage = Mockery::mock(DestinationStorage::class, [app(S3ClientFactory::class)])->makePartial();
+        $storage->shouldNotReceive('probeHostKey');
+
+        foreach ([self::PUBKEY, self::PUBKEY.' backup@server', explode(' ', self::PUBKEY)[1]] as $pin) {
+            $this->assertSame(self::PUBKEY, SshHostKey::publicKey($pin));
+            $this->assertSame(self::PUBKEY, $storage->backupSftpHostPublicKey($this->destination($pin)));
+        }
+    }
+
+    public function test_public_key_canonicalizes_rsa_sha2_aliases(): void
+    {
+        $blob = base64_encode(pack('N', 7).'ssh-rsa'.pack('N', 3)."\x01\x00\x01".pack('N', 9).'rsa-bytes');
+
+        foreach (['ssh-rsa', 'rsa-sha2-256', 'rsa-sha2-512'] as $algorithm) {
+            $this->assertSame('ssh-rsa '.$blob, SshHostKey::publicKey($algorithm.' '.$blob.' comment'));
+        }
+    }
+
+    public function test_public_key_preserves_an_ecdsa_server_key(): void
+    {
+        $key = trim(EC::createKey('nistp256')->getPublicKey()->toString('OpenSSH', ['comment' => '']));
+
+        $this->assertSame($key, SshHostKey::publicKey($key.' server-comment'));
+        $this->assertSame($key, SshHostKey::publicKey(explode(' ', $key)[1]));
+    }
+
+    public function test_fingerprint_validation_requires_a_complete_sha256_digest(): void
+    {
+        $this->assertTrue(SshHostKey::isFingerprint(self::FINGERPRINT));
+        $this->assertTrue(SshHostKey::isFingerprint('sha256:'.substr(self::FINGERPRINT, 7).'='));
+
+        foreach (['', 'SHA256:', 'SHA256:invalid', self::PUBKEY, self::FINGERPRINT.' comment'] as $pin) {
+            $this->assertFalse(SshHostKey::isFingerprint($pin));
+        }
+    }
+
+    #[DataProvider('invalidPins')]
+    public function test_backup_rejects_missing_or_malformed_pins_without_probing(?string $pin): void
+    {
+        $storage = Mockery::mock(DestinationStorage::class, [app(S3ClientFactory::class)])->makePartial();
+        $storage->shouldNotReceive('probeHostKey');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Configure a valid SFTP');
+
+        $storage->backupSftpHostPublicKey($this->destination($pin));
+    }
+
+    #[DataProvider('invalidPins')]
+    public function test_destination_test_rejects_invalid_pins_before_connecting(?string $pin): void
+    {
+        $storage = Mockery::mock(DestinationStorage::class, [app(S3ClientFactory::class)])
+            ->makePartial()->shouldAllowMockingProtectedMethods();
+        $storage->shouldNotReceive('newSftp');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Configure a valid SFTP');
+
+        $storage->test($this->destination($pin));
+    }
+
+    public static function invalidPins(): array
+    {
+        return [
+            'missing' => [null],
+            'blank' => ['   '],
+            'malformed fingerprint' => ['SHA256:invalid'],
+            'malformed key' => ['ssh-ed25519 not-base64'],
+            'truncated key blob' => ['ssh-ed25519 '.base64_encode(pack('N', 11).'ssh-ed25519')],
+            'wrong algorithm' => ['ssh-rsa '.explode(' ', self::PUBKEY)[1]],
+        ];
+    }
+
+    public function test_fingerprint_backup_fetches_the_key_without_authenticating(): void
+    {
+        $sftp = Mockery::mock(SFTP::class);
+        $sftp->shouldReceive('getServerPublicHostKey')->once()->andReturn(self::PUBKEY.' server-comment');
+        $sftp->shouldNotReceive('login');
+        $storage = Mockery::mock(DestinationStorage::class, [app(S3ClientFactory::class)])
+            ->makePartial()->shouldAllowMockingProtectedMethods();
+        $storage->shouldReceive('newSftp')->once()->with('ssh.example.com', 22)->andReturn($sftp);
+
+        $this->assertSame(self::PUBKEY, $storage->backupSftpHostPublicKey($this->destination(self::FINGERPRINT)));
+    }
+
+    public function test_fingerprint_backup_rejects_a_mismatched_key_even_if_probe_fingerprint_matches(): void
+    {
+        $storage = Mockery::mock(DestinationStorage::class, [app(S3ClientFactory::class)])->makePartial();
+        $storage->shouldReceive('probeHostKey')->once()->andReturn([
+            'key' => self::OTHER_PUBKEY,
+            'fingerprint' => self::FINGERPRINT,
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('host key verification failed');
+
+        $storage->backupSftpHostPublicKey($this->destination(self::FINGERPRINT));
     }
 
     public function test_malformed_key_line_does_not_use_a_base64_comment_as_the_key(): void
