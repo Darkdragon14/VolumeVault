@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'sftp_backup_host_verification' => [
+        'title' => 'Identità del server fissata obbligatoria per i backup SFTP',
+        'description' => 'I test delle destinazioni e i caricamenti dei backup SFTP richiedono ora una chiave host fissata valida. VolumeVault passa la chiave pubblica a Offen 2.50.1 o successivo. Prima di arrestare le applicazioni, le chiavi assenti o non valide vengono rifiutate, le chiavi pubbliche complete vengono normalizzate offline e le impronte SHA256 vengono risolte tramite una verifica senza autenticazione rispetto all’impronta salvata, senza fiducia automatica. Offen rifiuta qualsiasi identità del server non corrispondente durante il caricamento. Sono supportate chiavi OpenSSH e soli dati base64. Per le destinazioni esistenti senza chiave fissata, recupera la chiave del server, confronta la sua impronta tramite un canale indipendente fidato, salva e prova. Il solo rilevamento si basa sulla fiducia al primo contatto. La chiave fissata resta facoltativa per elenchi e download di ripristino.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Ripristinate le connessioni degli agenti dopo gli aggiornamenti del client HTTP',
         'description' => 'Corrette le opzioni di trasporto HTTP che potevano impedire agli agenti di connettersi dopo un aggiornamento delle dipendenze. Restano obbligatori la verifica del certificato e del nome host e almeno TLS 1.2. Aggiorna l’immagine dell’agente mantenendo il volume di archiviazione e la configurazione esistenti; non è necessaria una nuova registrazione.',

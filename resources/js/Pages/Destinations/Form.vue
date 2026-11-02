@@ -366,7 +366,7 @@ useEnvironmentForms(form);
                     <span v-if="error('settings.host_key')" class="block text-sm text-rose-700 dark:text-rose-300">{{ error('settings.host_key') }}</span>
                     <span v-if="hostKeyProbe.fingerprint" class="block text-xs text-emerald-700 dark:text-emerald-400">{{ t('Server key trusted (fingerprint {fingerprint}). Compare it with the server before saving to rule out a first-contact attack.', { fingerprint: hostKeyProbe.fingerprint }) }}</span>
                     <span v-if="hostKeyProbe.error" class="block text-xs text-rose-700 dark:text-rose-400">{{ hostKeyProbe.error }}</span>
-                    <span class="text-xs text-slate-500 dark:text-slate-400">{{ t('Optional but recommended. Use the button to trust the current server key, or paste a host key (e.g. from ssh-keyscan) or its SHA256 fingerprint. Blocks man-in-the-middle attacks on the SFTP operations performed by VolumeVault; the backup container cannot verify host keys.') }}</span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">{{ t('Required for destination tests and backup uploads. Fetch the server key and compare its fingerprint through a trusted channel before saving, or paste an OpenSSH key, bare base64 key, or SHA256 fingerprint. Missing or invalid pins are rejected and fingerprint pins are checked before applications are stopped. Offen rejects server identity mismatches during upload. Discovery alone is trust on first use, not identity verification.') }}</span>
                 </div>
             </section>
 

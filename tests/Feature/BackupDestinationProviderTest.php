@@ -49,9 +49,9 @@ class BackupDestinationProviderTest extends TestCase
             ],
             [
                 'provider' => BackupDestination::PROVIDER_SSH,
-                'settings' => ['host' => 'server.local', 'port' => 2222, 'remote_path' => '/srv/backups'],
+                'settings' => ['host' => 'server.local', 'port' => 2222, 'remote_path' => '/srv/backups', 'host_key' => 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP7m24OrCqk9z3+lIB2Pa3L7Z5FkAOsXr7iKWvMkElYr'],
                 'secrets' => ['user' => 'backup', 'password' => 'secret'],
-                'expected' => ['SSH_HOST_NAME' => 'server.local', 'SSH_PORT' => '2222', 'SSH_REMOTE_PATH' => '/srv/backups', 'SSH_USER' => 'backup', 'SSH_PASSWORD' => 'secret'],
+                'expected' => ['SSH_HOST_NAME' => 'server.local', 'SSH_PORT' => '2222', 'SSH_REMOTE_PATH' => '/srv/backups', 'SSH_USER' => 'backup', 'SSH_PASSWORD' => 'secret', 'SSH_HOST_PUBLIC_KEY' => 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP7m24OrCqk9z3+lIB2Pa3L7Z5FkAOsXr7iKWvMkElYr'],
             ],
             [
                 'provider' => BackupDestination::PROVIDER_AZURE_BLOB,

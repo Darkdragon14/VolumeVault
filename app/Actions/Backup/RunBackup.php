@@ -17,6 +17,7 @@ use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerVolume;
 use App\Services\Agents\HostWorkAdmission;
+use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\BackupDestinations\ListBackupObjects;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\LocalDockerExecution;
@@ -150,6 +151,10 @@ class RunBackup
 
             LocalDockerExecution::assertDestination($job->destination);
 
+            $sshHostPublicKey = $job->destination->provider === BackupDestination::PROVIDER_SSH
+                ? app(DestinationStorage::class)->backupSftpHostPublicKey($job->destination)
+                : null;
+
             if ($job->isDockerVolumeSource()) {
                 $this->inspectDockerVolume->handle($job->volume_name);
                 DockerVolume::updateOrCreate(['docker_host_id' => $run->docker_host_id, 'name' => $job->volume_name], ['exists' => true, 'last_seen_at' => now()]);
@@ -194,6 +199,7 @@ class RunBackup
             $result = $this->runBackupContainer->handle(
                 $run->fresh(['job.destination', 'snapshotDestination']),
                 fn () => $this->heartbeat($run, requiresRunning: true),
+                $sshHostPublicKey,
             );
             $this->appendRunLog->handle($run, $result->combinedOutput());
 

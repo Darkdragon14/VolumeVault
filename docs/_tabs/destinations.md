@@ -10,7 +10,7 @@ VolumeVault is not S3-only. It supports the destination families exposed by the 
 
 - S3-compatible storage: AWS S3, Cloudflare R2, and custom S3-compatible endpoints.
 - WebDAV: URL, optional path, optional basic auth, and optional insecure TLS mode.
-- SSH/SFTP: host, port, remote path, username, password or private key, and an optional pinned host key.
+- SSH/SFTP: host, port, remote path, username, password or private key, and a pinned host key required for destination tests and backup uploads.
 - Azure Blob Storage: container plus account key or connection string.
 - Dropbox: remote path, app key, app secret, refresh token, and concurrency level.
 - Google Drive: folder ID and service account JSON, with optional domain-wide delegation subject.
@@ -33,7 +33,9 @@ If a saved network measurement host becomes unavailable, the form keeps its ID a
 
 An unsaved SFTP form can discover the server key from the **central network** or an agent with both `destination-v1` and `sftp-host-key-v1`. Choose the discovery executor explicitly; it is independent of automated measurements and manual saved-destination operations. Discovery sends only host, port and executor, never endpoint credentials. Agent discovery queues an operation and polls for its result. Changing the host, port, executor, provider or manually entered key invalidates the in-flight result; leaving the page stops polling.
 
-You may still paste a public host key or SHA256 fingerprint manually. Compare a discovered fingerprint with the server through a trusted channel before saving: discovery is trust on first use, not independent identity verification. Pinning protects SFTP operations performed by VolumeVault. **The Offen backup container cannot verify host keys**, so discovery does not fix this backup-upload limitation.
+You may paste an OpenSSH public host key, bare base64 key data, or a `SHA256:` fingerprint manually. Compare a discovered fingerprint with the server through an independent trusted channel before saving: discovery is trust on first use (TOFU), not independent identity verification. For existing destinations without a pin, edit the destination, fetch the key, compare its fingerprint, save, and test. Never accept a changed key without investigating.
+
+Destination tests and backup uploads require a valid pin. VolumeVault passes the public key to Offen 2.50.1 or newer as `SSH_HOST_PUBLIC_KEY`. Before applications are stopped, missing or invalid pins are rejected, full public keys are normalized offline, and fingerprint pins are resolved by an unauthenticated probe against the saved fingerprint, without automatically trusting or saving a new key. Offen rejects any server identity mismatch during upload, after applications are stopped; cleanup then restarts them. VolumeVault's own listing and restore-download code retains optional pinning: a configured pin is checked, but those operations do not newly require one.
 
 Destination testing, listing, upload, download, and restore download behavior is centralized in `app/Services/BackupDestinations/DestinationStorage.php`. Backup runs upload through Offen, which does not expose a verifiable exact Dropbox file ID to VolumeVault. Asynchronous metadata processing never infers that ID from a filename, since the file may have been replaced. Even a newly successful Dropbox backup without a proven file ID remains unverifiable for restoration from run history.
 

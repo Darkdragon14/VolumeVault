@@ -63,7 +63,11 @@ The seven gaps identified after remote stack support now have implementations:
 6. **Installation-save destination eligibility:** central execution and central reachability are explicit; agent-owned local destinations are excluded and central-owned local destinations require hybrid mode.
 7. **Installation import recovery:** key rotation covers encrypted agent operations, relay chunks and new outbox payloads while preserving assignments; central recovery does not rewind agent journals or remote state.
 
-Implementation of these gaps is not a claim that every main-screen control has passed an independent review or that all future local/remote behavior is identical. Intentional v1 boundaries remain: manual agent updates, user-provided network connectivity, new-volume-only cross-host archive relay, and centrally executed installation saves. Backup-upload host-key verification remains limited by Offen. Review and testing of the main controls remain ongoing quality work rather than an unimplemented seven-gap feature batch.
+Implementation of these gaps is not a claim that every main-screen control has passed an independent review or that all future local/remote behavior is identical. Intentional v1 boundaries remain: manual agent updates, user-provided network connectivity, new-volume-only cross-host archive relay, and centrally executed installation saves. SFTP backup uploads require a pinned server identity, passed to Offen 2.50.1 or newer as `SSH_HOST_PUBLIC_KEY`. Review and testing of the main controls remain ongoing quality work rather than an unimplemented seven-gap feature batch.
+
+### SFTP Backup Integration Test
+
+`tests/Feature/SftpBackupDockerTest.php` is opt-in with `VOLUMEVAULT_SFTP_DOCKER_TEST=1`. It requires a local Docker socket, preloaded `atmoz/sftp:alpine` and `offen/docker-volume-backup:latest` images, and a PHP test runner with the Docker CLI. On Linux, a containerized test runner needs host networking to reach the disposable SFTP server's bridge IP. The test creates only uniquely named temporary resources on an internal network, publishes no ports, and never mounts the Docker socket into Offen. It checks actual archive contents, password/private-key authentication, fingerprint pins, and rejection of missing or incorrect host keys. Run it with `php artisan test --compact tests/Feature/SftpBackupDockerTest.php` in that opt-in environment. No images are pulled by the test.
 
 ### Agent Transport Integration Test
 

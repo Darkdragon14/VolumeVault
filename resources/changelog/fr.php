@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'sftp_backup_host_verification' => [
+        'title' => 'Identité du serveur épinglée obligatoire pour les sauvegardes SFTP',
+        'description' => 'Les tests de destination et les envois de sauvegardes SFTP exigent désormais une clé d’hôte épinglée valide. VolumeVault transmet la clé publique à Offen 2.50.1 ou ultérieur. Avant l’arrêt des applications, les clés absentes ou invalides sont refusées, les clés publiques complètes sont normalisées hors ligne et une sonde sans authentification résout les empreintes SHA256 en les comparant aux empreintes enregistrées, sans confiance automatique. Offen refuse toute identité de serveur différente pendant l’envoi. Les clés OpenSSH et les données base64 seules sont acceptées. Pour un ancien emplacement sans clé épinglée, récupérez la clé du serveur, comparez son empreinte via un canal indépendant fiable, enregistrez et testez. La découverte seule repose sur la confiance au premier contact. L’épinglage reste facultatif pour les listes et les téléchargements de restauration.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Connexion des agents rétablie après la mise à jour du client HTTP',
         'description' => 'Correction des options de transport HTTP qui pouvaient empêcher les agents de se connecter après une mise à jour des dépendances. La vérification du certificat et du nom d’hôte ainsi que TLS 1.2 minimum restent imposés. Mettez à jour l’image de l’agent en conservant son volume de stockage et sa configuration ; aucun nouvel enrôlement n’est nécessaire.',

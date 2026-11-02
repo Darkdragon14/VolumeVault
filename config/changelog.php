@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'sftp_backup_host_verification',
+        ],
+    ],
     'releases' => [
         'v2.0.8' => [
             'date' => '2026-10-30',

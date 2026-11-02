@@ -106,11 +106,13 @@ The TOTP secret and recovery codes are encrypted at rest with `APP_KEY`. If a us
 
 ## SFTP Host Key Pinning
 
-SSH/SFTP destinations accept an optional pinned host key. When set, VolumeVault verifies the server key before sending any credentials and refuses the connection on mismatch, blocking man-in-the-middle attacks.
+SSH/SFTP destination tests and backup uploads require a pinned server identity. VolumeVault passes the public host key to `offen/docker-volume-backup` (2.50.1 or newer) as `SSH_HOST_PUBLIC_KEY`. Missing or invalid pins are rejected before applications are stopped; VolumeVault never automatically trusts a newly observed key. Full public keys are normalized offline at this stage, not checked against the live server. Offen rejects any server identity mismatch during upload, after applications have been stopped; the existing cleanup then restarts them.
 
-The simplest way to set it is the **Fetch key from server** button on the destination form: VolumeVault connects to the host (key exchange only, no login), pins the key it presents, and shows its `SHA256:` fingerprint. This is trust-on-first-use — it protects against any later man-in-the-middle. If you want to also rule out a first-contact attack, compare the displayed fingerprint with the server's own (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`) before saving. You can also paste a key manually: the server's public host key (for example from `ssh-keyscan -t ed25519 server.local`) or its `SHA256:` fingerprint (from `ssh-keygen -lf`).
+For an existing destination without a pin, edit it, use **Fetch key from server**, compare the displayed `SHA256:` fingerprint with the server's own through an independent trusted channel (for example, run `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server), then save and test. Discovery performs key exchange only, without login credentials. Fetching a key alone is trust on first use (TOFU), not independent verification: an attacker present during first contact could supply their own key. Do not save an unverified key or replace a mismatched pin without investigating.
 
-This pin protects VolumeVault's own SFTP operations — destination testing, listing, and restore downloads. The actual backup upload runs in the temporary `offen/docker-volume-backup` container, which does not verify SSH host keys (an upstream limitation), so that leg of the transfer cannot be pinned from here.
+You can also enter an OpenSSH public host key, its bare base64 key data, or a `SHA256:` fingerprint manually. Existing fingerprint pins remain supported: before stopping applications, VolumeVault probes the server without authentication and accepts the returned public key only if it matches the stored fingerprint, then supplies that key to Offen. The probe does not establish new trust or update the saved pin.
+
+VolumeVault's own listing and restore-download code still allows an absent pin; when a pin is configured, these operations verify it before sending credentials. This optional behavior does not apply to destination tests or backup uploads, which require the pin.
 
 ## Secure Installation Saves
 

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'sftp_backup_host_verification' => [
+        'title' => 'Az SFTP-mentésekhez rögzített szerverazonosság szükséges',
+        'description' => 'Az SFTP-céltesztekhez és a mentések feltöltéséhez mostantól érvényes rögzített gazdakulcs szükséges. A VolumeVault átadja a nyilvános kulcsot az Offen 2.50.1 vagy újabb verziójának. Az alkalmazások leállítása előtt a hiányzó vagy érvénytelen kulcsokat elutasítja, a teljes nyilvános kulcsokat offline normalizálja, az SHA256-ujjlenyomatokhoz pedig hitelesítés nélküli próbával, a mentett ujjlenyomathoz hasonlítva keres kulcsot, automatikus bizalom nélkül. Az Offen feltöltés közben minden eltérő szerverazonosságot elutasít. Az OpenSSH-kulcsok és a puszta base64-kulcsadatok támogatottak. A meglévő, rögzített kulcs nélküli céloknál kérje le a szerver kulcsát, hasonlítsa össze az ujjlenyomatát független, megbízható csatornán, mentse és tesztelje. A felderítés önmagában az első kapcsolatba vetett bizalom. A listázásnál és a visszaállítási letöltéseknél a kulcsrögzítés továbbra is választható.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Az ügynökök kapcsolata helyreállt a HTTP-kliens frissítése után',
         'description' => 'Javítottuk a HTTP-átvitel beállításait, amelyek egy függőségfrissítés után megakadályozhatták az ügynökök csatlakozását. A tanúsítvány és a gépnév ellenőrzése, valamint legalább a TLS 1.2 továbbra is kötelező. Frissítse az ügynök lemezképét a meglévő tárolókötet és konfiguráció megtartásával; új regisztráció nem szükséges.',

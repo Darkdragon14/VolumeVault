@@ -19,6 +19,8 @@ class RunBackupContainerTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const HOST_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP7m24OrCqk9z3+lIB2Pa3L7Z5FkAOsXr7iKWvMkElYr';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -254,7 +256,7 @@ class RunBackupContainerTest extends TestCase
             'bucket' => 'unused',
             'access_key_id' => '',
             'secret_access_key' => '',
-            'settings' => ['host' => 'ssh.example.com', 'port' => 2222, 'remote_path' => '/backups'],
+            'settings' => ['host' => 'ssh.example.com', 'port' => 2222, 'remote_path' => '/backups', 'host_key' => self::HOST_KEY],
             'secrets' => [
                 'user' => 'backup',
                 'private_key' => "-----BEGIN KEY-----\nabc\n-----END KEY-----",
@@ -288,6 +290,8 @@ class RunBackupContainerTest extends TestCase
         $this->assertSame('key-passphrase', $createEnvironment['SSH_IDENTITY_PASSPHRASE'] ?? null);
         $this->assertSame('ssh.example.com', $createEnvironment['SSH_HOST_NAME'] ?? null);
         $this->assertSame('2222', $createEnvironment['SSH_PORT'] ?? null);
+        $this->assertSame(self::HOST_KEY, trim($createEnvironment['SSH_HOST_PUBLIC_KEY'] ?? ''));
+        $this->assertArrayNotHasKey('SSH_INSECURE_IGNORE_HOST_KEY', $createEnvironment);
         $this->assertFalse(collect($createCommand)->contains(fn (string $argument) => str_contains($argument, 'volumevault_ssh_key')));
 
         $this->assertSame($containerName.':/tmp/volumevault_ssh_key', $docker->commands[1][3]);
@@ -421,7 +425,7 @@ class RunBackupContainerTest extends TestCase
             'bucket' => 'unused',
             'access_key_id' => '',
             'secret_access_key' => '',
-            'settings' => ['host' => 'ssh.example.com', 'port' => 22, 'remote_path' => '/backups'],
+            'settings' => ['host' => 'ssh.example.com', 'port' => 22, 'remote_path' => '/backups', 'host_key' => self::HOST_KEY],
             'secrets' => ['user' => 'backup', 'password' => 'secret'],
         ]);
         $run = $this->backupRun($destination, ['volume_name' => 'app_data']);
@@ -543,7 +547,7 @@ class RunBackupContainerTest extends TestCase
             'bucket' => 'unused',
             'access_key_id' => '',
             'secret_access_key' => '',
-            'settings' => ['host' => 'ssh.example.com', 'port' => 22, 'remote_path' => '/backups'],
+            'settings' => ['host' => 'ssh.example.com', 'port' => 22, 'remote_path' => '/backups', 'host_key' => self::HOST_KEY],
             'secrets' => ['user' => 'backup', 'private_key' => "-----BEGIN KEY-----\nabc\n-----END KEY-----"],
         ]);
     }
