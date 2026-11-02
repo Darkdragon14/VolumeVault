@@ -1,4 +1,10 @@
 {
+  "The saved server identity has changed. Reload the destination before approving a key.": "Сохранённые данные идентификации сервера изменились. Перезагрузите страницу назначения перед подтверждением ключа.",
+  "Approve the discovered server key or enter a trusted key manually before saving.": "Перед сохранением подтвердите обнаруженный ключ сервера или введите доверенный ключ вручную.",
+  "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Ключ сервера найден. Перед подтверждением сравните этот отпечаток через доверенный канал. Обнаружение означает доверие при первом использовании, а не проверку подлинности.",
+  "A host key is already saved. Approving this key replaces the saved trust. Only continue if you independently verified the server identity.": "Ключ сервера уже сохранён. Подтверждение этого ключа заменит сохранённые данные доверия. Продолжайте, только если вы независимо проверили подлинность сервера.",
+  "Approve and save": "Подтвердить и сохранить",
+  "Advanced: enter a trusted host key manually": "Дополнительно: ввести доверенный ключ сервера вручную",
     "environment.label": "Окружение",
     "environment.local": "Локальный хост",
     "environment.backups": "Резервные копии",

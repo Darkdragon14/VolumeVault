@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'sftp_host_key_approval' => [
+        'title' => 'Výslovné schválení zjištěných hostitelských klíčů SFTP',
+        'description' => 'Koncové body SSH/SFTP bez připnutého klíče automaticky zobrazí samostatný navržený klíč a otisk TOFU. Důvěra vyžaduje výslovné schválení a uložení; stávající klíče se nikdy tiše nenahrazují a neúspěšné zjišťování se neopakuje na pozadí. Otisky porovnejte nezávislým důvěryhodným kanálem. Pokročilé ruční zadání zůstává dostupné. Nové schvalovací API pro uložené cíle kontroluje koncový bod a předchozí otisk, uloží přesně odeslaný klíč bez dalšího síťového spojení a zaznamená otisky bez přihlašovacích údajů.',
+    ],
     'sftp_backup_host_verification' => [
         'title' => 'Zálohy SFTP vyžadují připnutou identitu serveru',
         'description' => 'Testy cílů a nahrávání záloh SFTP nyní vyžadují platný připnutý klíč hostitele. VolumeVault předává veřejný klíč nástroji Offen 2.50.1 nebo novějšímu. Před zastavením aplikací jsou chybějící či neplatné klíče odmítnuty, úplné veřejné klíče normalizovány offline a připnuté otisky SHA256 vyřešeny neautentizovanou sondou proti uloženému otisku, bez automatické důvěry. Offen odmítne jakoukoli neodpovídající identitu serveru během nahrávání. Podporovány jsou klíče OpenSSH a samotná data base64. U existujících cílů bez připnutého klíče načtěte klíč serveru, porovnejte jeho otisk nezávislým důvěryhodným kanálem, uložte a otestujte. Samotné zjištění klíče je důvěra při prvním kontaktu. Pro výpisy a stahování při obnově zůstává připnutí volitelné.',

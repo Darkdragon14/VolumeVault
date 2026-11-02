@@ -8,6 +8,7 @@ use App\Services\Agents\AgentExecution;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerVolumeName;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Validator;
 
 trait ValidatesBackupDestination
@@ -36,6 +37,11 @@ trait ValidatesBackupDestination
             'secrets' => ['nullable', 'array'],
             'settings.*' => ['nullable'],
             'secrets.*' => ['nullable'],
+            'host_key_approval' => ['nullable', 'array:fingerprint,previous_host,previous_port,previous_host_key', 'required_array_keys:fingerprint,previous_host,previous_port,previous_host_key'],
+            'host_key_approval.fingerprint' => ['required_with:host_key_approval', 'string', 'max:128'],
+            'host_key_approval.previous_host' => ['nullable', 'string', 'max:255'],
+            'host_key_approval.previous_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'host_key_approval.previous_host_key' => ['nullable', 'string', 'max:4096'],
             'settings.storage_limit_warning_bytes' => ['nullable', 'integer', 'min:0'],
             'settings.storage_limit_critical_bytes' => ['nullable', 'integer', 'min:0'],
         ];
@@ -130,7 +136,7 @@ trait ValidatesBackupDestination
                 } elseif (! in_array($this->input('provider'), [BackupDestination::PROVIDER_LOCAL, BackupDestination::PROVIDER_DOCKER_VOLUME], true) && $measurementHost !== DockerHost::LOCAL_ID) {
                     try {
                         app(AgentExecution::class)->validateHost($measurementHost, 'destination-v1');
-                    } catch (\Illuminate\Validation\ValidationException) {
+                    } catch (ValidationException) {
                         $validator->errors()->add('storage_measurement_host_id', 'Select a compatible agent supporting destination operations.');
                     }
                 }

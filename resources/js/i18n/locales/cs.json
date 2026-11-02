@@ -1,4 +1,10 @@
 {
+  "The saved server identity has changed. Reload the destination before approving a key.": "Uložená identita serveru se změnila. Před schválením klíče znovu načtěte cíl.",
+  "Approve the discovered server key or enter a trusted key manually before saving.": "Před uložením schvalte zjištěný klíč serveru nebo ručně zadejte důvěryhodný klíč.",
+  "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Klíč serveru nalezen. Před schválením porovnejte tento otisk prostřednictvím důvěryhodného kanálu. Zjištění znamená důvěru při prvním použití, nikoli ověření identity.",
+  "A host key is already saved. Approving this key replaces the saved trust. Only continue if you independently verified the server identity.": "Hostitelský klíč je již uložen. Schválením tohoto klíče nahradíte uloženou důvěru. Pokračujte pouze tehdy, pokud jste nezávisle ověřili identitu serveru.",
+  "Approve and save": "Schválit a uložit",
+  "Advanced: enter a trusted host key manually": "Pokročilé: zadat důvěryhodný hostitelský klíč ručně",
     "environment.label": "Prostředí",
     "environment.local": "Místní hostitel",
     "environment.backups": "Zálohy",

@@ -1,4 +1,10 @@
 {
+  "The saved server identity has changed. Reload the destination before approving a key.": "De opgeslagen serveridentiteit is gewijzigd. Laad de bestemming opnieuw voordat u een sleutel goedkeurt.",
+  "Approve the discovered server key or enter a trusted key manually before saving.": "Keur de gevonden serversleutel goed of voer handmatig een vertrouwde sleutel in voordat u opslaat.",
+  "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Serversleutel gevonden. Vergelijk deze vingerafdruk via een vertrouwd kanaal voordat u deze goedkeurt. Detectie berust op vertrouwen bij het eerste gebruik, niet op identiteitsverificatie.",
+  "A host key is already saved. Approving this key replaces the saved trust. Only continue if you independently verified the server identity.": "Er is al een hostsleutel opgeslagen. Als u deze sleutel goedkeurt, vervangt u het opgeslagen vertrouwen. Ga alleen verder als u de serveridentiteit onafhankelijk hebt geverifieerd.",
+  "Approve and save": "Goedkeuren en opslaan",
+  "Advanced: enter a trusted host key manually": "Geavanceerd: handmatig een vertrouwde hostsleutel invoeren",
     "environment.label": "Omgeving",
     "environment.local": "Lokale host",
     "environment.backups": "Back-ups",

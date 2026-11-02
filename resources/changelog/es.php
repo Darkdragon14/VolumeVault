@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'sftp_host_key_approval' => [
+        'title' => 'Aprobación explícita de las claves de servidor SFTP descubiertas',
+        'description' => 'Los destinos SSH/SFTP sin clave fijada muestran automáticamente una clave candidata separada y su huella TOFU. Es necesario aprobar y guardar explícitamente para confiar en esa clave; las claves existentes nunca se sustituyen silenciosamente y los descubrimientos fallidos no se reintentan en segundo plano. Compare las huellas mediante un canal independiente de confianza. La entrada manual avanzada sigue disponible. La nueva API de aprobación para destinos guardados comprueba el servidor y la huella anterior, guarda exactamente la clave enviada sin otra conexión de red y registra las huellas sin credenciales.',
+    ],
     'sftp_backup_host_verification' => [
         'title' => 'Identidad del servidor fijada obligatoria para las copias SFTP',
         'description' => 'Las pruebas de destinos y las subidas de copias SFTP ahora requieren una clave de host fijada válida. VolumeVault pasa la clave pública a Offen 2.50.1 o posterior. Antes de detener las aplicaciones, se rechazan las claves ausentes o no válidas, se normalizan las claves públicas completas sin conexión y se resuelven las huellas SHA256 mediante una consulta sin autenticación contra la huella guardada, sin confianza automática. Offen rechaza cualquier identidad de servidor que no coincida durante la subida. Se admiten claves OpenSSH y datos base64 sin formato adicional. Para destinos existentes sin clave fijada, obtenga la clave del servidor, compare su huella por un canal independiente de confianza, guarde y pruebe. El descubrimiento por sí solo implica confianza en el primer contacto. La fijación sigue siendo opcional para listados y descargas de restauración.',

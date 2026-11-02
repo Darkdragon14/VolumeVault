@@ -4,6 +4,10 @@ return [
     'unreleased' => [
         [
             'type' => 'change',
+            'key' => 'sftp_host_key_approval',
+        ],
+        [
+            'type' => 'change',
             'key' => 'sftp_backup_host_verification',
         ],
     ],

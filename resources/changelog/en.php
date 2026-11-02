@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'sftp_host_key_approval' => [
+        'title' => 'Explicit approval for discovered SFTP host keys',
+        'description' => 'Unpinned SSH/SFTP endpoints automatically show a separate candidate key and TOFU fingerprint. Approve and save explicitly to trust the chosen key; existing pins are never silently replaced and failed discovery is not retried in the background. Compare fingerprints through an independent trusted channel. Advanced manual entry remains available. The new saved-destination approval API checks the endpoint and previous fingerprint, saves exactly the submitted key without another network probe, and audits fingerprints without credentials.',
+    ],
     'sftp_backup_host_verification' => [
         'title' => 'Pinned server identity required for SFTP backups',
         'description' => 'SFTP destination tests and backup uploads now require a valid host-key pin. VolumeVault passes the public key to Offen 2.50.1 or newer. Before applications are stopped, missing or invalid pins are rejected, full public keys are normalized offline, and SHA256 fingerprint pins are resolved by an unauthenticated probe against the saved fingerprint, without automatic trust. Offen rejects any server identity mismatch during upload. OpenSSH and bare base64 keys are supported. For existing destinations without a pin, fetch the server key, compare its fingerprint through an independent trusted channel, save and test. Discovery alone is trust on first use. Listing and restore downloads retain optional pinning.',

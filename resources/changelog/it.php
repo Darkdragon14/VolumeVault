@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'sftp_host_key_approval' => [
+        'title' => 'Approvazione esplicita delle chiavi host SFTP rilevate',
+        'description' => 'Gli endpoint SSH/SFTP senza chiave fissata mostrano automaticamente una chiave candidata separata e la sua impronta TOFU. Occorre approvare e salvare esplicitamente per considerare attendibile la chiave; le chiavi esistenti non vengono mai sostituite in modo silenzioso e i rilevamenti falliti non vengono ritentati in background. Confrontare le impronte tramite un canale indipendente attendibile. Rimane disponibile la modalità manuale avanzata. La nuova API di approvazione per destinazioni salvate verifica endpoint e impronta precedente, salva esattamente la chiave inviata senza ulteriori connessioni di rete e registra le impronte senza credenziali.',
+    ],
     'sftp_backup_host_verification' => [
         'title' => 'Identità del server fissata obbligatoria per i backup SFTP',
         'description' => 'I test delle destinazioni e i caricamenti dei backup SFTP richiedono ora una chiave host fissata valida. VolumeVault passa la chiave pubblica a Offen 2.50.1 o successivo. Prima di arrestare le applicazioni, le chiavi assenti o non valide vengono rifiutate, le chiavi pubbliche complete vengono normalizzate offline e le impronte SHA256 vengono risolte tramite una verifica senza autenticazione rispetto all’impronta salvata, senza fiducia automatica. Offen rifiuta qualsiasi identità del server non corrispondente durante il caricamento. Sono supportate chiavi OpenSSH e soli dati base64. Per le destinazioni esistenti senza chiave fissata, recupera la chiave del server, confronta la sua impronta tramite un canale indipendente fidato, salva e prova. Il solo rilevamento si basa sulla fiducia al primo contatto. La chiave fissata resta facoltativa per elenchi e download di ripristino.',

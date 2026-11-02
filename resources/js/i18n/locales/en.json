@@ -1,4 +1,10 @@
 {
+  "The saved server identity has changed. Reload the destination before approving a key.": "The saved server identity has changed. Reload the destination before approving a key.",
+  "Approve the discovered server key or enter a trusted key manually before saving.": "Approve the discovered server key or enter a trusted key manually before saving.",
+  "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.",
+  "A host key is already saved. Approving this key replaces the saved trust. Only continue if you independently verified the server identity.": "A host key is already saved. Approving this key replaces the saved trust. Only continue if you independently verified the server identity.",
+  "Approve and save": "Approve and save",
+  "Advanced: enter a trusted host key manually": "Advanced: enter a trusted host key manually",
     "environment.label": "Environment",
     "environment.local": "Local host",
     "environment.backups": "Backups",

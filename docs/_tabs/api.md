@@ -95,7 +95,42 @@ Administrators with `write` can send `POST /api/v1/destinations/host-key` with `
 
 Poll `GET /api/v1/destinations/host-key/operations/{id}` with administrator access and `read`. The operation has `destination_id: null`, `action: "host_key"`, `docker_host_id`, an immutable `endpoint: { "host": "sftp.internal", "port": 22 }`, and the standard `pending` / `running` / `completed` status. On success, `result.status` is `success` and `result.data` contains `key` and `fingerprint`. Failure is reported in `result.error_message`. Never treat `completed` alone as success.
 
-The web form uses `POST /destinations/host-key` and `GET /destinations/host-key/operations/{id}` with session/CSRF protection. Its legacy central **200** body is directly `{ "key": "...", "fingerprint": "..." }` (without the API `data` wrapper); agent responses retain the operation wrapper. Capture host, port, executor and provider before starting. Discard late POST or poll responses after any context change or unmount, and require the exact endpoint, executor and operation ID on poll responses. Manual key edits must not be overwritten by an in-flight scan. Compare fingerprints through an independent trusted channel before saving: discovery alone is trust on first use, not identity verification.
+The web form uses `POST /destinations/host-key` and `GET /destinations/host-key/operations/{id}` with session/CSRF protection. Its legacy central **200** body is directly `{ "key": "...", "fingerprint": "..." }` (without the API `data` wrapper); agent responses retain the operation wrapper. It automatically discovers unpinned endpoints, keeps the candidate separate until explicit **Approve and save**, never automatically overwrites existing pins and does not retry failed discovery in the background. Capture host, port, executor and provider before starting. Discard late POST or poll responses after any context change or unmount, and require the exact endpoint, executor and operation ID on poll responses. Manual key edits must not be overwritten by an in-flight scan. Advanced manual entry remains available. Compare fingerprints through an independent trusted channel before saving: discovery alone is trust on first use, not identity verification.
+
+#### Explicit approval for a saved SSH destination
+
+Administrators with `write` can send `POST /api/v1/destinations/{destination}/host-key/approve` for an **existing** SSH/SFTP destination:
+
+```json
+{
+  "host": "sftp.internal",
+  "port": 22,
+  "key": "<exact discovered public host key>",
+  "fingerprint": "SHA256:<discovered key digest>",
+  "previous_fingerprint": null
+}
+```
+
+All five fields must be present. Use `previous_fingerprint: null` for first trust; replacing a pin requires its existing `SHA256:` fingerprint, not the new one. Under the existing destination mutation lock, approval checks the canonical public key against `fingerprint`, the submitted host/port against the saved SSH endpoint, and the expected previous fingerprint against the current pin. Stale endpoint/pin submissions are rejected; configuration in use blocks approval. The operation updates only `settings.host_key` and audits fingerprints, never credentials.
+
+Approval deliberately performs **no network request or re-probe**. It approves the exact chosen key, including one discovered by a remote executor, rather than trusting whatever key a new connection presents. TOFU remains TOFU: compare through an independent trusted channel and investigate key changes instead of silently rotating pins. Discovery and remote asynchronous polling above are unchanged. For a new API destination, discover and verify first, then create it with `settings.host_key`; a destination record must exist before using the approval endpoint.
+
+#### Explicit approval during destination create/update
+
+The form's **Approve and save** submits the regular destination create/update request with the candidate public key in `settings.host_key` and an optional top-level `host_key_approval` object:
+
+```json
+{
+  "fingerprint": "SHA256:<candidate key digest>",
+  "previous_host": "sftp.internal",
+  "previous_port": 22,
+  "previous_host_key": null
+}
+```
+
+If supplied, this object must contain all four keys. For an update, send the **original raw** saved host and pin (or `null` if absent), and the original saved port, defaulting to `22` when unset. For a create, all three `previous_*` fields must be `null`. The server checks that the candidate key matches `fingerprint` and compares the original fields with the locked current record to reject stale or racing approvals. It saves the submitted candidate without a network re-probe. Approval audit records contain fingerprints, not credentials.
+
+This guard is optional: ordinary manual create/update requests without `host_key_approval` retain their existing behavior. Unlike this form guard's raw `previous_host_key`, the dedicated approval endpoint above requires a computed `previous_fingerprint`; do not interchange the contracts.
 
 #### Remote archive metadata and notification finalization
 
@@ -206,6 +241,7 @@ GET    /api/v1/restore-runs/{id}
 GET    /api/v1/destinations
 POST   /api/v1/destinations
 POST   /api/v1/destinations/host-key
+POST   /api/v1/destinations/{destination}/host-key/approve
 GET    /api/v1/destinations/host-key/operations/{id}
 GET    /api/v1/destinations/{id}
 PUT    /api/v1/destinations/{id}

@@ -1,4 +1,10 @@
 {
+  "The saved server identity has changed. Reload the destination before approving a key.": "Die gespeicherte Serveridentität hat sich geändert. Laden Sie das Ziel neu, bevor Sie einen Schlüssel bestätigen.",
+  "Approve the discovered server key or enter a trusted key manually before saving.": "Bestätigen Sie vor dem Speichern den gefundenen Serverschlüssel oder geben Sie einen vertrauenswürdigen Schlüssel manuell ein.",
+  "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Serverschlüssel gefunden. Vergleichen Sie diesen Fingerabdruck vor der Bestätigung über einen vertrauenswürdigen Kanal. Die Erkennung bedeutet Vertrauen beim Erstkontakt, keine Identitätsprüfung.",
+  "A host key is already saved. Approving this key replaces the saved trust. Only continue if you independently verified the server identity.": "Ein Hostschlüssel ist bereits gespeichert. Wenn Sie diesen Schlüssel bestätigen, ersetzen Sie die bisherige Vertrauensgrundlage. Fahren Sie nur fort, wenn Sie die Serveridentität unabhängig überprüft haben.",
+  "Approve and save": "Bestätigen und speichern",
+  "Advanced: enter a trusted host key manually": "Erweitert: vertrauenswürdigen Hostschlüssel manuell eingeben",
     "environment.label": "Umgebung",
     "environment.local": "Lokaler Host",
     "environment.backups": "Backups",

@@ -24,6 +24,7 @@ const props = defineProps<{
 }>();
 
 const editing = computed(() => Boolean(props.destination));
+const formElement = ref<HTMLFormElement | null>(null);
 const page = usePage();
 const canManageDestinations = computed(() => Boolean((page.props.can as { manageSensitiveData?: boolean } | undefined)?.manageSensitiveData));
 const { executionHosts, localExecutionEnabled, canManageBackups } = useDeployment();
@@ -31,6 +32,12 @@ const hosts = computed(() => executionHosts(props.hosts));
 const hostSelectable = (host: ExecutionHost) => Number(host.id) !== 1 || localExecutionEnabled.value;
 const { t, translateError } = useI18n();
 const settings = props.destination?.settings || {};
+const hostKeyApprovalBaseline = Object.freeze({
+    previous_host: props.destination?.settings?.host ?? null,
+    previous_port: props.destination ? Number(props.destination.settings?.port) || 22 : null,
+    previous_host_key: props.destination?.settings?.host_key || null,
+});
+const savedIdentityChanged = ref(false);
 const hasSecret = (field: string) => Boolean(props.destination?.has_secrets?.[field]);
 const storageLimitUnitSelections = ref<Record<string, SizeUnit>>({});
 
@@ -118,9 +125,22 @@ const updateStorageLimitUnit = (key: string, unit: SizeUnit) => {
 };
 const updateStorageLimitThreshold = (key: string, value: string, unit: SizeUnit) => (form.settings as Record<string, any>)[key] = unitValueToBytes(value, unit);
 
-const submit = () => {
-    if (!canSave.value) return;
-    form.transform((data) => ({ ...data, docker_host_id: isHostLocalDestination(data) ? data.docker_host_id : null }));
+const submit = (approval?: { key: string; fingerprint: string }) => {
+    if (!canSave.value || form.processing || savedIdentityChanged.value) return;
+    if (form.provider === 'ssh' && !approval && !form.settings.host_key.trim()) {
+        hostKeySaveError.value = t('Approve the discovered server key or enter a trusted key manually before saving.');
+        if (!hostKeyProbe.value.loading && !hostKeyProbe.value.key && !hostKeyProbe.value.error && validHostKeyEndpoint.value) void fetchHostKey();
+        return;
+    }
+    form.transform((data) => ({
+        ...data,
+        docker_host_id: isHostLocalDestination(data) ? data.docker_host_id : null,
+        settings: { ...data.settings, host_key: approval?.key ?? data.settings.host_key },
+        ...(approval ? { host_key_approval: {
+            fingerprint: approval.fingerprint,
+            ...hostKeyApprovalBaseline,
+        } } : {}),
+    }));
     if (editing.value) {
         form.put(`/destinations/${props.destination.id}`);
         return;
@@ -133,12 +153,19 @@ const toggleDestinationActive = () => {
     form.is_active = !form.is_active;
 };
 
-const hostKeyProbe = ref<{ loading: boolean; fingerprint: string; error: string }>({
+const hostKeyProbe = ref<{ loading: boolean; key: string; fingerprint: string; error: string }>({
     loading: false,
+    key: '',
     fingerprint: '',
     error: '',
 });
 const hostKeyExecutor = ref(1);
+const hostKeySaveError = ref('');
+const storedHostKey = props.destination?.provider === 'ssh' ? settings.host_key || '' : '';
+const storedEndpoint = { host: settings.host || '', port: Number(settings.port) || 22 };
+const validHostKeyEndpoint = computed(() => Boolean(form.settings.host)
+    && !/[\s/@]/.test(form.settings.host)
+    && Number.isInteger(Number(form.settings.port)) && Number(form.settings.port) >= 1 && Number(form.settings.port) <= 65535);
 const hostKeyHosts = computed(() => measurementHosts.value.filter((host) => host.supports_sftp_host_key));
 let probeGeneration = 0;
 let probeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -147,9 +174,25 @@ const resetProbe = () => {
     probeGeneration++;
     clearTimeout(probeTimer);
     probeController?.abort();
-    hostKeyProbe.value = { loading: false, fingerprint: '', error: '' };
+    hostKeyProbe.value = { loading: false, key: '', fingerprint: '', error: '' };
+    hostKeySaveError.value = '';
 };
-watch(() => [form.provider, form.settings.host, form.settings.port, hostKeyExecutor.value], resetProbe, { flush: 'sync' });
+watch(() => JSON.stringify([
+    props.destination?.id ?? null,
+    props.destination?.provider ?? null,
+    props.destination?.settings?.host ?? null,
+    props.destination?.settings?.port ?? null,
+    props.destination?.settings?.host_key ?? null,
+]), () => {
+    savedIdentityChanged.value = true;
+    resetProbe();
+}, { flush: 'sync' });
+watch(() => [form.settings.host, form.settings.port], () => {
+    resetProbe();
+    // A saved pin belongs only to its original endpoint, including when reverting edits.
+    form.settings.host_key = form.provider === 'ssh' && form.settings.host === storedEndpoint.host
+        && Number(form.settings.port) === storedEndpoint.port ? storedHostKey : '';
+}, { flush: 'sync' });
 // Manual edits also invalidate discovery, including responses already in flight.
 watch(() => form.settings.host_key, resetProbe, { flush: 'sync' });
 watch(() => form.provider, () => {
@@ -160,17 +203,17 @@ watch(() => form.provider, () => {
 onBeforeUnmount(resetProbe);
 
 const fetchHostKey = async () => {
-    if (!canManageDestinations.value || form.provider !== 'ssh' || !form.settings.host || hostKeyProbe.value.loading) {
+    if (savedIdentityChanged.value || !canManageDestinations.value || form.provider !== 'ssh' || !validHostKeyEndpoint.value || hostKeyProbe.value.loading) {
         return;
     }
     resetProbe();
     const generation = probeGeneration;
-    const endpoint = { host: form.settings.host, port: Number(form.settings.port) || 22 };
+    const endpoint = { host: form.settings.host, port: Number(form.settings.port) };
     const executor = Number(hostKeyExecutor.value);
     let operationId: string | undefined;
     probeController = new AbortController();
     const signal = probeController.signal;
-    hostKeyProbe.value = { loading: true, fingerprint: '', error: '' };
+    hostKeyProbe.value = { loading: true, key: '', fingerprint: '', error: '' };
     const request = async (): Promise<void> => {
         try {
             const csrf = document.cookie.split('; ').find((cookie) => cookie.startsWith('XSRF-TOKEN='))?.slice(11);
@@ -197,15 +240,25 @@ const fetchHostKey = async () => {
                 if (operation.status !== 'completed' || operation.result?.status !== 'success') throw new Error(operation.result?.error_message || t('destinationOperations.failed'));
                 result = operation.result.data;
             }
-            if (typeof result?.key !== 'string' || typeof result?.fingerprint !== 'string') throw new Error(t('destinationOperations.failed'));
-            form.settings.host_key = result.key;
-            hostKeyProbe.value = { loading: false, fingerprint: result.fingerprint, error: '' };
+            if (typeof result?.key !== 'string' || !result.key.trim() || typeof result?.fingerprint !== 'string' || !result.fingerprint.trim()) throw new Error(t('destinationOperations.failed'));
+            hostKeyProbe.value = { loading: false, key: result.key, fingerprint: result.fingerprint, error: '' };
         } catch (error) {
             if (generation !== probeGeneration) return;
-            hostKeyProbe.value = { loading: false, fingerprint: '', error: error instanceof Error ? error.message : t('Unable to reach the SSH server.') };
+            hostKeyProbe.value = { loading: false, key: '', fingerprint: '', error: error instanceof Error ? error.message : t('Unable to reach the SSH server.') };
         }
     };
     await request();
+};
+watch(() => [form.provider, form.settings.host, form.settings.port, hostKeyExecutor.value], () => {
+    resetProbe();
+    if (!savedIdentityChanged.value && form.provider === 'ssh' && !form.settings.host_key.trim() && validHostKeyEndpoint.value && canManageDestinations.value) {
+        probeTimer = setTimeout(() => { void fetchHostKey(); }, 600);
+    }
+}, { immediate: true, flush: 'sync' });
+const approveHostKey = () => {
+    if (savedIdentityChanged.value || !hostKeyProbe.value.key || hostKeyProbe.value.loading || !canManageDestinations.value) return;
+    if (formElement.value && !formElement.value.reportValidity()) return;
+    submit({ key: hostKeyProbe.value.key, fingerprint: hostKeyProbe.value.fingerprint });
 };
 useEnvironmentForms(form);
 </script>
@@ -213,7 +266,7 @@ useEnvironmentForms(form);
 <template>
     <Head :title="editing ? t('Edit destination') : t('New destination')" />
     <AppLayout :title="editing ? t('Edit destination') : t('New destination')" :subtitle="t('Store destination settings and credentials encrypted at rest.')">
-        <form class="card max-w-4xl flex flex-col gap-5 p-4 sm:p-6" @submit.prevent="submit">
+        <form ref="formElement" data-testid="destination-form" class="card max-w-4xl flex flex-col gap-5 p-4 sm:p-6" @submit.prevent="submit()">
             <label v-if="isHostLocalDestination(form)" class="flex flex-col gap-2">
                 <span class="label">{{ t('hostWorkflow.destinationHost') }}</span>
                 <select v-model="form.docker_host_id" class="input" required>
@@ -358,14 +411,25 @@ useEnvironmentForms(form);
                     </label>
                     <div class="flex items-center justify-between gap-2">
                         <span class="label">{{ t('Pinned host key') }}</span>
-                        <button type="button" class="btn-secondary text-xs" :disabled="!canManageDestinations || !form.settings.host || hostKeyProbe.loading" @click="fetchHostKey">
+                        <button type="button" data-testid="fetch-host-key" class="btn-secondary text-xs" :disabled="savedIdentityChanged || !canManageDestinations || !validHostKeyEndpoint || hostKeyProbe.loading" @click="fetchHostKey">
                             {{ hostKeyProbe.loading ? t('Fetching...') : t('Fetch key from server') }}
                         </button>
                     </div>
-                    <textarea v-model="form.settings.host_key" class="input min-h-20" placeholder="ssh-ed25519 AAAAC3Nza... or SHA256:abc123..."></textarea>
-                    <span v-if="error('settings.host_key')" class="block text-sm text-rose-700 dark:text-rose-300">{{ error('settings.host_key') }}</span>
-                    <span v-if="hostKeyProbe.fingerprint" class="block text-xs text-emerald-700 dark:text-emerald-400">{{ t('Server key trusted (fingerprint {fingerprint}). Compare it with the server before saving to rule out a first-contact attack.', { fingerprint: hostKeyProbe.fingerprint }) }}</span>
-                    <span v-if="hostKeyProbe.error" class="block text-xs text-rose-700 dark:text-rose-400">{{ hostKeyProbe.error }}</span>
+                    <div v-if="hostKeyProbe.key" data-testid="host-key-candidate" class="flex flex-col gap-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-800 dark:text-amber-100">
+                        <p>{{ t('Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.') }}</p>
+                        <p data-testid="host-key-fingerprint" class="break-all font-mono">{{ hostKeyProbe.fingerprint }}</p>
+                        <p v-if="storedHostKey" data-testid="host-key-replacement-warning" class="font-semibold">{{ t('A host key is already saved. Approving this key replaces the saved trust. Only continue if you independently verified the server identity.') }}</p>
+                        <button type="button" data-testid="approve-host-key" class="btn-primary self-start" :disabled="form.processing || !canSave || !canManageDestinations" @click="approveHostKey">{{ t('Approve and save') }}</button>
+                    </div>
+                    <p v-if="hostKeyProbe.loading" data-testid="host-key-loading" class="text-sm text-slate-500 dark:text-slate-400" role="status">{{ t('Fetching...') }}</p>
+                    <details :open="Boolean(form.settings.host_key || error('settings.host_key'))">
+                        <summary class="cursor-pointer text-sm text-slate-500 dark:text-slate-400">{{ t('Advanced: enter a trusted host key manually') }}</summary>
+                        <textarea v-model="form.settings.host_key" data-testid="manual-host-key" :aria-label="t('Pinned host key')" class="input mt-2 min-h-20" placeholder="ssh-ed25519 AAAAC3Nza... or SHA256:abc123..."></textarea>
+                        <span v-if="error('settings.host_key')" class="block text-sm text-rose-700 dark:text-rose-300">{{ error('settings.host_key') }}</span>
+                    </details>
+                    <span v-if="hostKeyProbe.error" data-testid="host-key-error" class="block text-xs text-rose-700 dark:text-rose-400" role="alert">{{ hostKeyProbe.error }}</span>
+                    <span v-if="hostKeySaveError" data-testid="host-key-save-error" class="block text-sm text-rose-700 dark:text-rose-300" role="alert">{{ hostKeySaveError }}</span>
+                    <span v-if="savedIdentityChanged" data-testid="host-key-reload-required" class="block text-sm text-rose-700 dark:text-rose-300" role="alert">{{ t('The saved server identity has changed. Reload the destination before approving a key.') }}</span>
                     <span class="text-xs text-slate-500 dark:text-slate-400">{{ t('Required for destination tests and backup uploads. Fetch the server key and compare its fingerprint through a trusted channel before saving, or paste an OpenSSH key, bare base64 key, or SHA256 fingerprint. Missing or invalid pins are rejected and fingerprint pins are checked before applications are stopped. Offen rejects server identity mismatches during upload. Discovery alone is trust on first use, not identity verification.') }}</span>
                 </div>
             </section>
@@ -572,7 +636,7 @@ useEnvironmentForms(form);
             </div>
 
             <div class="flex flex-wrap gap-3">
-                <button class="btn-primary" :disabled="form.processing || !canSave">{{ editing ? t('Update destination') : t('Create destination') }}</button>
+                <button class="btn-primary" :disabled="savedIdentityChanged || form.processing || !canSave">{{ editing ? t('Update destination') : t('Create destination') }}</button>
                 <Link href="/destinations" class="btn-secondary">{{ t('Cancel') }}</Link>
             </div>
         </form>

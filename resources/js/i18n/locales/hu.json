@@ -1,4 +1,10 @@
 {
+  "The saved server identity has changed. Reload the destination before approving a key.": "A kiszolgáló mentett azonossága megváltozott. Kulcs jóváhagyása előtt töltse újra a célt.",
+  "Approve the discovered server key or enter a trusted key manually before saving.": "Mentés előtt hagyja jóvá a felderített kiszolgálókulcsot, vagy adjon meg kézzel egy megbízható kulcsot.",
+  "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Kiszolgálókulcs található. Jóváhagyás előtt hasonlítsa össze ezt az ujjlenyomatot egy megbízható csatornán keresztül. A felderítés az első használatkor adott bizalmat jelenti, nem személyazonosság-ellenőrzést.",
+  "A host key is already saved. Approving this key replaces the saved trust. Only continue if you independently verified the server identity.": "Már van mentett kiszolgálókulcs. Ennek a kulcsnak a jóváhagyása felülírja a mentett bizalmi kapcsolatot. Csak akkor folytassa, ha független módon ellenőrizte a kiszolgáló azonosságát.",
+  "Approve and save": "Jóváhagyás és mentés",
+  "Advanced: enter a trusted host key manually": "Speciális: megbízható kiszolgálókulcs kézi megadása",
     "environment.label": "Környezet",
     "environment.local": "Helyi gazdagép",
     "environment.backups": "Biztonsági mentések",
