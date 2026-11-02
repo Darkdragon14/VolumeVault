@@ -10,6 +10,10 @@ return [
             'type' => 'change',
             'key' => 'sftp_backup_host_verification',
         ],
+        [
+            'type' => 'change',
+            'key' => 'dependency_security_october_31_2026',
+        ],
     ],
     'releases' => [
         'v2.0.8' => [

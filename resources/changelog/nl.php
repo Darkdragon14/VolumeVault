@@ -9,6 +9,10 @@ return [
         'title' => 'Vastgezette serveridentiteit vereist voor SFTP-back-ups',
         'description' => 'SFTP-bestemmingstests en back-upuploads vereisen nu een geldige vastgezette hostsleutel. VolumeVault geeft de publieke sleutel door aan Offen 2.50.1 of nieuwer. Voordat toepassingen worden gestopt, worden ontbrekende of ongeldige sleutels geweigerd, volledige publieke sleutels offline genormaliseerd en SHA256-pins via een niet-geauthenticeerde probe vergeleken met de opgeslagen vingerafdruk, zonder automatisch vertrouwen. Offen weigert elke afwijkende serveridentiteit tijdens het uploaden. OpenSSH-sleutels en alleen base64-sleutelgegevens worden ondersteund. Haal voor bestaande bestemmingen zonder vastgezette sleutel de serversleutel op, vergelijk de vingerafdruk via een onafhankelijk vertrouwd kanaal, sla op en test. Detectie alleen is vertrouwen bij het eerste contact. Vastgezette sleutels blijven optioneel voor lijsten en hersteldownloads.',
     ],
+    'dependency_security_october_31_2026' => [
+        'title' => 'Beveiligingsupdates voor JavaScript-afhankelijkheden',
+        'description' => 'follow-redirects en de Vue-testafhankelijkheden glob en minimatch zijn bijgewerkt om waarschuwingen over het doorsturen van inloggegevens en denial-of-service te verhelpen. Volledige Composer- en npm-audits melden op het moment van deze update geen bekende kwetsbaarheden in de vergrendelde afhankelijkheden. Containerimages en actieve installaties vallen niet onder deze audits.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Agentverbindingen hersteld na updates van de HTTP-client',
         'description' => 'HTTP-transportopties hersteld die agentverbindingen na een afhankelijkheidsupdate konden blokkeren. Certificaat- en hostnaamverificatie en minimaal TLS 1.2 blijven verplicht. Werk het agentimage bij met behoud van het bestaande opslagvolume en de configuratie; opnieuw registreren is niet nodig.',

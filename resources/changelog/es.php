@@ -9,6 +9,10 @@ return [
         'title' => 'Identidad del servidor fijada obligatoria para las copias SFTP',
         'description' => 'Las pruebas de destinos y las subidas de copias SFTP ahora requieren una clave de host fijada válida. VolumeVault pasa la clave pública a Offen 2.50.1 o posterior. Antes de detener las aplicaciones, se rechazan las claves ausentes o no válidas, se normalizan las claves públicas completas sin conexión y se resuelven las huellas SHA256 mediante una consulta sin autenticación contra la huella guardada, sin confianza automática. Offen rechaza cualquier identidad de servidor que no coincida durante la subida. Se admiten claves OpenSSH y datos base64 sin formato adicional. Para destinos existentes sin clave fijada, obtenga la clave del servidor, compare su huella por un canal independiente de confianza, guarde y pruebe. El descubrimiento por sí solo implica confianza en el primer contacto. La fijación sigue siendo opcional para listados y descargas de restauración.',
     ],
+    'dependency_security_october_31_2026' => [
+        'title' => 'Correcciones de seguridad de dependencias JavaScript',
+        'description' => 'Se actualizaron follow-redirects y las dependencias glob y minimatch de las herramientas de prueba Vue para corregir avisos sobre reenvío de credenciales y denegación de servicio. Las auditorías completas de Composer y npm no detectan vulnerabilidades conocidas en las dependencias bloqueadas al realizar esta actualización. No cubren las imágenes de contenedores ni las instalaciones en ejecución.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Conexiones de agentes restauradas tras actualizar el cliente HTTP',
         'description' => 'Se corrigieron las opciones de transporte HTTP que podían impedir la conexión de los agentes tras actualizar las dependencias. Se mantienen la verificación del certificado y del nombre de host y el mínimo de TLS 1.2. Actualiza la imagen del agente conservando su volumen de almacenamiento y su configuración; no es necesario registrarlo de nuevo.',

@@ -9,6 +9,10 @@ return [
         'title' => 'SFTP-Backups erfordern eine festgelegte Serveridentität',
         'description' => 'SFTP-Zieltests und Backup-Uploads erfordern jetzt einen gültigen Hostschlüssel-Pin. VolumeVault übergibt den öffentlichen Schlüssel an Offen ab 2.50.1. Vor dem Stoppen der Anwendungen werden fehlende oder ungültige Pins abgelehnt, vollständige öffentliche Schlüssel offline normalisiert und SHA256-Pins durch eine nicht authentifizierte Abfrage gegen den gespeicherten Fingerabdruck aufgelöst, ohne automatisches Vertrauen. Offen weist jede abweichende Serveridentität beim Upload zurück. OpenSSH- und reine base64-Schlüssel werden unterstützt. Rufen Sie für bestehende Ziele ohne Pin den Serverschlüssel ab, vergleichen Sie den Fingerabdruck über einen unabhängigen vertrauenswürdigen Kanal, speichern und testen Sie. Die Erkennung allein ist Vertrauen beim Erstkontakt. Auflistung und Restore-Downloads behalten optionale Pins bei.',
     ],
+    'dependency_security_october_31_2026' => [
+        'title' => 'Sicherheitskorrekturen für JavaScript-Abhängigkeiten',
+        'description' => 'follow-redirects sowie glob und minimatch der Vue-Testwerkzeuge wurden aktualisiert, um die Weitergabe von Zugangsdaten und Denial-of-Service-Schwachstellen zu beheben. Vollständige Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen in den gesperrten Abhängigkeiten. Container-Images und laufende Installationen sind nicht von diesen Audits erfasst.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Agent-Verbindungen nach HTTP-Client-Updates wiederhergestellt',
         'description' => 'HTTP-Transportoptionen korrigiert, die Agent-Verbindungen nach einer Abhängigkeitsaktualisierung verhindern konnten. Zertifikats- und Hostnamenprüfung sowie mindestens TLS 1.2 bleiben vorgeschrieben. Aktualisieren Sie das Agent-Image unter Beibehaltung des Speichervolumes und der Konfiguration; eine erneute Registrierung ist nicht erforderlich.',

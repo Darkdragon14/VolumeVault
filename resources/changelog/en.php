@@ -9,6 +9,10 @@ return [
         'title' => 'Pinned server identity required for SFTP backups',
         'description' => 'SFTP destination tests and backup uploads now require a valid host-key pin. VolumeVault passes the public key to Offen 2.50.1 or newer. Before applications are stopped, missing or invalid pins are rejected, full public keys are normalized offline, and SHA256 fingerprint pins are resolved by an unauthenticated probe against the saved fingerprint, without automatic trust. Offen rejects any server identity mismatch during upload. OpenSSH and bare base64 keys are supported. For existing destinations without a pin, fetch the server key, compare its fingerprint through an independent trusted channel, save and test. Discovery alone is trust on first use. Listing and restore downloads retain optional pinning.',
     ],
+    'dependency_security_october_31_2026' => [
+        'title' => 'JavaScript dependency security fixes',
+        'description' => 'Updated follow-redirects and the Vue test tooling dependencies glob and minimatch to fix credential forwarding and denial-of-service advisories. Full Composer and npm audits report no known vulnerabilities in the locked dependencies at the time of this update. Container images and running installations are not covered by these audits.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Restored agent connections after HTTP client updates',
         'description' => 'Fixed HTTP transport options that could prevent agents from connecting after a dependency update. Certificate and hostname verification and the TLS 1.2 minimum remain enforced. Update the agent image while keeping its existing storage volume and configuration; enrollment again is not required.',

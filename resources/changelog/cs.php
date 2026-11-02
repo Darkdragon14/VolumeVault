@@ -9,6 +9,10 @@ return [
         'title' => 'Zálohy SFTP vyžadují připnutou identitu serveru',
         'description' => 'Testy cílů a nahrávání záloh SFTP nyní vyžadují platný připnutý klíč hostitele. VolumeVault předává veřejný klíč nástroji Offen 2.50.1 nebo novějšímu. Před zastavením aplikací jsou chybějící či neplatné klíče odmítnuty, úplné veřejné klíče normalizovány offline a připnuté otisky SHA256 vyřešeny neautentizovanou sondou proti uloženému otisku, bez automatické důvěry. Offen odmítne jakoukoli neodpovídající identitu serveru během nahrávání. Podporovány jsou klíče OpenSSH a samotná data base64. U existujících cílů bez připnutého klíče načtěte klíč serveru, porovnejte jeho otisk nezávislým důvěryhodným kanálem, uložte a otestujte. Samotné zjištění klíče je důvěra při prvním kontaktu. Pro výpisy a stahování při obnově zůstává připnutí volitelné.',
     ],
+    'dependency_security_october_31_2026' => [
+        'title' => 'Bezpečnostní opravy závislostí JavaScriptu',
+        'description' => 'Aktualizovány follow-redirects a závislosti testovacích nástrojů Vue glob a minimatch kvůli předávání přihlašovacích údajů a odepření služby. Úplné audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti v uzamčených závislostech. Tyto audity nepokrývají obrazy kontejnerů ani běžící instalace.',
+    ],
     'agent_http_transport_compatibility' => [
         'title' => 'Obnoveno připojení agentů po aktualizaci HTTP klienta',
         'description' => 'Opraveny volby HTTP přenosu, které mohly po aktualizaci závislostí bránit připojení agentů. Ověřování certifikátu a názvu hostitele i minimální TLS 1.2 zůstávají povinné. Aktualizujte obraz agenta se zachováním stávajícího úložného svazku a konfigurace; nová registrace není nutná.',
