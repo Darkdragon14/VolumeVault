@@ -1,21 +1,26 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'sftp_host_key_approval',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'sftp_backup_host_verification',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'dependency_security_october_31_2026',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.9' => [
+            'date' => '2026-11-02',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.9',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'sftp_host_key_approval',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'sftp_backup_host_verification',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'dependency_security_october_31_2026',
+                ],
+            ],
+        ],
         'v2.0.8' => [
             'date' => '2026-10-30',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.8',
