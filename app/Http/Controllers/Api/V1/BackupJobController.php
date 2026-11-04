@@ -363,6 +363,7 @@ class BackupJobController extends Controller
             'backup_filter_mode' => $backupFilterMode,
             'backup_include_paths' => $backupIncludePaths !== '' ? $backupIncludePaths : null,
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
+            'use_exact_filename' => $request->boolean('use_exact_filename'),
             'stop_containers_before_backup' => $request->boolean('stop_containers_before_backup'),
             'stop_container_names' => $isHostPath && $request->boolean('stop_containers_before_backup')
                 ? array_values(array_filter((array) $request->input('stop_container_names', [])))

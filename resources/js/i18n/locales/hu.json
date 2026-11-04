@@ -1,4 +1,11 @@
 {
+  "archiveNaming.exactLabel": "A pontos sablon használata előtag nélkül",
+  "archiveNaming.exactHelp": "Sablon szükséges. A normál mentések elhagyják a feladat/futás előtagot; a .tar.gz automatikusan hozzáadódik. A tokenértékek normalizáltak; az érvényes literális szöveg megmarad. A nevek legfeljebb 255 UTF-8 bájtosak, rövidítéskor stabil SHA256 utótaggal.",
+  "archiveNaming.standardHelp": "Opcionális sablon kiterjesztés nélkül. A VolumeVault stabil feladat-UUID és egyedi futásazonosító előtagot, majd .tar.gz kiterjesztést ad hozzá (255 bájtos korlát).",
+  "archiveNaming.safetyHelp": "A visszaállítás előtti biztonsági mentések pontos módban is mindig megtartják egyedi biztonsági/feladat/futás előtagjukat.",
+  "archiveNaming.exampleNamespace": "A 00000000-0000-4000-8000-000000000000 UUID példa; az új feladat saját stabil UUID-t kap. A 123-as futás is példa.",
+  "archiveNaming.collisionWarning": "A pontos nevek felülírhatnak archívumokat, más feladatokét is ugyanazon a célon, még időbélyegekkel is. A megőrzéshez futási előzmények és ellenőrzött cél-/objektumazonosság szükséges; az ismeretlen vagy bizonytalan objektumok érintetlenek maradnak. Előbb frissítse a távoli ügynököket.",
+  "archiveNaming.previewUnavailable": "A hosszú nevek előnézetéhez Web Crypto szükséges biztonságos böngészőkörnyezetben.",
   "The saved server identity has changed. Reload the destination before approving a key.": "A kiszolgáló mentett azonossága megváltozott. Kulcs jóváhagyása előtt töltse újra a célt.",
   "Approve the discovered server key or enter a trusted key manually before saving.": "Mentés előtt hagyja jóvá a felderített kiszolgálókulcsot, vagy adjon meg kézzel egy megbízható kulcsot.",
   "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Kiszolgálókulcs található. Jóváhagyás előtt hasonlítsa össze ezt az ujjlenyomatot egy megbízható csatornán keresztül. A felderítés az első használatkor adott bizalmat jelenti, nem személyazonosság-ellenőrzést.",

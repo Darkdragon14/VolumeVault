@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'exact_backup_filenames' => [
+        'title' => 'Választható pontos mentési fájlnevek',
+        'description' => 'A feladatok pontos névsablont használhatnak a normál feladat/futás előtag nélkül. Alapértelmezésben marad az egyedi előtag, a biztonsági mentések pedig mindig megtartják. A tokenértékek normalizáltak, a nevek hosszkorlátosak; az érvényes literális sablonszöveg megmarad. A pontos nevek más feladatok archívumait is felülírhatják. A megőrzéshez futási előzmények és ellenőrzött cél-/objektumazonosság szükséges; az ismeretlen vagy bizonytalan objektumok megmaradnak. Előbb frissítse a távoli ügynököket.',
+    ],
     'sftp_host_key_approval' => [
         'title' => 'A felderített SFTP-kiszolgálókulcsok kifejezett jóváhagyása',
         'description' => 'A rögzített kulcs nélküli SSH/SFTP-végpontok automatikusan külön kulcsjelöltet és TOFU-ujjlenyomatot jelenítenek meg. A kiválasztott kulcs elfogadásához kifejezett jóváhagyás és mentés szükséges; a meglévő kulcsok soha nem cserélődnek le észrevétlenül, a sikertelen felderítés pedig nem ismétlődik a háttérben. Az ujjlenyomatokat független, megbízható csatornán hasonlítsa össze. A speciális kézi bevitel továbbra is elérhető. A mentett célok új jóváhagyási API-ja ellenőrzi a végpontot és az előző ujjlenyomatot, újabb hálózati kapcsolat nélkül pontosan a beküldött kulcsot menti, és hitelesítő adatok nélkül naplózza az ujjlenyomatokat.',

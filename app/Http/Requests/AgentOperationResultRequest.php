@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\BackupArchiveFilename;
 use Illuminate\Foundation\Http\FormRequest;
 
 class AgentOperationResultRequest extends FormRequest
@@ -34,9 +35,15 @@ class AgentOperationResultRequest extends FormRequest
                 'result.duration_seconds' => ['required', 'integer:strict', 'min:0'],
             ];
         }
+
         return [
             'token' => ['required', 'string', 'regex:/\A[a-f0-9]{64}\z/'],
-            'result' => ['required', 'array:status,logs,error_message,backup_key,backup_size_bytes,target_volume_name,cleanup_complete,finished_at,duration_seconds,safety_backup'],
+            'result' => ['required', 'array:status,logs,error_message,backup_key,backup_size_bytes,backup_retention_identity,target_volume_name,cleanup_complete,finished_at,duration_seconds,safety_backup'],
+            'result.backup_retention_identity' => ['sometimes', 'nullable', 'array:key,filename,size,modified'],
+            'result.backup_retention_identity.key' => ['required_with:result.backup_retention_identity', 'string', 'max:4096'],
+            'result.backup_retention_identity.filename' => ['required_with:result.backup_retention_identity', new BackupArchiveFilename],
+            'result.backup_retention_identity.size' => ['required_with:result.backup_retention_identity', 'integer:strict', 'min:0'],
+            'result.backup_retention_identity.modified' => ['required_with:result.backup_retention_identity', 'integer:strict'],
             'result.status' => ['required', 'in:success,failed'],
             'result.logs' => ['present', 'nullable', 'string', 'max:262144'],
             'result.error_message' => ['nullable', 'string', 'max:1000'],

@@ -25,6 +25,7 @@ use App\Models\NotificationChannel;
 use App\Models\RestoreRun;
 use App\Models\RunFinalization;
 use App\Models\User;
+use App\Services\Agents\AgentCompatibility;
 use App\Services\Agents\AgentLifecycle;
 use App\Services\Agents\AgentOperationEnvelope;
 use App\Services\Agents\AgentOperationRedactor;
@@ -804,6 +805,26 @@ class AgentOperationProtocolTest extends TestCase
     }
 
     /** @return array{DockerHost, string, array<string, mixed>} */
+    public function test_exact_filename_receipt_persists_verified_identity_and_rejects_a_different_filename(): void
+    {
+        [$host, $body, $token] = $this->registered();
+        $body['capabilities'] = AgentCompatibility::CAPABILITIES;
+        $this->sendAgent('heartbeat', $token, [...$body, 'docker_status' => 'ready', 'active_operations' => 0])->assertOk();
+        $initial = $this->backup($host);
+        $job = $initial->job;
+        $initial->delete();
+        $job->update(['use_exact_filename' => true, 'backup_filename_template' => 'custom-{run}']);
+        $run = app(CreateBackupRunRecord::class)->handle($job, ['status' => 'queued', 'trigger' => 'manual']);
+        $this->enqueue($run);
+        $operation = $this->pull($body, $token);
+        $this->assertTrue($operation['spec']['job']['use_exact_filename']);
+        $identity = ['key' => 'archives/'.$run->backup_filename, 'filename' => $run->backup_filename, 'size' => 1234, 'modified' => now()->getTimestamp()];
+        $this->complete($body, $token, $operation, ['backup_retention_identity' => [...$identity, 'filename' => 'other.tar.gz']])->assertUnprocessable();
+        $this->complete($body, $token, $operation, ['backup_key' => $identity['key'], 'backup_retention_identity' => $identity])->assertOk();
+        $this->assertSame($identity, $run->fresh()->backup_retention_identity);
+        $this->assertArrayNotHasKey('backup_retention_identity', $run->fresh()->toArray());
+    }
+
     private function pending(?DockerHost $host = null): array
     {
         $host ??= DockerHost::factory()->create();

@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'exact_backup_filenames',
+        ],
+    ],
     'releases' => [
         'v2.0.9' => [
             'date' => '2026-11-02',

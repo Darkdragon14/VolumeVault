@@ -44,6 +44,7 @@ class BackupJobRequest extends FormRequest
             'host_path' => $hostPath !== '' ? $hostPath : null,
             'volume_name' => $sourceType === BackupJob::SOURCE_TYPE_HOST_PATH ? null : $this->input('volume_name'),
             'backup_filename_template' => $backupFilenameTemplate !== '' ? $backupFilenameTemplate : null,
+            'use_exact_filename' => $this->input('use_exact_filename', $this->existingBackupJob()?->use_exact_filename ?? false),
             // Absent, null or blank all mean "use the default"; any other value is
             // passed through unchanged so an invalid one (a bad string, an array) is
             // rejected by the enum rule with a 422 rather than silently coerced.
@@ -118,7 +119,8 @@ class BackupJobRequest extends FormRequest
             ])],
             // Never required: include mode with no paths simply keeps everything.
             'backup_include_paths' => ['nullable', 'string', 'max:2000'],
-            'backup_filename_template' => ['nullable', 'string', 'max:180'],
+            'backup_filename_template' => ['required_if:use_exact_filename,true', 'nullable', 'string', 'max:180'],
+            'use_exact_filename' => ['boolean'],
             'notifications_enabled' => ['boolean'],
             'notification_channel_ids' => ['nullable', 'array'],
             'notification_channel_ids.*' => ['integer', 'distinct', 'exists:notification_channels,id'],
@@ -147,6 +149,9 @@ class BackupJobRequest extends FormRequest
             if (! $validator->errors()->has('docker_host_id')) {
                 try {
                     app(AgentExecution::class)->validateHost($this->integer('docker_host_id'), 'backup-v1');
+                    if ($this->boolean('use_exact_filename')) {
+                        app(AgentExecution::class)->validateHost($this->integer('docker_host_id'), 'exact-filename-v1');
+                    }
                 } catch (ValidationException $exception) {
                     $validator->errors()->add('docker_host_id', $exception->getMessage());
                 }
@@ -276,6 +281,14 @@ class BackupJobRequest extends FormRequest
     {
         if ($message = app(RenderBackupFilename::class)->validationError($this->input('backup_filename_template'))) {
             $validator->errors()->add('backup_filename_template', $message);
+        }
+        if ($this->boolean('use_exact_filename') && $validator->errors()->isEmpty()) {
+            $job = new BackupJob($this->only(['name', 'source_type', 'volume_name', 'host_path', 'timezone', 'use_exact_filename']));
+            try {
+                app(RenderBackupFilename::class)->preview($this->input('backup_filename_template'), $job);
+            } catch (ValidationException $exception) {
+                $validator->errors()->add('backup_filename_template', $exception->getMessage());
+            }
         }
     }
 

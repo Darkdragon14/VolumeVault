@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'exact_backup_filenames' => [
+        'title' => 'Optionele exacte back-upnamen',
+        'description' => 'Back-uptaken kunnen een exacte naamsjabloon zonder het normale taak-/uitvoeringsvoorvoegsel gebruiken. Het unieke voorvoegsel blijft standaard en blijft altijd behouden bij veiligheidsback-ups. Tokenwaarden worden opgeschoond en namen ingekort; geldige letterlijke sjabloontekst blijft behouden. Exacte namen kunnen ook archieven van andere taken overschrijven. Bewaring vereist uitvoeringsgeschiedenis en geverifieerde bestemmings-/objectidentiteit; onbekende of dubbelzinnige objecten blijven behouden. Werk externe agents eerst bij.',
+    ],
     'sftp_host_key_approval' => [
         'title' => 'Gevonden SFTP-hostsleutels expliciet goedkeuren',
         'description' => 'SSH/SFTP-eindpunten zonder vastgezette sleutel tonen automatisch een afzonderlijke kandidaat met TOFU-vingerafdruk. Vertrouw de gekozen sleutel pas na expliciet goedkeuren en opslaan; bestaande sleutels worden nooit stilzwijgend vervangen en mislukte detectie wordt niet op de achtergrond herhaald. Vergelijk vingerafdrukken via een onafhankelijk vertrouwd kanaal. Geavanceerde handmatige invoer blijft beschikbaar. De nieuwe goedkeurings-API voor opgeslagen bestemmingen controleert het eindpunt en de vorige vingerafdruk, slaat precies de ingediende sleutel op zonder nieuwe netwerkcontrole en registreert vingerafdrukken zonder inloggegevens.',

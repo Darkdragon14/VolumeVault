@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'exact_backup_filenames' => [
+        'title' => 'Noms exacts de sauvegarde en option',
+        'description' => 'Les tâches peuvent utiliser un modèle exact sans le préfixe tâche/exécution habituel. Le préfixe unique reste le choix par défaut et demeure obligatoire pour les sauvegardes de sécurité. Les valeurs des jetons sont normalisées et les noms limités en longueur, en conservant le texte littéral valide. Les noms exacts peuvent écraser des archives, même entre tâches. Leur rétention dépend de l’historique et de l’identité vérifiée de la destination et de l’objet ; les objets inconnus ou ambigus sont préservés. Mettez les agents distants à jour avant utilisation.',
+    ],
     'sftp_host_key_approval' => [
         'title' => 'Approbation explicite des clés hôtes SFTP découvertes',
         'description' => 'Les points de connexion SSH/SFTP sans clé épinglée affichent automatiquement une clé candidate distincte et son empreinte TOFU. Une approbation et un enregistrement explicites sont nécessaires ; les clés existantes ne sont jamais remplacées silencieusement et les découvertes échouées ne sont pas relancées en arrière-plan. Comparez les empreintes via un canal indépendant de confiance. La saisie manuelle avancée reste disponible. La nouvelle API pour les destinations enregistrées vérifie le point de connexion et son empreinte précédente, enregistre exactement la clé soumise sans nouvelle connexion réseau et journalise les empreintes sans identifiants.',

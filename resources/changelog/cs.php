@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'exact_backup_filenames' => [
+        'title' => 'Volitelné přesné názvy záloh',
+        'description' => 'Úlohy mohou použít přesnou šablonu názvu bez běžné předpony úlohy/běhu. Jedinečná předpona zůstává výchozí a bezpečnostní zálohy ji vždy zachovají. Hodnoty tokenů se normalizují a délka názvů se omezuje; platný doslovný text šablony se zachová. Přesné názvy mohou přepsat i archivy jiných úloh. Uchovávání závisí na historii běhů a ověřené identitě cíle/objektu; neznámé či nejednoznačné objekty se zachovají. Před použitím aktualizujte vzdálené agenty.',
+    ],
     'sftp_host_key_approval' => [
         'title' => 'Výslovné schválení zjištěných hostitelských klíčů SFTP',
         'description' => 'Koncové body SSH/SFTP bez připnutého klíče automaticky zobrazí samostatný navržený klíč a otisk TOFU. Důvěra vyžaduje výslovné schválení a uložení; stávající klíče se nikdy tiše nenahrazují a neúspěšné zjišťování se neopakuje na pozadí. Otisky porovnejte nezávislým důvěryhodným kanálem. Pokročilé ruční zadání zůstává dostupné. Nové schvalovací API pro uložené cíle kontroluje koncový bod a předchozí otisk, uloží přesně odeslaný klíč bez dalšího síťového spojení a zaznamená otisky bez přihlašovacích údajů.',

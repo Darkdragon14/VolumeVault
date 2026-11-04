@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'exact_backup_filenames' => [
+        'title' => 'Optionale exakte Backup-Dateinamen',
+        'description' => 'Backup-Jobs können eine exakte Dateinamenvorlage ohne reguläres Job-/Laufpräfix verwenden. Das eindeutige Präfix bleibt Standard und für Sicherungsbackups immer erhalten. Tokenwerte werden bereinigt und Dateinamen längenbegrenzt; gültiger wörtlicher Vorlagentext bleibt erhalten. Exakte Namen können auch Archive anderer Jobs überschreiben. Die Aufbewahrung benötigt den Laufverlauf und eine geprüfte Ziel-/Objektidentität; unbekannte oder mehrdeutige Objekte bleiben erhalten. Remote-Agenten vor der Nutzung aktualisieren.',
+    ],
     'sftp_host_key_approval' => [
         'title' => 'Entdeckte SFTP-Hostschlüssel ausdrücklich bestätigen',
         'description' => 'SSH/SFTP-Endpunkte ohne hinterlegten Schlüssel zeigen automatisch einen separaten Schlüsselkandidaten mit TOFU-Fingerabdruck. Erst ausdrückliches Bestätigen und Speichern vertraut diesem Schlüssel; bestehende Schlüssel werden nie still ersetzt und fehlgeschlagene Abfragen nicht im Hintergrund wiederholt. Fingerabdrücke über einen unabhängigen vertrauenswürdigen Kanal vergleichen. Die erweiterte manuelle Eingabe bleibt verfügbar. Die neue Bestätigungs-API für gespeicherte Ziele prüft Endpunkt und bisherigen Fingerabdruck, speichert genau den übermittelten Schlüssel ohne erneute Netzwerkabfrage und protokolliert Fingerabdrücke ohne Zugangsdaten.',

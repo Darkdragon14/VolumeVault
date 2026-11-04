@@ -1,4 +1,11 @@
 {
+  "archiveNaming.exactLabel": "Utiliser le modèle exact sans préfixe",
+  "archiveNaming.exactHelp": "Un modèle est requis. Les sauvegardes ordinaires omettent le préfixe tâche/exécution ; .tar.gz est ajouté automatiquement. Les valeurs des jetons sont normalisées ; le texte littéral valide est conservé. Les noms sont limités à 255 octets UTF-8, avec un suffixe SHA256 stable si raccourcis.",
+  "archiveNaming.standardHelp": "Modèle facultatif sans extension. VolumeVault ajoute un préfixe UUID stable de la tâche et identifiant unique d’exécution, puis .tar.gz (limite de 255 octets).",
+  "archiveNaming.safetyHelp": "Les sauvegardes de sécurité avant restauration conservent toujours leur préfixe unique sécurité/tâche/exécution, même en mode exact.",
+  "archiveNaming.exampleNamespace": "L’UUID 00000000-0000-4000-8000-000000000000 est un exemple ; chaque nouvelle tâche reçoit son propre UUID stable. L’exécution 123 est aussi un exemple.",
+  "archiveNaming.collisionWarning": "Les noms exacts peuvent écraser des archives, y compris celles d’autres tâches sur la même destination, même avec un horodatage. La rétention dépend de l’historique et de l’identité vérifiée de la destination et de l’objet ; les objets inconnus ou ambigus sont préservés. Mettez les agents distants à jour.",
+  "archiveNaming.previewUnavailable": "L’aperçu des noms longs nécessite Web Crypto dans un contexte de navigateur sécurisé.",
   "The saved server identity has changed. Reload the destination before approving a key.": "L’identité enregistrée du serveur a changé. Rechargez la destination avant d’approuver une clé.",
   "Approve the discovered server key or enter a trusted key manually before saving.": "Approuvez la clé du serveur découverte ou saisissez manuellement une clé de confiance avant d’enregistrer.",
   "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Clé du serveur trouvée. Comparez cette empreinte via un canal de confiance avant de l’approuver. La découverte repose sur la confiance au premier contact, pas sur une vérification d’identité.",

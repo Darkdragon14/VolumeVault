@@ -1,4 +1,11 @@
 {
+  "archiveNaming.exactLabel": "Usar la plantilla exacta sin prefijo",
+  "archiveNaming.exactHelp": "Se requiere una plantilla. Las copias normales omiten el prefijo de tarea/ejecución; .tar.gz se añade automáticamente. Se normalizan los valores de los tokens y se conserva el texto literal válido. Los nombres se limitan a 255 bytes UTF-8 con un sufijo SHA256 estable al acortarse.",
+  "archiveNaming.standardHelp": "Plantilla opcional sin extensión. VolumeVault añade un UUID estable de tarea y un ID único de ejecución como prefijo, y .tar.gz (límite de 255 bytes).",
+  "archiveNaming.safetyHelp": "Las copias de seguridad previas a una restauración siempre conservan su prefijo único de seguridad/tarea/ejecución, incluso en modo exacto.",
+  "archiveNaming.exampleNamespace": "El UUID 00000000-0000-4000-8000-000000000000 es un ejemplo; cada tarea nueva recibe su propio UUID estable. La ejecución 123 también es un ejemplo.",
+  "archiveNaming.collisionWarning": "Los nombres exactos pueden sobrescribir archivos, incluidos los de otras tareas en el mismo destino, incluso con marcas de tiempo. La retención depende del historial y de la identidad verificada del destino/objeto; los objetos desconocidos o ambiguos no se modifican. Actualice los agentes remotos antes de usarlo.",
+  "archiveNaming.previewUnavailable": "La vista previa de nombres largos requiere Web Crypto en un contexto seguro del navegador.",
   "The saved server identity has changed. Reload the destination before approving a key.": "La identidad guardada del servidor ha cambiado. Vuelva a cargar el destino antes de aprobar una clave.",
   "Approve the discovered server key or enter a trusted key manually before saving.": "Apruebe la clave del servidor descubierta o introduzca manualmente una clave de confianza antes de guardar.",
   "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Clave del servidor encontrada. Compare esta huella mediante un canal de confianza antes de aprobarla. El descubrimiento implica confianza en el primer uso, no una verificación de identidad.",

@@ -1,4 +1,11 @@
 {
+  "archiveNaming.exactLabel": "Use the exact template without a prefix",
+  "archiveNaming.exactHelp": "A template is required. Regular backups omit the job/run prefix; .tar.gz is appended automatically. Token values are sanitized; valid literal text is preserved. Names are limited to 255 UTF-8 bytes with a stable SHA256 suffix when shortened.",
+  "archiveNaming.standardHelp": "Optional template without extension. VolumeVault adds a stable job UUID and unique run ID prefix, then .tar.gz automatically (255-byte limit).",
+  "archiveNaming.safetyHelp": "Pre-restore safety backups always retain their unique safety/job/run prefix, even in exact mode.",
+  "archiveNaming.exampleNamespace": "The UUID 00000000-0000-4000-8000-000000000000 is an example; a new job receives its own stable UUID. Run 123 is also an example.",
+  "archiveNaming.collisionWarning": "Exact names can overwrite existing archives, including those from other jobs sharing the destination—even with timestamp tokens. Retention depends on run history and verified destination/object identity; unknown or ambiguous objects are left untouched. Update remote agents before use.",
+  "archiveNaming.previewUnavailable": "Long filename preview requires Web Crypto in a secure browser context.",
   "The saved server identity has changed. Reload the destination before approving a key.": "The saved server identity has changed. Reload the destination before approving a key.",
   "Approve the discovered server key or enter a trusted key manually before saving.": "Approve the discovered server key or enter a trusted key manually before saving.",
   "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.",

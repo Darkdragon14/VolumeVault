@@ -31,7 +31,8 @@ class PruneBackupArchives
         $options = $run->execution_options_snapshot ?? [];
         $count = (int) ($options['retention_count'] ?? 0);
         $days = (int) ($options['retention_days'] ?? 0);
-        if ($count < 1 && $days < 1) {
+        $exact = (bool) ($options['use_exact_filename'] ?? false);
+        if ($count < 1 && $days < 1 && ! $exact) {
             return;
         }
 
@@ -65,8 +66,54 @@ class PruneBackupArchives
 
             $prefix = RenderBackupFilename::archivePrefix($namespace);
             $pattern = '/\A'.preg_quote($prefix, '/').'run-[1-9][0-9]*-.+\.(?:tar\.gz|tar\.zst|tgz|tar)(?:\.(?:gpg|age))?\z/D';
-            $objects = collect($this->listAllObjects($destination))
-                ->filter(fn (array $object): bool => preg_match($pattern, basename((string) ($object['display_name'] ?? $object['key'] ?? ''))) === 1)
+            $listed = collect($this->listAllObjects($destination));
+            $retention = app(ExactFilenameRetention::class);
+            if ($exact) {
+                $current = $listed->filter(fn (array $object): bool => basename((string) ($object['display_name'] ?? $object['key'] ?? '')) === $run->backup_filename);
+                if ($current->count() !== 1) {
+                    throw new RuntimeException;
+                }
+                $identity = $retention->identity($current->first());
+                if ($run->backup_retention_identity !== null && $run->backup_retention_identity !== $identity) {
+                    throw new RuntimeException;
+                }
+                $run->forceFill(['backup_retention_identity' => $identity])->save();
+            }
+            if ($count < 1 && $days < 1) {
+                return;
+            }
+            $manifest = $options['retention_manifest'] ?? $retention->manifest($run);
+            if (! $manifest['complete']) {
+                throw new RuntimeException;
+            }
+            $identities = collect($manifest['archives'])->keyBy('key');
+            $unverified = false;
+            $objects = $listed
+                ->filter(function (array $object) use ($pattern, $manifest, $identities, $retention, $run, &$unverified): bool {
+                    $name = basename((string) ($object['display_name'] ?? $object['key'] ?? ''));
+                    if ($name === $run->backup_filename) {
+                        return true;
+                    }
+                    if (in_array($name, $manifest['protected_filenames'], true)) {
+                        $unverified = true;
+
+                        return false;
+                    }
+                    $identity = $identities->get($object['key'] ?? '');
+                    if ($identity !== null) {
+                        $matches = $retention->matches($object, $identity);
+                        $unverified = $unverified || ! $matches;
+
+                        return $matches;
+                    }
+                    if (in_array($name, $manifest['exact_filenames'], true)) {
+                        $unverified = true;
+
+                        return false;
+                    }
+
+                    return preg_match($pattern, $name) === 1;
+                })
                 ->unique('key')
                 ->map(function (array $object) use ($run): array {
                     if (empty($object['key']) || empty($object['last_modified'])) {
@@ -78,6 +125,10 @@ class PruneBackupArchives
                         'current' => basename((string) ($object['display_name'] ?? $object['key'])) === $run->backup_filename,
                     ];
                 });
+
+            if ($unverified) {
+                $this->appendRunLog->handle($run, 'Retention preserved archives with ambiguous ownership or changed metadata. Exact-name cleanup requires the original run history and unchanged archive metadata.');
+            }
 
             if ($objects->where('current', true)->count() !== 1) {
                 throw new RuntimeException;

@@ -1,4 +1,11 @@
 {
+  "archiveNaming.exactLabel": "Exakte Vorlage ohne Präfix verwenden",
+  "archiveNaming.exactHelp": "Eine Vorlage ist erforderlich. Reguläre Backups lassen das Job-/Laufpräfix weg; .tar.gz wird automatisch angehängt. Tokenwerte werden bereinigt; gültiger wörtlicher Text bleibt erhalten. Namen sind auf 255 UTF-8-Bytes begrenzt, beim Kürzen mit stabilem SHA256-Suffix.",
+  "archiveNaming.standardHelp": "Optionale Vorlage ohne Erweiterung. VolumeVault ergänzt eine stabile Job-UUID und eindeutige Lauf-ID als Präfix sowie .tar.gz (maximal 255 Bytes).",
+  "archiveNaming.safetyHelp": "Sicherungsbackups vor einer Wiederherstellung behalten auch im exakten Modus ihr eindeutiges Sicherheits-/Job-/Laufpräfix.",
+  "archiveNaming.exampleNamespace": "Die UUID 00000000-0000-4000-8000-000000000000 ist ein Beispiel; ein neuer Job erhält eine eigene stabile UUID. Lauf 123 ist ebenfalls ein Beispiel.",
+  "archiveNaming.collisionWarning": "Exakte Namen können vorhandene Archive überschreiben, auch die anderer Jobs am selben Ziel – selbst mit Zeitstempeln. Die Aufbewahrung benötigt den Laufverlauf und eine geprüfte Ziel-/Objektidentität; unbekannte oder mehrdeutige Objekte bleiben erhalten. Remote-Agenten vorher aktualisieren.",
+  "archiveNaming.previewUnavailable": "Die Vorschau langer Dateinamen benötigt Web Crypto in einem sicheren Browserkontext.",
   "The saved server identity has changed. Reload the destination before approving a key.": "Die gespeicherte Serveridentität hat sich geändert. Laden Sie das Ziel neu, bevor Sie einen Schlüssel bestätigen.",
   "Approve the discovered server key or enter a trusted key manually before saving.": "Bestätigen Sie vor dem Speichern den gefundenen Serverschlüssel oder geben Sie einen vertrauenswürdigen Schlüssel manuell ein.",
   "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Serverschlüssel gefunden. Vergleichen Sie diesen Fingerabdruck vor der Bestätigung über einen vertrauenswürdigen Kanal. Die Erkennung bedeutet Vertrauen beim Erstkontakt, keine Identitätsprüfung.",
