@@ -132,6 +132,10 @@ Laravel session blocking serializes requests sharing a web session to prevent ol
 
 If an editable form has unsaved changes, switching environments requires confirmation before submitting. Cancel keeps the draft and sends no POST; proceeding discards the draft and loads the Dashboard. Drafts are not automatically transferred to the new environment.
 
+## One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/VolumeVault/)
+
 ## Documentation
 
 The full documentation is published with GitHub Pages and built from the [`docs`](docs) directory.
