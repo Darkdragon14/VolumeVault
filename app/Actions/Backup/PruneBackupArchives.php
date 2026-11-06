@@ -74,7 +74,7 @@ class PruneBackupArchives
                     throw new RuntimeException;
                 }
                 $identity = $retention->identity($current->first());
-                if ($run->backup_retention_identity !== null && $run->backup_retention_identity !== $identity) {
+                if ($run->backup_retention_identity !== null && ! $retention->identitiesMatch($run->backup_retention_identity, $identity)) {
                     throw new RuntimeException;
                 }
                 $run->forceFill(['backup_retention_identity' => $identity])->save();
@@ -82,7 +82,8 @@ class PruneBackupArchives
             if ($count < 1 && $days < 1) {
                 return;
             }
-            $manifest = $options['retention_manifest'] ?? $retention->manifest($run);
+            $manifest = $options['retention_manifest'] ?? $retention->manifest($run, $listed
+                ->map(fn (array $object): string => basename((string) ($object['display_name'] ?? $object['key'] ?? '')))->all());
             if (! $manifest['complete']) {
                 throw new RuntimeException;
             }

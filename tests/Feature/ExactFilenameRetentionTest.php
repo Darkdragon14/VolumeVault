@@ -14,8 +14,11 @@ use App\Services\Agents\AgentOperationSpecification;
 use App\Services\Agents\DispatchAgentOperation;
 use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\Docker\DockerVolumeName;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -60,6 +63,159 @@ class ExactFilenameRetentionTest extends TestCase
             $storage->shouldReceive('deleteBackupObjects')->once()->withArgs(fn ($destination, array $keys): bool => $keys === $deleted);
         }
         app(PruneBackupArchives::class)->handle($run);
+    }
+
+    private function seedHistory(BackupRun $reference, int $count, bool $distinctNames = false): void
+    {
+        $attributes = $reference->getAttributes();
+        unset($attributes['id']);
+        foreach (array_chunk(range(1, $count), 250) as $batch) {
+            $rows = [];
+            foreach ($batch as $index) {
+                $row = $attributes;
+                if ($distinctNames) {
+                    $row['backup_filename'] = 'historical-'.$index.'.tar.gz';
+                    if ($reference->backup_retention_identity !== null) {
+                        $row['backup_retention_identity'] = json_encode([
+                            ...$reference->backup_retention_identity,
+                            'key' => 'backups/'.$row['backup_filename'], 'filename' => $row['backup_filename'],
+                        ], JSON_THROW_ON_ERROR);
+                    }
+                }
+                $rows[] = $row;
+            }
+            DB::table('backup_runs')->insert($rows);
+        }
+    }
+
+    public function test_mysql_style_reordered_json_identities_match_for_old_and_current_archives(): void
+    {
+        $job = $this->job();
+        $oldRun = $this->backupRun($job);
+        $old = $this->track($oldRun);
+        $oldRun->forceFill(['backup_retention_identity' => array_reverse($oldRun->backup_retention_identity, true)])->save();
+        $run = $this->backupRun($job);
+        $current = $this->track($run);
+        $run->forceFill(['backup_retention_identity' => array_reverse($run->backup_retention_identity, true)])->save();
+        $this->assertTrue(app(ExactFilenameRetention::class)->matches($old, $oldRun->fresh()->backup_retention_identity));
+        $this->prune($run->fresh(), [$old, $current], [$old['key']]);
+        $this->assertSame('success', $run->fresh()->status);
+    }
+
+    #[DataProvider('changedIdentityFields')]
+    public function test_reordered_identities_still_require_each_field_value_and_type(string $field, mixed $value): void
+    {
+        $object = ['key' => 'backups/backup.tar.gz', 'display_name' => 'backup.tar.gz', 'size' => 100, 'last_modified' => '2026-01-01T00:00:00Z'];
+        $retention = app(ExactFilenameRetention::class);
+        $identity = array_reverse($retention->identity($object), true);
+        $identity[$field] = $value;
+        $this->assertFalse($retention->matches($object, $identity));
+        unset($identity[$field]);
+        $this->assertFalse($retention->matches($object, $identity));
+    }
+
+    public static function changedIdentityFields(): array
+    {
+        return [['key', 'another/backup.tar.gz'], ['filename', 'other.tar.gz'], ['size', 101], ['size', '100'], ['size', 100.0], ['modified', 1767225601], ['modified', '1767225600']];
+    }
+
+    #[DataProvider('namingModes')]
+    public function test_more_than_ten_thousand_unrelated_runs_do_not_disable_standard_local_or_agent_retention(bool $otherExact): void
+    {
+        $other = $this->backupRun($this->job(['use_exact_filename' => $otherExact]));
+        if ($otherExact) {
+            $this->track($other);
+        }
+        $this->seedHistory($other, 10001, distinctNames: true);
+        $this->backupRun($this->job());
+        $job = $this->job(['use_exact_filename' => false]);
+        $old = $this->object($this->backupRun($job));
+        $run = $this->backupRun($job);
+        $manifest = app(ExactFilenameRetention::class)->manifest($run);
+        $this->assertTrue($manifest['complete']);
+        $this->assertSame([], $manifest['archives']);
+        $this->prune($run, [$old, $this->object($run)], [$old['key']]);
+    }
+
+    #[DataProvider('namingModes')]
+    public function test_large_own_exact_history_is_scoped_to_present_archives_in_both_modes(bool $exact): void
+    {
+        $job = $this->job();
+        $oldRun = $this->backupRun($job);
+        $old = $this->track($oldRun);
+        $this->seedHistory($oldRun, 10001, distinctNames: true);
+        $job->update(['use_exact_filename' => $exact]);
+        $run = $this->backupRun($job);
+        $manifest = app(ExactFilenameRetention::class)->manifest($run, [$oldRun->backup_filename, $run->backup_filename]);
+        $this->assertTrue($manifest['complete']);
+        $this->assertCount(1, $manifest['archives']);
+        $this->prune($run, [$old, $this->object($run)], [$old['key']]);
+    }
+
+    public static function namingModes(): array
+    {
+        return [[false], [true]];
+    }
+
+    public function test_duplicate_history_rows_protect_the_name_without_disabling_standard_agent_cleanup(): void
+    {
+        $job = $this->job(['backup_filename_template' => 'constant']);
+        $duplicateRun = $this->backupRun($job);
+        $duplicate = $this->track($duplicateRun);
+        $this->seedHistory($duplicateRun, 10001);
+        $job->update(['use_exact_filename' => false]);
+        $old = $this->object($this->backupRun($job));
+        $run = $this->backupRun($job);
+        $manifest = app(ExactFilenameRetention::class)->manifest($run);
+        $this->assertTrue($manifest['complete']);
+        $this->assertSame([$duplicateRun->backup_filename], $manifest['protected_filenames']);
+        $run->update(['execution_options_snapshot' => [...$run->execution_options_snapshot, 'retention_manifest' => $manifest]]);
+        $this->prune($run, [$old, $duplicate, $this->object($run)], [$old['key']]);
+    }
+
+    public function test_history_scoping_still_finds_other_job_collisions_beyond_ten_thousand_rows(): void
+    {
+        $job = $this->job(['use_exact_filename' => false]);
+        $oldRun = $this->backupRun($job);
+        $old = $this->object($oldRun);
+        $unrelated = $this->backupRun($this->job(['use_exact_filename' => false]));
+        $this->seedHistory($unrelated, 10001, distinctNames: true);
+        $collision = $this->backupRun($this->job());
+        $collision->forceFill(['backup_filename' => $oldRun->backup_filename])->save();
+        $run = $this->backupRun($job);
+        $manifest = app(ExactFilenameRetention::class)->manifest($run);
+        $this->assertTrue($manifest['complete']);
+        $this->assertContains($oldRun->backup_filename, $manifest['protected_filenames']);
+        $run->update(['execution_options_snapshot' => [...$run->execution_options_snapshot, 'retention_manifest' => $manifest]]);
+        $this->prune($run, [$old, $this->object($run)]);
+    }
+
+    public function test_agent_manifest_remains_bounded_by_distinct_relevant_names_not_total_history(): void
+    {
+        $job = $this->job();
+        $oldRun = $this->backupRun($job);
+        $this->track($oldRun);
+        $this->seedHistory($oldRun, 10001, distinctNames: true);
+        $manifest = app(ExactFilenameRetention::class)->manifest($this->backupRun($job));
+        $this->assertFalse($manifest['complete']);
+        $this->assertSame([], $manifest['archives']);
+        $this->assertSame([], $manifest['protected_filenames']);
+    }
+
+    public function test_case_insensitive_database_collation_cannot_hide_another_jobs_exact_archive(): void
+    {
+        Schema::table('backup_runs', function (Blueprint $table): void {
+            $table->string('backup_filename')->nullable()->collation('NOCASE')->change();
+        });
+        $job = $this->job(['use_exact_filename' => false]);
+        $oldRun = $this->backupRun($job);
+        $collision = $this->backupRun($this->job());
+        $collision->forceFill(['backup_filename' => str_replace('-backup-', '-BACKUP-', $oldRun->backup_filename)])->save();
+        $run = $this->backupRun($job);
+        $manifest = app(ExactFilenameRetention::class)->manifest($run);
+        $this->assertContains($collision->backup_filename, $manifest['protected_filenames']);
+        $run->update(['execution_options_snapshot' => [...$run->execution_options_snapshot, 'retention_manifest' => $manifest]]);
+        $this->prune($run, [$this->object($oldRun), $this->object($collision), $this->object($run)]);
     }
 
     public function test_retention_uses_verified_records_and_always_preserves_current_upload(): void
