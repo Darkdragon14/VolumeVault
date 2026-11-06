@@ -1,4 +1,11 @@
 {
+  "archiveNaming.exactLabel": "De exacte sjabloon zonder voorvoegsel gebruiken",
+  "archiveNaming.exactHelp": "Een sjabloon is vereist. Normale back-ups laten het taak-/uitvoeringsvoorvoegsel weg; .tar.gz wordt automatisch toegevoegd. Tokenwaarden worden opgeschoond; geldige letterlijke tekst blijft behouden. Namen zijn beperkt tot 255 UTF-8-bytes, met een stabiel SHA256-achtervoegsel bij inkorting.",
+  "archiveNaming.standardHelp": "Optionele sjabloon zonder extensie. VolumeVault voegt een stabiele taak-UUID en unieke uitvoerings-ID als voorvoegsel toe, gevolgd door .tar.gz (maximaal 255 bytes).",
+  "archiveNaming.safetyHelp": "Veiligheidsback-ups vóór herstel behouden altijd hun unieke veiligheids-/taak-/uitvoeringsvoorvoegsel, ook in exacte modus.",
+  "archiveNaming.exampleNamespace": "De UUID 00000000-0000-4000-8000-000000000000 is een voorbeeld; een nieuwe taak krijgt een eigen stabiele UUID. Uitvoering 123 is ook een voorbeeld.",
+  "archiveNaming.collisionWarning": "Exacte namen kunnen archieven overschrijven, ook van andere taken op dezelfde bestemming, zelfs met tijdstempels. Bewaring vereist uitvoeringsgeschiedenis en geverifieerde bestemmings-/objectidentiteit; onbekende of dubbelzinnige objecten blijven onaangeroerd. Werk externe agents eerst bij.",
+  "archiveNaming.previewUnavailable": "Voorbeelden van lange namen vereisen Web Crypto in een veilige browsercontext.",
   "The saved server identity has changed. Reload the destination before approving a key.": "De opgeslagen serveridentiteit is gewijzigd. Laad de bestemming opnieuw voordat u een sleutel goedkeurt.",
   "Approve the discovered server key or enter a trusted key manually before saving.": "Keur de gevonden serversleutel goed of voer handmatig een vertrouwde sleutel in voordat u opslaat.",
   "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Serversleutel gevonden. Vergelijk deze vingerafdruk via een vertrouwd kanaal voordat u deze goedkeurt. Detectie berust op vertrouwen bij het eerste gebruik, niet op identiteitsverificatie.",

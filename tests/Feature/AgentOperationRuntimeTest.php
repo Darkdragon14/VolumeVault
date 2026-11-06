@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\ExactFilenameRetention;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Docker\CleanupDestinationOperationHelper;
 use App\Actions\Docker\ClearDockerVolume;
@@ -193,6 +194,39 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertSame($result, $store->read($second['id'])['result']);
         $database = new \PDO('sqlite:'.$store->directory($second['id']).'/runtime.sqlite');
         $this->assertSame(0, (int) $database->query('select count(*) from backup_runs')->fetchColumn());
+    }
+
+    #[DataProvider('exactArchiveNames')]
+    public function test_exact_filename_runtime_uses_manifest_and_returns_identity_for_controller_history(string $filename): void
+    {
+        $operation = self::operation();
+        $old = ['key' => 'backups/my-backup-41.tar.gz', 'display_name' => 'my-backup-41.tar.gz', 'size' => 100, 'last_modified' => '2026-01-01T00:00:00Z'];
+        $current = ['key' => 'backups/'.$filename, 'display_name' => $filename, 'size' => 123, 'last_modified' => '2026-02-01T00:00:00Z'];
+        $retention = app(ExactFilenameRetention::class);
+        $operation['spec']['job']['archive_namespace'] = (string) Str::uuid();
+        $operation['spec']['job']['use_exact_filename'] = true;
+        $operation['spec']['job']['retention_count'] = 1;
+        $operation['spec']['run']['backup_filename'] = $filename;
+        $operation['spec']['retention_manifest'] = ['complete' => true, 'archives' => [$retention->identity($old)], 'protected_filenames' => [], 'exact_filenames' => [$old['display_name']]];
+        app(AgentOperationStore::class)->accept($operation);
+        $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->once()->andReturn([]);
+        $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()->andReturn(new DockerProcessResult([], 0, 'uploaded', ''));
+        $this->mock(ListBackupObjects::class)->shouldReceive('findByFilename')->once()->andReturn($current);
+        $storage = $this->mock(DestinationStorage::class);
+        $storage->shouldReceive('useOperationProgress')->twice();
+        $storage->shouldReceive('listBackupObjectsPage')->once()->andReturn(['objects' => [$old, $current], 'next_cursor' => null]);
+        $storage->shouldReceive('deleteBackupObjects')->once()->withArgs(fn ($destination, array $keys): bool => $keys === [$old['key']]);
+
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $result = app(AgentOperationSupervisor::class)->pendingResult()['result'];
+        $this->assertSame('success', $result['status']);
+        $this->assertSame($retention->identity($current), $result['backup_retention_identity']);
+        $this->assertSame(1, BackupRun::count());
+    }
+
+    public static function exactArchiveNames(): array
+    {
+        return [['my-backup-42.tar.gz'], ['café.tar.gz'], ['backup [daily].tar.gz'], ['_latest.tar.gz']];
     }
 
     #[DataProvider('retentionResults')]

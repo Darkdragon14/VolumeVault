@@ -76,6 +76,7 @@ const form = useForm({
     backup_filter_mode: props.job?.backup_filter_mode || (props.job ? 'exclude' : 'include'),
     backup_include_paths: props.job?.backup_include_paths || '',
     backup_filename_template: props.job?.backup_filename_template || '',
+    use_exact_filename: props.job?.use_exact_filename ?? false,
     notifications_enabled: props.job?.notifications_enabled ?? true,
     notification_channel_ids: (props.job?.notification_channel_ids || props.defaultNotificationChannelIds || []) as number[],
     use_custom_alert_settings: props.job?.use_custom_alert_settings ?? false,
@@ -192,9 +193,14 @@ const archiveTemplateHasDateAndTimeTokens = computed(() => (
     && /\{day\}/.test(archiveTemplate.value)
     && /\{(time|hour|minute|second)\}/.test(archiveTemplate.value)
 ));
-const archiveTemplateOverwriteRisk = computed(() => archiveTemplate.value !== '' && !archiveTemplateHasRunToken.value && !archiveTemplateHasDateAndTimeTokens.value);
-const archiveFilenamePreview = computed(() => {
+const archiveTemplateOverwriteRisk = computed(() => form.use_exact_filename && archiveTemplate.value !== '' && !archiveTemplateHasRunToken.value && !archiveTemplateHasDateAndTimeTokens.value);
+const archiveFilenameStem = computed(() => {
     const now = new Date();
+    const time = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+        timeZone: form.timezone || props.appTimezone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(now).map(({ type, value }) => [type, value]));
     const source = form.source_type === 'host_path'
         ? form.host_path.replace(/^\/+|\/+$/g, '')
         : form.volume_name;
@@ -203,20 +209,68 @@ const archiveFilenamePreview = computed(() => {
         '{source}': safeFilenamePart(source || 'source', 'source'),
         '{id}': '123',
         '{run}': '123',
-        '{year}': String(now.getFullYear()),
-        '{month}': String(now.getMonth() + 1).padStart(2, '0'),
-        '{day}': String(now.getDate()).padStart(2, '0'),
-        '{time}': [now.getHours(), now.getMinutes(), now.getSeconds()].map((part) => String(part).padStart(2, '0')).join('-'),
-        '{hour}': String(now.getHours()).padStart(2, '0'),
-        '{minute}': String(now.getMinutes()).padStart(2, '0'),
-        '{second}': String(now.getSeconds()).padStart(2, '0'),
+        '{year}': time.year,
+        '{month}': time.month,
+        '{day}': time.day,
+        '{time}': `${time.hour}-${time.minute}-${time.second}`,
+        '{hour}': time.hour,
+        '{minute}': time.minute,
+        '{second}': time.second,
     };
 
-    return Object.entries(replacements).reduce(
+    const rendered = Object.entries(replacements).reduce(
         (filename, [token, value]) => filename.split(token).join(value),
         archiveTemplate.value || 'volumevault-{source}-run-{id}',
-    ) + '.tar.gz';
+    );
+    const prefix = form.use_exact_filename ? '' : `volumevault-${props.job?.archive_namespace || '00000000-0000-4000-8000-000000000000'}-run-123-`;
+
+    return prefix + rendered;
 });
+const archiveFilenamePreview = ref('');
+watch(archiveFilenameStem, async (stem, _, onCleanup) => {
+    let current = true;
+    const controller = new AbortController();
+    onCleanup(() => { current = false; controller.abort(); });
+    const encoder = new TextEncoder();
+    const extension = '.tar.gz';
+    if (encoder.encode(stem + extension).length <= 255) {
+        archiveFilenamePreview.value = stem + extension;
+        return;
+    }
+
+    archiveFilenamePreview.value = '';
+    try {
+        if (!globalThis.crypto?.subtle) {
+            const csrf = document.cookie.split('; ').find((cookie) => cookie.startsWith('XSRF-TOKEN='))?.slice(11);
+            const response = await fetch('/backup-jobs/filename-preview', {
+                method: 'POST', signal: controller.signal,
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json',
+                    ...(csrf ? { 'X-XSRF-TOKEN': decodeURIComponent(csrf) } : {}) },
+                body: JSON.stringify({ stem }),
+            });
+            if (!response.ok) throw new Error('Filename preview failed');
+            const result = await response.json();
+            if (current) archiveFilenamePreview.value = result.filename;
+            return;
+        }
+        const digest = await crypto.subtle.digest('SHA-256', encoder.encode(stem));
+        const hash = '-' + Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 12);
+        const availableBytes = 255 - hash.length - extension.length;
+        let truncated = '';
+        let usedBytes = 0;
+        for (const character of stem) {
+            const characterBytes = encoder.encode(character).length;
+            if (usedBytes + characterBytes > availableBytes) break;
+            truncated += character;
+            usedBytes += characterBytes;
+        }
+        truncated = truncated.replace(/[._-]+$/, '') || 'backup';
+        if (current) archiveFilenamePreview.value = truncated + hash + extension;
+    } catch {
+        // Do not display a stale or inaccurate filename when the request fails.
+        if (current) archiveFilenamePreview.value = t('archiveNaming.previewUnavailable');
+    }
+}, { immediate: true });
 
 const updateVolumeSearch = () => {
     if (!isDockerVolumeSource.value) return;
@@ -609,12 +663,20 @@ useEnvironmentForms(form, {
             <section class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4 sm:p-5">
                 <div class="flex flex-col gap-2">
                     <label for="backup_filename_template" class="label">{{ t('Archive name template') }}</label>
-                    <input id="backup_filename_template" v-model="form.backup_filename_template" class="input font-mono" :placeholder="t('Default: {template}', { template: 'volumevault-{source}-run-{id}' })">
-                    <p class="text-sm text-slate-600 dark:text-slate-300">{{ t('Optional template without extension. VolumeVault adds .tar.gz automatically.') }}</p>
-                    <p class="break-all rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-100">
+                    <input id="backup_filename_template" v-model="form.backup_filename_template" class="input font-mono" :required="form.use_exact_filename" :placeholder="t('Default: {template}', { template: 'volumevault-{source}-run-{id}' })">
+                    <label class="flex cursor-pointer items-start gap-2 text-sm">
+                        <input id="use_exact_filename" v-model="form.use_exact_filename" type="checkbox" class="mt-1 text-sky-400">
+                        <span>{{ t('archiveNaming.exactLabel') }}</span>
+                    </label>
+                    <span v-if="form.errors.use_exact_filename" class="text-sm text-rose-700 dark:text-rose-300">{{ form.errors.use_exact_filename }}</span>
+                    <p class="text-sm text-slate-600 dark:text-slate-300">{{ t(form.use_exact_filename ? 'archiveNaming.exactHelp' : 'archiveNaming.standardHelp') }}</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('archiveNaming.safetyHelp') }}</p>
+                    <p v-if="!form.use_exact_filename && !job?.archive_namespace" class="text-sm text-slate-500 dark:text-slate-400">{{ t('archiveNaming.exampleNamespace') }}</p>
+                    <p data-archive-preview class="break-all rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-300/20 dark:bg-sky-400/10 dark:text-sky-100">
                         {{ t('Preview: {filename}', { filename: archiveFilenamePreview }) }}
                     </p>
                     <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('Available tokens: {tokens}', { tokens: '{name}, {source}, {id}, {run}, {year}, {month}, {day}, {time}, {hour}, {minute}, {second}' }) }}</p>
+                    <p v-if="form.use_exact_filename" data-exact-warning class="rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-800 dark:text-amber-100">{{ t('archiveNaming.collisionWarning') }}</p>
                     <p v-if="archiveTemplateOverwriteRisk" class="rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-800 dark:text-amber-100">
                         {{ t('This template may produce the same filename for multiple backups. Previous archives can be overwritten by offen/docker-volume-backup.') }}
                     </p>

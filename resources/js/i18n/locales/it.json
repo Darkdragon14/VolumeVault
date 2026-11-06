@@ -1,4 +1,11 @@
 {
+  "archiveNaming.exactLabel": "Usa il modello esatto senza prefisso",
+  "archiveNaming.exactHelp": "È richiesto un modello. I backup normali omettono il prefisso attività/esecuzione; .tar.gz viene aggiunto automaticamente. I valori dei token vengono normalizzati; il testo letterale valido viene preservato. I nomi sono limitati a 255 byte UTF-8, con suffisso SHA256 stabile se abbreviati.",
+  "archiveNaming.standardHelp": "Modello facoltativo senza estensione. VolumeVault aggiunge un prefisso con UUID stabile dell’attività e ID univoco dell’esecuzione, poi .tar.gz (limite di 255 byte).",
+  "archiveNaming.safetyHelp": "I backup di sicurezza prima del ripristino mantengono sempre il prefisso univoco sicurezza/attività/esecuzione, anche in modalità esatta.",
+  "archiveNaming.exampleNamespace": "L’UUID 00000000-0000-4000-8000-000000000000 è un esempio; ogni nuova attività riceve il proprio UUID stabile. Anche l’esecuzione 123 è un esempio.",
+  "archiveNaming.collisionWarning": "I nomi esatti possono sovrascrivere archivi, anche di altre attività nella stessa destinazione, persino con token temporali. La conservazione dipende dalla cronologia e dall’identità verificata di destinazione/oggetto; gli oggetti sconosciuti o ambigui non vengono modificati. Aggiorna prima gli agenti remoti.",
+  "archiveNaming.previewUnavailable": "L’anteprima dei nomi lunghi richiede Web Crypto in un contesto sicuro del browser.",
   "The saved server identity has changed. Reload the destination before approving a key.": "L’identità salvata del server è cambiata. Ricarica la destinazione prima di approvare una chiave.",
   "Approve the discovered server key or enter a trusted key manually before saving.": "Approva la chiave del server rilevata o inserisci manualmente una chiave attendibile prima di salvare.",
   "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Chiave del server trovata. Confronta questa impronta tramite un canale attendibile prima di approvarla. Il rilevamento si basa sulla fiducia al primo utilizzo, non sulla verifica dell’identità.",

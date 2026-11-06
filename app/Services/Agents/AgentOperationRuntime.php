@@ -4,8 +4,8 @@ namespace App\Services\Agents;
 
 use App\Actions\Backup\CreateBackupRunRecord;
 use App\Actions\Backup\RunBackup;
-use App\Actions\Docker\CleanupBackupRunSecretFiles;
 use App\Actions\Docker\CleanupBackupRetentionHelper;
+use App\Actions\Docker\CleanupBackupRunSecretFiles;
 use App\Actions\Docker\CleanupDestinationOperationHelper;
 use App\Actions\Docker\ContainerIsAlive;
 use App\Actions\Docker\RemoveDockerContainer;
@@ -168,6 +168,9 @@ class AgentOperationRuntime
                 'finished_at' => ($run->finished_at ?? now())->toIso8601String(),
                 'duration_seconds' => (int) ($run->duration_seconds ?? 0),
             ];
+            if ($run instanceof BackupRun && isset($operation['spec']['retention_manifest'])) {
+                $result['backup_retention_identity'] = $run->backup_retention_identity;
+            }
             if ($run instanceof RestoreRun && $redactor->clean($run->target_volume_name) === $run->target_volume_name) {
                 $result['target_volume_name'] = $run->target_volume_name;
             }
@@ -279,7 +282,12 @@ class AgentOperationRuntime
             }
             if ($operation['kind'] === 'backup') {
                 $run = app(CreateBackupRunRecord::class)->handle($job, ['status' => 'queued', 'trigger' => 'manual']);
-                $run->forceFill(['backup_filename' => $spec['run']['backup_filename']])->save();
+                $run->forceFill([
+                    'backup_filename' => $spec['run']['backup_filename'],
+                    'execution_options_snapshot' => [...$run->execution_options_snapshot,
+                        ...(isset($spec['retention_manifest']) ? ['retention_manifest' => $spec['retention_manifest']] : []),
+                    ],
+                ])->save();
 
                 return $run;
             }

@@ -17,6 +17,18 @@ class ChangelogTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_symfony_security_patches_have_an_unreleased_note_in_every_locale(): void
+    {
+        $key = 'symfony_security_november_2026';
+        $this->assertSame(1, count(array_filter(config('changelog.unreleased'), fn (array $item): bool => $item['key'] === $key)));
+        foreach (User::SUPPORTED_LOCALES as $locale) {
+            $translations = require resource_path('changelog/'.$locale.'.php');
+            $this->assertNotEmpty($translations[$key]['title'], $locale);
+            $this->assertStringContainsString('Symfony', $translations[$key]['description'], $locale);
+            $this->assertStringContainsString('8.1.11', $translations[$key]['description'], $locale);
+        }
+    }
+
     public function test_october_dependency_maintenance_has_a_release_note_in_every_locale(): void
     {
         $key = 'dependency_maintenance_october_2026';

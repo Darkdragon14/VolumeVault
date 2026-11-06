@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'symfony_security_november_2026' => [
+        'title' => 'Symfony security patches',
+        'description' => 'Updated five Symfony components to 8.1.11 to address filesystem path, HTTP request and proxy handling, URL routing and YAML parser security advisories. Recreate application and agent containers with updated images, preserving storage and configuration. Dependency audits do not cover container images or automatically update running installations.',
+    ],
+    'exact_backup_filenames' => [
+        'title' => 'Optional exact backup filenames',
+        'description' => 'Backup jobs can opt into an exact filename template without the regular job/run prefix. The default remains uniquely prefixed; safety backups always keep their unique prefix. Token values are sanitized and filenames are length-limited, preserving valid literal template text. Exact names can overwrite other archives, including across jobs. Exact-mode retention depends on run history and verified destination/object identity; unknown or ambiguous objects are preserved. Update remote agents before use.',
+    ],
     'sftp_host_key_approval' => [
         'title' => 'Explicit approval for discovered SFTP host keys',
         'description' => 'Unpinned SSH/SFTP endpoints automatically show a separate candidate key and TOFU fingerprint. Approve and save explicitly to trust the chosen key; existing pins are never silently replaced and failed discovery is not retried in the background. Compare fingerprints through an independent trusted channel. Advanced manual entry remains available. The new saved-destination approval API checks the endpoint and previous fingerprint, saves exactly the submitted key without another network probe, and audits fingerprints without credentials.',

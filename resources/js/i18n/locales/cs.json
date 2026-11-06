@@ -1,4 +1,11 @@
 {
+  "archiveNaming.exactLabel": "Použít přesnou šablonu bez předpony",
+  "archiveNaming.exactHelp": "Šablona je povinná. Běžné zálohy vynechají předponu úlohy/běhu; .tar.gz se přidá automaticky. Hodnoty tokenů se normalizují; platný doslovný text se zachová. Názvy jsou omezeny na 255 bajtů UTF-8, při zkrácení se stabilní příponou SHA256.",
+  "archiveNaming.standardHelp": "Volitelná šablona bez přípony. VolumeVault přidá předponu se stabilním UUID úlohy a jedinečným ID běhu, poté .tar.gz (limit 255 bajtů).",
+  "archiveNaming.safetyHelp": "Bezpečnostní zálohy před obnovením vždy zachovají jedinečnou předponu bezpečnost/úloha/běh, i v přesném režimu.",
+  "archiveNaming.exampleNamespace": "UUID 00000000-0000-4000-8000-000000000000 je příklad; nová úloha získá vlastní stabilní UUID. Běh 123 je také příklad.",
+  "archiveNaming.collisionWarning": "Přesné názvy mohou přepsat archivy, včetně jiných úloh ve stejném cíli, i s časovými tokeny. Uchovávání závisí na historii běhů a ověřené identitě cíle/objektu; neznámé či nejednoznačné objekty zůstanou nedotčené. Nejprve aktualizujte vzdálené agenty.",
+  "archiveNaming.previewUnavailable": "Náhled dlouhých názvů vyžaduje Web Crypto v zabezpečeném kontextu prohlížeče.",
   "The saved server identity has changed. Reload the destination before approving a key.": "Uložená identita serveru se změnila. Před schválením klíče znovu načtěte cíl.",
   "Approve the discovered server key or enter a trusted key manually before saving.": "Před uložením schvalte zjištěný klíč serveru nebo ručně zadejte důvěryhodný klíč.",
   "Server key found. Compare this fingerprint through a trusted channel before approving. Discovery is trust on first use, not identity verification.": "Klíč serveru nalezen. Před schválením porovnejte tento otisk prostřednictvím důvěryhodného kanálu. Zjištění znamená důvěru při prvním použití, nikoli ověření identity.",

@@ -5,6 +5,7 @@ use App\Http\Controllers\AlertRuleController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AvailableUpdateController;
+use App\Http\Controllers\BackupFilenamePreviewController;
 use App\Http\Controllers\BackupGroupRunController;
 use App\Http\Controllers\BackupJobController;
 use App\Http\Controllers\BackupJobGroupController;
@@ -92,6 +93,7 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/stacks/backup', [StackController::class, 'backup'])->name('stacks.backup');
 
+        Route::post('/backup-jobs/filename-preview', BackupFilenamePreviewController::class)->middleware('throttle:120,1')->name('backup-jobs.filename-preview');
         Route::resource('backup-jobs', BackupJobController::class)->except(['index', 'show']);
         Route::post('/backup-jobs/{backupJob}/run', [BackupJobController::class, 'runNow'])->name('backup-jobs.run');
         Route::post('/backup-jobs/{backupJob}/pause', [BackupJobController::class, 'pause'])->name('backup-jobs.pause');
