@@ -166,7 +166,7 @@ describe('backup archive naming', () => {
         await vi.waitFor(() => expect(wrapper.get('[data-archive-preview]').text()).toBe(`Preview: ${'a'.repeat(234)}-${punctuationHash}.tar.gz`));
     });
 
-    it('translates all new UI keys and the unreleased changelog entry in every locale', () => {
+    it('translates all new UI keys and the changelog entry in every locale', () => {
         const locales = import.meta.glob('../../i18n/locales/*.json', { eager: true, import: 'default' });
         const keys = Object.keys(en).filter((key) => key.startsWith('archiveNaming.'));
         for (const [path, messages] of Object.entries(locales)) {
@@ -177,6 +177,6 @@ describe('backup archive naming', () => {
             const changelog = readFileSync(`resources/changelog/${locale}.php`, 'utf8');
             expect(changelog).toMatch(/'exact_backup_filenames' => \[\s*'title' => '.+',\s*'description' => '.+',/);
         }
-        expect(readFileSync('config/changelog.php', 'utf8')).toMatch(/'unreleased' => \[[\s\S]*?'key' => 'exact_backup_filenames'/);
+        expect(readFileSync('config/changelog.php', 'utf8')).toContain("'key' => 'exact_backup_filenames'");
     });
 });

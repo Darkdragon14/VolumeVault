@@ -1,17 +1,22 @@
 <?php
 
 return [
-    'unreleased' => [
-        [
-            'type' => 'change',
-            'key' => 'symfony_security_november_2026',
-        ],
-        [
-            'type' => 'change',
-            'key' => 'exact_backup_filenames',
-        ],
-    ],
+    'unreleased' => [],
     'releases' => [
+        'v2.0.10' => [
+            'date' => '2026-11-06',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.10',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'symfony_security_november_2026',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'exact_backup_filenames',
+                ],
+            ],
+        ],
         'v2.0.9' => [
             'date' => '2026-11-02',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.9',

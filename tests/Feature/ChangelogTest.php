@@ -17,10 +17,14 @@ class ChangelogTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_symfony_security_patches_have_an_unreleased_note_in_every_locale(): void
+    public function test_symfony_security_patches_have_a_release_note_in_every_locale(): void
     {
         $key = 'symfony_security_november_2026';
-        $this->assertSame(1, count(array_filter(config('changelog.unreleased'), fn (array $item): bool => $item['key'] === $key)));
+        $items = config('changelog.unreleased');
+        foreach (config('changelog.releases') as $release) {
+            $items = array_merge($items, $release['items']);
+        }
+        $this->assertSame(1, count(array_filter($items, fn (array $item): bool => $item['key'] === $key)));
         foreach (User::SUPPORTED_LOCALES as $locale) {
             $translations = require resource_path('changelog/'.$locale.'.php');
             $this->assertNotEmpty($translations[$key]['title'], $locale);
