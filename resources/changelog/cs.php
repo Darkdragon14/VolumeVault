@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'symfony_security_november_2026' => [
+        'title' => 'Bezpečnostní opravy Symfony',
+        'description' => 'Pět komponent Symfony bylo aktualizováno na 8.1.11 kvůli bezpečnostním upozorněním týkajícím se cest k souborům, HTTP požadavků a proxy, směrování URL a parseru YAML. Znovu vytvořte kontejnery aplikace a agentů s aktualizovanými obrazy a zachovejte úložiště i konfiguraci. Audity závislostí nezahrnují obrazy kontejnerů a automaticky neaktualizují běžící instalace.',
+    ],
     'exact_backup_filenames' => [
         'title' => 'Volitelné přesné názvy záloh',
         'description' => 'Úlohy mohou použít přesnou šablonu názvu bez běžné předpony úlohy/běhu. Jedinečná předpona zůstává výchozí a bezpečnostní zálohy ji vždy zachovají. Hodnoty tokenů se normalizují a délka názvů se omezuje; platný doslovný text šablony se zachová. Přesné názvy mohou přepsat i archivy jiných úloh. Uchovávání závisí na historii běhů a ověřené identitě cíle/objektu; neznámé či nejednoznačné objekty se zachovají. Před použitím aktualizujte vzdálené agenty.',

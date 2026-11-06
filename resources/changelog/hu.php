@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'symfony_security_november_2026' => [
+        'title' => 'Symfony biztonsági javítások',
+        'description' => 'Öt Symfony összetevő frissült a 8.1.11 verzióra a fájlútvonalakkal, HTTP-kérésekkel és proxykkal, URL-útválasztással és a YAML-feldolgozóval kapcsolatos biztonsági figyelmeztetések javításához. Hozza létre újra az alkalmazás és az ügynökök konténereit frissített képekből, a tárhely és a konfiguráció megtartásával. A függőségek auditja nem terjed ki a konténerképekre, és nem frissíti automatikusan a futó telepítéseket.',
+    ],
     'exact_backup_filenames' => [
         'title' => 'Választható pontos mentési fájlnevek',
         'description' => 'A feladatok pontos névsablont használhatnak a normál feladat/futás előtag nélkül. Alapértelmezésben marad az egyedi előtag, a biztonsági mentések pedig mindig megtartják. A tokenértékek normalizáltak, a nevek hosszkorlátosak; az érvényes literális sablonszöveg megmarad. A pontos nevek más feladatok archívumait is felülírhatják. A megőrzéshez futási előzmények és ellenőrzött cél-/objektumazonosság szükséges; az ismeretlen vagy bizonytalan objektumok megmaradnak. Előbb frissítse a távoli ügynököket.',

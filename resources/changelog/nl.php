@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'symfony_security_november_2026' => [
+        'title' => 'Symfony-beveiligingsupdates',
+        'description' => 'Vijf Symfony-componenten zijn bijgewerkt naar 8.1.11 om beveiligingsmeldingen over bestandspaden, HTTP-verzoeken en proxies, URL-routering en de YAML-parser te verhelpen. Maak applicatie- en agentcontainers opnieuw aan met bijgewerkte images en behoud opslag en configuratie. Afhankelijkheidsaudits dekken geen containerimages en werken actieve installaties niet automatisch bij.',
+    ],
     'exact_backup_filenames' => [
         'title' => 'Optionele exacte back-upnamen',
         'description' => 'Back-uptaken kunnen een exacte naamsjabloon zonder het normale taak-/uitvoeringsvoorvoegsel gebruiken. Het unieke voorvoegsel blijft standaard en blijft altijd behouden bij veiligheidsback-ups. Tokenwaarden worden opgeschoond en namen ingekort; geldige letterlijke sjabloontekst blijft behouden. Exacte namen kunnen ook archieven van andere taken overschrijven. Bewaring vereist uitvoeringsgeschiedenis en geverifieerde bestemmings-/objectidentiteit; onbekende of dubbelzinnige objecten blijven behouden. Werk externe agents eerst bij.',

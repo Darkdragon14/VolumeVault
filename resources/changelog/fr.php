@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'symfony_security_november_2026' => [
+        'title' => 'Correctifs de sécurité Symfony',
+        'description' => 'Mise à jour de cinq composants Symfony vers 8.1.11 pour corriger des alertes concernant les chemins de fichiers, les requêtes HTTP et les proxys, le routage des URL et le parseur YAML. Recréez les conteneurs de l’application et des agents avec les images à jour, en conservant le stockage et la configuration. Les audits de dépendances ne couvrent pas les images de conteneurs et ne mettent pas automatiquement à jour les installations en cours.',
+    ],
     'exact_backup_filenames' => [
         'title' => 'Noms exacts de sauvegarde en option',
         'description' => 'Les tâches peuvent utiliser un modèle exact sans le préfixe tâche/exécution habituel. Le préfixe unique reste le choix par défaut et demeure obligatoire pour les sauvegardes de sécurité. Les valeurs des jetons sont normalisées et les noms limités en longueur, en conservant le texte littéral valide. Les noms exacts peuvent écraser des archives, même entre tâches. Leur rétention dépend de l’historique et de l’identité vérifiée de la destination et de l’objet ; les objets inconnus ou ambigus sont préservés. Mettez les agents distants à jour avant utilisation.',

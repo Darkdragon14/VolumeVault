@@ -4,6 +4,10 @@ return [
     'unreleased' => [
         [
             'type' => 'change',
+            'key' => 'symfony_security_november_2026',
+        ],
+        [
+            'type' => 'change',
             'key' => 'exact_backup_filenames',
         ],
     ],

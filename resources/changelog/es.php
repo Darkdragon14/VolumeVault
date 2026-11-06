@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'symfony_security_november_2026' => [
+        'title' => 'Correcciones de seguridad de Symfony',
+        'description' => 'Se actualizaron cinco componentes de Symfony a 8.1.11 para corregir avisos sobre rutas de archivos, solicitudes HTTP y proxies, enrutamiento de URL y el analizador YAML. Recree los contenedores de la aplicación y los agentes con imágenes actualizadas, conservando el almacenamiento y la configuración. Las auditorías de dependencias no cubren las imágenes de contenedores ni actualizan automáticamente las instalaciones en ejecución.',
+    ],
     'exact_backup_filenames' => [
         'title' => 'Nombres exactos opcionales para las copias',
         'description' => 'Las tareas pueden usar una plantilla exacta sin el prefijo normal de tarea/ejecución. El prefijo único sigue siendo predeterminado y se mantiene siempre en las copias de seguridad previas a restaurar. Se normalizan los valores de los tokens y se limita la longitud del nombre, conservando el texto literal válido. Los nombres exactos pueden sobrescribir archivos de otras tareas. La retención depende del historial y de la identidad verificada del destino/objeto; los objetos desconocidos o ambiguos se conservan. Actualice los agentes remotos antes de usarlo.',
