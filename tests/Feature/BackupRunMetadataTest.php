@@ -213,7 +213,12 @@ class BackupRunMetadataTest extends TestCase
         ]);
 
         $run = $run->fresh();
-        $this->assertSame(['archive_namespace' => $run->job->archive_namespace, ...$initialOptions], $run->execution_options_snapshot);
+        $this->assertSame([
+            'archive_namespace' => $run->job->archive_namespace,
+            'use_exact_filename' => false,
+            'backup_filename_template' => null,
+            ...$initialOptions,
+        ], $run->execution_options_snapshot);
         $executionJob = $run->executionJob();
 
         foreach ($initialOptions as $field => $value) {

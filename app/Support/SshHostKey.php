@@ -2,8 +2,35 @@
 
 namespace App\Support;
 
+use phpseclib3\Crypt\PublicKeyLoader;
+use Throwable;
+
 class SshHostKey
 {
+    public static function isFingerprint(string $key): bool
+    {
+        return preg_match('/^sha256:([A-Za-z0-9+\/]{43}=?)$/i', trim($key), $matches) === 1
+            && strlen(base64_decode($matches[1], true) ?: '') === 32;
+    }
+
+    public static function publicKey(string $key): string
+    {
+        $blob = self::blob($key);
+
+        if ($blob === '') {
+            return '';
+        }
+
+        $length = unpack('Nlength', substr($blob, 0, 4))['length'];
+        $line = substr($blob, 4, $length).' '.base64_encode($blob);
+
+        try {
+            return trim(PublicKeyLoader::loadPublicKey($line)->toString('OpenSSH', ['comment' => '']));
+        } catch (Throwable) {
+            return '';
+        }
+    }
+
     public static function matches(string $pinned, string $presented): bool
     {
         $presentedFingerprint = self::fingerprint($presented);

@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\ExactFilenameRetention;
 use App\Actions\Backup\RunBackup;
 use App\Actions\Docker\CleanupDestinationOperationHelper;
-use App\Actions\Docker\CleanupBackupRetentionHelper;
 use App\Actions\Docker\ClearDockerVolume;
 use App\Actions\Docker\ContainerIsAlive;
 use App\Actions\Docker\CreateDockerVolume;
@@ -30,6 +30,7 @@ use App\Services\BackupDestinations\DestinationStorage;
 use App\Services\BackupDestinations\ListBackupObjects;
 use App\Services\Docker\DockerProcess;
 use App\Services\Docker\DockerProcessResult;
+use App\Services\S3\S3ClientFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
@@ -110,6 +111,56 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertSame(1, BackupRun::count());
     }
 
+    public function test_agent_resolves_its_sftp_fingerprint_before_running_the_backup(): void
+    {
+        $key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP7m24OrCqk9z3+lIB2Pa3L7Z5FkAOsXr7iKWvMkElYr';
+        $operation = self::operation();
+        $operation['spec']['destination'] = [
+            'name' => 'SFTP archives', 'provider' => 'ssh', 'bucket' => 'unused', 'access_key_id' => '', 'secret_access_key' => '',
+            'settings' => ['host' => '93.184.216.34', 'port' => 2222, 'remote_path' => '/backups', 'host_key' => DestinationStorage::hostKeyFingerprint($key)],
+            'secrets' => ['user' => 'backup', 'password' => 'sftp-test-password'],
+        ];
+        app(AgentOperationStore::class)->accept($operation);
+        $storage = Mockery::mock(DestinationStorage::class, [app(S3ClientFactory::class)])->makePartial();
+        $storage->shouldReceive('probeHostKey')->once()->with('93.184.216.34', 2222)
+            ->andReturn(['key' => $key, 'fingerprint' => DestinationStorage::hostKeyFingerprint($key)]);
+        $this->app->instance(DestinationStorage::class, $storage);
+        $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->once()->andReturn([]);
+        $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()
+            ->withArgs(function (BackupRun $run, callable $heartbeat, ?string $hostKey) use ($key): bool {
+                $this->assertSame(1, $run->docker_host_id);
+                $this->assertSame($key, $hostKey);
+
+                return true;
+            })->andReturn(new DockerProcessResult([], 0, 'uploaded', ''));
+        $this->mock(ListBackupObjects::class)->shouldReceive('findByFilename')->once()
+            ->andReturn(['key' => 'central-unique.tar.gz', 'size' => 123]);
+
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $this->assertSame('success', app(AgentOperationSupervisor::class)->pendingResult()['result']['status']);
+    }
+
+    public function test_agent_refuses_an_unpinned_sftp_backup_before_inspecting_or_stopping_applications(): void
+    {
+        $operation = self::operation();
+        $operation['spec']['job']['stop_containers_before_backup'] = true;
+        $operation['spec']['destination'] = [
+            'name' => 'Legacy SFTP', 'provider' => 'ssh', 'bucket' => 'unused', 'access_key_id' => '', 'secret_access_key' => '',
+            'settings' => ['host' => '93.184.216.34', 'remote_path' => '/backups'],
+            'secrets' => ['user' => 'backup', 'password' => 'sftp-test-password'],
+        ];
+        app(AgentOperationStore::class)->accept($operation);
+        $this->mock(InspectDockerVolume::class)->shouldNotReceive('handle');
+        $this->mock(StopDockerContainers::class)->shouldNotReceive('handle');
+        $this->mock(RunBackupContainer::class)->shouldNotReceive('handle');
+
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $result = app(AgentOperationSupervisor::class)->pendingResult()['result'];
+        $this->assertSame('failed', $result['status']);
+        $this->assertStringContainsString('Configure a valid SFTP', BackupRun::firstOrFail()->error_message);
+        $this->assertStringNotContainsString('sftp-test-password', $result['logs']);
+    }
+
     public function test_metadata_only_operations_survive_native_worker_restart_without_backup_execution(): void
     {
         $directory = $this->root.'/archives';
@@ -143,6 +194,39 @@ class AgentOperationRuntimeTest extends TestCase
         $this->assertSame($result, $store->read($second['id'])['result']);
         $database = new \PDO('sqlite:'.$store->directory($second['id']).'/runtime.sqlite');
         $this->assertSame(0, (int) $database->query('select count(*) from backup_runs')->fetchColumn());
+    }
+
+    #[DataProvider('exactArchiveNames')]
+    public function test_exact_filename_runtime_uses_manifest_and_returns_identity_for_controller_history(string $filename): void
+    {
+        $operation = self::operation();
+        $old = ['key' => 'backups/my-backup-41.tar.gz', 'display_name' => 'my-backup-41.tar.gz', 'size' => 100, 'last_modified' => '2026-01-01T00:00:00Z'];
+        $current = ['key' => 'backups/'.$filename, 'display_name' => $filename, 'size' => 123, 'last_modified' => '2026-02-01T00:00:00Z'];
+        $retention = app(ExactFilenameRetention::class);
+        $operation['spec']['job']['archive_namespace'] = (string) Str::uuid();
+        $operation['spec']['job']['use_exact_filename'] = true;
+        $operation['spec']['job']['retention_count'] = 1;
+        $operation['spec']['run']['backup_filename'] = $filename;
+        $operation['spec']['retention_manifest'] = ['complete' => true, 'archives' => [$retention->identity($old)], 'protected_filenames' => [], 'exact_filenames' => [$old['display_name']]];
+        app(AgentOperationStore::class)->accept($operation);
+        $this->mock(InspectDockerVolume::class)->shouldReceive('handle')->once()->andReturn([]);
+        $this->mock(RunBackupContainer::class)->shouldReceive('handle')->once()->andReturn(new DockerProcessResult([], 0, 'uploaded', ''));
+        $this->mock(ListBackupObjects::class)->shouldReceive('findByFilename')->once()->andReturn($current);
+        $storage = $this->mock(DestinationStorage::class);
+        $storage->shouldReceive('useOperationProgress')->twice();
+        $storage->shouldReceive('listBackupObjectsPage')->once()->andReturn(['objects' => [$old, $current], 'next_cursor' => null]);
+        $storage->shouldReceive('deleteBackupObjects')->once()->withArgs(fn ($destination, array $keys): bool => $keys === [$old['key']]);
+
+        $this->assertTrue(app(AgentOperationRuntime::class)->handle($operation['id']));
+        $result = app(AgentOperationSupervisor::class)->pendingResult()['result'];
+        $this->assertSame('success', $result['status']);
+        $this->assertSame($retention->identity($current), $result['backup_retention_identity']);
+        $this->assertSame(1, BackupRun::count());
+    }
+
+    public static function exactArchiveNames(): array
+    {
+        return [['my-backup-42.tar.gz'], ['café.tar.gz'], ['backup [daily].tar.gz'], ['_latest.tar.gz']];
     }
 
     #[DataProvider('retentionResults')]

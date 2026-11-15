@@ -1,6 +1,26 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Laravel and phpseclib security fixes',
+        'description' => 'Updated Laravel to 13.42.0 and phpseclib to 3.0.58 to fix concurrent task output injection and denial of service when parsing encrypted keys. Full Composer and npm audits report no known vulnerabilities at the time of this update. They do not cover container images. Recreate application and agent containers with patched images, preserving volumes and configuration; running installations are not updated automatically.',
+    ],
+    'symfony_security_november_2026' => [
+        'title' => 'Symfony security patches',
+        'description' => 'Updated five Symfony components to 8.1.11 to address filesystem path, HTTP request and proxy handling, URL routing and YAML parser security advisories. Recreate application and agent containers with updated images, preserving storage and configuration. Dependency audits do not cover container images or automatically update running installations.',
+    ],
+    'exact_backup_filenames' => [
+        'title' => 'Optional exact backup filenames',
+        'description' => 'Backup jobs can opt into an exact filename template without the regular job/run prefix. The default remains uniquely prefixed; safety backups always keep their unique prefix. Token values are sanitized and filenames are length-limited, preserving valid literal template text. Exact names can overwrite other archives, including across jobs. Exact-mode retention depends on run history and verified destination/object identity; unknown or ambiguous objects are preserved. Update remote agents before use.',
+    ],
+    'sftp_host_key_approval' => [
+        'title' => 'Explicit approval for discovered SFTP host keys',
+        'description' => 'Unpinned SSH/SFTP endpoints automatically show a separate candidate key and TOFU fingerprint. Approve and save explicitly to trust the chosen key; existing pins are never silently replaced and failed discovery is not retried in the background. Compare fingerprints through an independent trusted channel. Advanced manual entry remains available. The new saved-destination approval API checks the endpoint and previous fingerprint, saves exactly the submitted key without another network probe, and audits fingerprints without credentials.',
+    ],
+    'sftp_backup_host_verification' => [
+        'title' => 'Pinned server identity required for SFTP backups',
+        'description' => 'SFTP destination tests and backup uploads now require a valid host-key pin. VolumeVault passes the public key to Offen 2.50.1 or newer. Before applications are stopped, missing or invalid pins are rejected, full public keys are normalized offline, and SHA256 fingerprint pins are resolved by an unauthenticated probe against the saved fingerprint, without automatic trust. Offen rejects any server identity mismatch during upload. OpenSSH and bare base64 keys are supported. For existing destinations without a pin, fetch the server key, compare its fingerprint through an independent trusted channel, save and test. Discovery alone is trust on first use. Listing and restore downloads retain optional pinning.',
+    ],
     'dependency_security_october_31_2026' => [
         'title' => 'JavaScript dependency security fixes',
         'description' => 'Updated follow-redirects and the Vue test tooling dependencies glob and minimatch to fix credential forwarding and denial-of-service advisories. Full Composer and npm audits report no known vulnerabilities in the locked dependencies at the time of this update. Container images and running installations are not covered by these audits.',

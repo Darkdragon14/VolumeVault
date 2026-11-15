@@ -4,7 +4,10 @@ namespace App\Actions\Backup;
 
 use App\Models\BackupJob;
 use App\Models\BackupRun;
+use App\Rules\BackupArchiveFilename;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class RenderBackupFilename
 {
@@ -25,15 +28,28 @@ class RenderBackupFilename
 
         $run->loadMissing('job');
 
-        $template = trim((string) $run->job->backup_filename_template);
-        $namespace = $run->execution_options_snapshot['archive_namespace'] ?? null;
-        $prefix = $namespace === null ? '' : self::archivePrefix($namespace, $run->trigger === BackupRun::TRIGGER_PRE_RESTORE).'run-'.$run->id.'-';
+        $options = $run->execution_options_snapshot ?? [];
+        $template = trim((string) (array_key_exists('backup_filename_template', $options) ? $options['backup_filename_template'] : $run->job->backup_filename_template));
+        $namespace = $options['archive_namespace'] ?? null;
+        $safety = $run->trigger === BackupRun::TRIGGER_PRE_RESTORE;
+        $exact = (bool) ($options['use_exact_filename'] ?? $run->job->use_exact_filename) && ! $safety;
+        if ($safety) {
+            $namespace ??= $run->job->archive_namespace ?? '00000000-0000-4000-8000-000000000000';
+        }
+        $prefix = $exact || $namespace === null ? '' : self::archivePrefix($namespace, $safety).'run-'.$run->id.'-';
 
-        if ($template === '') {
-            return $this->finalize($prefix.'volumevault-'.$this->safeRunSource($run).'-run-'.$run->id);
+        if ($exact && $template === '') {
+            throw ValidationException::withMessages(['backup_filename_template' => 'An archive name template is required for exact filenames.']);
+        }
+        $stem = $template === ''
+            ? $prefix.'volumevault-'.$this->safeRunSource($run).'-run-'.$run->id
+            : $prefix.$this->renderTemplate($template, $run);
+        $filename = $this->finalize($stem);
+        if ($exact && Validator::make(['filename' => $filename], ['filename' => [new BackupArchiveFilename]])->fails()) {
+            throw ValidationException::withMessages(['backup_filename_template' => 'The rendered archive filename must be a safe basename without a drive prefix, path separators, or control characters.']);
         }
 
-        return $this->finalize($prefix.$this->renderTemplate($template, $run));
+        return $filename;
     }
 
     public static function archivePrefix(string $namespace, bool $safety = false): string
@@ -84,12 +100,16 @@ class RenderBackupFilename
         $run->forceFill([
             'id' => $runId ?? 123,
             'started_at' => $time ?? now(),
+            'trigger' => BackupRun::TRIGGER_MANUAL,
+            'execution_options_snapshot' => [
+                'archive_namespace' => $job->archive_namespace ?? '00000000-0000-4000-8000-000000000000',
+                'backup_filename_template' => $template,
+                'use_exact_filename' => $job->use_exact_filename,
+            ],
         ]);
         $run->setRelation('job', $job);
 
-        $template = trim((string) $template);
-
-        return $this->finalize($this->renderTemplate($template === '' ? self::DEFAULT_TEMPLATE : $template, $run));
+        return $this->handle($run);
     }
 
     private function renderTemplate(string $template, BackupRun $run): string
@@ -148,7 +168,7 @@ class RenderBackupFilename
         return preg_match('/\.(tar|tar\.gz|tgz|tar\.zst|gz|zst)(\.(gpg|age))?$/i', $template) === 1;
     }
 
-    private function finalize(string $stem): string
+    public function finalize(string $stem): string
     {
         $filename = $stem.self::EXTENSION;
 

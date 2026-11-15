@@ -63,6 +63,7 @@ class BackupRun extends Model
         'backup_destination_locator_fingerprint',
         'execution_options_snapshot',
         'dispatch_token',
+        'backup_retention_identity',
         'dispatch_attempted_at',
         'dispatch_published_at',
     ];
@@ -83,6 +84,7 @@ class BackupRun extends Model
             'backup_size_bytes' => 'integer',
             'archive_metadata_pending' => 'boolean',
             'execution_options_snapshot' => 'array',
+            'backup_retention_identity' => 'array',
         ];
     }
 

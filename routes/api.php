@@ -69,6 +69,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('/backup-groups/{backupGroup}/notifications', [BackupJobGroupController::class, 'toggleNotifications']);
         Route::post('/destinations', [DestinationController::class, 'store']);
         Route::post('/destinations/host-key', [DestinationController::class, 'hostKey']);
+        Route::post('/destinations/{destination}/host-key/approve', [DestinationController::class, 'approveHostKey']);
         Route::put('/destinations/{destination}', [DestinationController::class, 'update']);
         Route::delete('/destinations/{destination}', [DestinationController::class, 'destroy']);
         Route::post('/destinations/{destination}/test', [DestinationController::class, 'test']);

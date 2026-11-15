@@ -1,6 +1,26 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Sicherheitskorrekturen für Laravel und phpseclib',
+        'description' => 'Laravel auf 13.42.0 und phpseclib auf 3.0.58 aktualisiert, um die Manipulation paralleler Aufgabenausgaben und Dienstverweigerung beim Lesen verschlüsselter Schlüssel zu beheben. Vollständige Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen. Container-Images werden nicht geprüft. Anwendungs- und Agent-Container mit korrigierten Images neu erstellen und Volumes sowie Konfiguration beibehalten; laufende Installationen werden nicht automatisch aktualisiert.',
+    ],
+    'symfony_security_november_2026' => [
+        'title' => 'Symfony-Sicherheitskorrekturen',
+        'description' => 'Fünf Symfony-Komponenten wurden auf 8.1.11 aktualisiert, um Sicherheitslücken bei Dateipfaden, HTTP-Anfragen und Proxys, URL-Routing und dem YAML-Parser zu beheben. Anwendungs- und Agent-Container mit aktualisierten Images neu erstellen und dabei Speicher und Konfiguration beibehalten. Abhängigkeitsprüfungen erfassen keine Container-Images und aktualisieren laufende Installationen nicht automatisch.',
+    ],
+    'exact_backup_filenames' => [
+        'title' => 'Optionale exakte Backup-Dateinamen',
+        'description' => 'Backup-Jobs können eine exakte Dateinamenvorlage ohne reguläres Job-/Laufpräfix verwenden. Das eindeutige Präfix bleibt Standard und für Sicherungsbackups immer erhalten. Tokenwerte werden bereinigt und Dateinamen längenbegrenzt; gültiger wörtlicher Vorlagentext bleibt erhalten. Exakte Namen können auch Archive anderer Jobs überschreiben. Die Aufbewahrung benötigt den Laufverlauf und eine geprüfte Ziel-/Objektidentität; unbekannte oder mehrdeutige Objekte bleiben erhalten. Remote-Agenten vor der Nutzung aktualisieren.',
+    ],
+    'sftp_host_key_approval' => [
+        'title' => 'Entdeckte SFTP-Hostschlüssel ausdrücklich bestätigen',
+        'description' => 'SSH/SFTP-Endpunkte ohne hinterlegten Schlüssel zeigen automatisch einen separaten Schlüsselkandidaten mit TOFU-Fingerabdruck. Erst ausdrückliches Bestätigen und Speichern vertraut diesem Schlüssel; bestehende Schlüssel werden nie still ersetzt und fehlgeschlagene Abfragen nicht im Hintergrund wiederholt. Fingerabdrücke über einen unabhängigen vertrauenswürdigen Kanal vergleichen. Die erweiterte manuelle Eingabe bleibt verfügbar. Die neue Bestätigungs-API für gespeicherte Ziele prüft Endpunkt und bisherigen Fingerabdruck, speichert genau den übermittelten Schlüssel ohne erneute Netzwerkabfrage und protokolliert Fingerabdrücke ohne Zugangsdaten.',
+    ],
+    'sftp_backup_host_verification' => [
+        'title' => 'SFTP-Backups erfordern eine festgelegte Serveridentität',
+        'description' => 'SFTP-Zieltests und Backup-Uploads erfordern jetzt einen gültigen Hostschlüssel-Pin. VolumeVault übergibt den öffentlichen Schlüssel an Offen ab 2.50.1. Vor dem Stoppen der Anwendungen werden fehlende oder ungültige Pins abgelehnt, vollständige öffentliche Schlüssel offline normalisiert und SHA256-Pins durch eine nicht authentifizierte Abfrage gegen den gespeicherten Fingerabdruck aufgelöst, ohne automatisches Vertrauen. Offen weist jede abweichende Serveridentität beim Upload zurück. OpenSSH- und reine base64-Schlüssel werden unterstützt. Rufen Sie für bestehende Ziele ohne Pin den Serverschlüssel ab, vergleichen Sie den Fingerabdruck über einen unabhängigen vertrauenswürdigen Kanal, speichern und testen Sie. Die Erkennung allein ist Vertrauen beim Erstkontakt. Auflistung und Restore-Downloads behalten optionale Pins bei.',
+    ],
     'dependency_security_october_31_2026' => [
         'title' => 'Sicherheitskorrekturen für JavaScript-Abhängigkeiten',
         'description' => 'follow-redirects sowie glob und minimatch der Vue-Testwerkzeuge wurden aktualisiert, um die Weitergabe von Zugangsdaten und Denial-of-Service-Schwachstellen zu beheben. Vollständige Composer- und npm-Audits melden zum Zeitpunkt dieser Aktualisierung keine bekannten Schwachstellen in den gesperrten Abhängigkeiten. Container-Images und laufende Installationen sind nicht von diesen Audits erfasst.',

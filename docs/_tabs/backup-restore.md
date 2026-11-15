@@ -50,11 +50,17 @@ In the web form, creating a job defaults to the simple include mode, while exist
 
 Backup jobs can also define an archive name template without the extension. Supported tokens are `{name}`, `{source}`, `{id}`, `{run}`, `{year}`, `{month}`, `{day}`, `{time}`, `{hour}`, `{minute}`, and `{second}`. `{name}` is the job name sanitized for filenames, `{source}` is the Docker volume or host path source, and `{id}` / `{run}` is the backup run ID. VolumeVault adds a stable per-job namespace and a unique run ID before the rendered template, then appends `.tar.gz` automatically. Even constant templates produce unique filenames. Safety backups use a separate prefix. Existing archives are not renamed.
 
+Enable **Use the exact template without a prefix** only when regular backups must use the rendered template without the job/run prefix. A nonempty template is required. The API accepts `use_exact_filename` as a boolean: creating a job defaults to `false`, while omitting the field on update preserves the stored setting. `.tar.gz` is still appended automatically. Token values such as `{name}` and `{source}` undergo safety normalization; unsupported characters in those values become underscores. Valid literal template text, including Unicode and glob characters, is preserved. The complete filename is limited to 255 UTF-8 bytes: an overlong stem is shortened at a complete character boundary, trailing dots/underscores/hyphens are trimmed from the shortened portion, and `-` plus the first 12 hexadecimal characters of the original stem's SHA256 hash is appended before `.tar.gz`. The preview uses the job timezone, or the application timezone when unset. A new job's preview UUID and run ID are examples, not reserved identifiers.
+
+**Exact filenames can overwrite existing archives, including backups from other jobs using the same destination. Timestamp tokens do not eliminate cross-job collisions.** Use distinct templates or destinations. Pre-restore safety backups always retain the unique safety/job/run prefix, even when the job uses exact filenames.
+
 ### Retention by archive count
 
 Set `retention_count` (or the Docker label `retention-count`) to a positive integer to keep that many recent archives for the job. VolumeVault counts the actual archives on the destination, not the number of run-history records, and deletes an explicit list of the oldest excess files only after a successful regular backup. Archives belonging to other jobs and legacy archives without the job prefix are preserved. Failed backups and pre-restore safety backups do not trigger count retention.
 
-Both day and count retention are performed by VolumeVault within the job namespace. If both are configured, exceeding either limit makes an archive eligible for deletion, but the newly uploaded archive is always retained. Legacy unprefixed archives are no longer removed automatically by day retention either; review them manually after upgrading.
+Both day and count retention are performed by VolumeVault within the job namespace in standard mode. If both are configured, exceeding either limit makes an archive eligible for deletion, but the newly uploaded archive is always retained. Legacy unprefixed archives are no longer removed automatically by day retention either; review them manually after upgrading.
+
+In exact mode, retention only considers database-tracked objects whose destination and archive identity can be verified. Unknown, ambiguous or unverifiable objects are left untouched, including unrelated files with matching names. Cleanup depends on retained run history; removing that history can leave archives requiring manual cleanup. Recorded identity checks do not prove that every same-name replacement made outside VolumeVault can be detected. Avoid collisions rather than relying on cleanup to make shared exact names safe. Update remote agents before enabling exact naming; incompatible agents cannot safely execute this workflow.
 
 The destination must allow listing and deletion. Private destination hosts must be allowed by `VOLUMEVAULT_SSRF_ALLOWED_IPS`. Cleanup failures appear in the backup run logs without undoing a successful upload; inspect these logs to confirm retention is working. Remote agents must be updated to support safe retention.
 
@@ -179,10 +185,10 @@ The environment variable mapping for `offen/docker-volume-backup` is centralized
 By default, generated archive names follow this pattern:
 
 ```text
-volumevault-<safe-source-name>-run-<backup-run-id>.tar.gz
+volumevault-<job-uuid>-run-<backup-run-id>-volumevault-<safe-source-name>-run-<backup-run-id>.tar.gz
 ```
 
-Existing jobs with no archive name template keep that legacy pattern.
+This is the standard namespaced pattern when no template is configured. Older archives are not renamed. An explicit exact-name template omits the regular prefix, but never the safety-backup prefix.
 
 ## Restore Behavior
 

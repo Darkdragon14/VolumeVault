@@ -1,6 +1,26 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Correcciones de seguridad de Laravel y phpseclib',
+        'description' => 'Laravel actualizado a 13.42.0 y phpseclib a 3.0.58 para corregir la inyección de salida de tareas concurrentes y la denegación de servicio al leer claves cifradas. Las auditorías completas de Composer y npm no detectan vulnerabilidades conocidas en el momento de esta actualización. No cubren las imágenes de contenedores. Recree los contenedores de la aplicación y los agentes con imágenes corregidas, conservando los volúmenes y la configuración; las instalaciones en ejecución no se actualizan automáticamente.',
+    ],
+    'symfony_security_november_2026' => [
+        'title' => 'Correcciones de seguridad de Symfony',
+        'description' => 'Se actualizaron cinco componentes de Symfony a 8.1.11 para corregir avisos sobre rutas de archivos, solicitudes HTTP y proxies, enrutamiento de URL y el analizador YAML. Recree los contenedores de la aplicación y los agentes con imágenes actualizadas, conservando el almacenamiento y la configuración. Las auditorías de dependencias no cubren las imágenes de contenedores ni actualizan automáticamente las instalaciones en ejecución.',
+    ],
+    'exact_backup_filenames' => [
+        'title' => 'Nombres exactos opcionales para las copias',
+        'description' => 'Las tareas pueden usar una plantilla exacta sin el prefijo normal de tarea/ejecución. El prefijo único sigue siendo predeterminado y se mantiene siempre en las copias de seguridad previas a restaurar. Se normalizan los valores de los tokens y se limita la longitud del nombre, conservando el texto literal válido. Los nombres exactos pueden sobrescribir archivos de otras tareas. La retención depende del historial y de la identidad verificada del destino/objeto; los objetos desconocidos o ambiguos se conservan. Actualice los agentes remotos antes de usarlo.',
+    ],
+    'sftp_host_key_approval' => [
+        'title' => 'Aprobación explícita de las claves de servidor SFTP descubiertas',
+        'description' => 'Los destinos SSH/SFTP sin clave fijada muestran automáticamente una clave candidata separada y su huella TOFU. Es necesario aprobar y guardar explícitamente para confiar en esa clave; las claves existentes nunca se sustituyen silenciosamente y los descubrimientos fallidos no se reintentan en segundo plano. Compare las huellas mediante un canal independiente de confianza. La entrada manual avanzada sigue disponible. La nueva API de aprobación para destinos guardados comprueba el servidor y la huella anterior, guarda exactamente la clave enviada sin otra conexión de red y registra las huellas sin credenciales.',
+    ],
+    'sftp_backup_host_verification' => [
+        'title' => 'Identidad del servidor fijada obligatoria para las copias SFTP',
+        'description' => 'Las pruebas de destinos y las subidas de copias SFTP ahora requieren una clave de host fijada válida. VolumeVault pasa la clave pública a Offen 2.50.1 o posterior. Antes de detener las aplicaciones, se rechazan las claves ausentes o no válidas, se normalizan las claves públicas completas sin conexión y se resuelven las huellas SHA256 mediante una consulta sin autenticación contra la huella guardada, sin confianza automática. Offen rechaza cualquier identidad de servidor que no coincida durante la subida. Se admiten claves OpenSSH y datos base64 sin formato adicional. Para destinos existentes sin clave fijada, obtenga la clave del servidor, compare su huella por un canal independiente de confianza, guarde y pruebe. El descubrimiento por sí solo implica confianza en el primer contacto. La fijación sigue siendo opcional para listados y descargas de restauración.',
+    ],
     'dependency_security_october_31_2026' => [
         'title' => 'Correcciones de seguridad de dependencias JavaScript',
         'description' => 'Se actualizaron follow-redirects y las dependencias glob y minimatch de las herramientas de prueba Vue para corregir avisos sobre reenvío de credenciales y denegación de servicio. Las auditorías completas de Composer y npm no detectan vulnerabilidades conocidas en las dependencias bloqueadas al realizar esta actualización. No cubren las imágenes de contenedores ni las instalaciones en ejecución.',

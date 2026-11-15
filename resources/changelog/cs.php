@@ -1,6 +1,26 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Bezpečnostní opravy Laravel a phpseclib',
+        'description' => 'Laravel byl aktualizován na 13.42.0 a phpseclib na 3.0.58 kvůli podvržení výstupu souběžných úloh a odepření služby při čtení šifrovaných klíčů. Úplné audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti. Nezahrnují obrazy kontejnerů. Znovu vytvořte kontejnery aplikace a agentů s opravenými obrazy a zachovejte svazky a konfiguraci; běžící instalace se neaktualizují automaticky.',
+    ],
+    'symfony_security_november_2026' => [
+        'title' => 'Bezpečnostní opravy Symfony',
+        'description' => 'Pět komponent Symfony bylo aktualizováno na 8.1.11 kvůli bezpečnostním upozorněním týkajícím se cest k souborům, HTTP požadavků a proxy, směrování URL a parseru YAML. Znovu vytvořte kontejnery aplikace a agentů s aktualizovanými obrazy a zachovejte úložiště i konfiguraci. Audity závislostí nezahrnují obrazy kontejnerů a automaticky neaktualizují běžící instalace.',
+    ],
+    'exact_backup_filenames' => [
+        'title' => 'Volitelné přesné názvy záloh',
+        'description' => 'Úlohy mohou použít přesnou šablonu názvu bez běžné předpony úlohy/běhu. Jedinečná předpona zůstává výchozí a bezpečnostní zálohy ji vždy zachovají. Hodnoty tokenů se normalizují a délka názvů se omezuje; platný doslovný text šablony se zachová. Přesné názvy mohou přepsat i archivy jiných úloh. Uchovávání závisí na historii běhů a ověřené identitě cíle/objektu; neznámé či nejednoznačné objekty se zachovají. Před použitím aktualizujte vzdálené agenty.',
+    ],
+    'sftp_host_key_approval' => [
+        'title' => 'Výslovné schválení zjištěných hostitelských klíčů SFTP',
+        'description' => 'Koncové body SSH/SFTP bez připnutého klíče automaticky zobrazí samostatný navržený klíč a otisk TOFU. Důvěra vyžaduje výslovné schválení a uložení; stávající klíče se nikdy tiše nenahrazují a neúspěšné zjišťování se neopakuje na pozadí. Otisky porovnejte nezávislým důvěryhodným kanálem. Pokročilé ruční zadání zůstává dostupné. Nové schvalovací API pro uložené cíle kontroluje koncový bod a předchozí otisk, uloží přesně odeslaný klíč bez dalšího síťového spojení a zaznamená otisky bez přihlašovacích údajů.',
+    ],
+    'sftp_backup_host_verification' => [
+        'title' => 'Zálohy SFTP vyžadují připnutou identitu serveru',
+        'description' => 'Testy cílů a nahrávání záloh SFTP nyní vyžadují platný připnutý klíč hostitele. VolumeVault předává veřejný klíč nástroji Offen 2.50.1 nebo novějšímu. Před zastavením aplikací jsou chybějící či neplatné klíče odmítnuty, úplné veřejné klíče normalizovány offline a připnuté otisky SHA256 vyřešeny neautentizovanou sondou proti uloženému otisku, bez automatické důvěry. Offen odmítne jakoukoli neodpovídající identitu serveru během nahrávání. Podporovány jsou klíče OpenSSH a samotná data base64. U existujících cílů bez připnutého klíče načtěte klíč serveru, porovnejte jeho otisk nezávislým důvěryhodným kanálem, uložte a otestujte. Samotné zjištění klíče je důvěra při prvním kontaktu. Pro výpisy a stahování při obnově zůstává připnutí volitelné.',
+    ],
     'dependency_security_october_31_2026' => [
         'title' => 'Bezpečnostní opravy závislostí JavaScriptu',
         'description' => 'Aktualizovány follow-redirects a závislosti testovacích nástrojů Vue glob a minimatch kvůli předávání přihlašovacích údajů a odepření služby. Úplné audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti v uzamčených závislostech. Tyto audity nepokrývají obrazy kontejnerů ani běžící instalace.',

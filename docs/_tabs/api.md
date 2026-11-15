@@ -95,7 +95,42 @@ Administrators with `write` can send `POST /api/v1/destinations/host-key` with `
 
 Poll `GET /api/v1/destinations/host-key/operations/{id}` with administrator access and `read`. The operation has `destination_id: null`, `action: "host_key"`, `docker_host_id`, an immutable `endpoint: { "host": "sftp.internal", "port": 22 }`, and the standard `pending` / `running` / `completed` status. On success, `result.status` is `success` and `result.data` contains `key` and `fingerprint`. Failure is reported in `result.error_message`. Never treat `completed` alone as success.
 
-The web form uses `POST /destinations/host-key` and `GET /destinations/host-key/operations/{id}` with session/CSRF protection. Its legacy central **200** body is directly `{ "key": "...", "fingerprint": "..." }` (without the API `data` wrapper); agent responses retain the operation wrapper. Capture host, port, executor and provider before starting. Discard late POST or poll responses after any context change or unmount, and require the exact endpoint, executor and operation ID on poll responses. Manual key edits must not be overwritten by an in-flight scan. Compare fingerprints through an independent trusted channel. Discovery does not remove Offen's host-key verification limitation for backup uploads.
+The web form uses `POST /destinations/host-key` and `GET /destinations/host-key/operations/{id}` with session/CSRF protection. Its legacy central **200** body is directly `{ "key": "...", "fingerprint": "..." }` (without the API `data` wrapper); agent responses retain the operation wrapper. It automatically discovers unpinned endpoints, keeps the candidate separate until explicit **Approve and save**, never automatically overwrites existing pins and does not retry failed discovery in the background. Capture host, port, executor and provider before starting. Discard late POST or poll responses after any context change or unmount, and require the exact endpoint, executor and operation ID on poll responses. Manual key edits must not be overwritten by an in-flight scan. Advanced manual entry remains available. Compare fingerprints through an independent trusted channel before saving: discovery alone is trust on first use, not identity verification.
+
+#### Explicit approval for a saved SSH destination
+
+Administrators with `write` can send `POST /api/v1/destinations/{destination}/host-key/approve` for an **existing** SSH/SFTP destination:
+
+```json
+{
+  "host": "sftp.internal",
+  "port": 22,
+  "key": "<exact discovered public host key>",
+  "fingerprint": "SHA256:<discovered key digest>",
+  "previous_fingerprint": null
+}
+```
+
+All five fields must be present. Use `previous_fingerprint: null` for first trust; replacing a pin requires its existing `SHA256:` fingerprint, not the new one. Under the existing destination mutation lock, approval checks the canonical public key against `fingerprint`, the submitted host/port against the saved SSH endpoint, and the expected previous fingerprint against the current pin. Stale endpoint/pin submissions are rejected; configuration in use blocks approval. The operation updates only `settings.host_key` and audits fingerprints, never credentials.
+
+Approval deliberately performs **no network request or re-probe**. It approves the exact chosen key, including one discovered by a remote executor, rather than trusting whatever key a new connection presents. TOFU remains TOFU: compare through an independent trusted channel and investigate key changes instead of silently rotating pins. Discovery and remote asynchronous polling above are unchanged. For a new API destination, discover and verify first, then create it with `settings.host_key`; a destination record must exist before using the approval endpoint.
+
+#### Explicit approval during destination create/update
+
+The form's **Approve and save** submits the regular destination create/update request with the candidate public key in `settings.host_key` and an optional top-level `host_key_approval` object:
+
+```json
+{
+  "fingerprint": "SHA256:<candidate key digest>",
+  "previous_host": "sftp.internal",
+  "previous_port": 22,
+  "previous_host_key": null
+}
+```
+
+If supplied, this object must contain all four keys. For an update, send the **original raw** saved host and pin (or `null` if absent), and the original saved port, defaulting to `22` when unset. For a create, all three `previous_*` fields must be `null`. The server checks that the candidate key matches `fingerprint` and compares the original fields with the locked current record to reject stale or racing approvals. It saves the submitted candidate without a network re-probe. Approval audit records contain fingerprints, not credentials.
+
+This guard is optional: ordinary manual create/update requests without `host_key_approval` retain their existing behavior. Unlike this form guard's raw `previous_host_key`, the dedicated approval endpoint above requires a computed `previous_fingerprint`; do not interchange the contracts.
 
 #### Remote archive metadata and notification finalization
 
@@ -164,7 +199,7 @@ Host-path backup sources and local destinations (`settings.archive_path` / `arch
 
 Backup-job create/edit page props already include `hosts[].host_path_policy: { status: "known" | "unknown" | "local_disabled", reported_at, freshness: "current" | "fresh" | "stale" | "unavailable", prefixes: [] }`; no extra API request is needed. This replaces raw allowlist arrays. A remote policy is known only with fresh inventory, an online agent and a reported allowlist; inventory older than 15 minutes is stale, and a heartbeat does not refresh its age. Treat the report as advisory: unknown does not authorize unvalidated runtime access. The executing agent always enforces its actual policy. Configure remote prefixes on that agent, not on the central server.
 
-For SSH/SFTP destinations, set `settings.host_key` (an OpenSSH public host key line or a `SHA256:` fingerprint) on create/update to pin VolumeVault's SFTP operations. Use the discovery contract above or enter the key manually. The Offen backup container cannot verify host keys; this remains a backup-upload limitation.
+For SSH/SFTP destinations, set `settings.host_key` (an OpenSSH public host key line, bare base64 key data, or a `SHA256:` fingerprint) on create/update. Destination tests and backup uploads require a valid pin. Before applications are stopped for backup, missing or invalid pins are rejected, full public keys are normalized offline, and fingerprint pins are resolved by an unauthenticated probe against the saved fingerprint, without automatically trusting a new key. VolumeVault passes the public key to Offen 2.50.1 or newer as `SSH_HOST_PUBLIC_KEY`; Offen rejects any server identity mismatch during upload. Use the discovery contract above or enter the key manually, verifying its fingerprint independently before saving. VolumeVault's own listing and restore-download code retains optional pinning.
 
 `POST /api/v1/backup-groups` creates a backup group that owns the schedule, notifications and failure policy (`continue` or `stop`) for a set of member jobs. Attach a job to a group by creating or updating a backup job with `planning_mode: "group"` and either `backup_job_group_id` (an existing group) or `group_selection: "new"` plus a `new_group` object. `POST /api/v1/backup-groups/{id}/run` queues one group run that backs up every active member volume and emits a single start and success/fail notification; `GET /api/v1/backup-group-runs/{id}` returns the aggregated outcome with its per-volume member runs. A group cannot be deleted while it still has members. Group run payloads (`GET /api/v1/backup-group-runs`, the `recent_group_runs` lists and the dashboard) include `total_backup_size_bytes`, the sum of the member archive sizes; it stays `null` until at least one member size has been recorded, because sizes are written asynchronously shortly after each volume finishes. The dashboard stats also expose `last_successful_group_backup_size`, the aggregated size of the most recent successful group run.
 
@@ -206,6 +241,7 @@ GET    /api/v1/restore-runs/{id}
 GET    /api/v1/destinations
 POST   /api/v1/destinations
 POST   /api/v1/destinations/host-key
+POST   /api/v1/destinations/{destination}/host-key/approve
 GET    /api/v1/destinations/host-key/operations/{id}
 GET    /api/v1/destinations/{id}
 PUT    /api/v1/destinations/{id}

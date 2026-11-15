@@ -3,6 +3,7 @@
 namespace App\Services\Agents;
 
 use App\Actions\Backup\AdvanceBackupGroupRun;
+use App\Actions\Backup\ExactFilenameRetention;
 use App\Models\AgentOperation;
 use App\Models\BackupDestination;
 use App\Models\BackupJob;
@@ -50,6 +51,9 @@ class DispatchAgentOperation
         if ($run instanceof BackupRun && ($job->retention_count || $job->retention_days)) {
             app(AgentExecution::class)->validateHost($hostId, 'retention-v1');
         }
+        if ($run instanceof BackupRun && app(ExactFilenameRetention::class)->requiresCapability($run)) {
+            app(AgentExecution::class)->validateHost($hostId, 'exact-filename-v1');
+        }
         $relay = $run instanceof RestoreRun ? $run->archiveRelay : null;
         if ($relay !== null) {
             app(AgentExecution::class)->validateHost($hostId, 'archive-relay-v1');
@@ -76,6 +80,10 @@ class DispatchAgentOperation
         $spec['job']['source_type'] = $job->sourceType();
         if ($run instanceof BackupRun && app(AgentExecution::class)->supportsHost($run->dockerHost, 'retention-v1')) {
             $spec['job']['archive_namespace'] = $run->execution_options_snapshot['archive_namespace'] ?? null;
+        }
+        if ($run instanceof BackupRun && app(AgentExecution::class)->supportsHost($run->dockerHost, 'exact-filename-v1')) {
+            $spec['job']['use_exact_filename'] = (bool) ($run->execution_options_snapshot['use_exact_filename'] ?? false);
+            $spec['retention_manifest'] = app(ExactFilenameRetention::class)->manifest($run);
         }
         if ($relay !== null) {
             $spec['relay'] = ['id' => $relay->id, 'size_bytes' => (int) $relay->size_bytes, 'sha256' => $relay->sha256];

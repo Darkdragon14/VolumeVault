@@ -33,6 +33,9 @@ class CreateBackupRunRecord
 
                     $lockedJob->setRelation('destination', $lockedDestination);
                     app(AgentExecution::class)->validateHost((int) $lockedJob->docker_host_id, 'backup-v1');
+                    if ($lockedJob->use_exact_filename && ($attributes['trigger'] ?? null) !== BackupRun::TRIGGER_PRE_RESTORE) {
+                        app(AgentExecution::class)->validateHost((int) $lockedJob->docker_host_id, 'exact-filename-v1');
+                    }
                     if (($attributes['trigger'] ?? null) !== BackupRun::TRIGGER_PRE_RESTORE && ($lockedJob->retention_count || $lockedJob->retention_days)) {
                         app(AgentExecution::class)->validateHost((int) $lockedJob->docker_host_id, 'retention-v1');
                     }
@@ -56,6 +59,8 @@ class CreateBackupRunRecord
                         'backup_destination_locator_fingerprint' => $lockedDestination->locatorFingerprint(),
                         'execution_options_snapshot' => $lockedJob->only([
                             'archive_namespace',
+                            'use_exact_filename',
+                            'backup_filename_template',
                             'retention_days',
                             'retention_count',
                             'backup_exclude_regexp',
@@ -67,6 +72,9 @@ class CreateBackupRunRecord
                     ]);
 
                     $run->setRelation('job', $lockedJob);
+                    if (($attributes['trigger'] ?? null) !== BackupRun::TRIGGER_PRE_RESTORE && app(ExactFilenameRetention::class)->requiresCapability($run)) {
+                        app(AgentExecution::class)->validateHost((int) $lockedJob->docker_host_id, 'exact-filename-v1');
+                    }
                     $run->forceFill(['backup_filename' => $this->renderBackupFilename->handle($run)])->save();
 
                     return $run;

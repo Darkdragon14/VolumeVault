@@ -1,6 +1,26 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Correctifs de sécurité Laravel et phpseclib',
+        'description' => 'Mise à jour de Laravel vers 13.42.0 et de phpseclib vers 3.0.58 pour corriger les alertes d’injection de sortie de tâches concurrentes et de déni de service lors de la lecture de clés chiffrées. Les audits complets Composer et npm ne signalent aucune vulnérabilité connue au moment de cette mise à jour. Ils ne couvrent pas les images de conteneurs. Recréez les conteneurs de l’application et des agents avec les images corrigées en conservant les volumes et la configuration ; les installations en cours ne sont pas mises à jour automatiquement.',
+    ],
+    'symfony_security_november_2026' => [
+        'title' => 'Correctifs de sécurité Symfony',
+        'description' => 'Mise à jour de cinq composants Symfony vers 8.1.11 pour corriger des alertes concernant les chemins de fichiers, les requêtes HTTP et les proxys, le routage des URL et le parseur YAML. Recréez les conteneurs de l’application et des agents avec les images à jour, en conservant le stockage et la configuration. Les audits de dépendances ne couvrent pas les images de conteneurs et ne mettent pas automatiquement à jour les installations en cours.',
+    ],
+    'exact_backup_filenames' => [
+        'title' => 'Noms exacts de sauvegarde en option',
+        'description' => 'Les tâches peuvent utiliser un modèle exact sans le préfixe tâche/exécution habituel. Le préfixe unique reste le choix par défaut et demeure obligatoire pour les sauvegardes de sécurité. Les valeurs des jetons sont normalisées et les noms limités en longueur, en conservant le texte littéral valide. Les noms exacts peuvent écraser des archives, même entre tâches. Leur rétention dépend de l’historique et de l’identité vérifiée de la destination et de l’objet ; les objets inconnus ou ambigus sont préservés. Mettez les agents distants à jour avant utilisation.',
+    ],
+    'sftp_host_key_approval' => [
+        'title' => 'Approbation explicite des clés hôtes SFTP découvertes',
+        'description' => 'Les points de connexion SSH/SFTP sans clé épinglée affichent automatiquement une clé candidate distincte et son empreinte TOFU. Une approbation et un enregistrement explicites sont nécessaires ; les clés existantes ne sont jamais remplacées silencieusement et les découvertes échouées ne sont pas relancées en arrière-plan. Comparez les empreintes via un canal indépendant de confiance. La saisie manuelle avancée reste disponible. La nouvelle API pour les destinations enregistrées vérifie le point de connexion et son empreinte précédente, enregistre exactement la clé soumise sans nouvelle connexion réseau et journalise les empreintes sans identifiants.',
+    ],
+    'sftp_backup_host_verification' => [
+        'title' => 'Identité du serveur épinglée obligatoire pour les sauvegardes SFTP',
+        'description' => 'Les tests de destination et les envois de sauvegardes SFTP exigent désormais une clé d’hôte épinglée valide. VolumeVault transmet la clé publique à Offen 2.50.1 ou ultérieur. Avant l’arrêt des applications, les clés absentes ou invalides sont refusées, les clés publiques complètes sont normalisées hors ligne et une sonde sans authentification résout les empreintes SHA256 en les comparant aux empreintes enregistrées, sans confiance automatique. Offen refuse toute identité de serveur différente pendant l’envoi. Les clés OpenSSH et les données base64 seules sont acceptées. Pour un ancien emplacement sans clé épinglée, récupérez la clé du serveur, comparez son empreinte via un canal indépendant fiable, enregistrez et testez. La découverte seule repose sur la confiance au premier contact. L’épinglage reste facultatif pour les listes et les téléchargements de restauration.',
+    ],
     'dependency_security_october_31_2026' => [
         'title' => 'Correctifs de sécurité des dépendances JavaScript',
         'description' => 'Mise à jour de follow-redirects et des dépendances glob et minimatch des outils de test Vue pour corriger des alertes de transmission d’identifiants et de déni de service. Les audits complets Composer et npm ne signalent aucune vulnérabilité connue dans les dépendances verrouillées au moment de cette mise à jour. Ces audits ne couvrent pas les images de conteneurs ni les installations en cours.',

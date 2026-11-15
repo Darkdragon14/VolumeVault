@@ -4,10 +4,42 @@ return [
     'unreleased' => [
         [
             'type' => 'change',
-            'key' => 'dependency_security_october_31_2026',
+            'key' => 'php_dependency_security_november_2026',
         ],
     ],
     'releases' => [
+        'v2.0.10' => [
+            'date' => '2026-11-06',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.10',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'symfony_security_november_2026',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'exact_backup_filenames',
+                ],
+            ],
+        ],
+        'v2.0.9' => [
+            'date' => '2026-11-02',
+            'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.9',
+            'items' => [
+                [
+                    'type' => 'change',
+                    'key' => 'sftp_host_key_approval',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'sftp_backup_host_verification',
+                ],
+                [
+                    'type' => 'change',
+                    'key' => 'dependency_security_october_31_2026',
+                ],
+            ],
+        ],
         'v2.0.8' => [
             'date' => '2026-10-30',
             'url' => 'https://github.com/Darkdragon14/VolumeVault/releases/tag/v2.0.8',

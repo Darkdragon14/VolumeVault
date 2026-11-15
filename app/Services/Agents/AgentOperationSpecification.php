@@ -5,6 +5,7 @@ namespace App\Services\Agents;
 use App\Actions\Backup\RenderBackupFilename;
 use App\Http\Requests\Concerns\ValidatesBackupDestination;
 use App\Models\BackupDestination;
+use App\Rules\BackupArchiveFilename;
 use App\Services\BackupDestinations\SftpEndpointHost;
 use App\Services\BackupSources\HostPathPolicy;
 use App\Services\Docker\DockerVolumeName;
@@ -49,14 +50,27 @@ class AgentOperationSpecification
                 'id' => ['required', 'uuid'],
                 'token' => ['required', 'regex:/\A[0-9a-f]{64}\z/'],
                 'kind' => ['required', 'in:backup,restore'],
-                'spec' => ['required', 'array:version,job,destination,safety_destination,run,relay'],
+                'spec' => ['required', 'array:version,job,destination,safety_destination,run,relay,retention_manifest'],
                 'spec.relay' => ['sometimes', 'array:id,size_bytes,sha256'],
                 'spec.relay.id' => ['required_with:spec.relay', 'uuid'],
                 'spec.relay.size_bytes' => ['required_with:spec.relay', 'integer:strict', 'min:1'],
                 'spec.relay.sha256' => ['required_with:spec.relay', 'regex:/\A[0-9a-f]{64}\z/'],
                 'spec.version' => ['required', 'integer', 'in:1'],
-                'spec.job' => ['required', 'array:name,source_type,volume_name,host_path,retention_days,retention_count,archive_namespace,backup_filter_mode,backup_exclude_regexp,backup_include_paths,stop_containers_before_backup,stop_container_names,timezone'],
+                'spec.job' => ['required', 'array:name,source_type,volume_name,host_path,retention_days,retention_count,archive_namespace,use_exact_filename,backup_filter_mode,backup_exclude_regexp,backup_include_paths,stop_containers_before_backup,stop_container_names,timezone'],
                 'spec.job.archive_namespace' => ['sometimes', 'nullable', 'uuid'],
+                'spec.job.use_exact_filename' => ['sometimes', 'boolean:strict'],
+                'spec.retention_manifest' => ['required_if:spec.job.use_exact_filename,true', 'array:complete,archives,protected_filenames,exact_filenames'],
+                'spec.retention_manifest.complete' => ['required_with:spec.retention_manifest', 'boolean:strict'],
+                'spec.retention_manifest.archives' => ['present_with:spec.retention_manifest', 'array', 'max:10000'],
+                'spec.retention_manifest.archives.*' => ['array:key,filename,size,modified'],
+                'spec.retention_manifest.archives.*.key' => ['required', 'string', 'max:4096'],
+                'spec.retention_manifest.archives.*.filename' => ['required', new BackupArchiveFilename],
+                'spec.retention_manifest.archives.*.size' => ['required', 'integer:strict', 'min:0'],
+                'spec.retention_manifest.archives.*.modified' => ['required', 'integer:strict'],
+                'spec.retention_manifest.protected_filenames' => ['present_with:spec.retention_manifest', 'array', 'max:10001'],
+                'spec.retention_manifest.protected_filenames.*' => ['string', 'max:255'],
+                'spec.retention_manifest.exact_filenames' => ['present_with:spec.retention_manifest', 'array', 'max:10001'],
+                'spec.retention_manifest.exact_filenames.*' => ['string', 'max:255'],
                 'spec.job.name' => ['required', 'string', 'max:255'],
                 'spec.job.source_type' => ['required', 'in:docker_volume,host_path'],
                 'spec.job.volume_name' => ['nullable', 'string', 'max:255'],
@@ -73,7 +87,7 @@ class AgentOperationSpecification
                 'spec.destination' => ['required', 'array:name,provider,endpoint,region,bucket,path_prefix,access_key_id,secret_access_key,use_path_style_endpoint,settings,secrets'],
                 'spec.safety_destination' => ['sometimes', 'array:name,provider,endpoint,region,bucket,path_prefix,access_key_id,secret_access_key,use_path_style_endpoint,settings,secrets'],
                 'spec.run' => ['present', 'array:backup_filename,selected_backup_key,source_volume_name,target_volume_name,mode,backup_before_overwrite,confirmation_text'],
-                'spec.run.backup_filename' => ['nullable', 'string', 'max:255', 'regex:/\A[a-zA-Z0-9][a-zA-Z0-9_.-]*\z/'],
+                'spec.run.backup_filename' => ['nullable', new BackupArchiveFilename],
                 'spec.run.selected_backup_key' => ['nullable', 'string', 'max:4096'],
                 'spec.run.source_volume_name' => ['nullable', 'string', 'max:4096'],
                 'spec.run.target_volume_name' => ['nullable', 'string', 'max:255'],
@@ -87,7 +101,7 @@ class AgentOperationSpecification
                 $rules['spec'] = ['required', 'array:version,destination,action,cursor,limit,selected_backup,archive'];
                 $rules['spec.action'] = ['required', 'in:test,list,stats,metadata'];
                 $rules['spec.archive'] = ['required_if:spec.action,metadata', 'array:filename,key,size', 'prohibited_unless:spec.action,metadata'];
-                $rules['spec.archive.filename'] = ['required_with:spec.archive', 'string', 'max:255', 'regex:/\A[a-zA-Z0-9][a-zA-Z0-9_.-]*\z/'];
+                $rules['spec.archive.filename'] = ['required_with:spec.archive', new BackupArchiveFilename];
                 $rules['spec.archive.key'] = ['nullable', 'string', 'max:4096'];
                 $rules['spec.archive.size'] = ['nullable', 'integer:strict', 'min:0'];
                 $rules['spec.cursor'] = ['nullable', 'string', 'max:16384', 'prohibited_unless:spec.action,list'];
@@ -235,7 +249,7 @@ class AgentOperationSpecification
             if (empty($run['backup_filename'])) {
                 throw new RuntimeException;
             }
-            if (($job['retention_count'] ?? 0) > 0 || ($job['retention_days'] ?? 0) > 0) {
+            if (! ($job['use_exact_filename'] ?? false) && (($job['retention_count'] ?? 0) > 0 || ($job['retention_days'] ?? 0) > 0)) {
                 if (empty($job['archive_namespace']) || ! str_starts_with($run['backup_filename'], RenderBackupFilename::archivePrefix($job['archive_namespace']))) {
                     throw new RuntimeException;
                 }

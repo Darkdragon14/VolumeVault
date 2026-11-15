@@ -70,6 +70,7 @@ class BackupJob extends Model
         'backup_filter_mode',
         'backup_include_paths',
         'backup_filename_template',
+        'use_exact_filename',
         'stop_containers_before_backup',
         'stop_container_names',
         'configuration_source',
@@ -82,6 +83,7 @@ class BackupJob extends Model
     protected $attributes = [
         'docker_host_id' => DockerHost::LOCAL_ID,
         'notifications_enabled' => true,
+        'use_exact_filename' => false,
         'use_custom_alert_settings' => false,
         'alert_notifications_enabled' => true,
         'configuration_source' => self::CONFIGURATION_SOURCE_MANUAL,
@@ -103,6 +105,7 @@ class BackupJob extends Model
             'retention_days' => 'integer',
             'retention_count' => 'integer',
             'notifications_enabled' => 'boolean',
+            'use_exact_filename' => 'boolean',
             'use_custom_alert_settings' => 'boolean',
             'alert_notifications_enabled' => 'boolean',
             'stop_containers_before_backup' => 'boolean',

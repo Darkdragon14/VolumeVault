@@ -7,11 +7,13 @@ use App\Actions\Runs\CreateRunFinalizations;
 use App\Actions\Runs\ProcessRunFinalization;
 use App\Models\ActivityLog;
 use App\Models\AgentOperation;
+use App\Models\ArchiveRelay;
 use App\Models\BackupJob;
 use App\Models\BackupRun;
 use App\Models\DockerHost;
 use App\Models\DockerVolume;
 use App\Models\RestoreRun;
+use App\Services\BackupDestinations\DestinationOperations;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -63,7 +65,7 @@ class AgentOperationBroker
                     'owner_instance_id' => $locked->agent_instance_id, 'claimed_at' => now(), 'last_progress_at' => now(),
                 ])->save();
                 if ($operation->kind === 'archive_export') {
-                    \App\Models\ArchiveRelay::where('source_agent_operation_id', $operation->id)->where('status', 'pending')->update(['status' => 'exporting']);
+                    ArchiveRelay::where('source_agent_operation_id', $operation->id)->where('status', 'pending')->update(['status' => 'exporting']);
                 }
 
                 return $this->envelope($operation);
@@ -170,7 +172,7 @@ class AgentOperationBroker
                 return [];
             }
             if ($operation->kind === 'destination') {
-                app(\App\Services\BackupDestinations\DestinationOperations::class)->complete($operation, $result);
+                app(DestinationOperations::class)->complete($operation, $result);
 
                 return [];
             }
@@ -212,9 +214,14 @@ class AgentOperationBroker
                 'stopped_container_ids' => null,
             ]);
             if ($run instanceof BackupRun) {
+                if (isset($result['backup_retention_identity'])) {
+                    abort_unless(($run->execution_options_snapshot['use_exact_filename'] ?? false)
+                        && $result['backup_retention_identity']['filename'] === $run->backup_filename, 422, 'Unexpected archive retention identity.');
+                }
                 $run->forceFill([
                     'backup_key' => $result['backup_key'] ?? null,
                     'backup_size_bytes' => $result['backup_size_bytes'] ?? null,
+                    'backup_retention_identity' => $status === 'success' ? ($result['backup_retention_identity'] ?? null) : null,
                     'docker_container_cleanup_pending' => false, 'archive_metadata_pending' => false,
                 ]);
                 $job->forceFill([

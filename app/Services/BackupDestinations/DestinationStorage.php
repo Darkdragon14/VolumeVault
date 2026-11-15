@@ -96,6 +96,10 @@ class DestinationStorage
     {
         $this->guardOutbound($destination);
 
+        if ($destination->provider === BackupDestination::PROVIDER_SSH) {
+            $this->assertSftpHostKeyConfigured($destination);
+        }
+
         match ($destination->provider) {
             BackupDestination::PROVIDER_AWS_S3,
             BackupDestination::PROVIDER_CLOUDFLARE_R2,
@@ -1196,12 +1200,7 @@ SH;
     {
         $sftp = $this->newSftp((string) $destination->setting('host'), (int) $destination->setting('port', 22));
 
-        // Pin the server host key BEFORE authenticating, so a man-in-the-middle
-        // never receives the username/password/private key. This only guards
-        // VolumeVault's own SFTP operations (test, listing, restore download):
-        // the offen backup container ignores host keys entirely (upstream
-        // hardcodes ssh.InsecureIgnoreHostKey), so the actual backup upload
-        // cannot be pinned here.
+        // Verify the server identity before sending authentication credentials.
         $this->verifyHostKey($destination, $sftp);
 
         $credential = (string) $destination->secret('password', '');
@@ -1243,6 +1242,39 @@ SH;
                 self::hostKeyFingerprint($presented) ?: 'unknown',
             ));
         }
+    }
+
+    public function assertSftpHostKeyConfigured(BackupDestination $destination): void
+    {
+        $pinned = trim((string) $destination->setting('host_key', ''));
+
+        if (! SshHostKey::isFingerprint($pinned) && SshHostKey::publicKey($pinned) === '') {
+            throw new RuntimeException('Configure a valid SFTP server host key or SHA256 fingerprint in the destination before testing or running backups. Use Fetch key from server and verify its fingerprint before saving.');
+        }
+    }
+
+    public function backupSftpHostPublicKey(BackupDestination $destination): string
+    {
+        $this->assertSftpHostKeyConfigured($destination);
+        $pinned = trim((string) $destination->setting('host_key'));
+
+        if (! SshHostKey::isFingerprint($pinned)) {
+            return SshHostKey::publicKey($pinned);
+        }
+
+        $presented = $this->probeHostKey((string) $destination->setting('host'), (int) ($destination->setting('port') ?: 22));
+
+        if (! SshHostKey::matches($pinned, $presented['key'])) {
+            throw new RuntimeException('SFTP host key verification failed: the server key does not match the pinned fingerprint.');
+        }
+
+        $key = SshHostKey::publicKey($presented['key']);
+
+        if ($key === '') {
+            throw new RuntimeException('Unable to parse the SFTP server host key.');
+        }
+
+        return $key;
     }
 
     /**
