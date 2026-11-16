@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Correcciones de seguridad de Laravel y phpseclib',
+        'description' => 'Laravel actualizado a 13.42.0 y phpseclib a 3.0.58 para corregir la inyección de salida de tareas concurrentes y la denegación de servicio al leer claves cifradas. Las auditorías completas de Composer y npm no detectan vulnerabilidades conocidas en el momento de esta actualización. No cubren las imágenes de contenedores. Recree los contenedores de la aplicación y los agentes con imágenes corregidas, conservando los volúmenes y la configuración; las instalaciones en ejecución no se actualizan automáticamente.',
+    ],
     'symfony_security_november_2026' => [
         'title' => 'Correcciones de seguridad de Symfony',
         'description' => 'Se actualizaron cinco componentes de Symfony a 8.1.11 para corregir avisos sobre rutas de archivos, solicitudes HTTP y proxies, enrutamiento de URL y el analizador YAML. Recree los contenedores de la aplicación y los agentes con imágenes actualizadas, conservando el almacenamiento y la configuración. Las auditorías de dependencias no cubren las imágenes de contenedores ni actualizan automáticamente las instalaciones en ejecución.',

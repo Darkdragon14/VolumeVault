@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Laravel és phpseclib biztonsági javítások',
+        'description' => 'A Laravel 13.42.0 és a phpseclib 3.0.58 verzióra frissült a párhuzamos feladatok kimenetének manipulálása és a titkosított kulcsok olvasásakor fellépő szolgáltatásmegtagadás javítására. A teljes Composer- és npm-audit a frissítés időpontjában nem jelez ismert sérülékenységet. A konténerképeket nem ellenőrzik. Hozza létre újra az alkalmazás és az ügynökök konténereit javított képekkel, a kötetek és a konfiguráció megőrzésével; a futó telepítések nem frissülnek automatikusan.',
+    ],
     'symfony_security_november_2026' => [
         'title' => 'Symfony biztonsági javítások',
         'description' => 'Öt Symfony összetevő frissült a 8.1.11 verzióra a fájlútvonalakkal, HTTP-kérésekkel és proxykkal, URL-útválasztással és a YAML-feldolgozóval kapcsolatos biztonsági figyelmeztetések javításához. Hozza létre újra az alkalmazás és az ügynökök konténereit frissített képekből, a tárhely és a konfiguráció megtartásával. A függőségek auditja nem terjed ki a konténerképekre, és nem frissíti automatikusan a futó telepítéseket.',

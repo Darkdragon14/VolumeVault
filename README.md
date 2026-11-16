@@ -153,6 +153,8 @@ Huge thanks to Offen and the maintainers of `offen/docker-volume-backup` for the
 
 Dependency security checks use `composer audit --locked` and `npm audit`, including development dependencies. The npm overrides for `js-beautify` select patched `glob` and `minimatch` versions while upstream ranges still select vulnerable releases. `resources/js/dependencyCompatibility.test.ts` checks Vue HTML formatting and the formatter CLI with glob patterns and EditorConfig; run `npm test` after changing these overrides. Remove the overrides once upstream accepts patched versions. These checks do not audit container images or update running installations.
 
+The November 2026 PHP security update requires Laravel 13.42+ and phpseclib 3.0.58+ to address concurrent task output injection and denial of service when parsing encrypted keys. Deploy rebuilt application and agent images to apply these fixes, preserving volumes and configuration.
+
 All contributions are welcome.
 
 - Contributor acknowledgements: [`CONTRIBUTORS.md`](CONTRIBUTORS.md)

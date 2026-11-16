@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Bezpečnostní opravy Laravel a phpseclib',
+        'description' => 'Laravel byl aktualizován na 13.42.0 a phpseclib na 3.0.58 kvůli podvržení výstupu souběžných úloh a odepření služby při čtení šifrovaných klíčů. Úplné audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti. Nezahrnují obrazy kontejnerů. Znovu vytvořte kontejnery aplikace a agentů s opravenými obrazy a zachovejte svazky a konfiguraci; běžící instalace se neaktualizují automaticky.',
+    ],
     'symfony_security_november_2026' => [
         'title' => 'Bezpečnostní opravy Symfony',
         'description' => 'Pět komponent Symfony bylo aktualizováno na 8.1.11 kvůli bezpečnostním upozorněním týkajícím se cest k souborům, HTTP požadavků a proxy, směrování URL a parseru YAML. Znovu vytvořte kontejnery aplikace a agentů s aktualizovanými obrazy a zachovejte úložiště i konfiguraci. Audity závislostí nezahrnují obrazy kontejnerů a automaticky neaktualizují běžící instalace.',

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_dependency_security_november_2026' => [
+        'title' => 'Laravel and phpseclib security fixes',
+        'description' => 'Updated Laravel to 13.42.0 and phpseclib to 3.0.58 to fix concurrent task output injection and denial of service when parsing encrypted keys. Full Composer and npm audits report no known vulnerabilities at the time of this update. They do not cover container images. Recreate application and agent containers with patched images, preserving volumes and configuration; running installations are not updated automatically.',
+    ],
     'symfony_security_november_2026' => [
         'title' => 'Symfony security patches',
         'description' => 'Updated five Symfony components to 8.1.11 to address filesystem path, HTTP request and proxy handling, URL routing and YAML parser security advisories. Recreate application and agent containers with updated images, preserving storage and configuration. Dependency audits do not cover container images or automatically update running installations.',
