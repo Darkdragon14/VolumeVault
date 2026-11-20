@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_runtime_security_november_2026' => [
+        'title' => 'Bezpečnostní aktualizace PHP',
+        'description' => 'Obrazy aplikace a agentů nyní vyžadují PHP 8.5.13 nebo novější kvůli opravě phpAfterShell a dalších zranitelností PHP. Znovu vytvořte všechny kontejnery VolumeVault z opravených obrazů a zachovejte jejich data a konfiguraci.',
+    ],
     'php_dependency_security_november_2026' => [
         'title' => 'Bezpečnostní opravy Laravel a phpseclib',
         'description' => 'Laravel byl aktualizován na 13.42.0 a phpseclib na 3.0.58 kvůli podvržení výstupu souběžných úloh a odepření služby při čtení šifrovaných klíčů. Úplné audity Composer a npm v době této aktualizace nehlásí žádné známé zranitelnosti. Nezahrnují obrazy kontejnerů. Znovu vytvořte kontejnery aplikace a agentů s opravenými obrazy a zachovejte svazky a konfiguraci; běžící instalace se neaktualizují automaticky.',

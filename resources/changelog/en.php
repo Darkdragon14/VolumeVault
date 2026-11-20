@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_runtime_security_november_2026' => [
+        'title' => 'PHP runtime security update',
+        'description' => 'Application and agent images now require PHP 8.5.13 or newer to address phpAfterShell and other PHP vulnerabilities. Recreate all VolumeVault containers with patched images, preserving their storage and configuration.',
+    ],
     'php_dependency_security_november_2026' => [
         'title' => 'Laravel and phpseclib security fixes',
         'description' => 'Updated Laravel to 13.42.0 and phpseclib to 3.0.58 to fix concurrent task output injection and denial of service when parsing encrypted keys. Full Composer and npm audits report no known vulnerabilities at the time of this update. They do not cover container images. Recreate application and agent containers with patched images, preserving volumes and configuration; running installations are not updated automatically.',

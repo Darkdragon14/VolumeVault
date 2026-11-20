@@ -18,7 +18,6 @@ class ContainerPublicationTest extends TestCase
         foreach (['runtime', 'agent'] as $stage) {
             $this->assertSame(1, preg_match('/^FROM [^\n]+ AS '.$stage.'\n(.*?)(?=^FROM |\z)/ms', $dockerfile, $stageMatches));
             $this->assertSame(1, preg_match('/^RUN php -r \'([^\n]+)\'$/m', $stageMatches[1], $guardMatches));
-            $this->assertStringContainsString('PHP_VERSION_ID < 80512', $guardMatches[1]);
 
             $process = new Process([PHP_BINARY, '-r', str_replace('PHP_VERSION_ID', (string) $versionId, $guardMatches[1])]);
             $process->setTimeout(10);
@@ -26,7 +25,7 @@ class ContainerPublicationTest extends TestCase
 
             $this->assertSame($exitCode, $process->getExitCode(), $stage.': '.$process->getErrorOutput());
             $this->assertSame('', $process->getOutput());
-            $this->assertSame($exitCode === 0 ? '' : "VolumeVault requires PHP 8.5.12 or newer.\n", $process->getErrorOutput());
+            $this->assertSame($exitCode === 0 ? '' : "VolumeVault requires PHP 8.5.13 or newer.\n", $process->getErrorOutput());
         }
     }
 
@@ -36,10 +35,10 @@ class ContainerPublicationTest extends TestCase
     public static function phpVersions(): array
     {
         return [
-            'previous patch rejected' => [80511, 1],
+            'previous patch rejected' => [80512, 1],
             'older minor rejected' => [80499, 1],
-            'security release accepted' => [80512, 0],
-            'newer patch accepted' => [80513, 0],
+            'security release accepted' => [80513, 0],
+            'newer patch accepted' => [80514, 0],
             'newer minor accepted' => [80600, 0],
         ];
     }
