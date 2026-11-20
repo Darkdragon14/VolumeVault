@@ -1,7 +1,12 @@
 <?php
 
 return [
-    'unreleased' => [],
+    'unreleased' => [
+        [
+            'type' => 'change',
+            'key' => 'php_runtime_security_november_2026',
+        ],
+    ],
     'releases' => [
         'v2.0.11' => [
             'date' => '2026-11-16',

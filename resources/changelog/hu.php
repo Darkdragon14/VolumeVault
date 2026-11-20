@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_runtime_security_november_2026' => [
+        'title' => 'PHP biztonsági frissítés',
+        'description' => 'Az alkalmazás és az ügynökök konténerképei mostantól PHP 8.5.13-at vagy újabb verziót igényelnek a phpAfterShell és más PHP-sebezhetőségek javításához. Hozza létre újra az összes VolumeVault-konténert a javított képekből, az adatok és a konfiguráció megtartásával.',
+    ],
     'php_dependency_security_november_2026' => [
         'title' => 'Laravel és phpseclib biztonsági javítások',
         'description' => 'A Laravel 13.42.0 és a phpseclib 3.0.58 verzióra frissült a párhuzamos feladatok kimenetének manipulálása és a titkosított kulcsok olvasásakor fellépő szolgáltatásmegtagadás javítására. A teljes Composer- és npm-audit a frissítés időpontjában nem jelez ismert sérülékenységet. A konténerképeket nem ellenőrzik. Hozza létre újra az alkalmazás és az ügynökök konténereit javított képekkel, a kötetek és a konfiguráció megőrzésével; a futó telepítések nem frissülnek automatikusan.',

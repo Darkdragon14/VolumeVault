@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'php_runtime_security_november_2026' => [
+        'title' => 'Aggiornamento di sicurezza di PHP',
+        'description' => 'Le immagini dell’applicazione e degli agent richiedono ora PHP 8.5.13 o successivo per correggere phpAfterShell e altre vulnerabilità di PHP. Ricrea tutti i container VolumeVault con le immagini corrette, conservando dati e configurazione.',
+    ],
     'php_dependency_security_november_2026' => [
         'title' => 'Correzioni di sicurezza per Laravel e phpseclib',
         'description' => 'Laravel aggiornato a 13.42.0 e phpseclib a 3.0.58 per correggere l’iniezione dell’output delle attività concorrenti e la negazione del servizio durante la lettura di chiavi cifrate. Le verifiche complete Composer e npm non segnalano vulnerabilità note al momento di questo aggiornamento. Non coprono le immagini dei container. Ricreare i container dell’applicazione e degli agenti con immagini corrette, conservando volumi e configurazione; le installazioni in esecuzione non vengono aggiornate automaticamente.',

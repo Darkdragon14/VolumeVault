@@ -15,7 +15,7 @@ FROM serversideup/php:8.5-fpm-nginx-alpine AS runtime
 
 USER root
 
-RUN php -r 'if (PHP_VERSION_ID < 80512) { fwrite(STDERR, "VolumeVault requires PHP 8.5.12 or newer.\n"); exit(1); }'
+RUN php -r 'if (PHP_VERSION_ID < 80513) { fwrite(STDERR, "VolumeVault requires PHP 8.5.13 or newer.\n"); exit(1); }'
 
 RUN apk add --no-cache docker-cli tzdata \
     && install-php-extensions pdo_sqlite zip
@@ -52,7 +52,7 @@ RUN mkdir -p storage/database storage/framework/cache storage/framework/sessions
 
 FROM php:8.5-cli-alpine AS agent
 
-RUN php -r 'if (PHP_VERSION_ID < 80512) { fwrite(STDERR, "VolumeVault requires PHP 8.5.12 or newer.\n"); exit(1); }'
+RUN php -r 'if (PHP_VERSION_ID < 80513) { fwrite(STDERR, "VolumeVault requires PHP 8.5.13 or newer.\n"); exit(1); }'
 
 RUN apk add --no-cache docker-cli tzdata su-exec libzip sqlite-libs \
     && apk add --no-cache --virtual .agent-build-deps $PHPIZE_DEPS libzip-dev sqlite-dev \
