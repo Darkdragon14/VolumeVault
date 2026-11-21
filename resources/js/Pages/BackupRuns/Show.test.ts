@@ -115,6 +115,19 @@ describe('Backup run detail', () => {
     });
 
     it('waits for the active poll request to finish before scheduling another', () => {
+        router.init({
+            initialPage: {
+                component: 'BackupRuns/Show',
+                props: { errors: {}, run: queuedRun },
+                url: '/backup-runs/42',
+                version: null,
+                clearHistory: false,
+                encryptHistory: false,
+                rescuedProps: [],
+            },
+            resolveComponent: () => BackupRunShow,
+            swapComponent: async () => {},
+        });
         vi.useFakeTimers();
         const visit = vi.spyOn(router, 'visit').mockImplementation((_url, options) => {
             options?.onCancelToken?.({ cancel: vi.fn() });
@@ -133,7 +146,7 @@ describe('Backup run detail', () => {
             vi.advanceTimersByTime(2000);
             expect(visit).toHaveBeenCalledTimes(2);
         } finally {
-            polling.stop();
+            polling.destroy();
             visit.mockRestore();
             vi.useRealTimers();
         }

@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_refresh_november_2026' => [
+        'title' => 'PHP- und JavaScript-Abhängigkeiten aktualisiert',
+        'description' => 'Kompatible PHP- und JavaScript-Abhängigkeiten aktualisiert, darunter Laravel 13.43.0 und Axios 1.21.1. Vollständige Composer- und npm-Prüfungen melden zum Zeitpunkt der Aktualisierung keine bekannten Schwachstellen; sie erfassen keine Container-Images und garantieren keine zukünftige Sicherheit. Anwendungs- und Agent-Container mit aktualisierten Images neu erstellen und Daten sowie Konfiguration beibehalten. Laufende Installationen werden nicht automatisch aktualisiert.',
+    ],
     'php_runtime_security_november_2026' => [
         'title' => 'PHP-Sicherheitsupdate',
         'description' => 'Die Anwendungs- und Agent-Images erfordern nun PHP 8.5.13 oder neuer, um phpAfterShell und weitere PHP-Schwachstellen zu beheben. Erstellen Sie alle VolumeVault-Container mit korrigierten Images neu und behalten Sie ihre Daten und Konfiguration bei.',

@@ -11,7 +11,7 @@ class ApiHealthTest extends TestCase
 {
     public function test_health_is_public_and_does_not_query_dependencies(): void
     {
-        DB::shouldReceive('connection')->never();
+        DB::partialMock()->shouldNotReceive('connection');
         $this->mock(DockerProcess::class)->shouldNotReceive('run');
         Queue::fake();
 

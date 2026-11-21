@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'dependency_refresh_november_2026' => [
+        'title' => 'Aktualizace závislostí PHP a JavaScriptu',
+        'description' => 'Aktualizovány kompatibilní závislosti PHP a JavaScriptu, včetně Laravel 13.43.0 a Axios 1.21.1. Úplné audity Composer a npm v době aktualizace nehlásí žádné známé zranitelnosti; nezahrnují obrazy kontejnerů ani nezaručují budoucí bezpečnost. Znovu vytvořte kontejnery aplikace a agentů s aktualizovanými obrazy a zachovejte data i konfiguraci. Běžící instalace se neaktualizují automaticky.',
+    ],
     'php_runtime_security_november_2026' => [
         'title' => 'Bezpečnostní aktualizace PHP',
         'description' => 'Obrazy aplikace a agentů nyní vyžadují PHP 8.5.13 nebo novější kvůli opravě phpAfterShell a dalších zranitelností PHP. Znovu vytvořte všechny kontejnery VolumeVault z opravených obrazů a zachovejte jejich data a konfiguraci.',
