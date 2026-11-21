@@ -104,7 +104,7 @@ class AgentClientTest extends TestCase
 
     public function test_once_enrolls_heartbeats_and_publishes_inventory_without_database_or_app_key(): void
     {
-        DB::shouldReceive('connection')->never();
+        DB::partialMock()->shouldNotReceive('connection');
         $this->fakeServer();
         $this->dockerAvailable();
         $this->artisan('volumevault:agent --once')->assertSuccessful();
